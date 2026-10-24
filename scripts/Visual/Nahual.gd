@@ -3,7 +3,7 @@ extends Node3D
 ## the bench every night, become an enormous black dog lying beside it. Its head turns to watch
 ## whoever watches it (`watcher`, else whichever camera is drawing); once it has been looked at,
 ## it is gone the moment they look away, and it comes back only when its place is unwatched,
-## a while later (`away_for`, s). Its body and head are the uncanny kit's
+## a while later (`away_for`, s): given `haunts`, at another of them, having gone the works between. Its body and head are the uncanny kit's
 ## (tools/eclipse/underground_uncanny.py), the head turned about the neck.
 
 ## Where the head turns on the body, where its eyes are on the head (each, and between them), and
@@ -54,6 +54,12 @@ const REACH := 14.0
 @export var intruder: Node3D
 @export var away_for := Vector2(40.0, 90.0)
 @export var seed := 11
+## Where else it lies (its parent's frame: x, y, z, and its turn about the vertical). It travels the works behind the
+## walls between them: gone from one, it comes back at another, never the one it left, and only where the eye does
+## not see. Empty: always where it was.
+@export var haunts: Array[Vector4] = []
+## Whether it is away in the works now (gone, not yet back).
+var away := false
 
 var body: MeshInstance3D
 var head: MeshInstance3D
@@ -206,8 +212,19 @@ func _process(delta: float) -> void:
 	else:
 		_back_in -= delta
 
-		if _back_in <= 0.0 and not seen:
-			_come_back()
+		if _back_in <= 0.0:
+			if haunts.is_empty():
+				if not seen:
+					_come_back()
+			else:
+				# (Somewhere else it lies, out of the eye's sight.)
+				var free := haunts.filter(func(h): return Vector3(h.x, h.y, h.z).distance_to(position) > 0.5 \
+					and not eye.is_position_in_frustum(get_parent().to_global(Vector3(h.x, h.y + 0.6, h.z))))
+				if not free.is_empty():
+					var h: Vector4 = free[_rng.randi() % free.size()]
+					position = Vector3(h.x, h.y, h.z)
+					rotation.y = h.w
+					_come_back()
 
 
 ## Its head turned toward the eye, as far as a lying dog's will turn.
@@ -326,6 +343,7 @@ func _smoke_mesh(path: PackedVector3Array, radius: float, bands: Array, erosion:
 
 
 func _go() -> void:
+	away = true
 	visible = false
 	solid.process_mode = Node.PROCESS_MODE_DISABLED
 	solid.collision_layer = 0
@@ -336,6 +354,7 @@ func _go() -> void:
 
 
 func _come_back() -> void:
+	away = false
 	visible = true
 	presence = 1.0
 	_show()

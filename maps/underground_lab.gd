@@ -1149,8 +1149,11 @@ func _furnish() -> void:
 		Vfx.place(niche_flames, middle, {"wicks": wicks})
 		Vfx.emit(niche_flames, true)
 
-	# (Turned to project into the far wall with the image's top kept up.)
-	_decal("soot", Vector3(1.2, NICHE_SILL + 1.15, FAR_WALL - 0.1), Vector3(0.8, 0.4, 0.9), Vector3(90, 180, 0)).name = "decal_soot_niche"
+	# (Over the niche on whichever wall it stands, turned to project into that wall with the image's top kept up.)
+	var niche_at: Vector3 = places["niche"]
+	var off_wall := Vector3(0.0, 0.0, -0.1).rotated(Vector3.UP, float(places["niche_yaw"]) - PI)
+	_decal("soot", Vector3(niche_at.x, NICHE_SILL + 1.15, niche_at.z) + off_wall, Vector3(0.8, 0.4, 0.9),
+		Vector3(90, rad_to_deg(float(places["niche_yaw"])), 0)).name = "decal_soot_niche"
 
 	# A vent low in the back wall breathing the warm air of the works behind it; its breath has
 	# stained the wall above it.

@@ -15,9 +15,17 @@ extends Node3D
 ##   reaching out to them; stepped into, it flinches aside, and never flees;
 ## - escorting: round the procession's dead while they walk (`gather`);
 ## - dragged: at the end of its time, or when what they fear passes (`hush`, the dark train), yanked back to the
-##   drain, still reaching back toward what it leaves, and pulled down through it.
-## All are bound to the drain, never farther from it than TETHER. The node is placed at the drain's middle at
-## the floor, its axes the grate's (its gaps at `lanes` along Z).
+##   drain, still reaching back toward what it leaves, and pulled down through it;
+## - lurking: (a lurker) never torn free: hooked out of its slot, turning toward whoever is near, drawn back in when
+##   they come close;
+## - hiding: (a shy one) caught in someone's gaze, darting out of it, low.
+## No two crowd into one: each keeps a hand's room from the others (SEPARATE), those begging take their own places
+## before the living's eyes, and those sharing a candle their own sides of its flame.
+## Each has its size (`sizes`) and its temper (`tempers`): a beggar (all of the above), shy (never begs; flees the
+## gaze), hungry (never begs; only the candles, longer at them), a lurker (stays at the mouth).
+## All are bound to where they come up, never farther from it than `tether`. The node is placed there at the floor:
+## a drain's middle, its axes the grate's (its gaps at `lanes` along Z); or (`mouth` "wall") a grille low in a wall,
+## at the foot of its face, local +Z out of the wall (its slots at `lanes` heights).
 
 ## Under the grate: how deep their wrists are, how far along the slots they wander.
 const HOME := Vector3(0.0, -0.24, 0.0)
@@ -60,15 +68,39 @@ const PLEADERS := 2
 const CALL_EVERY := 2.0
 ## How often a soul looks again at its way (s).
 const ROUTE_EVERY := 0.25
+## The room each keeps from the others (m, at size 1), and how fast it is pushed apart (per s); how far apart those
+## begging hang before the living, side by side; how far round a shared candle's flame the next one warms (rad).
+const SEPARATE := 0.3
+const SEPARATE_RATE := 6.0
+const PLEAD_APART := 0.42
+const SHARE_TURN := 1.3
+## A wall grille: how far behind its face they wait, how far out a climbing hand holds (its fingers through), where
+## one torn free lurches to (out, up from its slot).
+const BEHIND := -0.24
+const GRIP_OUT := 0.05
+const FREED_OUT := Vector2(0.45, 0.35)
+## A lurker: how far out of its slot it hooks, how long it stays, how near someone may come before it draws back.
+const LURK_OUT := 0.1
+const LURK_FOR := Vector2(6.0, 14.0)
+const LURK_NEAR := 1.8
+## Gazed at (a shy one): within how many degrees of the eye's line and how far; where it darts (sideways out of the
+## gaze, m, and how low), how fast, and how long out of the gaze before it goes on.
+const GAZE := 16.0
+const GAZE_REACH := 8.0
+const DART := Vector2(1.3, 0.35)
+const DART_SPEED := 2.2
+const HIDE_FOR := 1.2
+## A hungry one at a candle: how much longer it stays.
+const HUNGRY_WARM := 1.8
 ## The lines a hand's way is looked along, off its wrist (m): its fire below, its palm above, round it where it leans.
 const HAND_ROOM := [Vector3(0.0, -0.04, 0.0), Vector3.ZERO, Vector3(0.0, 0.14, 0.0), Vector3(0.12, 0.08, 0.0),
 	Vector3(-0.12, 0.08, 0.0), Vector3(0.0, 0.08, 0.12), Vector3(0.0, 0.08, -0.12)]
 ## How each hand is held while it does each thing: how far it leans toward what it reaches for (rad), how
 ## hard it trembles (rad).
 const TILT := {"below": 0.0, "climbing": 0.0, "seeking": 0.6, "warming": 0.7, "straining": 1.1, "pleading": 0.3,
-	"escorting": 0.35, "dragged": 1.05}
+	"escorting": 0.35, "dragged": 1.05, "lurking": 0.5, "hiding": 0.2}
 const TREMBLE := {"below": 0.03, "climbing": 0.12, "seeking": 0.04, "warming": 0.03, "straining": 0.13,
-	"pleading": 0.06, "escorting": 0.04, "dragged": 0.08}
+	"pleading": 0.06, "escorting": 0.04, "dragged": 0.08, "lurking": 0.05, "hiding": 0.09}
 ## Shy of what passes them as well as of the near: how dim they go, near someone, for the escort's height.
 const SHY_DIM := 0.75
 const HEIGHT := Vector2(0.6, 1.5)
@@ -135,6 +167,14 @@ void fragment() {
 @export var lanes := PackedFloat32Array()
 ## The hands they are (from the uncanny kit: one reaching, one clawing); without them, flames.
 @export var hand_meshes: Array[Mesh] = []
+## How far from where they come up they can go (m); where that is ("grate", a drain; "wall", a grille low in a wall);
+## how many may be out at once.
+@export var tether := TETHER
+@export var mouth := "grate"
+@export var want_out := WANT_OUT
+## Each one's size, drawn from this range; its temper, drawn by these weights ("beggar", "shy", "hungry", "lurker").
+@export var sizes := Vector2(1.0, 1.0)
+@export var tempers := {"beggar": 1.0}
 
 ## Each ánima's hand (it carries its aura and its light), its fire, its trail, its light.
 var lights: Array[MeshInstance3D] = []
@@ -164,10 +204,13 @@ var _sheet: ShaderMaterial
 ## The living's last place, and how long they have stood still.
 var _living_was := Vector3.INF
 var _still_for := 0.0
+var _traits := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
 	_rng.seed = seed
+	# (Their sizes and tempers from a draw of their own, so the rest of their lives go as they did without them.)
+	_traits.seed = seed * 7919 + 13
 	var core_mesh := MeshVfx.flame(CORE.x, CORE.y)
 
 	for i in count:
@@ -250,11 +293,13 @@ func _ready() -> void:
 		lamps.append(lamp)
 
 		var phase := Vector3(_rng.randf_range(0.0, TAU), _rng.randf_range(0.0, TAU), _rng.randf_range(0.0, TAU))
-		var lane: float = lanes[(i * 5) % lanes.size()] if not lanes.is_empty() else 0.0
+		var lane: float = lanes[(i * 5) % lanes.size()] if not lanes.is_empty() else (0.25 if mouth == "wall" else 0.0)
 		_souls.append({"state": "below", "phase": phase, "t": 0.0, "until": 0.0, "lane": lane, "goal": Vector3.ZERO,
 			"held": 0.0, "candle": -1, "fade": 1.0, "flare": 0.0, "at": Vector3.ZERO, "vel": Vector3.ZERO,
 			"face": Vector3.FORWARD, "clock": 0.0, "from": Vector3.ZERO, "pace": 0.0, "route": Vector3.INF,
-			"route_to": Vector3.INF, "route_at": 0.0})
+			"route_to": Vector3.INF, "route_at": 0.0, "size": _traits.randf_range(sizes.x, sizes.y),
+			"temper": _pick_temper(), "slot": -1, "hid": 0.0})
+		hand.scale = Vector3.ONE * float(_souls[i]["size"])
 		_souls[i]["at"] = _below(i)
 		hand.position = _souls[i]["at"]
 
@@ -285,7 +330,7 @@ func _process(delta: float) -> void:
 
 	if not hidden:
 		_next_rise -= delta
-		if _count_out() < WANT_OUT and _next_rise <= 0.0:
+		if _count_out() < want_out and _next_rise <= 0.0:
 			for i in count:
 				if _souls[i]["state"] == "below":
 					_become(i, "climbing")
@@ -331,7 +376,7 @@ func _become(i: int, state: String) -> void:
 			soul["until"] = _rng.randf_range(OUT_FOR.x, OUT_FOR.y)
 			soul["held"] = _rng.randf_range(GRIP_FOR.x, GRIP_FOR.y)
 		"warming":
-			soul["held"] = _rng.randf_range(WARM_FOR.x, WARM_FOR.y)
+			soul["held"] = _rng.randf_range(WARM_FOR.x, WARM_FOR.y) * (HUNGRY_WARM if soul["temper"] == "hungry" else 1.0)
 			soul["flare"] = 1.0
 		"straining":
 			soul["held"] = _rng.randf_range(STRAIN_FOR.x, STRAIN_FOR.y)
@@ -339,8 +384,19 @@ func _become(i: int, state: String) -> void:
 			soul["pace"] = 0.4
 			soul["flare"] = 1.0
 			soul["candle"] = -1
-		"pleading", "escorting":
+		"pleading":
 			soul["candle"] = -1
+			# (Its own place before them: the first free one.)
+			var taken := _souls.filter(func(s): return s["state"] == "pleading" and s != soul).map(func(s): return s["slot"])
+			soul["slot"] = 0
+			while soul["slot"] in taken:
+				soul["slot"] += 1
+		"escorting":
+			soul["candle"] = -1
+		"lurking":
+			soul["held"] = _traits.randf_range(LURK_FOR.x, LURK_FOR.y)
+		"hiding":
+			soul["hid"] = 0.0
 
 
 ## Where a soul goes next once free: home if its time is up; to someone standing still near, if few beg them yet;
@@ -356,7 +412,7 @@ func _choose(i: int) -> void:
 		_become(i, "escorting")
 		return
 
-	if _beggable() and _count("pleading") < PLEADERS:
+	if soul["temper"] == "beggar" and _beggable() and _count("pleading") < PLEADERS:
 		_become(i, "pleading")
 		return
 
@@ -366,7 +422,7 @@ func _choose(i: int) -> void:
 
 	for c in candles.size():
 		var spot := _warm_spot(c)
-		if _flat(spot).length() > TETHER:
+		if _flat(spot).length() > tether:
 			far.append(c)
 		elif _souls.any(func(s): return s["candle"] == c):
 			taken.append(c)
@@ -375,6 +431,9 @@ func _choose(i: int) -> void:
 
 	soul["candle"] = -1
 
+	# (The hungry make for a candle within reach whenever there is one, taken or not.)
+	if soul["temper"] == "hungry" and not (free + taken).is_empty():
+		far = []
 	if not far.is_empty() and _count("straining") == 0 and _rng.randf() < 0.35:
 		soul["candle"] = far[_rng.randi() % far.size()]
 		soul["goal"] = _tethered(to_local(candles[soul["candle"]]), _rng.randf_range(0.7, 1.3))
@@ -386,12 +445,12 @@ func _choose(i: int) -> void:
 
 	if not pick.is_empty():
 		soul["candle"] = pick[_rng.randi() % pick.size()]
-		soul["goal"] = _warm_spot(soul["candle"])
+		soul["goal"] = _warm_spot(soul["candle"], i)
 		soul["from"] = to_local(candles[soul["candle"]])
 	else:
 		# (No candles here: about the drain.)
 		var a := _rng.randf_range(0.0, TAU)
-		var r := _rng.randf_range(0.4, TETHER * 0.7)
+		var r := _rng.randf_range(0.4, tether * 0.7)
 		soul["goal"] = Vector3(cos(a) * r, _rng.randf_range(HEIGHT.x, HEIGHT.y), sin(a) * r)
 		soul["from"] = soul["goal"]
 
@@ -400,13 +459,24 @@ func _choose(i: int) -> void:
 
 
 ## Beside a candle's flame on its open side (`sides`; else toward the drain), the wrist a little below the flame
-## (local).
-func _warm_spot(c: int) -> Vector3:
+## (local). Soul `i` sharing it with others before it takes its own side, turned round the flame from theirs.
+func _warm_spot(c: int, i := -1) -> Vector3:
 	var flame := to_local(candles[c])
 	var out := -_flat(flame).normalized() * WARM_OFF if _flat(flame).length() > 0.01 else Vector3.RIGHT * WARM_OFF
 
 	if c < sides.size():
 		out = global_basis.inverse() * sides[c]
+
+	var before := 0
+	for j in maxi(i, 0):
+		before += 1 if _souls[j]["candle"] == c else 0
+	if before > 0 and c < sides.size():
+		# (A candle open on one side only, in a shrine or a niche: the next waits further out along it, a little
+		# aside, never round into what holds the candle.)
+		var aside := out.cross(Vector3.UP).normalized() * 0.06 * (1.0 if before % 2 == 1 else -1.0)
+		out = out * (1.0 + 0.9 * before) + aside
+	elif before > 0:
+		out = out.rotated(Vector3.UP, SHARE_TURN * ceilf(before / 2.0) * (1.0 if before % 2 == 1 else -1.0))
 
 	return flame + out + Vector3(0.0, -WARM_DROP, 0.0)
 
@@ -414,8 +484,8 @@ func _warm_spot(c: int) -> Vector3:
 ## A point held within the tether, at a height.
 func _tethered(at: Vector3, y: float) -> Vector3:
 	var flat := _flat(at)
-	if flat.length() > TETHER - 0.05:
-		flat = flat.normalized() * (TETHER - 0.05)
+	if flat.length() > tether - 0.05:
+		flat = flat.normalized() * (tether - 0.05)
 	return Vector3(flat.x, y, flat.z)
 
 
@@ -444,7 +514,7 @@ func _beggable() -> bool:
 	if _still_for < STILL_FOR:
 		return false
 
-	return _flat(to_local(flee_from.global_position)).length() < TETHER + ARM
+	return _flat(to_local(flee_from.global_position)).length() < tether + ARM
 
 
 ## Someone standing still near: now and then one more leaves its candle and comes to beg of them.
@@ -458,7 +528,7 @@ func _call_to_beg(delta: float) -> void:
 	var best := -1
 
 	for i in count:
-		if _souls[i]["state"] in ["seeking", "warming", "straining"]:
+		if _souls[i]["state"] in ["seeking", "warming", "straining"] and _souls[i]["temper"] == "beggar":
 			if best < 0 or _souls[i]["at"].distance_to(them) < _souls[best]["at"].distance_to(them):
 				best = i
 
@@ -466,12 +536,15 @@ func _call_to_beg(delta: float) -> void:
 		_become(best, "pleading")
 
 
-## Where a pleading soul hangs: at arm's length before the living's eyes, a little below them (local).
-func _before_them() -> Vector3:
+## Where a pleading soul hangs: at arm's length before the living's eyes, a little below them (local); each in its
+## own place (`slot`), side by side across their sight, the second a little higher.
+func _before_them(slot := 0) -> Vector3:
 	var eye := _eye()
 	var ahead := _flat(-eye.basis.z)
 	ahead = ahead.normalized() if ahead.length() > 0.01 else Vector3.FORWARD
-	return to_local(eye.origin + ahead * ARM + Vector3(0.0, -BELOW_EYES, 0.0))
+	var across := ahead.cross(Vector3.UP).normalized()
+	var aside := (float(slot) - (PLEADERS - 1) / 2.0) * PLEAD_APART
+	return to_local(eye.origin + ahead * ARM + across * aside + Vector3(0.0, -BELOW_EYES + 0.08 * (slot % 2), 0.0))
 
 
 ## The living's eyes: the camera, if it is theirs; else their body, a head above it.
@@ -491,8 +564,13 @@ func _move(i: int, delta: float, hidden: bool) -> void:
 	soul["clock"] += delta
 	soul["flare"] = maxf(0.0, soul["flare"] - 1.4 * delta)
 
-	if hidden and soul["state"] in ["seeking", "warming", "straining", "pleading", "escorting", "climbing"]:
+	if hidden and soul["state"] in ["seeking", "warming", "straining", "pleading", "escorting", "climbing", "lurking", "hiding"]:
 		_become(i, "dragged")
+
+	# A shy one caught in someone's gaze darts out of it.
+	if soul["temper"] == "shy" and soul["state"] in ["seeking", "warming", "straining"] and _gazed(at):
+		soul["goal"] = _out_of_gaze(at)
+		_become(i, "hiding")
 
 	var state: String = soul["state"]
 	var phase: Vector3 = soul["phase"]
@@ -503,32 +581,62 @@ func _move(i: int, delta: float, hidden: bool) -> void:
 		"below":
 			at = at.lerp(_below(i), 1.0 - exp(-3.0 * delta))
 		"climbing":
-			# Up its gap to the wrist, held there trembling, then torn free and up.
-			var gap := Vector3(clampf(at.x, -SLIDE, SLIDE), at.y, soul["lane"])
-			if at.y < GRIP_Y - 0.005 and soul["clock"] < 3.0:
-				at = at.move_toward(Vector3(gap.x, GRIP_Y, gap.z), SPEED * 1.2 * delta)
+			# Up its gap to the wrist (from a wall, out through its slot to the fingers), held there trembling, then
+			# torn free and up; a lurker stays hooked there.
+			var wall := mouth == "wall"
+			var grip := Vector3(clampf(at.x, -SLIDE, SLIDE), soul["lane"], GRIP_OUT) if wall \
+				else Vector3(clampf(at.x, -SLIDE, SLIDE), GRIP_Y, soul["lane"])
+			var short: bool = at.z < GRIP_OUT - 0.005 if wall else at.y < GRIP_Y - 0.005
+			if short and soul["clock"] < 3.0:
+				at = at.move_toward(grip, SPEED * 1.2 * delta)
 			elif soul["held"] > 0.0:
 				soul["held"] -= delta
 				if soul["held"] <= 0.0:
 					soul["flare"] = 1.0
+					if soul["temper"] == "lurker":
+						_become(i, "lurking")
 			else:
-				at = at.move_toward(Vector3(at.x, FREED_Y, at.z), FREED_SPEED * delta)
-				if at.y >= FREED_Y - 0.01:
+				var freed := Vector3(at.x, float(soul["lane"]) + FREED_OUT.y, FREED_OUT.x) if wall else Vector3(at.x, FREED_Y, at.z)
+				at = at.move_toward(freed, FREED_SPEED * delta)
+				if at.distance_to(freed) < 0.01:
 					_choose(i)
+		"lurking":
+			# Hooked out of its slot, turning toward whoever is near; drawn back in when they come close, or in time.
+			var hook := Vector3(clampf(at.x, -SLIDE, SLIDE), soul["lane"], LURK_OUT) if mouth == "wall" \
+				else Vector3(clampf(at.x, -SLIDE, SLIDE), LURK_OUT, soul["lane"])
+			var stir := Vector3(sin(_time * 0.7 + phase.x), sin(_time * 1.1 + phase.y), sin(_time * 0.9 + phase.z)) * 0.015
+			at = at.lerp(hook + stir, 1.0 - exp(-3.0 * delta))
+			soul["held"] -= delta
+			if _living():
+				var them := to_local(flee_from.global_position)
+				if _flat(them - at).length() < 4.0:
+					toward = them + Vector3(0.0, 0.8, 0.0)
+				if _flat(them - at).length() < LURK_NEAR:
+					soul["held"] = 0.0
+			if soul["held"] <= 0.0:
+				_become(i, "dragged")
+		"hiding":
+			# Out of the gaze, low and to its side; on again once out of it a while.
+			at = at.move_toward(_next(i, soul["goal"]), DART_SPEED * delta)
+			toward = soul["goal"] + Vector3(0.0, 0.3, 0.0)
+			soul["hid"] = 0.0 if _gazed(at) else soul["hid"] + delta
+			if soul["hid"] > HIDE_FOR:
+				_choose(i)
 		"seeking":
-			# In surges: a lunge, then a pause, reaching ahead.
+			# In surges: a lunge, then a pause, reaching ahead (the hungry faster).
 			var surge := pow(maxf(0.0, sin(soul["clock"] * SURGE + phase.x)), 2.0)
-			at = at.move_toward(_next(i, soul["goal"]), SPEED * (IDLE + 2.0 * surge) * delta)
+			var keen := 1.4 if soul["temper"] == "hungry" else 1.0
+			at = at.move_toward(_next(i, soul["goal"]), SPEED * keen * (IDLE + 2.0 * surge) * delta)
 			toward = soul["goal"] + Vector3(0.0, 0.2, 0.0) if at.distance_to(soul["goal"]) > 0.25 else soul["from"]
 			if at.distance_to(soul["goal"]) < 0.04:
-				if soul["candle"] >= 0 and _flat(_warm_spot(soul["candle"])).length() <= TETHER:
+				if soul["candle"] >= 0 and _flat(_warm_spot(soul["candle"])).length() <= tether:
 					_become(i, "warming")
 				elif soul["candle"] >= 0:
 					_become(i, "straining")
 				else:
 					_choose(i)
 		"warming":
-			var spot := _warm_spot(soul["candle"])
+			var spot := _warm_spot(soul["candle"], i)
 			var bob := Vector3(sin(_time * 1.3 + phase.x), sin(_time * 0.9 + phase.y), sin(_time * 1.1 + phase.z)) * 0.02
 			at = at.lerp(spot + bob, 1.0 - exp(-4.0 * delta))
 			toward = to_local(candles[soul["candle"]])
@@ -548,10 +656,10 @@ func _move(i: int, delta: float, hidden: bool) -> void:
 			if not _living():
 				_choose(i)
 			else:
-				var spot := _before_them()
+				var spot := _before_them(int(soul["slot"]))
 				var them := to_local(flee_from.global_position)
 				# Out of reach (they have gone on), it strains after them.
-				if _flat(spot).length() > TETHER:
+				if _flat(spot).length() > tether:
 					soul["goal"] = _tethered(spot, spot.y)
 					soul["from"] = them + Vector3(0.0, 0.6, 0.0)
 					_become(i, "straining")
@@ -572,20 +680,38 @@ func _move(i: int, delta: float, hidden: bool) -> void:
 				at = at.move_toward(_next(i, goal), SPEED * 2.4 * delta)
 				toward = round_it + Vector3(0.0, 1.2, 0.0)
 		"dragged":
-			# Yanked back to its gap, faster and faster, reaching back toward what it leaves; then down through it.
+			# Yanked back to its gap, faster and faster, reaching back toward what it leaves; then down through it
+			# (from a wall, back in through its slot).
 			soul["pace"] = minf(DRAG_SPEED, soul["pace"] + DRAG_GAIN * delta)
-			var mouth := Vector3(clampf(at.x, -SLIDE, SLIDE), 0.12, _nearest_lane(at.z))
-			if _flat(at - mouth).length() > 0.03:
-				at = at.move_toward(_next(i, Vector3(mouth.x, maxf(mouth.y, minf(at.y, 0.6)), mouth.z)), soul["pace"] * delta)
+			var wall := mouth == "wall"
+			var gap_at := Vector3(clampf(at.x, -SLIDE, SLIDE), _nearest_lane(at.y), 0.12) if wall \
+				else Vector3(clampf(at.x, -SLIDE, SLIDE), 0.12, _nearest_lane(at.z))
+			var off: Vector3 = at - gap_at if wall else _flat(at - gap_at)
+			if off.length() > 0.03:
+				var aim := gap_at if wall else Vector3(gap_at.x, maxf(gap_at.y, minf(at.y, 0.6)), gap_at.z)
+				at = at.move_toward(_next(i, aim), soul["pace"] * delta)
 				toward = soul["from"] if soul["from"] != Vector3.ZERO else at + Vector3(0.0, 0.5, 0.0)
+			elif wall:
+				soul["lane"] = gap_at.y
+				at = at.move_toward(Vector3(at.x, gap_at.y, BEHIND), SINK_SPEED * delta)
+				if at.z <= BEHIND + 0.02:
+					soul["state"] = "below"
+					soul["from"] = Vector3.ZERO
 			else:
-				soul["lane"] = mouth.z
-				at = at.move_toward(Vector3(at.x, HOME.y, mouth.z), SINK_SPEED * delta)
+				soul["lane"] = gap_at.z
+				at = at.move_toward(Vector3(at.x, HOME.y, gap_at.z), SINK_SPEED * delta)
 				if at.y <= HOME.y + 0.02:
 					soul["state"] = "below"
 					soul["from"] = Vector3.ZERO
 
-	if state in ["seeking", "warming", "straining", "pleading", "escorting", "dragged"]:
+	# (Never two in one place: each keeps its room from the others out.)
+	if state in ["seeking", "warming", "straining", "pleading", "escorting", "hiding", "lurking"]:
+		var push := _apart(i, at) * minf(1.0, SEPARATE_RATE * delta)
+		# (Pushed only where nothing solid stands in the way.)
+		if push.length() > 0.0005 and _clear(at, at + push):
+			at += push
+
+	if state in ["seeking", "warming", "straining", "pleading", "escorting", "dragged", "hiding"]:
 		at = _flinch(at)
 
 	soul["at"] = at
@@ -639,6 +765,54 @@ func _clear(a: Vector3, b: Vector3) -> bool:
 	return true
 
 
+## How far soul `i` at `at` (local) must move to have its room from every other out of the gap (the larger the
+## pair, the more room); two on one spot part along their own phases.
+func _apart(i: int, at: Vector3) -> Vector3:
+	var push := Vector3.ZERO
+	for j in count:
+		var other: Dictionary = _souls[j]
+		if j == i or other["state"] in ["below", "climbing", "dragged"]:
+			continue
+		var room := SEPARATE * (float(_souls[i]["size"]) + float(other["size"])) / 2.0
+		var d: Vector3 = at - other["at"]
+		if d.length() < room:
+			var away := d.normalized() if d.length() > 0.001 else Vector3(cos(_souls[i]["phase"].x), 0.0, sin(_souls[i]["phase"].x))
+			push += away * (room - d.length())
+	return push
+
+
+## Whether the drawing eye looks at a point (local) from near: within GAZE of its line, GAZE_REACH of it.
+func _gazed(at: Vector3) -> bool:
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return false
+	var d := to_global(at) - camera.global_position
+	return d.length() < GAZE_REACH and (-camera.global_basis.z).dot(d.normalized()) > cos(deg_to_rad(GAZE))
+
+
+## Where a soul caught in the gaze darts (local): on across the eye's sight the way it already lies from its line,
+## and low.
+func _out_of_gaze(at: Vector3) -> Vector3:
+	var camera := get_viewport().get_camera_3d()
+	var p := to_global(at)
+	var right := camera.global_basis.x
+	var side := 1.0 if right.dot(p - camera.global_position) >= 0.0 else -1.0
+	return _tethered(to_local(p + right * side * DART.x), DART.y)
+
+
+## A temper drawn by `tempers`' weights.
+func _pick_temper() -> String:
+	var total := 0.0
+	for w in tempers.values():
+		total += float(w)
+	var pick := _traits.randf() * total
+	for kind in tempers:
+		pick -= float(tempers[kind])
+		if pick <= 0.0:
+			return kind
+	return "beggar"
+
+
 ## Kept out of the living's body: one that comes too near flinches aside.
 func _flinch(at: Vector3) -> Vector3:
 	if not _living() or at.y < 0.1:
@@ -676,9 +850,14 @@ func _draw(i: int, delta: float, toward: Vector3) -> void:
 	var face: Vector3 = soul["face"]
 	var tilt: float = TILT[state]
 
-	if state in ["below", "climbing"] or (state == "dragged" and at.y < 0.3 and _flat(at - Vector3(at.x, 0.0, _nearest_lane(at.z))).length() < 0.2 and absf(at.x) < SLIDE + 0.2):
-		face = Vector3.FORWARD
-		tilt = 0.0
+	var wall := mouth == "wall"
+	var by_slot: bool = absf(at.x) < SLIDE + 0.2 and (at.z < 0.2 and absf(at.y - _nearest_lane(at.y)) < 0.15 if wall
+		else at.y < 0.3 and _flat(at - Vector3(at.x, 0.0, _nearest_lane(at.z))).length() < 0.2)
+	var in_slot: bool = state in ["below", "climbing"] or (state == "dragged" and by_slot)
+	if in_slot:
+		# (Through a wall's slot flat, its fingers out of the wall; up through a grate's, edge-on.)
+		face = Vector3.BACK if wall else Vector3.FORWARD
+		tilt = PI / 2.0 if wall else 0.0
 	elif toward != Vector3.INF and _flat(toward - at).length() > 0.02:
 		face = _flat(toward - at).normalized()
 	elif _flat(soul["vel"]).length() > 0.05:
@@ -693,8 +872,10 @@ func _draw(i: int, delta: float, toward: Vector3) -> void:
 	var turned := Basis(palm, up, palm.cross(up)).orthonormalized()
 	var wobble := Basis(Vector3(cos(phase.x + _time), 0.0, sin(phase.x + _time)).normalized(), amount * sin(_time * 23.0 + phase.y))
 	# (Turned edge-on fast as it goes down through its slot, so it never lies across the bars.)
-	var rate := 20.0 if tilt == 0.0 and state != "below" else (9.0 if state == "dragged" else 5.0)
+	var rate := 20.0 if in_slot and state != "below" else (9.0 if state == "dragged" else 5.0)
 	hand.quaternion = hand.quaternion.slerp((wobble * turned).get_rotation_quaternion(), 1.0 - exp(-rate * delta))
+	var size: float = soul["size"]
+	hand.scale = Vector3.ONE * size
 
 	# Its fire: upright in the world at the wrist, taller as it flares or hurries, streaming behind it.
 	var shell := shells[i]
@@ -703,13 +884,13 @@ func _draw(i: int, delta: float, toward: Vector3) -> void:
 	var flare: float = soul["flare"]
 	var tall := 1.0 + 0.5 * flare + 0.25 * minf(speed, 1.5)
 	var wide := 1.0 + 0.15 * flare
-	shell.global_transform = Transform3D(Basis.from_scale(Vector3(wide, tall, wide)),
-		hand.global_position + Vector3(0.0, -SHELL_SINK, 0.0))
+	shell.global_transform = Transform3D(Basis.from_scale(Vector3(wide, tall, wide) * size),
+		hand.global_position + Vector3(0.0, -SHELL_SINK * size, 0.0))
 	var stream := -(global_basis * vel) * STREAM
 	if stream.length() > STREAM_MOST:
 		stream = stream.normalized() * STREAM_MOST
 	# (Given in the fire's own, scaled space.)
-	_fire_looks[i].set_shader_parameter(&"sway", Vector3(stream.x / wide, stream.y / tall, stream.z / wide))
+	_fire_looks[i].set_shader_parameter(&"sway", Vector3(stream.x / wide, stream.y / tall, stream.z / wide) / size)
 	_fire_looks[i].set_shader_parameter(&"energy", FIRE_ENERGY + 1.2 * flare)
 
 	# Dimmer near the living (they are shy of them), and eaten away as they fade.
@@ -725,25 +906,29 @@ func _draw(i: int, delta: float, toward: Vector3) -> void:
 
 	_fire_looks[i].set_shader_parameter(&"erosion", lerpf(0.9, 0.2, shown))
 	_trail_looks[i].set_shader_parameter(&"erosion", lerpf(0.95, 0.2, shown))
-	var risen := clampf(at.y / 0.4, 0.0, 1.0)
-	lamps[i].light_energy = LAMP_ENERGY * risen * shown * (1.0 + 0.8 * flare)
+	var risen := clampf((at.z - BEHIND) / (GRIP_OUT - BEHIND), 0.0, 1.0) if wall else clampf(at.y / 0.4, 0.0, 1.0)
+	lamps[i].light_energy = LAMP_ENERGY * risen * shown * (1.0 + 0.8 * flare) * size
 
 
-## Where a soul below wanders: along its slot under the grate.
+## Where a soul below wanders: along its slot under the grate (behind a wall's grille, along its slot there).
 func _below(i: int) -> Vector3:
 	var p: Vector3 = _souls[i]["phase"] if i < _souls.size() else Vector3.ZERO
 	var lane: float = _souls[i]["lane"] if i < _souls.size() else 0.0
-	return Vector3(HOME.x + sin(_time * 0.43 + p.x) * SLIDE * 0.8, HOME.y + sin(_time * 0.81 + p.y) * 0.025, lane)
+	var along := HOME.x + sin(_time * 0.43 + p.x) * SLIDE * 0.8
+	if mouth == "wall":
+		return Vector3(along, lane + sin(_time * 0.81 + p.y) * 0.015, BEHIND)
+	return Vector3(along, HOME.y + sin(_time * 0.81 + p.y) * 0.025, lane)
 
 
-func _nearest_lane(z: float) -> float:
+## The gap nearest `v` (along Z under a grate, up a wall's grille).
+func _nearest_lane(v: float) -> float:
 	if lanes.is_empty():
-		return z
+		return v
 
 	var best: float = lanes[0]
 
 	for lane in lanes:
-		if absf(lane - z) < absf(best - z):
+		if absf(lane - v) < absf(best - v):
 			best = lane
 
 	return best
@@ -775,7 +960,7 @@ func _trail(delta: float) -> void:
 		_paths[i] = path
 		if path.size() >= 2:
 			# (Its look on the mesh itself: a mesh made anew each frame drops a node's override.)
-			var strip := MeshVfx.ribbon(path, TRAIL_WIDTH, eye)
+			var strip := MeshVfx.ribbon(path, TRAIL_WIDTH * float(_souls[i]["size"]), eye)
 			strip.surface_set_material(0, _trail_looks[i])
 			ribbons[i].mesh = strip
 		else:
@@ -804,3 +989,11 @@ func _build_glow() -> void:
 	glow.light_energy = GLOW_ENERGY
 	add_child(glow)
 	glow.position = Vector3(0.0, GLOW_Y, 0.0)
+	if mouth == "wall":
+		# (Behind a wall's grille: the sheet stood up behind its slots, the light deep in the duct.)
+		var middle := 0.25
+		if not lanes.is_empty():
+			middle = (lanes[0] + lanes[lanes.size() - 1]) / 2.0
+		plane.orientation = PlaneMesh.FACE_Z
+		sheet.position = Vector3(0.0, middle, -0.03)
+		glow.position = Vector3(0.0, middle, BEHIND + 0.05)

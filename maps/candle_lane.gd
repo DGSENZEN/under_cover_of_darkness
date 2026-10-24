@@ -6,6 +6,8 @@ extends "res://maps/underground_lab.gd"
 ## and a glimpse of the chapel through its doorway), then set whole into maps/metro, where the map's own spaces meet it.
 
 const LIBRARY := preload("res://maps/library_lab.tscn")
+const WatchingEyes := preload("res://scripts/Visual/WatchingEyes.gd")
+const WispsScript := preload("res://scripts/Visual/Wisps.gd")
 ## Where the lane's middle is in the plan; how far the corridor runs each way from it (m: 28 tile modules, 7 vault spans).
 const PLAN_ORIGIN := Vector3(12.8, -11.0, 74.35)
 const LANE_HALF := 16.8
@@ -47,6 +49,42 @@ const PASAJE_GLOW := Color(1.0, 0.55, 0.42)
 const CHAPEL_GLOW := Color(1.0, 0.66, 0.36)
 const CHAPEL_IN := 2.0
 const CHAPEL_WIDTH := 6.0
+## The lane crowded (after the first look): candles massed on the floor where the ledges ran out of room, and under
+## her niche and the milagros board; marigolds; papel picado before the chapel; the pipes' works off their mains; the
+## air line's hoods at the walls' feet (the ánimas come and go by them); the old culvert the nahual looks out of.
+## [piece, where, turned]: masses and buckets with their backs to their wall, the works and culvert on its face.
+const DRESSING := [
+	["candle_mass_a", Vector3(12.8, 0.0, BACK_WALL + 0.53), 0.0],
+	["candle_mass_b", Vector3(12.0, 0.0, FAR_WALL - 0.36), PI],
+	["candle_mass_b", Vector3(16.42, 0.0, 3.1), -PI / 2.0],
+	["candle_mass_b", Vector3(-10.0, 0.0, BACK_WALL + 0.36), 0.0],
+	["flower_bucket", Vector3(13.65, 0.0, BACK_WALL + 0.2), 0.0],
+	["flower_bucket", Vector3(16.3, 0.0, 2.5), 0.0],
+	["flower_bucket", Vector3(-10.6, 0.0, BACK_WALL + 0.2), 0.0],
+	["picado_strings", Vector3.ZERO, 0.0],
+	["gas_meter", Vector3(-6.6, 0.0, BACK_WALL), 0.0],
+	["main_gauge", Vector3(9.1, 0.0, BACK_WALL), 0.0],
+	["air_branch", Vector3(-13.8, 0.0, FAR_WALL), PI],
+	["air_branch", Vector3(0.9, 0.0, FAR_WALL), PI],
+	["culvert", Vector3(-5.0, 0.0, FAR_WALL), PI],
+]
+## The ánimas' other ways up, by the vents: [the vent's foot on its wall, which way out of the wall (+1 the back
+## wall's, -1 the far's), how far its face stands out, its slots' heights, how many come by it, their sizes, their
+## tempers (Animas.gd), how far they go]. The hood by the mouth: little ones, mostly shy; the hood mid-lane: hungry
+## for the candles; the old grille: big lurkers that keep to it.
+const VENT_SOULS := [
+	[Vector3(-13.8, 0.0, FAR_WALL), -1.0, 0.16, [0.2, 0.3], 6, Vector2(0.45, 0.75), {"shy": 3.0, "beggar": 1.0}, 4.0],
+	[Vector3(0.9, 0.0, FAR_WALL), -1.0, 0.16, [0.2, 0.3], 4, Vector2(0.8, 1.15), {"hungry": 2.0, "beggar": 1.0}, 6.0],
+	[Vector3(VENT_X, 0.0, BACK_WALL), 1.0, 0.05, [0.25, 0.36], 3, Vector2(1.2, 1.5), {"lurker": 1.0}, 2.0],
+]
+## The nahual's haunts in the lane (x, y, z, its turn: lying out from its wall, its head toward the lane's middle):
+## by the bench (where the bay has it), beside the culvert it comes and goes by, on the north wall's foot between her
+## niche and the gas meter, by the hood at the mouth.
+const HAUNTS := [Vector4(-6.6, 0.0, 4.35, PI / 2.0), Vector4(-4.1, 0.0, 4.3, PI / 2.0), Vector4(-7.7, 0.0, BACK_WALL + 0.25, -PI / 2.0),
+	Vector4(-15.3, 0.0, 4.3, PI / 2.0)]
+## Where its eyes look out of the culvert while it is away: in the dark a hand behind the bars (tools/eclipse/
+## candle_lane.py CULVERT, CULVERT_DARK).
+const CULVERT_EYES := Vector3(-5.0, 0.34, FAR_WALL - 0.29)
 ## How brightly the backdrops glow (the Pasaje's, the chapel's): dim as the lane's own light, never a lit screen.
 const BACKDROP_GLOW := Vector2(0.035, 0.03)
 ## How much of the stubs' lights the fog takes up.
@@ -59,14 +97,22 @@ var shop: Node3D
 var chapel_door: Node3D
 var stub: Node3D
 var door_frame: MeshInstance3D
-var ledges: MeshInstance3D
+var ledges: Array[MeshInstance3D] = []
+var masses: Array[MeshInstance3D] = []
 var milagros: MeshInstance3D
 var mouth_sign: MeshInstance3D
 var mouth_portal: MeshInstance3D
 var arrows: Array[MeshInstance3D] = []
-## The flames on the ledges (Vfx "candles", a run of wicks each, each its light) and every wick they stand on.
+## The flames (Vfx "candles": a run of a ledge's wicks or a floor mass's each, each its light), and every wick on the
+## ledges.
 var candles: Array[Node3D] = []
 var candle_wicks: Array[Vector3] = []
+## The ánimas that come up by the vents (VENT_SOULS), each source its own.
+var vent_souls: Array[Node3D] = []
+## The nahual's eyes in the culvert (scripts/Visual/WatchingEyes.gd).
+var culvert_eyes: Node3D
+## The ánimas' warmth slipping out of their ways up into the candles' flames (scripts/Visual/Wisps.gd).
+var wisps: Node3D
 
 
 func _ready() -> void:
@@ -84,6 +130,8 @@ func _ready() -> void:
 	_east_end()
 	_west_end()
 	_lane_pieces()
+	_vent_souls()
+	_nahual_ways()
 	_stubs()
 	shop = LIBRARY.instantiate()
 	shop.name = "Library"
@@ -92,6 +140,76 @@ func _ready() -> void:
 	shop.transform = Transform3D(Basis(Vector3.UP, PI), SHOP_AT)
 	add_child(shop)
 	inspection_sections.append(shop)
+
+
+## The vents' ánimas fear what the drain's fear and gather where they gather (the dark train, the procession).
+func _process(delta: float) -> void:
+	super._process(delta)
+	for souls in vent_souls:
+		souls.hush = animas.hush if animas != null else 0.0
+		souls.gather = animas.gather if animas != null else null
+
+
+## The ánimas up by the vents (VENT_SOULS): each source at its vent's face, out of its wall, making for the lane's
+## candles (the drain's, the ledges', the masses').
+func _vent_souls() -> void:
+	var hands: Array[Mesh] = []
+	if ResourceLoader.exists(UNCANNY_KIT):
+		var kit := _kit(UNCANNY_KIT)
+		hands = [kit["anima_hand_reach"], kit["anima_hand_claw"]] as Array[Mesh]
+	var lit := PackedVector3Array(animas.candles) if animas != null else PackedVector3Array()
+	for flames in candles:
+		lit.append(flames.global_position)
+	for k in VENT_SOULS.size():
+		var vent: Array = VENT_SOULS[k]
+		var souls: Node3D = AnimasScript.new()
+		souls.name = "vent_animas_%d" % k
+		souls.hand_meshes = hands
+		souls.colour = Color("b8f04a")
+		souls.seed = 41 + 17 * k
+		souls.flee_from = player
+		souls.mouth = "wall"
+		souls.lanes = PackedFloat32Array(vent[3])
+		souls.count = vent[4]
+		souls.want_out = maxi(1, int(vent[4]) - 1)
+		souls.sizes = vent[5]
+		souls.tempers = vent[6]
+		souls.tether = vent[7]
+		souls.candles = lit
+		add_child(souls)
+		souls.position = vent[0] + Vector3(0.0, 0.0, float(vent[1]) * float(vent[2]))
+		souls.rotation.y = 0.0 if vent[1] > 0.0 else PI
+		vent_souls.append(souls)
+
+	# Their warmth, now and then, out of where they come up and into the flames.
+	wisps = WispsScript.new()
+	wisps.name = "wisps"
+	var ways_up := PackedVector3Array()
+	if animas != null:
+		ways_up.append(animas.global_position + Vector3(0.0, 0.05, 0.0))
+	for souls in vent_souls:
+		ways_up.append(souls.to_global(Vector3(0.0, 0.25, 0.05)))
+	wisps.sources = ways_up
+	var flames := PackedVector3Array()
+	for flame in candles:
+		flames.append(flame.global_position)
+	wisps.targets = flames
+	add_child(wisps)
+
+
+## The nahual given the lane's haunts, and its eyes in the culvert for while it is away between them.
+func _nahual_ways() -> void:
+	if nahual == null:
+		return
+	var haunts: Array[Vector4] = []
+	haunts.assign(HAUNTS)
+	nahual.haunts = haunts
+	culvert_eyes = WatchingEyes.new()
+	culvert_eyes.name = "culvert_eyes"
+	culvert_eyes.nahual = nahual
+	culvert_eyes.watched = player
+	add_child(culvert_eyes)
+	culvert_eyes.position = CULVERT_EYES
 
 
 ## A point in the lane's frame, in the plan's (x, floor height, y).
@@ -109,6 +227,16 @@ func _shop_front() -> void:
 			panel.free()
 	_cut("far_wall", Vector3(-half_run, 0.0, FAR_WALL + WALL_FACE), Vector3(half_run, HEIGHT, FAR_WALL + WALL_FACE + WALL),
 		SHOP_FRONT.x, SHOP_FRONT.y)
+	# (And what the bay hung on that stretch of wall: its name tablet, its bills, its splashes.)
+	for n: Node in get_children():
+		var at := (n as Node3D).position if n is Node3D else Vector3.INF
+		if (n is Decal or String(n.name).begins_with("name_tablet")) and at.z > FAR_WALL - 0.3 \
+				and at.x > SHOP_FRONT.x - 0.3 and at.x < SHOP_FRONT.y + 0.3:
+			if n is MeshInstance3D:
+				wall_panels.erase(n)
+			if n is Decal:
+				decals.erase(n)
+			n.free()
 
 
 ## The east end: its tiles over the doorway gone, its wall rebuilt round the chapel's doorway.
@@ -156,7 +284,8 @@ func _lane_pieces() -> void:
 	var look := Painterly.material(_painted(["candle_lane.png", "candle_lane_base.png"]), &"bespoke")
 	door_frame = _place(meshes["chapel_door"], look, "chapel_door", Vector3.ZERO, 0.0, false)
 	door_frame.name = "door_frame"
-	ledges = _place(meshes["votive_ledges"], look, "votive_ledges", Vector3.ZERO, 0.0, false)
+	for kind in ["votive_north", "votive_south"]:
+		ledges.append(_place(meshes[kind], look, kind, Vector3.ZERO, 0.0, false))
 	milagros = _place(meshes["milagros_board"], look, "milagros_board", Vector3.ZERO, 0.0, false)
 	mouth_portal = _place(meshes["mouth_portal"], look, "mouth_portal", Vector3.ZERO, 0.0, false)
 	mouth_sign = _place(meshes["enamel_sign"], look, "enamel_sign", Vector3(-half_run + SIGN_IN, HEIGHT, (BACK_WALL + FAR_WALL) / 2.0),
@@ -167,20 +296,30 @@ func _lane_pieces() -> void:
 		plate.name = "arrow_%d" % arrows.size()
 		plate.set_meta("points", arrow[3])
 		arrows.append(plate)
+	for dressed: Array in DRESSING:
+		var piece := _place(meshes[dressed[0]], look, dressed[0], dressed[1], dressed[2], false)
+		if String(dressed[0]).begins_with("candle_mass"):
+			masses.append(piece)
 	_candles()
 
 
-## The ledges' candles lit: their wicks in runs of CANDLE_RUN along each ledge, a flame system (and its light) to a run.
+## The candles lit: the ledges' wicks in runs of CANDLE_RUN along each ledge, each floor mass's all together; a flame
+## system (and its light) to a run or a mass.
 func _candles() -> void:
 	if not FileAccess.file_exists(LANE_WICKS):
 		missing.append(LANE_WICKS)
 		return
+	var all_wicks: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(LANE_WICKS))
 	var runs := {}
-	for w in (JSON.parse_string(FileAccess.get_file_as_string(LANE_WICKS)) as Dictionary).get("votive_ledges", []):
-		var at: Vector3 = ledges.global_transform * Vector3(w[0], w[1], w[2])
-		candle_wicks.append(at)
-		var key := "%s%d" % ["far" if w[2] > 1.0 else "back", floori(w[0] / CANDLE_RUN)]
-		runs.get_or_add(key, []).append(at)
+	for ledge in ledges:
+		for w in all_wicks.get(String(ledge.get_meta("kind")), []):
+			var at: Vector3 = ledge.global_transform * Vector3(w[0], w[1], w[2])
+			candle_wicks.append(at)
+			var key := "%s%d" % ["far" if w[2] > 1.0 else "back", floori(w[0] / CANDLE_RUN)]
+			runs.get_or_add(key, []).append(at)
+	for mass in masses:
+		for w in all_wicks.get(String(mass.get_meta("kind")), []):
+			runs.get_or_add(String(mass.name), []).append(mass.global_transform * Vector3(w[0], w[1], w[2]))
 	for key: String in runs:
 		var middle := Vector3.ZERO
 		var wicks := []

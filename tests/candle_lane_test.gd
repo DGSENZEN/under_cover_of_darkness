@@ -16,6 +16,10 @@ func _ready() -> void:
 	await _shell()
 	await _order()
 	await _ends()
+	await _crowding()
+	await _vents()
+	await _nahual_ways()
+	await _wisps()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -235,6 +239,137 @@ func _ends() -> void:
 	_check("C11 standalone, the Pasaje stub (two puestos either side of the mouth, lit backdrops 6 m up and down it) and the chapel's glimpse (warm light 2 m inside the doorway, a backdrop) stand; not standalone, neither does",
 		stub != null and stub.visible and puestos.size() == 2 and up_down == 2 and glows and behind == 1 and bare,
 		"puestos %d backdrops %d/%d glow %s chapel backdrop %d inset bare %s" % [puestos.size(), up_down, backdrops.size(), glows, behind, bare])
+
+
+## The revision after the first look: the candles massed, the pipes' works, the vents and the culvert; and nothing of
+## the bay left where the lane moved it.
+func _crowding() -> void:
+	var wicks: Array = lane.get("candle_wicks") if lane.get("candle_wicks") != null else []
+	var masses: Array = lane.find_children("candle_mass*", "MeshInstance3D", false, false)
+	var lit := masses.filter(func(m): return lane.find_children("votives_%s" % m.name, "Node3D", false, false).size() == 1)
+	var at_niche: bool = masses.any(func(m): return (m as Node3D).position.distance_to(lane.places["niche"]) < 0.6)
+	_check("L1 the candles mass: seventy and more on the ledges, four masses on the floor each alight, one under her niche",
+		wicks.size() >= 70 and masses.size() == 4 and lit.size() == 4 and at_niche,
+		"ledge wicks %d masses %d lit %d at niche %s" % [wicks.size(), masses.size(), lit.size(), at_niche])
+
+	# The works on their mains: the gauge's riser on the water main, the meter's tee on the gas line, each hood's drop
+	# off the air line; the hoods and culvert at the walls' feet.
+	var on_main := func(kind: String, main_kind: String) -> bool:
+		var piece: Node3D = lane.find_children(kind + "*", "MeshInstance3D", false, false).front() if not lane.find_children(kind + "*", "MeshInstance3D", false, false).is_empty() else null
+		if piece == null:
+			return false
+		for main: MeshInstance3D in lane.services:
+			var box: AABB = main.global_transform * main.get_aabb()
+			if String(main.get_meta("kind", "")) == main_kind and box.position.x < piece.position.x and box.end.x > piece.position.x \
+					and absf(box.get_center().z - piece.position.z) < 0.5:
+				return true
+		return false
+	var hoods: Array = lane.find_children("air_branch*", "MeshInstance3D", false, false)
+	var hoods_on: bool = hoods.size() >= 2 and hoods.all(func(h):
+		for main: MeshInstance3D in lane.services:
+			var box: AABB = main.global_transform * main.get_aabb()
+			if String(main.get_meta("kind", "")) == "pipe_blue_4" and box.position.x < h.position.x and box.end.x > h.position.x:
+				return true
+		return false)
+	var culvert: Node3D = lane.get_node_or_null("culvert")
+	# Nothing of the bay's far wall left in the shopfront's span (its tablet, bills, splashes), and her niche's soot
+	# where her niche is.
+	var in_front := []
+	for n: Node in lane.get_children():
+		if (n is Decal or String(n.name).begins_with("name_tablet")) and n.global_position.z > lane.FAR_WALL - 0.3 \
+				and n.global_position.x > lane.SHOP_FRONT.x - 0.3 and n.global_position.x < lane.SHOP_FRONT.y + 0.3:
+			in_front.append(String(n.name))
+	var soot: Node3D = lane.get_node_or_null("decal_soot_niche")
+	var soot_ok: bool = soot != null and Vector2(soot.position.x, soot.position.z).distance_to(
+		Vector2(lane.places["niche"].x, lane.places["niche"].z)) < 0.3
+	_check("L2 the pipes' works stand on their mains, the hoods at the air line's feet, the culvert in the far wall; nothing of the bay left behind the shopfront, her soot over her niche",
+		on_main.call("main_gauge", "pipe_green_4") and on_main.call("gas_meter", "pipe_ochre_4") and hoods_on
+		and culvert != null and absf(culvert.position.z - lane.FAR_WALL) < 0.05 and in_front.is_empty() and soot_ok,
+		"gauge %s meter %s hoods %d on %s culvert %s in front %s soot %s" % [on_main.call("main_gauge", "pipe_green_4"),
+			on_main.call("gas_meter", "pipe_ochre_4"), hoods.size(), hoods_on, culvert != null, in_front, soot_ok])
+
+
+## The ánimas come up by the vents too: each way up its own kind (the hood by the mouth small and shy, the one mid-lane
+## hungry, the old grille's big lurkers), from the face of a hood or grille on the wall.
+func _vents() -> void:
+	var sources: Array = lane.get("vent_souls") if lane.get("vent_souls") != null else []
+	var at_vents := sources.all(func(s):
+		var by := false
+		for kind in ["air_branch", "vent_grille"]:
+			for piece: Node3D in lane.find_children(kind + "*", "MeshInstance3D", false, false):
+				by = by or Vector2(piece.position.x, piece.position.z).distance_to(Vector2(s.position.x, s.position.z)) < 0.3
+		return by and s.mouth == "wall")
+	var means: Array = sources.map(func(s): return s._souls.reduce(func(a, x): return a + float(x["size"]), 0.0) / s.count)
+	var kinds: Array = sources.map(func(s): return s.tempers.keys())
+	var apart: bool = means.size() == 3 and means[0] < means[1] and means[1] < means[2] and "shy" in kinds[0] \
+		and "hungry" in kinds[1] and kinds[2] == ["lurker"]
+	_check("L3 the ánimas come up by the vents too, three more ways, each its own kind and size",
+		sources.size() == 3 and at_vents and apart, "sources %d at vents %s sizes %s kinds %s" % [sources.size(), at_vents, means, kinds])
+
+
+## The nahual travels the works: gone from one haunt, back at another out of sight; while it is away its eyes look
+## out of the culvert, and close when someone comes near, or when it is back.
+func _nahual_ways() -> void:
+	var nahual: Node3D = lane.get("nahual")
+	var eyes: Node3D = lane.get("culvert_eyes")
+	var haunts: Array = nahual.haunts if nahual != null else []
+	var camera := get_viewport().get_camera_3d()
+	var left: Vector3 = nahual.position if nahual != null else Vector3.ZERO
+	var elsewhere := false
+	var unseen := true
+	if nahual != null and haunts.size() >= 3:
+		nahual._go()
+		nahual.set("_back_in", 0.0)
+		await _frames(3)
+		elsewhere = nahual.visible and nahual.position.distance_to(left) > 0.5 \
+			and haunts.any(func(h): return Vector3(h.x, h.y, h.z).distance_to(nahual.position) < 0.01)
+		unseen = camera == null or not camera.is_position_in_frustum(nahual.global_position + Vector3(0.0, 0.6, 0.0))
+	_check("N1 the nahual comes back at another of its haunts, out of sight, never where it left",
+		haunts.size() >= 3 and elsewhere and unseen, "haunts %d elsewhere %s unseen %s" % [haunts.size(), elsewhere, unseen])
+
+	var opened := false
+	var closed_near := false
+	var closed_back := false
+	if nahual != null and eyes != null:
+		var player: Node3D = lane.get("player")
+		player.global_position = eyes.global_position + Vector3(6.0, 0.0, -2.5)
+		nahual._go()
+		nahual.set("_back_in", 1000.0)
+		eyes.set("_want", true)
+		eyes.set("_next", 30.0)
+		await _frames(30)
+		opened = eyes.open > 0.99 and eyes.eyes.all(func(e): return e.visible)
+		player.global_position = eyes.global_position + Vector3(0.0, 0.0, -1.2)
+		await _frames(30)
+		closed_near = eyes.open < 0.01
+		player.global_position = eyes.global_position + Vector3(6.0, 0.0, -2.5)
+		nahual.appear()
+		await _frames(30)
+		closed_back = eyes.open < 0.01
+	_check("N2 while it is away its eyes open in the culvert's dark; they close when someone comes near, and when it is back",
+		opened and closed_near and closed_back, "opened %s closed near %s closed when back %s" % [opened, closed_near, closed_back])
+
+
+## Now and then a wisp of their warmth slips out of a vent or the drain and is drawn along the lane into a flame:
+## from where they come up, into a candle, a few at most at once, and none left when it is done.
+func _wisps() -> void:
+	var wisps: Node3D = lane.get("wisps")
+	var from_vent := false
+	var into_flame := false
+	var most := 0
+	if wisps != null:
+		wisps.next_in = 0.0
+		for f in 1200:
+			await get_tree().process_frame
+			most = maxi(most, wisps.flying())
+			for w: Dictionary in wisps.flights:
+				if w["t"] < 0.05:
+					from_vent = from_vent or Array(wisps.sources).any(func(s): return s.distance_to(w["head"]) < 0.4)
+				if w["t"] > 0.97:
+					into_flame = into_flame or Array(wisps.targets).any(func(c): return c.distance_to(w["head"]) < 0.3)
+	_check("W1 wisps slip out of the vents and the drain and are drawn into the candles' flames, a few at most at once",
+		wisps != null and from_vent and into_flame and most >= 1 and most <= wisps.AT_ONCE,
+		"from a vent %s into a flame %s most at once %d" % [from_vent, into_flame, most])
 
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:

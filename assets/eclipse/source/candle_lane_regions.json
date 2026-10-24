@@ -14,8 +14,18 @@
   "enamel",
   "tile_line",
   "sign",
-  "cement"
+  "cement",
+  "marigold",
+  "herb",
+  "paper",
+  "picado",
+  "picado_b",
+  "pipe_ochre",
+  "pipe_green",
+  "pipe_blue",
+  "iron",
+  "soot_black"
  ],
- "atlas_px": 2048,
- "px_per_m": 119.36
+ "atlas_px": 4096,
+ "px_per_m": 104.72
 }

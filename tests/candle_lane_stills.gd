@@ -42,12 +42,38 @@ func _ready() -> void:
 		["lane_mouth_in", Vector3(-24.0, 1.7, 3.0), Vector3(-14.0, 2.0, 1.1)],
 		["lane_puesto", Vector3(-21.5, 1.6, 2.5), Vector3(-17.5, 1.2, 6.2)],
 		["lane_arrows", Vector3(-11.5, 1.7, 2.6), Vector3(-14.2, 2.05, -2.35)],
+		["lane_masses", Vector3(14.2, 1.3, 0.6), Vector3(12.9, 0.3, -2.0)],
+		["lane_picado", Vector3(5.0, 1.6, 1.1), Vector3(14.0, 2.9, 1.1)],
+		["lane_gas_meter", Vector3(-5.0, 1.7, 0.4), Vector3(-6.6, 2.4, -2.35)],
+		["lane_gauge", Vector3(7.6, 2.4, 0.2), Vector3(9.2, 3.2, -2.35)],
+		["lane_hood", Vector3(-12.4, 1.2, 2.4), Vector3(-13.8, 0.4, 4.55)],
+		["lane_culvert", Vector3(-5.0, 1.1, 2.4), Vector3(-5.0, 0.35, 4.55)],
+		["lane_vent_souls", Vector3(-11.6, 1.4, 1.6), Vector3(-13.8, 0.6, 4.2)],
+		["lane_lurkers", Vector3(3.6, 1.2, 0.6), Vector3(3.6, 0.35, -2.35)],
+		["lane_eyes", Vector3(-5.0, 0.8, 1.8), Vector3(-5.0, 0.35, 4.55)],
+		["lane_wisps", Vector3(-6.0, 1.6, 0.0), Vector3(-11.0, 0.9, 1.5)],
 	]
 	for view in views:
 		if not only.is_empty() and view[0] not in only:
 			continue
 		_place(lane.to_global(view[1]), lane.to_global(view[2]))
-		await _frames(100)
+		# (The vents' ánimas sent up to be seen, and given time to come out.)
+		if view[0] in ["lane_vent_souls", "lane_lurkers"]:
+			for souls: Node3D in lane.vent_souls:
+				for k in 3:
+					souls.rise_now()
+			await _frames(260)
+		# (The nahual away in the works, its eyes open in the culvert.)
+		if view[0] == "lane_eyes" and lane.nahual != null:
+			lane.nahual._go()
+			lane.nahual.set("_back_in", 1000.0)
+			lane.culvert_eyes.open_now()
+		# (A wisp sent out of the mouth's hood toward her niche's candles, caught midway.)
+		if view[0] == "lane_wisps":
+			lane.wisps.sources = PackedVector3Array([lane.vent_souls[0].to_global(Vector3(0.0, 0.25, 0.05))])
+			lane.wisps.next_in = 0.0
+			await _frames(40)
+		await _frames(100 if view[0] != "lane_wisps" else 10)
 		_capture(view[0] + ".png")
 	get_tree().quit()
 

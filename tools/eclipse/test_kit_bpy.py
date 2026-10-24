@@ -2274,16 +2274,18 @@ class CandleLane(unittest.TestCase):
         self.assertIsNotNone(_hit(o, (x, y_mid, 2.9), (1.0, 0.0, 0.0), 0.5))
         self.assertIsNotNone(_hit(o, (x, y_mid + 1.6, 1.4), (1.0, 0.0, 0.0), 0.5))
 
-    def test_the_ledges_carry_their_candles(self):
-        wicks = common.WICKS.get("votive_ledges", [])
-        self.assertGreaterEqual(len(wicks), 20)
-        (x0, x1), _, (z0, z1) = self._extent("votive_ledges")
-        self.assertTrue(all(x0 < w[0] < x1 for w in wicks))
-        # (Every wick over a candle over a ledge: a ray down from just above it meets the piece.)
-        self.assertTrue(all(_hit(self.objects["votive_ledges"], (w[0], w[1], w[2] + 0.02), (0, 0, -1), 0.5) for w in wicks))
+    def test_the_ledges_and_masses_carry_their_candles(self):
+        # (Crowded: the ledges forty and more each, the floor's masses their dozens.)
+        for n, least in (("votive_north", 40), ("votive_south", 30), ("candle_mass_a", 25), ("candle_mass_b", 14)):
+            wicks = common.WICKS.get(n, [])
+            self.assertGreaterEqual(len(wicks), least, n)
+            (x0, x1), _, _ = self._extent(n)
+            self.assertTrue(all(x0 < w[0] < x1 for w in wicks), n)
+            # (Every wick over a candle: a ray down from just above it meets the piece.)
+            self.assertTrue(all(_hit(self.objects[n], (w[0], w[1], w[2] + 0.02), (0, 0, -1), 0.5) for w in wicks), n)
 
     def test_sign_faces_are_blank_for_the_users_words(self):
-        for n in ("enamel_sign", "arrow_east", "arrow_west", "puesto"):
+        for n in ("enamel_sign", "arrow_east", "arrow_west", "puesto", "gas_meter", "main_gauge"):
             names = {s.material.name for s in self.objects[n].material_slots}
             self.assertIn("sign", names, n)
 
