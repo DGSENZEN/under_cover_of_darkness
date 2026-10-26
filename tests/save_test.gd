@@ -7,6 +7,8 @@ const SaveFiles := preload("res://scripts/Save/SaveFiles.gd")
 const FIXTURE := preload("res://tests/fixtures/save/fixture_map.tscn")
 const FIXTURE_B := preload("res://tests/fixtures/save/fixture_map_b.tscn")
 const PLAYER := preload("res://Player.tscn")
+const Props := preload("res://scripts/Interaction/Props.gd")
+const TorchScript := preload("res://scripts/Visual/Torch.gd")
 
 var results: Array[String] = []
 @onready var save: Node = get_node("/root/SaveGame")
@@ -22,6 +24,11 @@ func _ready() -> void:
 	await _g5_can_save()
 	await _g6_missing()
 	await _g17_maps()
+	await _g8_player()
+	await _g9_world_things()
+	await _g11_camera_settles()
+	await _g12_taken_stays_gone()
+	# (G10, the gates still carrying what he has, is city_test's, run beside this.)
 	# Last: it changes the scene (this suite stays, under the root).
 	await _g7_through_the_cover()
 	print("\n==== RESULTS ====")
@@ -157,6 +164,117 @@ func _g17_maps() -> void:
 	_check("G17 maps you left", fresh.get_node("StubA").value == 5 and city.maps.has(FIXTURE.resource_path), str(city.maps.keys()))
 	_drop(fresh)
 	city.maps.clear()
+
+
+## A map of the things that saved themselves before saving to disk: a door,
+## a locked chest, a key and a torch, named as a level's markers name them.
+func _things_map() -> Node3D:
+	save.gone.clear()
+	var map := Node3D.new()
+	map.name = "Things"
+	add_child(map)
+	var door := Props.door(map, Vector3(0, 0, -4))
+	door.name = "door_cellar"
+	var chest := Props.chest(map, Vector3(3, 0, -4), 0.0, Vector3(0.9, 0.55, 0.55), true, &"strong", "strongbox")
+	chest.name = "chest_strong"
+	var key := Props.key(map, Vector3(5, 0.6, -1), &"cellar", "cellar key")
+	key.name = "key_cellar"
+	var torch: Node3D = TorchScript.new()
+	torch.name = "torch_gate"
+	torch.position = Vector3(-3, 2, 0)
+	map.add_child(torch)
+	return map
+
+
+func _g8_player() -> void:
+	save.gone.clear()
+	var player := PLAYER.instantiate()
+	add_child(player)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	player.teleport(Transform3D(Basis(Vector3.UP, 1.1), Vector3(2, 3.5, -1)))
+	player.neck.rotation.x = deg_to_rad(-30.0)
+	player.velocity = Vector3(0, -2, 1)
+	player.revolver.loaded = {&"cylinder": 3, &"shot": 0}
+	player.revolver.barrel = &"shot"
+	player.caster.select(&"ward")
+	player.power.power = 40.0
+	var body: Dictionary = save.gather()
+	_drop(player)
+	var fresh := PLAYER.instantiate()
+	add_child(fresh)
+	await get_tree().physics_frame
+	save.apply(body)
+	var ok: bool = fresh.global_position.distance_to(Vector3(2, 3.5, -1)) < 0.001 and absf(fresh.neck.rotation.x - deg_to_rad(-30.0)) < 0.001 \
+		and absf(fresh.rotation.y - 1.1) < 0.001 and fresh.velocity.is_equal_approx(Vector3(0, -2, 1)) and fresh.revolver.loaded == {&"cylinder": 3, &"shot": 0} \
+		and fresh.revolver.barrel == &"shot" and fresh.caster.selected == &"ward" and is_equal_approx(fresh.power.power, 40.0)
+	_check("G8 the player", ok, "at %s look %.3f yaw %.3f v %s loaded %s barrel %s spell %s power %.1f" % [fresh.global_position, fresh.neck.rotation.x,
+		fresh.rotation.y, fresh.velocity, fresh.revolver.loaded, fresh.revolver.barrel, fresh.caster.selected, fresh.power.power])
+	_drop(fresh)
+
+
+func _g9_world_things() -> void:
+	var map := _things_map()
+	await get_tree().physics_frame
+	var door := map.get_node("door_cellar")
+	door.load_state({"open": true, "locked": false, "angle": deg_to_rad(70.0)})
+	var chest := map.get_node("chest_strong")
+	chest.load_state({"open": false, "locked": false})
+	map.get_node("torch_gate").load_state({"lit": false})
+	await get_tree().physics_frame
+	var body: Dictionary = save.gather()
+	_drop(map)
+	var fresh := _things_map()
+	await get_tree().physics_frame
+	save.apply(body)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var states := [fresh.get_node("door_cellar").save_state(), fresh.get_node("chest_strong").save_state(), fresh.get_node("torch_gate").save_state()]
+	var ok: bool = states[0]["open"] == true and is_equal_approx(states[0]["angle"], deg_to_rad(70.0)) and states[1]["locked"] == false and states[2]["lit"] == false \
+		and body["saveables"].has("Things/key_cellar")
+	_check("G9 doors, chests, pickups, torches", ok, "%s %s" % [states, body["saveables"].keys()])
+	_drop(fresh)
+
+
+func _g11_camera_settles() -> void:
+	save.gone.clear()
+	var player := PLAYER.instantiate()
+	add_child(player)
+	await get_tree().physics_frame
+	player.teleport(Transform3D(Basis(), Vector3(8, 1, 8)))
+	var body: Dictionary = save.gather()
+	_drop(player)
+	var fresh := PLAYER.instantiate()
+	add_child(fresh)
+	await get_tree().physics_frame
+	await get_tree().process_frame
+	save.apply(body)
+	# As under the cover: one tick of the world, then the first drawn frame.
+	await get_tree().physics_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var camera: Camera3D = fresh.camera
+	var seen := Vector2(camera.global_position.x, camera.global_position.z)
+	_check("G11 nothing slides into place", seen.distance_to(Vector2(8, 8)) < 0.05 and fresh.global_position.distance_to(Vector3(8, 1, 8)) < 0.05,
+		"camera %s body %s" % [camera.global_position, fresh.global_position])
+	_drop(fresh)
+
+
+func _g12_taken_stays_gone() -> void:
+	var map := _things_map()
+	await get_tree().physics_frame
+	var key := map.get_node("key_cellar")
+	key.taken = true
+	key.queue_free()
+	await get_tree().process_frame
+	var body: Dictionary = save.gather()
+	_drop(map)
+	var fresh := _things_map()
+	await get_tree().physics_frame
+	save.apply(body)
+	await get_tree().process_frame
+	_check("G12 taken stays gone", body["gone"].has("Things/key_cellar") and fresh.get_node_or_null("key_cellar") == null, str(body["gone"]))
+	_drop(fresh)
 
 
 func _g7_through_the_cover() -> void:

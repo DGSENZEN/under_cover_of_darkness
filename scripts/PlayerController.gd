@@ -4108,10 +4108,39 @@ func _update_rope_climb(delta: float) -> void:
 	LanternBody.slide_character(self)
 
 
-## What the player carries through a gate (CityState): his health and his
-## inventory (purse, keys, belt).
+## What the player carries through a gate (CityState), and into a save: his
+## health, his inventory (purse, keys, belt), his power, the revolver's load
+## and the spell in hand.
 func save_state() -> Dictionary:
-	return {"health": health, "inventory": inventory.save_state()}
+	var state := {"health": health, "inventory": inventory.save_state()}
+
+	if power != null:
+		state["power"] = power.power
+
+	if revolver != null:
+		state["revolver"] = revolver.save_state()
+
+	if caster != null:
+		state["caster"] = caster.save_state()
+
+	return state
+
+
+## Where he is in a save (SaveGame), not carried through gates: where he
+## stands and faces, where he looks, how he moves.
+func save_place() -> Dictionary:
+	return {"transform": global_transform, "look": neck.rotation.x, "velocity": velocity}
+
+
+## Back where a save had him (save_place): moved there at once, nothing
+## sliding into place.
+func load_place(state: Dictionary) -> void:
+	if state.has("transform"):
+		teleport(state["transform"])
+
+	neck.rotation.x = float(state.get("look", neck.rotation.x))
+	velocity = state.get("velocity", Vector3.ZERO)
+	reset_physics_interpolation()
 
 
 ## Carries what was saved (save_state) into this district.
@@ -4120,6 +4149,15 @@ func load_state(state: Dictionary) -> void:
 
 	if state.has("inventory"):
 		inventory.load_state(state["inventory"])
+
+	if power != null and state.has("power"):
+		power.power = clampf(float(state["power"]), 0.0, power.MAX)
+
+	if revolver != null and state.has("revolver"):
+		revolver.load_state(state["revolver"])
+
+	if caster != null and state.has("caster"):
+		caster.load_state(state["caster"])
 
 
 ## Sets the world transform and clears movement, traversal, velocity, jump, and shove state.

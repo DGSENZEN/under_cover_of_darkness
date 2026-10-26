@@ -45,6 +45,14 @@ func frob(player: Node) -> void:
 	queue_free()
 
 
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
 ## Taken or not, and where it lies (PickupState), for the district's memory.
 func save_state() -> Dictionary:
 	return PickupState.save(self)

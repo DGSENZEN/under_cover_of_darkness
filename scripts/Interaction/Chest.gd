@@ -32,6 +32,11 @@ var _snap := false
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	# (The guards look over every chest for one left open: GuardLife.)
 	add_to_group(&"chests")
 	_lid = get_node_or_null("Lid") as AnimatableBody3D

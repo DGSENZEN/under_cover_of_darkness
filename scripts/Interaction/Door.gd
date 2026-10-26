@@ -50,6 +50,11 @@ var _snap := false
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_closed_yaw = rotation.y
 	sync_to_physics = true
 	was_shut = not is_open

@@ -183,6 +183,11 @@ var _reach: Area3D
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_before_ready()
 	add_to_group(&"torches")
 	# Its clock starts somewhere of its own. (One draw from the global dice,

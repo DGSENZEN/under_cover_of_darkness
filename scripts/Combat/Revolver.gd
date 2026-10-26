@@ -187,6 +187,17 @@ func _ready() -> void:
 	_ensure_action(&"aim", KEY_NONE, MOUSE_BUTTON_RIGHT)
 
 
+## Its load and which barrel is up (the player's save_state).
+func save_state() -> Dictionary:
+	return {"loaded": loaded.duplicate(), "barrel": barrel}
+
+
+func load_state(state: Dictionary) -> void:
+	loaded = (state.get("loaded", loaded) as Dictionary).duplicate()
+	barrel = StringName(state.get("barrel", barrel))
+	loading = Load.NONE
+
+
 func _physics_process(delta: float) -> void:
 	_game_time += delta
 	_kick = move_toward(_kick, 0.0, delta / maxf(_settle, 0.01))

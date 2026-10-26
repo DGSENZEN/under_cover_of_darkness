@@ -158,6 +158,16 @@ func select(id: StringName) -> void:
 	loadout = Loadout.TOME if info["tier"] == Spells.Tier.TOME else Loadout.HAND
 
 
+## The spell in hand and the hand set for it (the player's save_state).
+func save_state() -> Dictionary:
+	return {"selected": selected, "loadout": loadout}
+
+
+func load_state(state: Dictionary) -> void:
+	select(StringName(state.get("selected", selected)))
+	loadout = int(state.get("loadout", loadout)) as Loadout
+
+
 ## A spell key pressed: that spell, the hand set for it; the revolver
 ## drawn if something else is in hand; the sights let go of.
 func _press_key(id: StringName) -> void:
