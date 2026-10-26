@@ -78,7 +78,7 @@ func build(font: Font, lore: String) -> void:
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(spacer)
 	back = MenuWord.new()
-	back.configure("Back", -1, INK, font)
+	back.configure("Back", -1, INK)
 	back.custom_minimum_size = Vector2(240, 52)
 	back.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	back.focus_entered.connect(func(): back.set_selected(true))

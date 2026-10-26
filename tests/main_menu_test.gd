@@ -50,7 +50,11 @@ func _ready() -> void:
 	check(MenuType.title().get_font_name().contains("Poiret") and MenuType.choice().get_font_name().contains("Cormorant SC") and MenuType.body().get_font_name().contains("Cormorant Garamond") and MenuType.body_italic().get_font_style() & TextServer.FONT_ITALIC, "the bundled typefaces load")
 
 	# Task 1: the word column and one selection path.
-	check(menu.words.size() == 4 and menu.words.map(func(w): return w.text) == ["NEW GAME", "CONTINUE", "SETTINGS", "LORE"], "four words in reading order")
+	check(menu.words.size() == 5 and menu.words.map(func(w): return w.text) == ["New Game", "Continue", "Settings", "Lore", "Quit"], "five words in reading order")
+	var title_labels: Array = menu._design.get_children().filter(func(n): return n is Label)
+	check(title_labels.size() == 2 and title_labels.all(func(l): return l.get_theme_font("font").get_font_name().contains("Poiret")), "the title is set in deco capitals")
+	check(menu._design.get_node_or_null("Hairline") is TextureRect, "a gold hairline under the title")
+	check(menu.words[0].get_theme_font("font").get_font_name().contains("Cormorant SC") and menu.words[0].get_node_or_null("Tick") == null, "the choices are book small capitals, with no marker")
 	check(menu.words[1].position.y - menu.words[0].position.y >= 56.0, "words have room between them")
 	check(menu.words.all(func(w): return is_equal_approx(w.position.x, menu.words[0].position.x)), "words sit in one column")
 	check(menu.selected == -1, "nothing is selected before input")
@@ -67,6 +71,9 @@ func _ready() -> void:
 	check(menu.selected == 3 and menu.words.filter(func(w): return w.selected).size() == 1, "mouse after keyboard: one selection, the latest")
 	check(menu.music.selected == 3 and menu.music.last_jingle.get("button") == 3 and menu.music.last_jingle.get("kind") == "hover", "choosing a word sounds its instrument")
 	check(not menu.has_method("music_marker"), "the old music marker hook is gone")
+	menu.select(1)
+	await get_tree().create_timer(0.25).timeout
+	check(is_equal_approx(menu.words[1].step_x, MenuWord.STEP) and is_equal_approx(menu.words[1].modulate.a, 1.0) and absf(menu.words[0].modulate.a - MenuWord.DIM) < 0.01, "the chosen word steps forward and lights within 0.2 s; the rest dim")
 
 	# Task 2: the painted band.
 	menu.select(2)
@@ -169,7 +176,7 @@ func _ready() -> void:
 	await key(KEY_ESCAPE)
 	await get_tree().create_timer(0.7).timeout
 	check(menu.page_open == -1 and menu.words[3].has_focus() and not menu.band.page, "Escape folds the page back to its word")
-	check(menu.words[0].modulate.a > 0.5, "words come back when the page closes")
+	check(absf(menu.words[0].modulate.a - MenuWord.DIM) < 0.01, "words come back when the page closes")
 	check(ResourceLoader.exists(menu.game_scene), "New Game points at an existing playable scene")
 	var starts := [0]
 	menu.music.started.connect(func(): starts[0] += 1)

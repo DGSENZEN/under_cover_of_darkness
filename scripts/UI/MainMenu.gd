@@ -13,8 +13,9 @@ const LORE := "THE ECLIPSE OF 1923\nMexico City was changed by the Eclipse and t
 @export var music_score := MenuMusic.SCORE_JSON
 signal selection_changed(index: int)
 
-const NAMES := ["New Game", "Continue", "Settings", "Lore"]
-const COLOURS := [Color("ef774c"), Color("67c9ed"), Color("929fdb"), Color("efa25e")]
+const NAMES := ["New Game", "Continue", "Settings", "Lore", "Quit"]
+const COLOURS := [Color("ef774c"), Color("67c9ed"), Color("929fdb"), Color("efa25e"), Color("b9b0a2")]
+const GOLD := Color("d9b46a")
 const WORD_X := 72.0
 const WORD_TOP := 360.0
 const WORD_GAP := 64.0
@@ -67,11 +68,26 @@ func _ready() -> void:
 	_design.add_child(band)
 	selection_changed.connect(func(i): band.show_choice(i, words[i].position.y + words[i].size.y * 0.5))
 	selection_changed.connect(_sound_choice)
-	_text("UNDER COVER", Vector2(72, 115), 52)
-	_text("OF DARKNESS", Vector2(72, 175), 58)
+	_title("UNDER COVER", Vector2(72, 104))
+	_title("OF DARKNESS", Vector2(72, 166))
+	# A gold hairline under the title, fading to nothing.
+	var fade := Gradient.new()
+	fade.colors = PackedColorArray([GOLD, Color(GOLD, 0.0)])
+	var hairline_texture := GradientTexture2D.new()
+	hairline_texture.gradient = fade
+	hairline_texture.width = 256
+	hairline_texture.height = 1
+	var hairline := TextureRect.new()
+	hairline.name = "Hairline"
+	hairline.texture = hairline_texture
+	hairline.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	hairline.position = Vector2(74, 238)
+	hairline.size = Vector2(230, 1.5)
+	hairline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_design.add_child(hairline)
 	for i in range(NAMES.size()):
 		var word := MenuWord.new()
-		word.configure(NAMES[i], i, COLOURS[i], _font)
+		word.configure(NAMES[i], i, COLOURS[i])
 		word.position = Vector2(WORD_X, WORD_TOP + i * WORD_GAP - 26)
 		word.size = Vector2(420, 52)
 		word.chosen.connect(select)
@@ -92,14 +108,19 @@ func _ready() -> void:
 	_layout()
 	# No automatic focus highlight until keyboard navigation is used.
 
-func _text(words: String, at: Vector2, point_size: int, colour := INK) -> Label:
+func _title(words: String, at: Vector2) -> Label:
 	var label := Label.new()
 	label.text = words
 	label.position = at
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_font_override("font", _font)
-	label.add_theme_font_size_override("font_size", point_size)
-	label.add_theme_color_override("font_color", colour)
+	var spaced := FontVariation.new()
+	spaced.base_font = MenuType.title()
+	spaced.spacing_glyph = 18
+	label.add_theme_font_override("font", spaced)
+	label.add_theme_font_size_override("font_size", 56)
+	label.add_theme_color_override("font_color", INK)
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	label.add_theme_constant_override("shadow_outline_size", 8)
 	_design.add_child(label)
 	return label
 
@@ -145,7 +166,7 @@ func _exit_tree() -> void:
 		music.queue_free()
 
 func _activate(index: int) -> void:
-	if _transitioning or page_open >= 0:
+	if _transitioning or page_open >= 0 or index >= 4:
 		return
 	band.pulse()
 	if is_instance_valid(music):
@@ -175,7 +196,7 @@ func open_page(index: int, message := "") -> void:
 		word.focus_mode = Control.FOCUS_NONE
 		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if word.index != index:
-			word.modulate.a = 0.35
+			word.set_page_dim(true)
 	if is_instance_valid(music) and index > 0:
 		music.set_state([MenuMusic.State.BROWSING, MenuMusic.State.CONTINUE, MenuMusic.State.SETTINGS, MenuMusic.State.LORE][index])
 	await get_tree().create_timer(MenuBand.GLIDE).timeout
