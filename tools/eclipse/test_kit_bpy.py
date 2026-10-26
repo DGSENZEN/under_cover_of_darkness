@@ -33,6 +33,7 @@ import library_spectres  # noqa: E402
 import library_ward  # noqa: E402
 import library_hangings  # noqa: E402
 import candle_lane  # noqa: E402
+import lane_landmarks  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -2288,6 +2289,36 @@ class CandleLane(unittest.TestCase):
         for n in ("enamel_sign", "arrow_east", "arrow_west", "puesto", "gas_meter", "main_gauge"):
             names = {s.material.name for s in self.objects[n].material_slots}
             self.assertIn("sign", names, n)
+
+
+
+class LaneLandmarks(unittest.TestCase):
+    """The candle lane's landmarks (tools/eclipse/lane_landmarks.py; docs/superpowers/plans/2026-10-25-lane-landmarks.md),
+    in the lane's frame (Blender: x along it, y = the lane's -z, z up). Closed, in budget, through the gate; clear of
+    every head over the walk (lane z 0.2-2.6)."""
+
+    @classmethod
+    def setUpClass(cls):
+        lane_landmarks.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        self.assertEqual(sorted(self.objects), sorted(lane_landmarks.BUDGET))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=lane_landmarks.BUDGET[n],
+                                        sliver=lane_landmarks.SLIVER[n])[:3], [], n)
+
+    def test_the_garland_clears_the_walk(self):
+        low = [v for v in _world(self.objects["garland"]) if -2.6 <= v.y <= -0.2 and v.z < 2.6]
+        self.assertEqual(low[:3], [])
+
+    def test_the_garland_spans_the_lane(self):
+        ys = [v.y for v in _world(self.objects["garland"])]
+        # (From the south wall's hook to her stall's front, lane z 0.)
+        self.assertLessEqual(min(ys), -4.4)
+        self.assertGreaterEqual(max(ys), -0.05)
 
 
 if __name__ == "__main__":

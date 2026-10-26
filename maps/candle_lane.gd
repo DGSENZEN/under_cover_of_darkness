@@ -29,6 +29,13 @@ const CHAPEL_STUB := 3.0
 ## board and the mouth's portal (built where they stand in the lane), the Pasaje's puesto, the station's sign, the
 ## way's arrows; the ledges' wicks.
 const LANE_KIT := "res://assets/eclipse/kit/candle_lane.glb"
+## The landmarks (tools/eclipse/lane_landmarks.py; docs/superpowers/plans/2026-10-25-lane-landmarks.md): what makes her
+## stall and his shop read from the Pasaje. Her garland ties on at her riser and hangs from the south wall's hook (its
+## span, the axis it sways about: at most GARLAND_SWAY on the draught).
+const LANDMARKS_KIT := "res://assets/eclipse/kit/lane_landmarks.glb"
+const GARLAND_TIE := Vector3(1.57, 3.32, -0.04)
+const GARLAND_HOOK := Vector3(1.95, 3.42, 4.45)
+const GARLAND_SWAY := deg_to_rad(3.0)
 const LANE_WICKS := "res://assets/eclipse/source/candle_lane_wicks.json"
 ## How far the end wall's opening reaches inside the doorway's frame (m, each side and over it): the wall's cut faces
 ## buried in the stone, the way through still the frame's 3 m.
@@ -184,6 +191,8 @@ var people: Array[MeshInstance3D] = []
 var crowd_of_shades: Node3D
 ## The walk's pockets (POCKETS): {name, loud, x (plan x range), emitters (silent, named for their sound), lights}.
 var pockets: Array[Dictionary] = []
+## The landmarks placed, by piece (garland, ...).
+var landmarks := {}
 ## The shades one talks to: "librarian", "curandera", "market_curandera".
 var shades := {}
 
@@ -205,6 +214,7 @@ func _ready() -> void:
 	_east_end()
 	_west_end()
 	_lane_pieces()
+	_landmarks()
 	_vent_souls()
 	_nahual_ways()
 	_people()
@@ -270,6 +280,7 @@ func set_decals(on: bool) -> void:
 ## The vents' ánimas fear what the drain's fear and gather where they gather (the dark train, the procession).
 func _process(delta: float) -> void:
 	super._process(delta)
+	_sway(landmarks.get("garland"), GARLAND_TIE, GARLAND_HOOK, GARLAND_SWAY)
 	for souls in vent_souls:
 		souls.hush = animas.hush if animas != null else 0.0
 		souls.gather = animas.gather if animas != null else null
@@ -489,6 +500,27 @@ func _fit_into_plan() -> void:
 			var by := (to_hi - to_lo) / (hi - lo)
 			mesh.transform = Transform3D(Basis.from_scale(Vector3(by, 1.0, 1.0)), Vector3(keep * (1.0 - by), 0.0, 0.0)) \
 				* mesh.transform
+
+
+## The landmarks (LANDMARKS_KIT), each where its kit built it: her garland across the walk (not solid: over every head).
+func _landmarks() -> void:
+	if not ResourceLoader.exists(LANDMARKS_KIT):
+		missing.append(LANDMARKS_KIT)
+		return
+	var meshes := _kit(LANDMARKS_KIT)
+	var look := Painterly.material(_painted(["lane_landmarks.png", "lane_landmarks_base.png"]), &"bespoke")
+	landmarks["garland"] = _place(meshes["garland"], look, "garland", Vector3.ZERO, 0.0, false)
+
+
+## A hung piece swaying about the line from `from` to `to` (the lane's frame), at most `most` radians, as far as the
+## draught blows (its full sway at the train's).
+func _sway(piece: MeshInstance3D, from: Vector3, to: Vector3, most: float) -> void:
+	if piece == null:
+		return
+	var blow := clampf(DRAUGHT.length() / (DRAUGHT.length() * 5.0), 0.0, 1.0)
+	var angle := most * (0.35 + 0.65 * blow) * sin(_clock * 0.9) * (0.7 + 0.3 * sin(_clock * 0.37 + 1.3))
+	var turn := Basis((to - from).normalized(), angle)
+	piece.transform = Transform3D(turn, from - turn * from)
 
 
 ## The east end: its tiles over the doorway gone, its wall rebuilt round the chapel's doorway.

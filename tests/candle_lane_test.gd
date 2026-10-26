@@ -25,6 +25,7 @@ func _ready() -> void:
 	await _people()
 	await _pockets()
 	await _crowd_of_shades()
+	await _landmarks()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -649,6 +650,33 @@ func _crowd_of_shades() -> void:
 	_check("C22 after the dark train a surge pours in from the mouth (none after the Company's); walked into, a shade comes apart",
 		surged >= 4 and after_company <= 1 and scattered >= 1,
 		"surged %d after the Company's train %d scattered %d" % [surged, after_company, scattered])
+
+
+## The landmarks (docs/superpowers/plans/2026-10-25-lane-landmarks.md): what makes her stall and his shop read from the
+## Pasaje, placed, clear of every head over the walk, and greyed by the form light like the rest.
+func _landmarks() -> void:
+	var marks: Dictionary = lane.get("landmarks") if lane.get("landmarks") != null else {}
+	var garland: MeshInstance3D = marks.get("garland")
+	var low := []
+	if garland != null:
+		for s in garland.mesh.get_surface_count():
+			for v: Vector3 in garland.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]:
+				var p := garland.transform * v
+				if p.z >= 0.2 and p.z <= 2.6 and p.y < 2.6:
+					low.append(p)
+	_check("L5 her garland hangs across the walk, clear of every head", garland != null and low.is_empty(),
+		"garland %s, %d points under 2.6 m over the walk %s" % [garland != null, low.size(), low.slice(0, 2)])
+
+	# The form light greys them and gives their materials back.
+	var before := {}
+	for mesh: MeshInstance3D in marks.values():
+		before[mesh] = mesh.material_override
+	lane.set_form(true)
+	var greyed: bool = not marks.is_empty() and marks.values().all(func(m): return m.material_override == lane.form_material)
+	lane.set_form(false)
+	var restored: bool = marks.values().all(func(m): return m.material_override == before[m])
+	_check("L5b F2 greys the landmarks and gives back their materials", greyed and restored,
+		"%d marks, greyed %s, restored %s" % [marks.size(), greyed, restored])
 
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:

@@ -1,0 +1,11 @@
+{
+ "slots": [
+  "marigold",
+  "herb",
+  "picado",
+  "picado_b",
+  "iron"
+ ],
+ "atlas_px": 2048,
+ "px_per_m": 392.21
+}

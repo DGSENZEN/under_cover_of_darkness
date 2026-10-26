@@ -2,7 +2,7 @@ extends Node3D
 ## The candle lane's landmarks as the player sees them from the Pasaje (docs/superpowers/plans/2026-10-25-lane-landmarks.md,
 ## Task 1): the real map, the player camera's field of view, the eye 1.65 m over the floor. Each check is judged on the
 ## mouth view, its regions projected from points in the lane's frame. Windowed, in the game's time:
-##   Godot --path . --fixed-fps 60 --resolution 1920x1080 res://tests/lane_landmarks_view_test.tscn
+##   Godot --path . --fixed-fps 60 --resolution 1152x648 res://tests/lane_landmarks_view_test.tscn
 ## The views are saved to docs/superpowers/refs/underground/landmarks/ (review media, not committed).
 const MAP := preload("res://maps/metro.tscn")
 const OUT := "res://docs/superpowers/refs/underground/landmarks/"
@@ -46,6 +46,9 @@ func _ready() -> void:
 
 	# The mouth, twice half a second apart (the crowd hidden for those shots: what moves is judged without it).
 	_look(VIEWS[0][0], VIEWS[0][1], false)
+	# (-- --no-garland: the check's own baseline, the garland hidden.)
+	if OS.get_cmdline_user_args().has("--no-garland") and lane.get("landmarks") != null and lane.landmarks.has("garland"):
+		lane.landmarks["garland"].visible = false
 	var crowd: Node3D = lane.get("crowd_of_shades")
 	if crowd != null:
 		crowd.visible = false
@@ -73,22 +76,29 @@ func _ready() -> void:
 
 
 func _judge(a: Image, b: Image) -> void:
-	# LV1 her garland crosses the corridor: marigold in most of the span's columns.
-	var span := _region(Vector3(0.5, 2.6, NORTH), Vector3(3.0, 3.6, SOUTH))
+	# LV1 her garland crosses the corridor: warm (marigold, reddened under her neon and the chapel's haze) in most of
+	# the span's columns.
+	# (Its columns span the walk where the garland crosses, x 1.4-2.1, from her stall's front, where it ties on, to the
+	# south wall: a box running nearer the eye would be wider on screen than the lane there.)
+	var span := _region(Vector3(1.4, 2.6, 0.0), Vector3(2.1, 3.6, SOUTH))
 	var bins := 10
 	var hit := []
 	hit.resize(bins)
 	hit.fill(false)
 	_each(a, span, func(x: int, _y: int, c: Color):
-		if _hue_in(c.h * 360.0, Vector2(20.0, 45.0)) and c.s > 0.5 and c.v > 0.35:
+		if _hue_in(c.h * 360.0, Vector2(0.0, 45.0)) and c.s > 0.5 and c.v > 0.25:
 			hit[clampi(int(float(x - span.position.x) / maxf(span.size.x, 1.0) * bins), 0, bins - 1)] = true)
 	var spanned: int = hit.count(true)
-	_check("LV1 her garland crosses the corridor over her stall", spanned >= 7, "%d of %d columns marigold" % [spanned, bins])
+	var hidden := OS.get_cmdline_user_args().has("--no-garland")
+	_check("LV1 her garland crosses the corridor over her stall%s" % (" (garland hidden)" if hidden else ""), spanned >= 8,
+		"%d of %d columns warm" % [spanned, bins])
 
 	# LV2 a red pool at his arch, none at the chapel's end.
 	var at_arch := _share(a, _region(Vector3(4.7, 0.0, SOUTH - 1.5), Vector3(7.7, 3.2, SOUTH)), _red)
-	var at_chapel := _share(a, _region(Vector3(14.0, 0.0, NORTH), Vector3(16.8, 4.0, SOUTH)), _red)
-	_check("LV2 a red pool at his arch, and none at the chapel's end", at_arch >= 0.04 and at_chapel < 0.01,
+	# (The chapel's end below 2.2 m: higher, the garland's flags hang across it on screen.)
+	var at_chapel := _share(a, _region(Vector3(14.0, 0.0, NORTH), Vector3(16.8, 2.2, SOUTH)), _red)
+	# (The chapel's end has a scatter of warm candle and neon hues in the band, ~3 %: no pool. His arch's is a pool.)
+	_check("LV2 a red pool at his arch, twice the chapel end's scatter", at_arch >= 0.04 and at_arch >= 2.0 * at_chapel,
 		"arch %.3f, chapel %.3f" % [at_arch, at_chapel])
 
 	# LV3 something moves out of his arch onto the walk.
@@ -100,7 +110,9 @@ func _judge(a: Image, b: Image) -> void:
 			var c := a.get_pixel(x, y)
 			var d := b.get_pixel(x, y)
 			seen += 1
-			if absf(c.r - d.r) + absf(c.g - d.g) + absf(c.b - d.b) > 0.15:
+			# (A page is pale paper: what flickers on the floor, candle and neon light, is not.)
+			var paper := (c.v > 0.55 and c.s < 0.3) or (d.v > 0.55 and d.s < 0.3)
+			if paper and absf(c.r - d.r) + absf(c.g - d.g) + absf(c.b - d.b) > 0.15:
 				moved += 1
 	var share_moved := float(moved) / maxf(seen, 1.0)
 	_check("LV3 something moves out of his arch onto the walk", share_moved >= 0.005, "%.4f of the floor changed" % share_moved)
@@ -108,7 +120,10 @@ func _judge(a: Image, b: Image) -> void:
 	# LV4 the station sign no longer leads; LV5 the niche quieter than her stall.
 	var stall_lum := _luminance(a, _region(Vector3(-1.5, 0.5, NORTH), Vector3(1.5, 2.8, 0.0)))
 	var sign_node: Node3D = lane.get("mouth_sign")
-	var sign_lum := _luminance(a, _box_region(sign_node)) if sign_node != null else INF
+	# (Its face toward the mouth alone: the box round it is mostly the dark vault.)
+	var sign_box := _lane_box(sign_node) if sign_node != null else AABB()
+	var sign_lum := _luminance(a, _region(sign_box.position, Vector3(sign_box.position.x, sign_box.end.y, sign_box.end.z))) \
+		if sign_node != null else INF
 	_check("LV4 the blank station sign is dimmer than her stall", sign_lum < stall_lum,
 		"sign %.3f, her stall %.3f" % [sign_lum, stall_lum])
 	var niche: Node3D = lane.find_child("niche", true, false)
@@ -136,8 +151,10 @@ func _hue_in(hue: float, band: Vector2) -> bool:
 	return hue >= band.x and hue <= band.y if band.x <= band.y else hue >= band.x or hue <= band.y
 
 
-## The screen rectangle a box in the lane's frame covers (its corners projected), clipped to the image.
+## The screen rectangle a box in the lane's frame covers (its corners projected), clipped to the image. (Run at the
+## project's base size, 1152x648: under canvas_items stretch a larger window's shot and the camera's projection differ.)
 func _region(lo: Vector3, hi: Vector3) -> Rect2i:
+	var size := Vector2(get_viewport().get_texture().get_size())
 	var rect := Rect2()
 	var first := true
 	for i in 8:
@@ -148,21 +165,26 @@ func _region(lo: Vector3, hi: Vector3) -> Rect2i:
 		var s := eye.unproject_position(g)
 		rect = Rect2(s, Vector2.ZERO) if first else rect.expand(s)
 		first = false
-	var size := Vector2(get_viewport().get_texture().get_size())
 	return Rect2i(rect.intersection(Rect2(Vector2.ZERO, size)))
 
 
 ## The screen rectangle a node's drawn box covers.
 func _box_region(node: Node3D) -> Rect2i:
+	var box := _lane_box(node)
+	return _region(box.position, box.end)
+
+
+## A node's drawn box, in the lane's frame.
+func _lane_box(node: Node3D) -> AABB:
 	var box := AABB()
 	var first := true
-	for mesh: VisualInstance3D in [node] + node.find_children("*", "VisualInstance3D", true, false):
+	for mesh in [node] + node.find_children("*", "VisualInstance3D", true, false):
 		if not mesh is VisualInstance3D:
 			continue
 		var b: AABB = lane.global_transform.affine_inverse() * mesh.global_transform * mesh.get_aabb()
 		box = b if first else box.merge(b)
 		first = false
-	return _region(box.position, box.end)
+	return box
 
 
 ## (Plain loops: a lambda's counters are copies, and would come back unchanged.)
