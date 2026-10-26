@@ -37,7 +37,9 @@ behind its word.
   second (a hand-painted boil) and never displaces the illustration. The
   painting drifts slowly (18 s each way).
 - **Changing choice:** the band glides 0.5 s to the new word, and the
-  paintings cross-fade over 0.6 s. The city dims to 0.72 while a band shows.
+  paintings cross-fade over 0.6 s, each keeping its own glaze. If the
+  selection changes mid-fade, the picture that is mostly showing stays.
+  The city dims to 0.72 while a band shows.
 - **Pressing** a word pulses the band.
 
 **Known limit.** The illustrations exist only at about 575 px inside their
@@ -45,9 +47,11 @@ rims. The wide ones are enlarged about 1.45× in design px, roughly 1.75× at
 1080p and more at 1440p and 4K, so they look soft there. The fix is an
 upscaled derived copy, which waits on the user's approval.
 
-**Pages.** Continue, Settings and Lore spread their band over the right
-two-thirds (`Rect2(530, 0, 1070, 900)`). Its left side tears, and the
-painting moves right with torn edges all round.
+**Pages.** Continue, Settings and Lore spread their band from design x 530
+to the visible screen's right, top and bottom edges, on any window shape
+(`MainMenu.visible_design_rect`, `MenuBand.set_screen`). Its left side
+tears, and the painting glides right with the spread, with torn edges all
+round.
 [MenuPages](../../scripts/UI/MenuPages.gd) writes the page's content in a
 560-wide column over a feathered scrim:
 - Lore's text
@@ -117,6 +121,9 @@ next eighth note, at most one frame late.
   fades out in 30 ms to make room.
 - A chord with no jingle falls back to the loop's first chord, with a warning.
 
+**Arrival.** If the score has an arrival cue, it plays first and the loop
+starts as it lands.
+
 **New Game.** Pressing New Game opens the loading cover at once and calls
 `start_game()`. The song plays on to the end of its current phrase. If less
 than a bar is left, it plays the next phrase too. Over that span the layers
@@ -125,7 +132,9 @@ leave in order:
 - low and fx at 75%
 - base on the final bar line
 
-The node then frees itself. If the game scene fails to open, the menu starts
+A heard position that steps back by a hair (mix timing) is not a loop
+wrap. Anything still sounding at the bar line, for example after a stall,
+fades over 0.15 s. The node then frees itself. If the game scene fails to open, the menu starts
 its music again and says so on a page. Leaving the menu any other way stops
 the music.
 
@@ -179,6 +188,10 @@ walk, facing the curandera.
   It runs against `tests/fixtures/menu_score/`: numpy tones put through the
   real tool by `tests/fixtures/make_menu_score_fixture.py`. These are test
   data, not game audio.
+- `tests/menu_scene_change_test.gd` (headless, `--script`) presses New Game
+  into `tests/fixtures/tiny_game.tscn`. It checks that the theme is still
+  in the root, finishing its phrase, after the menu is gone, and that it
+  then frees itself.
 - `tests/tools/test_make_city_masks.py` and
   `tests/tools/test_prepare_menu_score.py` use stdlib unittest:
   `python3 -m unittest discover -s tests/tools -p '<file>'`.

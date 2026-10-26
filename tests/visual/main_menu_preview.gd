@@ -136,6 +136,15 @@ func run() -> void:
 	root.size = Vector2i(2560, 1080)
 	await create_timer(0.3).timeout
 	await capture("/private/tmp/main-menu-wide.png")
+	# Pages on other window shapes: every edge but the torn left one is the screen's.
+	for shape in [Vector2i(2560, 1600), Vector2i(2560, 1080), Vector2i(1024, 768)]:
+		root.size = shape
+		await process_frame
+		menu.open_page(3)
+		await create_timer(0.9).timeout
+		await capture("/private/tmp/main-menu-page-%dx%d.png" % [shape.x, shape.y])
+		menu.close_page()
+		await create_timer(0.6).timeout
 	root.size = Vector2i(900, 900)
 	await capture("/private/tmp/main-menu-square.png")
 	root.size = Vector2i(1280, 720)
