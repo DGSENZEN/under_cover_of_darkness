@@ -12,6 +12,8 @@ const NAMES := ["Resume", "Settings", "Main menu", "Quit"]
 const QUESTIONS := {2: "Main menu?", 3: "Quit?"}
 const MAIN_MENU := "res://main_menu.tscn"
 const ArtLoading := preload("res://scripts/UI/ArtLoadingScreen.gd")
+const BACKDROP_SHADER := preload("res://scripts/UI/pause_backdrop.gdshader")
+const GRADE_SHADER := preload("res://scripts/UI/pause_grade.gdshader")
 const INK := Color("f4e6cc")
 const GOLD := Color("d9b46a")
 
@@ -31,6 +33,17 @@ var quit_game: Callable
 var leave_to_menu: Callable
 var _design: Control
 var _backdrop: TextureRect
+## The paused game drained and darkened under the painting.
+var _grade: ColorRect
+## 0..1: how far the painting has bloomed in (and the game been drained).
+var bloom := 0.0:
+	set(value):
+		bloom = value
+		if _backdrop and _backdrop.material:
+			(_backdrop.material as ShaderMaterial).set_shader_parameter("level", value)
+		if _grade:
+			(_grade.material as ShaderMaterial).set_shader_parameter("level", value)
+var _bloom_tween: Tween
 var _veil: Control
 var _settings_panel: Control
 var _confirm: Control
@@ -85,6 +98,11 @@ func set_open(on: bool) -> void:
 			word.set_selected(false)
 		select(0)
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if _bloom_tween:
+			_bloom_tween.kill()
+		bloom = 0.0
+		_bloom_tween = MenuMotion.tween(self)
+		_bloom_tween.tween_property(self, "bloom", 1.0, MenuMotion.BLOOM)
 	else:
 		settings.end_capture()
 
@@ -209,6 +227,14 @@ func _layout() -> void:
 # Building
 
 func _build_backdrop() -> void:
+	_grade = ColorRect.new()
+	_grade.name = "Grade"
+	_grade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_grade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var grading := ShaderMaterial.new()
+	grading.shader = GRADE_SHADER
+	_grade.material = grading
+	add_child(_grade)
 	_backdrop = TextureRect.new()
 	_backdrop.name = "Backdrop"
 	_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -217,6 +243,20 @@ func _build_backdrop() -> void:
 	_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if ResourceLoader.exists(BACKDROP):
 		_backdrop.texture = load(BACKDROP)
+		# It melts into the paused game (pause_backdrop.gdshader).
+		var melt := ShaderMaterial.new()
+		melt.shader = BACKDROP_SHADER
+		var grain := FastNoiseLite.new()
+		grain.frequency = 0.012
+		grain.fractal_octaves = 4
+		var noise := NoiseTexture2D.new()
+		noise.width = 512
+		noise.height = 512
+		noise.seamless = true
+		noise.noise = grain
+		melt.set_shader_parameter("noise", noise)
+		melt.set_shader_parameter("fps", MenuBand.BOIL_FPS)
+		_backdrop.material = melt
 	add_child(_backdrop)
 	# Over it, a veil darkest at the left where the words are (over the frozen
 	# game, without a painting, a deeper one).
