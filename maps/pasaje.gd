@@ -124,6 +124,15 @@ const STRINGS := [-17.0, -9.8, -2.0, 5.9, 12.85]
 const GANTRY_Z := 18.3
 const GANTRY_HOOKS := [-2.0, 0.0, 2.0]
 const GANTRY_HOOK_Y := 2.86
+## The posters and graffiti: the sheet the graffiti are cut from (GRAFFITI_GRID x GRAFFITI_GRID), the posters (the
+## overhead kit's) and their widths; how far clear of the stalls and the openings they keep, the shortest alcove
+## that takes them.
+const GRAFFITI := "pasaje_graffiti.png"
+const GRAFFITI_GRID := 4
+const POSTERS := {"poster_a": 0.5, "poster_b": 0.42, "poster_c": 0.72}
+const MARK_CLEAR := 0.15
+const OPENING_CLEAR := 0.35
+const ALCOVE_LEAST := 0.6
 ## How far a sign swings at most (radians) and at what draught it does (m/s).
 const SWING := deg_to_rad(4.0)
 const SWING_FULL := 1.0
@@ -163,6 +172,8 @@ var steam: Array[Node3D] = []
 var overhead: Array[MeshInstance3D] = []
 var hanging: Array[Node3D] = []
 var _swing_clock := 0.0
+## The posters and the graffiti decals on the walls.
+var marks: Array[Node3D] = []
 
 
 func _ready() -> void:
@@ -171,6 +182,7 @@ func _ready() -> void:
 	_stalls()
 	_wares()
 	_overhead()
+	_marks()
 	if standalone:
 		_environment()
 		_stubs()
@@ -528,6 +540,108 @@ func _overhead() -> void:
 	overhead.append(SetKit.place(root, kit["gantry"], look, "gantry", Vector3(0.0, 0.0, GANTRY_Z), 0.0, false))
 	for x in GANTRY_HOOKS:
 		_hung_sign(root, kit, look, "sign_board_b", Vector3(x, GANTRY_HOOK_Y, GANTRY_Z))
+
+
+## Bills pasted and marks painted in the alcoves the stalls leave on the walls, where people stop and nobody keeps the
+## wall clean: a bill or two in the north, thicker toward the south end, where the market's crowd is thickest under
+## the canopy and the graffiti start; newer bills pasted over older.
+func _marks() -> void:
+	if not ResourceLoader.exists(OVERHEAD_KIT):
+		return
+	var kit := SetKit.kit(OVERHEAD_KIT)
+	var look := Painterly.material(SetKit.painted(["pasaje_overhead.png", "pasaje_overhead_base.png"]), &"bespoke")
+	var cells := _graffiti_cells()
+	var root := Node3D.new()
+	root.name = "marks"
+	add_child(root)
+	var k := 0
+	for side: int in [-1, 1]:
+		for alcove in _alcoves(side):
+			var a: float = alcove[0]
+			var b: float = alcove[1]
+			var south := (0.5 * (a + b) + HALF_L) / (2.0 * HALF_L)
+			var bills := 1 + int(2.6 * south * south)
+			var z := a + 0.05
+			for i in bills:
+				var kind: String = ["poster_a", "poster_b", "poster_c"][(k + i) % 3]
+				var width: float = POSTERS[kind]
+				if z + width > b - 0.05:
+					break
+				var low := 1.05 + 0.35 * _hash(k * 3.7 + i) - 0.12 * i
+				var at := Vector3(side * (HALF_W - WALL - FACE - 0.004 * i), low, z + width / 2.0)
+				var bill := SetKit.place(root, kit[kind], look, kind, at, -side * PI / 2.0, false)
+				marks.append(bill)
+				z += width * (0.55 + 0.3 * _hash(k + i * 1.3))
+			# The graffiti: under the bills from the middle of the stretch on, and across the wall at the south end.
+			var sprays := (1 if south > 0.45 else 0) + (1 if south > 0.75 and b - a > 1.2 else 0)
+			for i in sprays:
+				if cells.is_empty():
+					break
+				var size := 0.8 + 0.4 * _hash(k * 1.9 + i)
+				var middle := lerpf(a + size / 2.0, b - size / 2.0, (i + 0.5) / sprays)
+				if b - a < size + 0.1:
+					break
+				marks.append(_graffito(root, cells[(k * 5 + i * 7) % cells.size()], side, middle, 0.7 + 0.25 * i, size))
+			k += 1
+
+
+## The free runs of the `side` wall: [z from, z to], clear of its stalls and openings, ALCOVE_LEAST long or longer.
+func _alcoves(side: int) -> Array:
+	var taken := []
+	for name in stalls:
+		var box := AABB()
+		var first := true
+		for mesh: MeshInstance3D in stalls[name].find_children("*", "MeshInstance3D", true, false):
+			var part: AABB = global_transform.affine_inverse() * mesh.global_transform * mesh.get_aabb()
+			box = part if first else box.merge(part)
+			first = false
+		if not first and signf(box.get_center().x) == side:
+			taken.append([box.position.z - MARK_CLEAR, box.end.z + MARK_CLEAR])
+	for name in OPENINGS:
+		if OPENINGS[name][0] == side:
+			taken.append([OPENINGS[name][1] - OPENING_CLEAR, OPENINGS[name][2] + OPENING_CLEAR])
+	taken.sort_custom(func(p, q): return p[0] < q[0])
+	var free := []
+	var z := -HALF_L + 0.2
+	for span in taken:
+		if span[0] - z >= ALCOVE_LEAST:
+			free.append([z, span[0]])
+		z = maxf(z, span[1])
+	if HALF_L - 0.2 - z >= ALCOVE_LEAST:
+		free.append([z, HALF_L - 0.2])
+	return free
+
+
+## The graffiti sheet cut into its cells, each its own texture (a decal draws a whole texture).
+func _graffiti_cells() -> Array[Texture2D]:
+	var cells: Array[Texture2D] = []
+	var sheet := SetKit.painted([GRAFFITI], SetKit.ATLAS_DIR, true)
+	if sheet == null:
+		return cells
+	var image := sheet.get_image()
+	if image.is_compressed():
+		image.decompress()
+	var size := image.get_width() / GRAFFITI_GRID
+	for j in GRAFFITI_GRID:
+		for i in GRAFFITI_GRID:
+			cells.append(ImageTexture.create_from_image(image.get_region(Rect2i(i * size, j * size, size, size))))
+	return cells
+
+
+## A graffito sprayed on the `side` wall's tiles, its middle at (z, height), `size` across.
+func _graffito(root: Node3D, cell: Texture2D, side: int, z: float, height: float, size: float) -> Decal:
+	var mark := Decal.new()
+	mark.name = "graffito"
+	mark.texture_albedo = cell
+	mark.size = Vector3(size, 0.3, size)
+	mark.normal_fade = 0.6
+	# (Projected into the wall along its -Y, its image upright: its Z down the wall.)
+	var into := Vector3(-side, 0.0, 0.0)
+	var down := Vector3(0.0, -1.0, 0.0)
+	mark.basis = Basis(into.cross(down), into, down)
+	root.add_child(mark)
+	mark.position = Vector3(side * (HALF_W - WALL - FACE), height, z)
+	return mark
 
 
 ## A sign hung from its pivot at `at`, which swings it.

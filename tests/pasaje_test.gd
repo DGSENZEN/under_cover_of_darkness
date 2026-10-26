@@ -19,6 +19,7 @@ func _ready() -> void:
 	await _stalls()
 	await _wares()
 	await _overhead()
+	_marks()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -276,6 +277,36 @@ func _overhead() -> void:
 	_check("P6c the canopy spans the street at the stretch's south end", covers, "%d canopies" % canopy.size())
 
 
+## Task 7: the posters and graffiti, thicker toward the south end, none on an opening or by a stall's neon.
+func _marks() -> void:
+	var marks: Array = pasaje.get("marks") if pasaje.get("marks") != null else []
+	var south := 0
+	var north := 0
+	var wrong := []
+	var neons := []
+	for name in pasaje.stalls:
+		for box: MeshInstance3D in pasaje.stalls[name].find_children("neon_box*", "MeshInstance3D", true, false):
+			neons.append(_local_box(box))
+	for mark: Node3D in marks:
+		var at := pasaje.to_local(mark.global_position)
+		if at.z >= 5.0:
+			south += 1
+		elif at.z <= -5.0:
+			north += 1
+		var side := 1 if at.x > 0.0 else -1
+		for opening in pasaje.OPENINGS:
+			var o: Array = pasaje.OPENINGS[opening]
+			if o[0] == side and at.z > o[1] - 0.3 and at.z < o[2] + 0.3:
+				wrong.append("%s by the %s" % [mark.name, opening])
+		for box: AABB in neons:
+			if box.grow(0.3).has_point(at):
+				wrong.append("%s by a neon" % mark.name)
+	_check("P7 posters and graffiti thicken toward the south end", north > 0 and south >= 1.5 * north,
+		"%d south, %d north (of %d)" % [south, north, marks.size()])
+	_check("P7b none of them on an opening or a stall's neon face", not marks.is_empty() and wrong.is_empty(),
+		"%s" % [wrong.slice(0, 4)])
+
+
 ## Whether a Vfx system's fumes are breathing.
 func _steaming(system: Node3D) -> bool:
 	for fumes in system.get_children():
@@ -284,12 +315,15 @@ func _steaming(system: Node3D) -> bool:
 	return false
 
 
-## The bounds of a stall's meshes in the set's frame (leaving out its wares, named for `trade`, if given).
+## The bounds of a stall's built meshes in the set's frame (leaving out its steam, which drifts where the draught takes
+## it, and its wares, named for `trade`, if given).
 func _stall_box(root: Node3D, trade := "") -> AABB:
 	var box := AABB()
 	var first := true
 	for mesh: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
 		if trade != "" and String(mesh.name).begins_with(trade + "_"):
+			continue
+		if "steam" in String(root.get_path_to(mesh)):
 			continue
 		var part := _local_box(mesh)
 		box = part if first else box.merge(part)

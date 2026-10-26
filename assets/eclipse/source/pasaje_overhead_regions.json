@@ -10,8 +10,9 @@
   "cloth_patch",
   "brass",
   "glass_bulb",
-  "burlap"
+  "burlap",
+  "paper"
  ],
  "atlas_px": 2048,
- "px_per_m": 116.85
+ "px_per_m": 98.62
 }

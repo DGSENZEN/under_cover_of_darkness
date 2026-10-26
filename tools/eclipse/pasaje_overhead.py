@@ -29,7 +29,7 @@ from underground_shapes import box, pipe, smooth_object, stud, turned  # noqa: E
 NAME = "pasaje_overhead"
 ATLAS = 2048
 SLOTS = ["iron", "steel", "enamel", "sign", "rubber", "cloth_black", "cloth_blue", "cloth_patch", "brass", "glass_bulb",
-         "burlap"]
+         "burlap", "paper"]
 
 rng = random.Random(1933)
 
@@ -205,8 +205,52 @@ def gantry(m):
         turned(m, [(0.035, GANTRY_Y - 0.06), (0.035, GANTRY_Y - 0.035)], 8, "iron", at=(x, 0.0, 0.0))
 
 
+# --- the posters -----------------------------------------------------------------------------------------
+
+# Bills pasted on the tiles: [width, height], their paper's thickness, the plain margin round their image (the user's).
+POSTERS = {"poster_a": (0.5, 0.7), "poster_b": (0.42, 0.58), "poster_c": (0.72, 0.46)}
+PAPER = 0.006
+MARGIN = 0.05
+TEARS = 4
+
+
+def _poster(width, height, seed):
+    """A bill: its edge torn ragged (one corner bitten away by someone tearing it down), its image a plain field in
+    its margin; pasted flat on the tiles (its back at y = 0), a few millimetres proud of them."""
+    def made(m):
+        tear = random.Random(seed)
+        half = width / 2
+        corners = [(-half, 0.0), (half, 0.0), (half, height), (-half, height)]
+        inner = [(-half + MARGIN, MARGIN), (half - MARGIN, MARGIN), (half - MARGIN, height - MARGIN),
+                 (-half + MARGIN, height - MARGIN)]
+        bitten = tear.randrange(4)
+        outline, field = [], []
+        for c in range(4):
+            (ax, az), (bx, bz) = corners[c], corners[(c + 1) % 4]
+            (px, pz), (qx, qz) = inner[c], inner[(c + 1) % 4]
+            for k in range(TEARS + 1):
+                t = k / (TEARS + 1)
+                ox, oz = ax + (bx - ax) * t, az + (bz - az) * t
+                ix, iz = px + (qx - px) * t, pz + (qz - pz) * t
+                # Torn in toward the field, never through its margin; the bitten corner deeper.
+                bite = 0.6 if (c == bitten and k == 0) else tear.uniform(0.0, 0.45)
+                outline.append((ox + (ix - ox) * bite, oz + (iz - oz) * bite))
+                field.append((ix, iz))
+        m.shell()
+        m.face([(x, -PAPER, z) for x, z in field], "sign")
+        n = len(outline)
+        for k in range(n):
+            (o0, o1), (f0, f1) = (outline[k], outline[(k + 1) % n]), (field[k], field[(k + 1) % n])
+            m.face([(o0[0], -PAPER, o0[1]), (o1[0], -PAPER, o1[1]), (f1[0], -PAPER, f1[1]), (f0[0], -PAPER, f0[1])],
+                   "paper")
+            m.face([(o0[0], -PAPER, o0[1]), (o0[0], 0.0, o0[1]), (o1[0], 0.0, o1[1]), (o1[0], -PAPER, o1[1])], "paper")
+        m.face([(x, 0.0, z) for x, z in reversed(outline)], "paper")
+    return made
+
+
 PIECES = [(n, _sign(*SIGNS[n])) for n in SIGNS] + [("drop_rod", drop_rod), ("cable_bundle", cable_bundle),
                                                    ("bulb_string", bulb_string), ("canopy", canopy), ("gantry", gantry)]
+PIECES += [(n, _poster(*POSTERS[n], seed=k)) for k, n in enumerate(POSTERS)]
 BUDGET = {name: 3000 for name, _ in PIECES}
 BUDGET["canopy"] = 2000
 SLIVER = {name: 0.004 for name in BUDGET}
