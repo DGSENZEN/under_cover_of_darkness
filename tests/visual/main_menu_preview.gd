@@ -46,7 +46,15 @@ func run() -> void:
 	var menu: CanvasLayer = load("res://main_menu.tscn").instantiate()
 	root.add_child(menu)
 	current_scene = menu
+	# The real pointer may rest over the window: park it away from the words,
+	# or a hover would select one and dim the city mid-check.
+	Input.warp_mouse(Vector2(1270, 710))
+	var park := InputEventMouseMotion.new()
+	park.position = Vector2(1270, 710)
+	park.global_position = park.position
+	root.push_input(park, true)
 	await create_timer(1.0).timeout
+	check(menu.selected == -1, "nothing is selected before input (pointer parked)")
 	await capture("/private/tmp/main-menu-idle.png")
 	var first_paint := root.get_texture().get_image()
 	await create_timer(2.0).timeout

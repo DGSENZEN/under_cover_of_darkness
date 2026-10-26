@@ -35,6 +35,7 @@ func _ready() -> void:
 	clock_checks()
 	layer_checks()
 	jingle_checks()
+	await ending_checks()
 	await get_tree().process_frame
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failures else 0)
@@ -136,3 +137,48 @@ func jingle_checks() -> void:
 	run_for(music, 0.5)
 	check(music.press_voices_playing(3) <= MenuMusic.PRESS_VOICES, "one press voice per word")
 	music.queue_free()
+
+func ending_checks() -> void:
+	pos = 3.0 * BAR
+	var music := make_music()
+	run_for(music, 0.5)
+	music.set_state(MenuMusic.State.BROWSING)
+	music.activity = 1.0
+	for i in range(240):
+		music.activity = 1.0
+		pos += 1.0 / 60.0
+		music.step(1.0 / 60.0)
+	check(music.stem_gain_db(&"trumpet") > -4.0, "high is in before the ending (%.1f dB)" % music.stem_gain_db(&"trumpet"))
+	check(music.process_mode == Node.PROCESS_MODE_ALWAYS, "plays on under the paused loading screen")
+	var ended := [false]
+	music.ended.connect(func(): ended[0] = true)
+	music.start_game()
+	check(music.state == MenuMusic.State.STARTING, "New Game starts the ending")
+	music.set_state(MenuMusic.State.LORE)
+	music.last_jingle = {}
+	music.hover(1)
+	music.press(1)
+	check(music.state == MenuMusic.State.STARTING and music.last_jingle.is_empty(), "nothing else plays once it is ending")
+	var end := 8.0 * BAR
+	var high_out_at := -1.0
+	var base_at_end := 0.0
+	while pos < end + 0.2 and not ended[0]:
+		pos += 1.0 / 60.0
+		music.step(1.0 / 60.0)
+		if high_out_at < 0.0 and music.stem_gain_db(&"trumpet") <= MenuMusic.OUT:
+			high_out_at = pos
+		if pos >= end - 1.0 / 60.0 and pos < end:
+			base_at_end = music.stem_gain_db(&"piano")
+	var span := end - (3.0 * BAR + 4.5)
+	check(ended[0] and absf(pos - end) <= 1.0 / 60.0 + 0.0001, "the song ends on its phrase's last bar line (at %.3f, bar line %.3f)" % [pos, end])
+	check(high_out_at > 0.0 and absf(high_out_at - (end - span * 0.6)) < 0.1, "the high layer leaves first")
+	check(base_at_end < -20.0, "the base is all but gone by then")
+	await get_tree().process_frame
+	check(not is_instance_valid(music) or music.is_queued_for_deletion(), "it frees itself when done")
+	pos = 7.5 * BAR
+	var late := make_music()
+	run_for(late, 0.1)
+	late.start_game()
+	var phrase := 8.0 * BAR
+	check(absf(late.ending_at() - 2.0 * phrase) < 0.001, "less than a bar left: it finishes the next phrase instead")
+	late.queue_free()

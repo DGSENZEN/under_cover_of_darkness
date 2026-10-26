@@ -6,6 +6,9 @@ extends Node
 ## Lives under the tree root so it can finish its phrase after the menu is gone.
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
+signal started
+signal ended
+
 enum State { ARRIVAL, BROWSING, IDLE, LORE, SETTINGS, CONTINUE, STARTING }
 
 const SCORE_JSON := "res://audio/music/menu/score.json"
@@ -32,6 +35,8 @@ const SLEW := 24.0
 const HOVER_VOICES := 2
 const PRESS_VOICES := 1
 const GIVE_WAY := 0.03
+## New Game: each layer is gone at this fraction of the way to the phrase's end.
+const LEAVES := {&"high": 0.4, &"low": 0.75, &"fx": 0.75, &"base": 1.0}
 
 @export var score_json_path := SCORE_JSON
 var available := false
@@ -54,8 +59,11 @@ var _pending: Array[Dictionary] = []
 var _turns := {}
 var _streams := {}
 var _warned := {}
+var _ending := {}
 
 func _ready() -> void:
+	# The loading screen pauses the tree; the song finishes its phrase under it.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	Sfx._ensure_buses()
 	if not position_source.is_valid():
 		position_source = _heard_position
@@ -96,6 +104,9 @@ func step(delta: float) -> void:
 	if not available:
 		return
 	var pos := loop_position()
+	if state == State.STARTING:
+		_end_step(pos)
+		return
 	var bar := MenuClock.bar_at(pos, float(score.bpm), int(score.beats_per_bar))
 	activity = maxf(activity - ACTIVITY_FALL * delta, 0.0)
 	if state == State.ARRIVAL and bar >= ARRIVAL_BARS:
@@ -111,7 +122,10 @@ func step(delta: float) -> void:
 		var id := StringName(stem.id)
 		_gains[id] = move_toward(float(_gains[id]), stem_target_db(id), SLEW * delta)
 	_mix()
-	# Presses waiting for their eighth note (which may lie past the loop's end).
+	_play_due(pos)
+
+## Presses waiting for their eighth note (which may lie past the loop's end).
+func _play_due(pos: float) -> void:
 	for press_at in _pending.duplicate():
 		var due: bool = pos >= float(press_at.at) and (not press_at.wraps or pos < float(press_at.from))
 		if due:
@@ -183,6 +197,49 @@ func _give_way(voice: Dictionary) -> void:
 	var fade := create_tween()
 	fade.tween_property(voice.player, "volume_db", OUT, GIVE_WAY)
 	fade.tween_callback(voice.player.queue_free)
+
+## New Game: the song plays on to the end of its phrase, thinning out (high
+## first, then low and fx, then base) and fading to silence on that bar line.
+## Less than a bar left, it finishes the next phrase instead. Then it frees itself.
+func start_game() -> void:
+	if not available:
+		started.emit()
+		ended.emit()
+		queue_free()
+		return
+	if state == State.STARTING:
+		return
+	var pos := loop_position()
+	var bpm := float(score.bpm)
+	var bar_len := MenuClock.beat_seconds(bpm) * int(score.beats_per_bar)
+	var end := MenuClock.phrase_end_after(pos, bpm, int(score.beats_per_bar), int(score.phrase_bars))
+	if end - pos < bar_len:
+		end += bar_len * int(score.phrase_bars)
+	state = State.STARTING
+	_ending = {"span": end - pos, "elapsed": 0.0, "last": pos, "end": end, "from": _gains.duplicate()}
+	started.emit()
+
+## Where (in loop seconds, unwrapped) the ending lands.
+func ending_at() -> float:
+	return float(_ending.get("end", -1.0))
+
+func _end_step(pos: float) -> void:
+	var moved := pos - float(_ending.last)
+	if moved < 0.0:
+		moved += float(score.loop_seconds)
+	_ending.elapsed = float(_ending.elapsed) + moved
+	_ending.last = pos
+	var f := float(_ending.elapsed) / float(_ending.span)
+	for stem in score.stems:
+		var id := StringName(stem.id)
+		var k := clampf(f / float(LEAVES[StringName(stem.layer)]), 0.0, 1.0)
+		_gains[id] = OUT if k >= 1.0 else maxf(float(_ending.from[id]) + linear_to_db(1.0 - k), OUT)
+	_mix()
+	_play_due(pos)
+	if f >= 1.0:
+		player.stop()
+		ended.emit()
+		queue_free()
 
 func set_state(next: State) -> void:
 	if not available or state == State.STARTING:

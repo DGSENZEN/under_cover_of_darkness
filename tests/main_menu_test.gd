@@ -29,8 +29,11 @@ func _ready() -> void:
 		return
 	var scene: PackedScene = load("res://main_menu.tscn")
 	var menu := scene.instantiate()
+	menu.music_score = "res://tests/fixtures/menu_score/score.json"
 	add_child(menu)
 	await get_tree().process_frame
+	await get_tree().process_frame
+	check(menu.music != null and menu.music.get_parent() == get_tree().root and menu.music.available, "the menu's music lives under the root")
 	check(menu.game_scene == "res://maps/metro.tscn", "New Game enters the actual Metro Underground scene")
 	var title_lines: Array[String] = []
 	for child in menu._design.get_children():
@@ -59,6 +62,7 @@ func _ready() -> void:
 	menu.words[3].mouse_entered.emit()
 	await get_tree().process_frame
 	check(menu.selected == 3 and menu.words.filter(func(w): return w.selected).size() == 1, "mouse after keyboard: one selection, the latest")
+	check(menu.music.selected == 3 and menu.music.last_jingle.get("button") == 3 and menu.music.last_jingle.get("kind") == "hover", "choosing a word sounds its instrument")
 	check(not menu.has_method("music_marker"), "the old music marker hook is gone")
 
 	# Task 2: the painted band.
@@ -119,6 +123,9 @@ func _ready() -> void:
 	menu.open_page(3)
 	await get_tree().create_timer(0.7).timeout
 	check(menu.pages.title_label.text == "Lore" and not menu.pages.body_label.text.is_empty(), "Lore opens the city's existing setting")
+	check(menu.music.state == MenuMusic.State.LORE, "the music knows Lore is open")
+	await get_tree().create_timer(0.6).timeout
+	check(float((menu.background.material as ShaderMaterial).get_shader_parameter("fx")) > 0.5, "the occult layer stirs the city while Lore is open")
 	check(menu.band.page and menu.band.band_rect() == Rect2(530, 0, 1070, 900), "Lore spreads its band over the right two-thirds")
 	check(is_equal_approx(menu.band.material.get_shader_parameter("page"), 1.0), "the band's edges turn into a page's")
 	check(menu.words[0].modulate.a < 0.4 and menu.words[0].visible, "other words dim but stay")
@@ -128,9 +135,21 @@ func _ready() -> void:
 	check(menu.page_open == -1 and menu.words[3].has_focus() and not menu.band.page, "Escape folds the page back to its word")
 	check(menu.words[0].modulate.a > 0.5, "words come back when the page closes")
 	check(ResourceLoader.exists(menu.game_scene), "New Game points at an existing playable scene")
+	var starts := [0]
+	menu.music.started.connect(func(): starts[0] += 1)
+	menu.game_scene = "res://tests/fixtures/no_such_game.tscn"
+	menu.words[0].pressed.emit()
+	await get_tree().process_frame
+	menu.words[0].pressed.emit()
+	check(starts[0] == 1 and get_tree().root.get_children().filter(func(n): return n.name.begins_with("ArtLoading")).size() <= 1, "pressing New Game twice starts one game")
+	await get_tree().create_timer(0.3).timeout
+	check(menu.page_open == 0 and menu.music != null and is_instance_valid(menu.music) and menu.music.state != MenuMusic.State.STARTING, "a game that will not open: the menu says so and its music returns")
+	menu.close_page()
+	var old_music: Node = menu.music
 	check(ProjectSettings.get_setting("application/run/main_scene") == "res://main_menu.tscn", "normal game launch opens the new menu")
 	menu.queue_free()
 	await get_tree().process_frame
+	check(not is_instance_valid(old_music) or old_music.is_queued_for_deletion(), "leaving the menu (not for a game) stops its music")
 	DirAccess.remove_absolute(Settings.path)
 	Settings.path = original_path
 	Settings.reload()

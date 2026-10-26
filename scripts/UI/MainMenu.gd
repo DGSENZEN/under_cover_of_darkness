@@ -8,6 +8,8 @@ const LORE := "THE ECLIPSE OF 1923\nMexico City was changed by the Eclipse and t
 
 ## The actual underground station and built candle lane from metro-standard.
 @export_file("*.tscn") var game_scene := "res://maps/metro.tscn"
+## The menu theme's score (prepared by tools/prepare_menu_score.py).
+@export var music_score := MenuMusic.SCORE_JSON
 signal selection_changed(index: int)
 
 const NAMES := ["New Game", "Continue", "Settings", "Lore"]
@@ -21,6 +23,7 @@ var background: LivingCity
 var _dim := 1.0
 var selected := -1
 var pages: MenuPages
+var music: MenuMusic
 var page_open := -1
 var _root: Control
 var _design: Control
@@ -62,6 +65,7 @@ func _ready() -> void:
 	band.name = "Band"
 	_design.add_child(band)
 	selection_changed.connect(func(i): band.show_choice(i, words[i].position.y + words[i].size.y * 0.5))
+	selection_changed.connect(_sound_choice)
 	_text("UNDER COVER", Vector2(72, 115), 52)
 	_text("OF DARKNESS", Vector2(72, 175), 58)
 	for i in range(NAMES.size()):
@@ -82,6 +86,7 @@ func _ready() -> void:
 	pages.build(_font, LORE)
 	pages.back.pressed.connect(close_page)
 	_design.add_child(pages)
+	_start_music()
 	get_viewport().size_changed.connect(_layout)
 	_layout()
 	# No automatic focus highlight until keyboard navigation is used.
@@ -112,18 +117,42 @@ func city_dim() -> float:
 func _process(delta: float) -> void:
 	_dim = move_toward(_dim, 0.72 if band.showing else 1.0, delta / 0.5 * 0.28)
 	background.dim = _dim
+	if is_instance_valid(music):
+		background.set_energy(music.layer_energy(&"base"), music.layer_energy(&"low"), music.layer_energy(&"high"), music.layer_energy(&"fx"))
+
+## The theme lives under the root, so it can finish its phrase after the menu.
+func _start_music() -> void:
+	music = MenuMusic.new()
+	music.name = "MenuMusic"
+	music.score_json_path = music_score
+	get_tree().root.add_child.call_deferred(music)
+
+func _sound_choice(index: int) -> void:
+	if is_instance_valid(music):
+		music.set_selected(index)
+		music.hover(index)
+		music.note_input()
+
+func _exit_tree() -> void:
+	if is_instance_valid(music) and music.state != MenuMusic.State.STARTING:
+		music.queue_free()
 
 func _activate(index: int) -> void:
 	if _transitioning or page_open >= 0:
 		return
+	band.pulse()
+	if is_instance_valid(music):
+		music.press(index)
 	if index == 0:
 		_transitioning = true
-		# Draw the click response before beginning the existing game's scene.
-		await get_tree().create_timer(0.22).timeout
+		# The loading cover opens at once; the song finishes its phrase under it.
+		if is_instance_valid(music):
+			music.start_game()
 		var cover := ArtLoading.open(get_tree())
 		var error: Error = await cover.change_to(game_scene)
 		if error != OK:
 			_transitioning = false
+			_start_music()
 			open_page(0, "The game scene could not be opened. Please try again.")
 	else:
 		open_page(index)
@@ -140,6 +169,8 @@ func open_page(index: int, message := "") -> void:
 		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if word.index != index:
 			word.modulate.a = 0.35
+	if is_instance_valid(music) and index > 0:
+		music.set_state([MenuMusic.State.BROWSING, MenuMusic.State.CONTINUE, MenuMusic.State.SETTINGS, MenuMusic.State.LORE][index])
 	await get_tree().create_timer(MenuBand.GLIDE).timeout
 	if turn == _page_turn and page_open == index:
 		pages.show_page(index, NAMES[index], COLOURS[index], message)
@@ -153,6 +184,8 @@ func close_page() -> void:
 	_page_turn += 1
 	pages.hide_page()
 	band.set_page(false)
+	if is_instance_valid(music):
+		music.set_state(MenuMusic.State.BROWSING)
 	for word in words:
 		word.focus_mode = Control.FOCUS_ALL
 		word.mouse_filter = Control.MOUSE_FILTER_STOP
