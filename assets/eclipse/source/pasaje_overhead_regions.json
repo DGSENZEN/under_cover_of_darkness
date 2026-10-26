@@ -1,0 +1,17 @@
+{
+ "slots": [
+  "iron",
+  "steel",
+  "enamel",
+  "sign",
+  "rubber",
+  "cloth_black",
+  "cloth_blue",
+  "cloth_patch",
+  "brass",
+  "glass_bulb",
+  "burlap"
+ ],
+ "atlas_px": 2048,
+ "px_per_m": 116.85
+}

@@ -110,6 +110,23 @@ const WARES := {
 const BULBS := ["tamales", "tortas", "atole", "coffee", "fruit", "herbs", "candles", "radios"]
 const BULB_AT := Vector3(-0.175, 2.17, 1.15)
 const BULB_COLOUR := Color(1.0, 0.72, 0.42)
+const OVERHEAD_KIT := "res://assets/eclipse/kit/pasaje_overhead.glb"
+## The direction signs on rods from the girders' bottoms (GIRDER_FOOT): [board, x, the girder's z]. None under the
+## canopy (it would hide them).
+const GIRDER_SIGNS := [["sign_board_a", -1.5, -11.994], ["sign_board_c", 2.2, -7.996], ["sign_board_b", 1.2, -3.998],
+	["sign_board_a", -0.8, 7.996], ["sign_board_c", 1.4, 11.994]]
+const GIRDER_FOOT := 4.18
+const ROD := 0.75
+## The cables and the bulb strings slung across, each between two girders (z).
+const CABLES := [-13.9, -6.1, 2.1, 9.8]
+const STRINGS := [-17.0, -9.8, -2.0, 5.9, 12.85]
+## The gantry under the canopy (z), the hooks along its beam (x), their height; its signs the shallow board.
+const GANTRY_Z := 18.3
+const GANTRY_HOOKS := [-2.0, 0.0, 2.0]
+const GANTRY_HOOK_Y := 2.86
+## How far a sign swings at most (radians) and at what draught it does (m/s).
+const SWING := deg_to_rad(4.0)
+const SWING_FULL := 1.0
 ## The food's steam: [stall, its Vfx preset, where it leaves (the stall's frame)].
 const STEAM := [["tamales", "pot_steam", Vector3(0.15, 1.51, 0.8)], ["tortas", "steam", Vector3(0.25, 1.02, 1.15)],
 	["atole", "pot_steam", Vector3(-0.6, 1.54, 1.12)], ["coffee", "pot_steam", Vector3(-0.55, 1.28, 1.1)]]
@@ -142,6 +159,10 @@ var stalls := {}
 var lights: Array[Light3D] = []
 ## The food's steam (Vfx systems), leaning on the draught.
 var steam: Array[Node3D] = []
+## What hangs over the street (its meshes), and the signs' pivots, each swinging about its hook on the draught.
+var overhead: Array[MeshInstance3D] = []
+var hanging: Array[Node3D] = []
+var _swing_clock := 0.0
 
 
 func _ready() -> void:
@@ -149,6 +170,7 @@ func _ready() -> void:
 	_shell_dressing()
 	_stalls()
 	_wares()
+	_overhead()
 	if standalone:
 		_environment()
 		_stubs()
@@ -161,12 +183,15 @@ func _ready() -> void:
 		player.position = Vector3(0.0, 1.05, -18.0)
 
 
-func _process(_delta: float) -> void:
-	if steam.is_empty():
-		return
+func _process(delta: float) -> void:
 	var wind: Vector3 = draught.call()
 	for system in steam:
 		Vfx.blow(system, wind)
+	# The signs swing about their hooks as hard as the draught blows, each at its own pace.
+	_swing_clock += delta
+	var reach := SWING * clampf(wind.length() / SWING_FULL, 0.0, 1.0)
+	for k in hanging.size():
+		hanging[k].rotation.x = reach * sin(_swing_clock * (1.7 + 0.23 * k) + 1.3 * k)
 
 
 ## The structural shell: the floor slab, the two walls cut round their openings (lintels over them), the ceiling.
@@ -468,6 +493,51 @@ func _wares() -> void:
 		system.position = spec[2]
 		Vfx.emit(system, true)
 		steam.append(system)
+
+
+## What the market hung over its street: direction signs on rods from the girders, cables and bulb strings slung
+## across, and at its south end the canopy with the gantry of signs under it.
+func _overhead() -> void:
+	if not ResourceLoader.exists(OVERHEAD_KIT):
+		missing.append(OVERHEAD_KIT)
+		return
+	var kit := SetKit.kit(OVERHEAD_KIT)
+	var look := Painterly.material(SetKit.painted(["pasaje_overhead.png", "pasaje_overhead_base.png"]), &"bespoke")
+	var lit := StandardMaterial3D.new()
+	lit.albedo_color = BULB_COLOUR
+	lit.emission_enabled = true
+	lit.emission = BULB_COLOUR
+	lit.emission_energy_multiplier = 3.0
+	var root := Node3D.new()
+	root.name = "overhead"
+	add_child(root)
+	for spec in GIRDER_SIGNS:
+		overhead.append(SetKit.place(root, kit["drop_rod"], look, "drop_rod", Vector3(spec[1], GIRDER_FOOT, spec[2]), 0.0, false))
+		_hung_sign(root, kit, look, spec[0], Vector3(spec[1], GIRDER_FOOT - ROD, spec[2]))
+	for z in CABLES:
+		overhead.append(SetKit.place(root, kit["cable_bundle"], look, "cable_bundle", Vector3(0.0, 0.0, z), 0.0, false))
+	for z in STRINGS:
+		var string := SetKit.place(root, kit["bulb_string"], look, "bulb_string", Vector3(0.0, 0.0, z), 0.0, false)
+		# (Its bulbs glowing; no lights of their own, the set's light budget spent on the stalls.)
+		for i in string.mesh.get_surface_count():
+			var slot: Material = string.mesh.surface_get_material(i)
+			if slot != null and slot.resource_name.begins_with("glass"):
+				string.set_surface_override_material(i, lit)
+		overhead.append(string)
+	overhead.append(SetKit.place(root, kit["canopy"], look, "canopy", Vector3.ZERO, 0.0, false))
+	overhead.append(SetKit.place(root, kit["gantry"], look, "gantry", Vector3(0.0, 0.0, GANTRY_Z), 0.0, false))
+	for x in GANTRY_HOOKS:
+		_hung_sign(root, kit, look, "sign_board_b", Vector3(x, GANTRY_HOOK_Y, GANTRY_Z))
+
+
+## A sign hung from its pivot at `at`, which swings it.
+func _hung_sign(root: Node3D, kit: Dictionary, look: Material, board: String, at: Vector3) -> void:
+	var pivot := Node3D.new()
+	pivot.name = "sign_pivot"
+	root.add_child(pivot, true)
+	pivot.position = at
+	overhead.append(SetKit.place(pivot, kit[board], look, board, Vector3.ZERO, 0.0, false))
+	hanging.append(pivot)
 
 
 ## A steady hash in [0, 1) of `v`.

@@ -18,6 +18,7 @@ func _ready() -> void:
 	_dressed()
 	await _stalls()
 	await _wares()
+	await _overhead()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -238,6 +239,41 @@ func _wares() -> void:
 	var lights: Array = pasaje.get("lights") if pasaje.get("lights") != null else []
 	_check("P5c the set's light stays in budget", plain <= 24 and shadowed <= 2 and lights.size() == plain + shadowed,
 		"%d shadowless, %d with shadows; %d listed" % [plain, shadowed, lights.size()])
+
+
+## Task 6: the overhead over every head, its signs swinging on the draught, the canopy closing the south end.
+func _overhead() -> void:
+	var overhead: Array = pasaje.get("overhead") if pasaje.get("overhead") != null else []
+	var low := []
+	for piece: MeshInstance3D in overhead:
+		var box := _local_box(piece)
+		if box.position.x < 3.0 and box.end.x > -3.0 and box.position.y < 2.4:
+			low.append("%s %.2f" % [piece.name, box.position.y])
+	_check("P6 nothing overhead hangs into the walk", not overhead.is_empty() and low.is_empty(),
+		"%d pieces; low %s" % [overhead.size(), low.slice(0, 4)])
+
+	var hanging: Array = pasaje.get("hanging") if pasaje.get("hanging") != null else []
+	# (Each one's swing over the 120 frames, not two instants: a sign may pass the same angle at both.)
+	var lows := hanging.map(func(p): return p.rotation.x)
+	var highs := lows.duplicate()
+	for i in 120:
+		await get_tree().process_frame
+		for k in hanging.size():
+			lows[k] = minf(lows[k], hanging[k].rotation.x)
+			highs[k] = maxf(highs[k], hanging[k].rotation.x)
+	var swung := 0
+	for k in hanging.size():
+		if highs[k] - lows[k] > 0.01:
+			swung += 1
+	_check("P6b the hanging signs swing on the draught", not hanging.is_empty() and swung == hanging.size(),
+		"%d of %d swung" % [swung, hanging.size()])
+
+	var canopy: Array = overhead.filter(func(p): return String(p.name).begins_with("canopy"))
+	var covers := false
+	if not canopy.is_empty():
+		var box := _local_box(canopy[0])
+		covers = box.position.x <= -4.5 and box.end.x >= 4.5 and box.position.z <= 13.0 and box.end.z >= 19.9
+	_check("P6c the canopy spans the street at the stretch's south end", covers, "%d canopies" % canopy.size())
 
 
 ## Whether a Vfx system's fumes are breathing.

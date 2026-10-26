@@ -37,6 +37,7 @@ import lane_landmarks  # noqa: E402
 import pasaje_shell  # noqa: E402
 import pasaje_stalls  # noqa: E402
 import pasaje_wares  # noqa: E402
+import pasaje_overhead  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -2525,6 +2526,55 @@ class PasajeWares(unittest.TestCase):
             # (Small enough for a counter or a shelf.)
             self.assertLessEqual(x1 - x0, 1.6, n)
             self.assertLessEqual(y1 - y0, 0.7, n)
+
+
+class PasajeOverhead(unittest.TestCase):
+    """The Pasaje's overhead (tools/eclipse/pasaje_overhead.py; docs/superpowers/plans/2026-10-26-pasaje-market.md Task
+    6): hanging signs (their faces blank) on rods from the girders and on the gantry, cable bundles and bulb strings
+    slung wall to wall, the tarpaulin canopy over the stretch's south end. Closed, in budget, through the gate; over
+    every head; the canopy's edges between the wall's mains."""
+
+    @classmethod
+    def setUpClass(cls):
+        pasaje_overhead.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        self.assertEqual(sorted(self.objects), sorted(pasaje_overhead.BUDGET))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=pasaje_overhead.BUDGET[n],
+                                        sliver=pasaje_overhead.SLIVER[n])[:3], [], n)
+
+    def test_the_signs_hang_from_their_hooks_their_faces_blank(self):
+        for n in pasaje_overhead.SIGNS:
+            (_, _), (_, _), (z0, z1) = self._extent(n)
+            self.assertAlmostEqual(z1, 0.0, delta=0.02, msg=n)
+            self.assertIn("sign", {s.material.name for s in self.objects[n].material_slots}, n)
+
+    def test_the_slung_lines_span_wall_to_wall_over_every_head(self):
+        for n in ("cable_bundle", "bulb_string"):
+            (x0, x1), _, (z0, z1) = self._extent(n)
+            self.assertLessEqual(x0, -pasaje_overhead.PLASTER + 0.02, n)
+            self.assertGreaterEqual(x1, pasaje_overhead.PLASTER - 0.02, n)
+            self.assertGreaterEqual(z0, 3.4, n)
+
+    def test_the_canopy_spans_the_south_end_between_the_mains(self):
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("canopy")
+        self.assertLessEqual(x0, -4.5)
+        self.assertGreaterEqual(x1, 4.5)
+        # (Blender y is the set's -z: z 13 to the stretch's end.)
+        self.assertLessEqual(y0, -19.9)
+        self.assertGreaterEqual(y1, -13.0)
+        self.assertGreaterEqual(z0, 2.4)
+        # Its edges, where the mains stand off the walls, between the air line's top and the gas main's bottom.
+        edge = [v.z for v in _world(self.objects["canopy"]) if abs(v.x) >= 4.4]
+        self.assertTrue(edge and min(edge) > 3.125 and max(edge) < 3.21, (min(edge), max(edge)))
 
 
 if __name__ == "__main__":
