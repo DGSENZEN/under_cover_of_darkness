@@ -1,0 +1,33 @@
+{
+ "slots": [
+  "wood",
+  "tin",
+  "steel",
+  "iron",
+  "brass",
+  "clay",
+  "cloth",
+  "burlap",
+  "paper",
+  "herb",
+  "herb_dry",
+  "chile",
+  "marigold",
+  "wax",
+  "wax_white",
+  "wax_red",
+  "bread",
+  "corn",
+  "glass",
+  "print_saint",
+  "palm",
+  "silver",
+  "velvet_purple",
+  "lacquer_black",
+  "enamel",
+  "rubber",
+  "glass_bulb"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 301.14
+}

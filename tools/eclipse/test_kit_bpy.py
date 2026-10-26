@@ -36,6 +36,7 @@ import candle_lane  # noqa: E402
 import lane_landmarks  # noqa: E402
 import pasaje_shell  # noqa: E402
 import pasaje_stalls  # noqa: E402
+import pasaje_wares  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -2486,6 +2487,44 @@ class PasajeStalls(unittest.TestCase):
             self.assertIn("sign", names, w)
             slots = {s.material.name for s in self.objects["neon_tube_%d" % round(w * 10)].material_slots}
             self.assertEqual(slots, {"neon"}, w)
+
+
+class PasajeWares(unittest.TestCase):
+    """The Pasaje's wares (tools/eclipse/pasaje_wares.py; docs/superpowers/plans/2026-10-26-pasaje-market.md Task 5):
+    each trade's goods, named for it, each built about its own foot (or, hung, from its own hook) to sit on a counter,
+    a shelf, a barrow or the floor. Closed, in budget, through the gate; two and more for every trade."""
+
+    @classmethod
+    def setUpClass(cls):
+        pasaje_wares.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        self.assertEqual(sorted(self.objects), sorted(pasaje_wares.BUDGET))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=pasaje_wares.BUDGET[n],
+                                        sliver=pasaje_wares.SLIVER[n])[:3], [], n)
+
+    def test_every_trade_has_two_and_more(self):
+        for trade in pasaje_wares.TRADES:
+            self.assertGreaterEqual(len([n for n in self.objects if n.startswith(trade + "_")]), 2, trade)
+
+    def test_each_stands_on_its_foot_or_hangs_from_its_hook(self):
+        for n in self.objects:
+            (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            if n in pasaje_wares.HUNG:
+                self.assertAlmostEqual(z1, 0.0, delta=0.003, msg=n)
+            else:
+                self.assertAlmostEqual(z0, 0.0, delta=0.003, msg=n)
+            # (Small enough for a counter or a shelf.)
+            self.assertLessEqual(x1 - x0, 1.6, n)
+            self.assertLessEqual(y1 - y0, 0.7, n)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ func _ready() -> void:
 	await _shell()
 	_dressed()
 	await _stalls()
+	await _wares()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -197,11 +198,63 @@ func _stalls() -> void:
 		counters > 0 and shut.is_empty(), "%d counters; %s" % [counters, shut.slice(0, 4)])
 
 
-## The bounds of a stall's meshes in the set's frame.
-func _stall_box(root: Node3D) -> AABB:
+## Task 5: each stall's wares, the food steaming, the set's light in budget.
+func _wares() -> void:
+	var stalls: Dictionary = pasaje.get("stalls") if pasaje.get("stalls") != null else {}
+	var short := []
+	for name in stalls:
+		var frame := _stall_box(stalls[name], String(name))
+		var wares: Array = stalls[name].find_children(String(name) + "_*", "MeshInstance3D", true, false)
+		var out := wares.filter(func(w): return not frame.grow(0.05).encloses(_local_box(w)))
+		if wares.size() < 2 or not out.is_empty():
+			short.append("%s: %d, %d outside" % [name, wares.size(), out.size()])
+	_check("P5 every stall has its trade's wares on or under its counter", not stalls.is_empty() and short.is_empty(),
+		"%s" % [short.slice(0, 4)])
+
+	await _frames(3)
+	var steam: Array = pasaje.get("steam") if pasaje.get("steam") != null else []
+	var dry := []
+	for food in ["tamales", "tortas", "atole", "coffee"]:
+		if not stalls.has(food):
+			dry.append(food)
+			continue
+		var frame := _stall_box(stalls[food], food).grow(0.1)
+		var over := false
+		for system: Node3D in steam:
+			var at := pasaje.to_local(system.global_position)
+			if _steaming(system) and at.y > 0.9 and frame.has_point(Vector3(at.x, frame.get_center().y, at.z)):
+				over = true
+		if not over:
+			dry.append(food)
+	_check("P5b the food stalls steam", dry.is_empty(), "%d systems; dry %s" % [steam.size(), dry])
+
+	var plain := 0
+	var shadowed := 0
+	for light: OmniLight3D in pasaje.find_children("*", "OmniLight3D", true, false):
+		if light.shadow_enabled:
+			shadowed += 1
+		else:
+			plain += 1
+	var lights: Array = pasaje.get("lights") if pasaje.get("lights") != null else []
+	_check("P5c the set's light stays in budget", plain <= 24 and shadowed <= 2 and lights.size() == plain + shadowed,
+		"%d shadowless, %d with shadows; %d listed" % [plain, shadowed, lights.size()])
+
+
+## Whether a Vfx system's fumes are breathing.
+func _steaming(system: Node3D) -> bool:
+	for fumes in system.get_children():
+		if fumes is Fumes and fumes.puffer != null and fumes.puffer.emitting:
+			return true
+	return false
+
+
+## The bounds of a stall's meshes in the set's frame (leaving out its wares, named for `trade`, if given).
+func _stall_box(root: Node3D, trade := "") -> AABB:
 	var box := AABB()
 	var first := true
 	for mesh: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
+		if trade != "" and String(mesh.name).begins_with(trade + "_"):
+			continue
 		var part := _local_box(mesh)
 		box = part if first else box.merge(part)
 		first = false

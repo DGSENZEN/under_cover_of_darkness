@@ -68,7 +68,7 @@ const STALLS := [
 	["milagros", "milagros", 1, 5.4, 1.6, "pipe_canvas", Color(0.88, 0.28, 1.0)],
 	["saints", "saints and prints", 1, 8.9, 2.2, "booth_tin", Color(1.0, 0.94, 0.28)],
 	["atole", "atole and coffee", 1, 13.1, 2.2, "lean_to_tarp", Color(1.0, 0.58, 0.28)],
-	["sweets", "sweets", 1, 17.4, 1.6, "pipe_canvas", Color(1.0, 0.28, 1.0)],
+	["sweets", "sweets", 1, 17.6, 2.2, "pipe_canvas", Color(1.0, 0.28, 1.0)],
 	["tortas", "tortas", -1, -15.6, 2.2, "tortas", Color(0.28, 0.58, 1.0)],
 	["fruit", "fruit", -1, -11.6, 1.6, "barrow", Color(0.58, 1.0, 0.28)],
 	["lottery", "lottery tickets", -1, -8.4, 1.6, "lean_to_tin", Color(0.46, 0.28, 1.0)],
@@ -81,6 +81,38 @@ const STALLS := [
 ## The neon box's face in the stall's frame (out from the tiles, its middle's height), and its light's reach.
 const NEON_AT := Vector3(0.0, 2.57, 1.42)
 const NEON_RANGE := 3.0
+
+const WARES_KIT := "res://assets/eclipse/kit/pasaje_wares.glb"
+## Each stall's wares in its frame (x along the wall, y up, z out from the tiles): [piece, where its foot stands (or
+## its hook hangs)]. On the counter (its top 0.92, its middle 1.15 out), on the booth's shelf (1.535, 0.18 out), under
+## the counter's ends, on the barrow's tray (0.74), hung from the beam (1.95) or the front rail (2.03).
+const WARES := {
+	"tamales": [["tamales_basket", Vector3(0.6, 0.0, 0.25)], ["tamales_crate", Vector3(-0.6, 0.0, 0.25)]],
+	"radios": [["radios_sets", Vector3(-0.33, 0.92, 1.15)], ["radios_parts", Vector3(0.12, 0.0, 1.15)]],
+	"candles": [["candles_rack", Vector3(-0.6, 0.92, 1.12)], ["candles_bundles", Vector3(0.45, 0.92, 1.15)]],
+	"copal": [["copal_censers", Vector3(-0.5, 0.92, 1.15)], ["copal_baskets", Vector3(0.25, 0.92, 1.15)]],
+	"milagros": [["milagros_board", Vector3(-0.35, 0.92, 1.25)], ["milagros_tray", Vector3(0.12, 0.92, 1.2)]],
+	"saints": [["saints_prints", Vector3(-0.2, 1.535, 0.21)], ["saints_frames", Vector3(0.0, 0.92, 1.15)]],
+	"atole": [["atole_urn", Vector3(-0.6, 0.92, 1.12)], ["atole_cups", Vector3(0.1, 0.92, 1.15)]],
+	"sweets": [["sweets_trays", Vector3(-0.55, 0.92, 1.15)], ["sweets_jars", Vector3(0.3, 0.92, 1.15)]],
+	"tortas": [["tortas_board", Vector3(-0.5, 1.26, 1.19)], ["tortas_jars", Vector3(-0.68, 0.0, 1.15)]],
+	"fruit": [["fruit_pile", Vector3(0.13, 0.74, 0.65)], ["fruit_crates", Vector3(-0.1, 0.0, 1.35)]],
+	"lottery": [["lottery_board", Vector3(-0.2, 0.92, 1.2)], ["lottery_stool", Vector3(0.15, 0.0, 1.15)]],
+	"herbs": [["herbs_bundles", Vector3(-0.2, 1.95, 1.4)], ["herbs_sacks", Vector3(-0.85, 0.0, 1.15)],
+		["herbs_sacks", Vector3(-0.1, 0.92, 1.15)]],
+	"chiles": [["chiles_ristras", Vector3(-0.2, 2.03, 1.36)], ["chiles_baskets", Vector3(-0.2, 0.92, 1.15)]],
+	"flowers": [["flowers_buckets", Vector3(-0.3, 0.92, 1.15)], ["flowers_bunches", Vector3(-0.2, 1.535, 0.18)]],
+	"coffee": [["coffee_pot", Vector3(-0.55, 0.92, 1.1)], ["coffee_sacks", Vector3(0.25, 0.0, 1.15)]],
+	"tinsmith": [["tinsmith_lanterns", Vector3(-0.3, 1.74, 1.38)], ["tinsmith_sheets", Vector3(0.3, 0.92, 1.15)]],
+}
+## The stalls a bare bulb hangs over (the food, and those that work by its light): from the cover over the counter's
+## middle. With the sixteen neons, the set's twenty-four lights.
+const BULBS := ["tamales", "tortas", "atole", "coffee", "fruit", "herbs", "candles", "radios"]
+const BULB_AT := Vector3(-0.175, 2.17, 1.15)
+const BULB_COLOUR := Color(1.0, 0.72, 0.42)
+## The food's steam: [stall, its Vfx preset, where it leaves (the stall's frame)].
+const STEAM := [["tamales", "pot_steam", Vector3(0.15, 1.51, 0.8)], ["tortas", "steam", Vector3(0.25, 1.02, 1.15)],
+	["atole", "pot_steam", Vector3(-0.6, 1.54, 1.12)], ["coffee", "pot_steam", Vector3(-0.55, 1.28, 1.1)]]
 
 @export var standalone := true
 ## Set into a larger map: its player is the map's.
@@ -106,12 +138,17 @@ var missing: Array[String] = []
 ## The stalls by name: each a root on its wall at its place, its pieces in the stall's frame (x along the wall, the
 ## tiles at z 0, the street toward +z).
 var stalls := {}
+## The set's own lights: the neons' and the bulbs'.
+var lights: Array[Light3D] = []
+## The food's steam (Vfx systems), leaning on the draught.
+var steam: Array[Node3D] = []
 
 
 func _ready() -> void:
 	_shell()
 	_shell_dressing()
 	_stalls()
+	_wares()
 	if standalone:
 		_environment()
 		_stubs()
@@ -122,6 +159,14 @@ func _ready() -> void:
 		player.debug_traversal = false
 		add_child(player)
 		player.position = Vector3(0.0, 1.05, -18.0)
+
+
+func _process(_delta: float) -> void:
+	if steam.is_empty():
+		return
+	var wind: Vector3 = draught.call()
+	for system in steam:
+		Vfx.blow(system, wind)
 
 
 ## The structural shell: the floor slab, the two walls cut round their openings (lintels over them), the ceiling.
@@ -379,6 +424,50 @@ func _neon(root: Node3D, kit: Dictionary, look: Material, width: float, colour: 
 	neon.add_child(glow)
 	glow.position = NEON_AT + Vector3(0.0, 0.0, 0.35)
 	root.add_child(neon)
+	lights.append(glow)
+
+
+## Each stall's wares where they stand; a bare bulb over the counters that want one, lit; the food steaming.
+func _wares() -> void:
+	if not ResourceLoader.exists(WARES_KIT) or stalls.is_empty():
+		missing.append(WARES_KIT)
+		return
+	var kit := SetKit.kit(WARES_KIT)
+	var look := Painterly.material(SetKit.painted(["pasaje_wares.png", "pasaje_wares_base.png"]), &"bespoke")
+	for name in WARES:
+		for ware in WARES[name]:
+			SetKit.place(stalls[name], kit[ware[0]], look, ware[0], ware[1], 0.0, false)
+	var lit := StandardMaterial3D.new()
+	lit.albedo_color = BULB_COLOUR
+	lit.emission_enabled = true
+	lit.emission = BULB_COLOUR
+	lit.emission_energy_multiplier = 3.0
+	for name in BULBS:
+		var root: Node3D = stalls[name]
+		var at := BULB_AT if root.find_children("counter*", "MeshInstance3D", true, false).size() > 0 \
+			else Vector3(0.0, BULB_AT.y, BULB_AT.z)
+		var bulb := SetKit.place(root, kit["bulb"], look, "bulb", at, 0.0, false)
+		# (Its glass glowing; its socket and cord painted.)
+		for i in bulb.mesh.get_surface_count():
+			var slot: Material = bulb.mesh.surface_get_material(i)
+			if slot != null and slot.resource_name.begins_with("glass"):
+				bulb.set_surface_override_material(i, lit)
+		var light := OmniLight3D.new()
+		light.name = "bulb_light"
+		light.light_color = BULB_COLOUR
+		light.light_energy = 0.9
+		light.omni_range = 3.2
+		light.shadow_enabled = false
+		root.add_child(light)
+		light.position = at + Vector3(0.0, -0.26, 0.0)
+		lights.append(light)
+	for spec in STEAM:
+		var system := Vfx.system(spec[1])
+		system.name = "steam"
+		stalls[spec[0]].add_child(system)
+		system.position = spec[2]
+		Vfx.emit(system, true)
+		steam.append(system)
 
 
 ## A steady hash in [0, 1) of `v`.
