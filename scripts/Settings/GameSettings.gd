@@ -51,7 +51,7 @@ const SPECS := {
 	"video/fps": {"default": 0, "steps": [30, 60, 120, 144, 0]},
 	"video/brightness": {"default": 1.0, "min": 0.5, "max": 1.5},
 	"video/fov": {"default": 75.0, "min": 60.0, "max": 100.0},
-	"video/grid": {"default": 480, "steps": [480, 360, 240, 0]},
+	"video/grid": {"default": 0, "steps": [480, 360, 240, 0]},
 	"controls/sensitivity": {"default": 1.0, "min": 0.25, "max": 3.0},
 	"controls/invert": {"default": false},
 	"hud/awareness_marks": {"default": true},

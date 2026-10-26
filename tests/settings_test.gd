@@ -44,7 +44,7 @@ func _ready() -> void:
 
 func store_checks() -> void:
 	fresh()
-	check(GameSettings.value("audio/music") == 1.0 and GameSettings.value("video/fov") == 75.0 and GameSettings.value("video/grid") == 480 and GameSettings.value("hud/subtitles") == true and GameSettings.value("comfort/camera_motion") == 1.0, "defaults")
+	check(GameSettings.value("audio/music") == 1.0 and GameSettings.value("video/fov") == 75.0 and GameSettings.value("video/grid") == 0 and GameSettings.value("hud/subtitles") == true and GameSettings.value("comfort/camera_motion") == 1.0, "defaults")
 	var heard := []
 	# A lambda held by the static notifier past the end crashes the engine at
 	# exit; nodes' methods let go when the node does, a lambda must be let go.
@@ -72,7 +72,7 @@ func store_checks() -> void:
 	GameSettings.set_value("hud/subtitle_size", 9)
 	check(GameSettings.value("video/fov") == 100.0 and GameSettings.value("audio/music") == 0.0 and GameSettings.value("video/fps") == 60 and GameSettings.value("video/grid") == 240 and GameSettings.value("hud/subtitle_size") == 2, "out-of-range values are clamped, unknown steps refused")
 	fresh("[video]\nfov=\"wide\"\ngrid=7\n[audio]\nmusic=nan\n[keys]\njump=\"banana\"\n")
-	check(GameSettings.value("video/fov") == 75.0 and GameSettings.value("video/grid") == 480 and GameSettings.value("audio/music") == 1.0 and InputMap.action_get_events(&"jump").size() > 0, "a hand-spoilt file falls back to defaults, key by key")
+	check(GameSettings.value("video/fov") == 75.0 and GameSettings.value("video/grid") == 0 and GameSettings.value("audio/music") == 1.0 and InputMap.action_get_events(&"jump").size() > 0, "a hand-spoilt file falls back to defaults, key by key")
 	check(GameSettings.look_scale() == 1.0, "the look scale is 1 at the default sensitivity")
 
 func startup_checks() -> void:

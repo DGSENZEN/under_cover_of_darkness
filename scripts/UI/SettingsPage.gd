@@ -272,6 +272,14 @@ func build() -> void:
 	GameSettings.events().changed.connect(_on_setting_changed)
 	show_tab(0)
 
+## The rows of the tabs not shown are out of the tree: they go with the page.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		for rows_of_tab in _rows_by_tab:
+			for row in rows_of_tab:
+				if is_instance_valid(row) and row.get_parent() == null:
+					row.free()
+
 func tab_names() -> Array:
 	return TABS.keys()
 
