@@ -131,7 +131,6 @@ var _words_next_at := -100.0
 var _tick_at := -100.0
 ## Tests: how many ticks have sounded.
 var ticks := 0
-var _marks_toggle: Button
 var _grade: ColorRect
 var _grade_amount := 0.0
 ## A flash in your eyes: the white over everything, fading (dazzle).
@@ -140,7 +139,7 @@ var _white_amount := 0.0
 var _last_real := -1.0
 var _fade: ColorRect
 var _death: Label
-var _pause: Control
+var _pause: PauseMenu
 var _scan_timer := 0.0
 var _listening := {}
 ## When a sting last played, so being noticed never becomes a racket.
@@ -745,94 +744,18 @@ func setup(p_player: CharacterBody3D) -> void:
 		player.inventory.belt_selection_changed.connect(_on_item_selected)
 
 
+## The pause menu (PauseMenu): the title and its words over the painting,
+## the settings book, the confirms. Shown while the tree is paused.
 func _build_pause() -> void:
-	_pause = Control.new()
-	_pause.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_pause.mouse_filter = Control.MOUSE_FILTER_STOP
-	_pause.visible = false
-	_root.add_child(_pause)
-	# It takes the click, so the click resumes here (anywhere but on a
-	# setting).
-	_pause.gui_input.connect(_on_pause_input)
-
-	var dim := ColorRect.new()
-	dim.color = Color(0.02, 0.02, 0.04, 0.72)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pause.add_child(dim)
-
-	var column := VBoxContainer.new()
-	column.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.add_theme_constant_override("separation", 10)
-	_pause.add_child(column)
-
-	var title := Label.new()
-	title.text = "Paused"
-	title.add_theme_font_override("font", _font)
-	title.add_theme_font_size_override("font_size", 48)
-	title.add_theme_color_override("font_color", INK)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(title)
-
-	var hint := Label.new()
-	hint.text = "Click to resume"
-	hint.add_theme_font_override("font", _font)
-	hint.add_theme_font_size_override("font_size", 19)
-	hint.add_theme_color_override("font_color", DIM)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(hint)
-
-	# Your settings under it: a click on one changes it, and does not resume.
-	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(0, 22)
-	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_child(gap)
-	_marks_toggle = Button.new()
-	_marks_toggle.flat = true
-	_marks_toggle.focus_mode = Control.FOCUS_NONE
-	_marks_toggle.add_theme_font_override("font", _font)
-	_marks_toggle.add_theme_font_size_override("font_size", 17)
-	_marks_toggle.add_theme_color_override("font_color", DIM)
-	_marks_toggle.add_theme_color_override("font_hover_color", INK)
-	_marks_toggle.add_theme_color_override("font_pressed_color", AMBER)
-	_marks_toggle.add_theme_color_override("font_hover_pressed_color", AMBER)
-	_marks_toggle.pressed.connect(toggle_awareness_marks)
-	column.add_child(_marks_toggle)
-	_show_settings()
-
-	# In the middle of the screen, whatever its size: offsets from the
-	# centre (a position would be from the corner), growing both ways if
-	# it needs more room.
-	column.set_anchors_preset(Control.PRESET_CENTER)
-	column.offset_left = -170.0
-	column.offset_right = 170.0
-	column.offset_top = -86.0
-	column.offset_bottom = 86.0
-	column.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	column.grow_vertical = Control.GROW_DIRECTION_BOTH
-
-
-## The marks over men noticing you, shown or hidden (the pause screen).
-func toggle_awareness_marks() -> void:
-	SettingsScript.set_awareness_marks(not SettingsScript.awareness_marks())
-	_show_settings()
-
-
-func _show_settings() -> void:
-	_marks_toggle.text = "Marks over guards:  %s" % ("shown" if SettingsScript.awareness_marks() else "hidden")
-
-
-func _on_pause_input(event: InputEvent) -> void:
-	if get_tree().paused and _is_click(event):
-		resume()
-		_pause.accept_event()
-
-
-## A mouse button pressed (not the wheel).
-static func _is_click(event: InputEvent) -> bool:
-	var button := event as InputEventMouseButton
-	return button != null and button.pressed and button.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE]
+	# Its own layer, over everything the level draws (under the loading cover).
+	var layer := CanvasLayer.new()
+	layer.name = "PauseLayer"
+	layer.layer = 60
+	layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(layer)
+	_pause = PauseMenu.new()
+	layer.add_child(_pause)
+	_pause.resume_requested.connect(resume)
 
 
 func _label(font_size: int, colour: Color, align: HorizontalAlignment) -> Label:
@@ -856,7 +779,7 @@ func _process(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
 		return
 
-	_pause.visible = get_tree().paused
+	_pause.set_open(get_tree().paused)
 	_play.visible = not get_tree().paused
 
 	if get_tree().paused:
@@ -1167,8 +1090,6 @@ static func subtitle_px(choice: int) -> int:
 func _on_setting_changed(key: String) -> void:
 	if key == "hud/subtitle_size":
 		_subtitle.add_theme_font_size_override("normal_font_size", subtitle_px(int(GameSettings.value(key))))
-	elif key == "hud/awareness_marks" and _marks_toggle != null:
-		_show_settings()
 
 
 ## A guard's alert rose: a swell of unease when one grows suspicious, a stab
@@ -1588,7 +1509,7 @@ func layout_rects() -> Dictionary:
 			rects[key] = piece.get_global_rect()
 
 	if _pause.visible:
-		rects["pause"] = (_pause.get_child(1) as Control).get_global_rect()
+		rects["pause"] = _pause.menu_rect()
 
 	for mark in _awareness.marks if _awareness.is_visible_in_tree() else []:
 		var r := AwarenessMarks.radius_of(mark)
@@ -1779,13 +1700,14 @@ void fragment() {
 """
 
 
-## Esc paused the game; Esc again, or a click (_on_pause_input), resumes it.
+## Esc paused the game; Esc again steps back through the pause menu (a
+## confirm, the settings) and then resumes. A click is the menu's own.
 func _unhandled_input(event: InputEvent) -> void:
-	if not get_tree().paused:
+	if not get_tree().paused or not _pause.visible:
 		return
 
-	if _is_click(event) or event.is_action_pressed("ui_cancel"):
-		resume()
+	if event.is_action_pressed("ui_cancel"):
+		_pause.back()
 		get_viewport().set_input_as_handled()
 
 
