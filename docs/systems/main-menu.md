@@ -246,6 +246,50 @@ Thaumaturge and Factotum, each with the user's own line. There is no heading.
   - Each archetype sound dips the song by `MenuMusic.DUCK_DB` (5 dB), which
     comes back at 5 dB/s, so they cut through the high layer.
 
+## Settings
+
+[GameSettings](../../scripts/Settings/GameSettings.gd) keeps every setting in
+`user://settings.cfg` (the first settings' keys, `audio/master_volume` and
+`hud/awareness_marks`, are kept). It's a static store, loaded on first ask;
+Retro, an autoload, asks at start-up.
+- **Checking.** Each setting has a default and a range (clamped) or steps
+  (anything else refused). A spoilt file falls back key by key.
+- **Applying.** Volumes scale each bus from its own level (Master outright);
+  buses made later get theirs (Retro hooks `bus_layout_changed`). The window
+  mode, VSync (not headless), frame limit and keys (InputMap) apply at once.
+  The camera (field of view, camera motion), turning (sensitivity, invert),
+  Retro (pixel grid, brightness pass) and the HUD (subtitles, size,
+  crosshair, marks) read it and follow `events().changed`.
+- **Keys.** `bind(action, event)` swaps with an action that had the key;
+  `reset_keys()`; kept as `key:<code>` / `mouse:<button>`.
+- **Gotchas.** Its re-read is `reread()`, never `reload()`: on a script class
+  that is `Script.reload`, which recompiles the script and resets its state
+  (the test path never took, and the suites wrote the player's file). Set
+  the file with `use_path()`. Listen with a node's method: a lambda left on
+  the static notifier crashes the engine at exit. Statics keep no
+  InputEvents (the default keys are text) for the same reason.
+- [Settings.gd](../../scripts/UI/Settings.gd) keeps the first calls
+  (`master_volume`, `awareness_marks`, `path`, `reread`) over the store.
+
+[SettingsPage](../../scripts/UI/SettingsPage.gd) is the book, shared by the
+main menu's Settings page and the pause menu: tabs (Audio, Video, Controls,
+Interface) as small-caps words, rows of brush sliders, ‹ cyclers ›, On/Off
+switches and keys. Up/Down, Left/Right, Enter, Q/E; a key row waits for the
+next key or mouse button, Escape cancels only the wait.
+
+## The pause menu
+
+[PauseMenu](../../scripts/UI/PauseMenu.gd), on the HUD's own `PauseLayer`
+(layer 60, over the level, under the loading cover). Esc in play pauses the
+tree; the HUD opens the menu while paused.
+- The painting `assets/ui/main_menu/pause.png` (the frozen game, dimmed,
+  until it exists), a veil at the left, the title, and the words Resume,
+  Settings, Main menu, Quit.
+- Settings opens the book; Main menu and Quit ask first ("Main menu?",
+  "Quit?", No ready). Main menu leaves through the loading cover.
+- Escape: cancels a key wait, then a confirm or the book, then resumes. A
+  click on the painting does nothing.
+
 ## Loading
 
 `ArtLoadingScreen` is a transient root-owned CanvasLayer above both scenes. It
@@ -298,6 +342,11 @@ walk, facing the curandera.
 - `tests/visual/archetype_preview.gd` (native) captures each archetype
   chosen, checks their effects move, and captures each transition at seven
   points, checking that it ends in the dark (`/private/tmp/archetype-*.png`).
+- `tests/settings_test.tscn` (the store, buses, keys, the hooks),
+  `tests/pause_menu_test.tscn`, and the HUD's pause checks in
+  `tests/interaction_test.tscn` (U7, U13).
+- `tests/visual/settings_preview.gd` and `tests/visual/pause_preview.gd`
+  capture the book's tabs and the pause menu over a level.
 - `tests/visual/menu_showcase.gd` is a scripted tour of the whole menu for a
   showcase video, recorded with Godot's movie maker:
   `godot --path . --resolution 1600x900 --fixed-fps 30 --write-movie out.avi --script res://tests/visual/menu_showcase.gd`
