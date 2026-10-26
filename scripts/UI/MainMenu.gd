@@ -17,7 +17,7 @@ const NAMES := ["New Game", "Continue", "Settings", "Lore", "Quit"]
 const COLOURS := [Color("ef774c"), Color("67c9ed"), Color("929fdb"), Color("efa25e"), Color("b9b0a2")]
 const GOLD := Color("d9b46a")
 const WORD_X := 72.0
-const WORD_TOP := 360.0
+const WORD_TOP := 400.0
 const WORD_GAP := 64.0
 var words: Array[MenuWord] = []
 var band: MenuBand
@@ -66,7 +66,6 @@ func _ready() -> void:
 	band = MenuBand.new()
 	band.name = "Band"
 	_design.add_child(band)
-	selection_changed.connect(func(i): band.show_choice(i, words[i].position.y + words[i].size.y * 0.5))
 	selection_changed.connect(_sound_choice)
 	_title("UNDER COVER", Vector2(72, 104))
 	_title("OF DARKNESS", Vector2(72, 166))
@@ -85,6 +84,11 @@ func _ready() -> void:
 	hairline.size = Vector2(230, 1.5)
 	hairline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_design.add_child(hairline)
+	# The words' paintings sit on one layer behind all the words.
+	var washes := Control.new()
+	washes.name = "Washes"
+	washes.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_design.add_child(washes)
 	for i in range(NAMES.size()):
 		var word := MenuWord.new()
 		word.configure(NAMES[i], i, COLOURS[i])
@@ -94,6 +98,9 @@ func _ready() -> void:
 		word.pressed.connect(_activate.bind(i))
 		_design.add_child(word)
 		words.append(word)
+		if word.wash:
+			washes.add_child(word.wash)
+			word.place_wash()
 	for i in range(words.size()):
 		words[i].focus_neighbor_top = words[maxi(i - 1, 0)].get_path()
 		words[i].focus_neighbor_bottom = words[mini(i + 1, words.size() - 1)].get_path()
@@ -138,12 +145,16 @@ static func visible_design_rect(viewport: Vector2) -> Rect2:
 	var offset := (viewport - DESIGN * factor) * 0.5
 	return Rect2(-offset / factor, viewport / factor)
 
-## The city's brightness: dimmed a little while a band is showing.
+## How many words' paintings are showing (one, or two mid-change).
+func washes_showing() -> int:
+	return words.filter(func(w): return w.wash != null and w.wash.level > 0.02).size()
+
+## The city's brightness: dimmed a little while a painting is showing.
 func city_dim() -> float:
 	return _dim
 
 func _process(delta: float) -> void:
-	_dim = move_toward(_dim, 0.72 if band.showing else 1.0, delta / 0.5 * 0.28)
+	_dim = move_toward(_dim, 0.72 if washes_showing() > 0 or band.page else 1.0, delta / 0.5 * 0.28)
 	background.dim = _dim
 	if is_instance_valid(music):
 		background.set_energy(music.layer_energy(&"base"), music.layer_energy(&"low"), music.layer_energy(&"high"), music.layer_energy(&"fx"))
@@ -168,7 +179,6 @@ func _exit_tree() -> void:
 func _activate(index: int) -> void:
 	if _transitioning or page_open >= 0 or index >= 4:
 		return
-	band.pulse()
 	if is_instance_valid(music):
 		music.press(index)
 	if index == 0:
@@ -191,7 +201,7 @@ func open_page(index: int, message := "") -> void:
 	page_open = index
 	_page_turn += 1
 	var turn := _page_turn
-	band.set_page(true)
+	band.open_page(index)
 	for word in words:
 		word.focus_mode = Control.FOCUS_NONE
 		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -211,7 +221,7 @@ func close_page() -> void:
 	page_open = -1
 	_page_turn += 1
 	pages.hide_page()
-	band.set_page(false)
+	band.close_page()
 	if is_instance_valid(music):
 		music.set_state(MenuMusic.State.BROWSING)
 	for word in words:
@@ -224,9 +234,13 @@ func close_page() -> void:
 func select(index: int) -> void:
 	if index == selected or index < 0 or index >= words.size():
 		return
+	var previous := selected
 	selected = index
 	for word in words:
 		word.set_selected(word.index == index)
+		# Only the outgoing painting may fade under the incoming one.
+		if word.wash and word.index != index and word.index != previous:
+			word.wash.clear()
 	if not words[index].has_focus() and words[index].focus_mode != Control.FOCUS_NONE:
 		words[index].grab_focus()
 	selection_changed.emit(index)

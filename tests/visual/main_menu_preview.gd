@@ -102,13 +102,14 @@ func run() -> void:
 	for i in range(4):
 		menu.select(i)
 		await create_timer(0.9).timeout
-		await capture("/private/tmp/main-menu-band-%d.png" % i)
-	var full := root.get_texture().get_image()
-	full.get_region(Rect2i(820, 230, 400, 300)).save_png("/private/tmp/main-menu-band-edge.png")
-	print("Captured /private/tmp/main-menu-band-edge.png")
+		await capture("/private/tmp/main-menu-wash-%d.png" % i)
+		var shot := root.get_texture().get_image()
+		var word: Control = menu.words[i]
+		var area := Rect2i(word.get_global_rect().position - Vector2(60, 70), Vector2i(560, 200))
+		shot.get_region(area.intersection(Rect2i(Vector2i.ZERO, shot.get_size()))).save_png("/private/tmp/main-menu-wash-%d-close.png" % i)
 	menu.select(1)
-	await create_timer(0.2).timeout
-	await capture("/private/tmp/main-menu-band-glide.png")
+	await create_timer(0.12).timeout
+	await capture("/private/tmp/main-menu-wash-change.png")
 	menu.words[0].button_down.emit()
 	await capture("/private/tmp/main-menu-click.png")
 	await click_control(menu.words[2])

@@ -1,8 +1,7 @@
 class_name MenuBand
 extends Control
-## The selection: a torn band of the chosen illustration brushed across the
-## city behind its word. It glides between words, cross-fades its picture,
-## and spreads over the right two-thirds to become a page.
+## A page's painting: the chosen illustration spread over the right of the
+## screen behind a page's text, torn on its left and melting into the city.
 const SHADER := preload("res://scripts/UI/menu_band.gdshader")
 const ATLAS := preload("res://assets/ui/main_menu/buttons.png")
 const BOIL_FPS := 9.0
@@ -29,8 +28,6 @@ var screen := Rect2(0, 0, 1600, 900)
 ## The two pictures being cross-faded: "a" fading out, "b" fading in.
 var art_a := -1
 var art_b := -1
-var _choice := -1
-var _word_y := 0.0
 var _target := Rect2()
 var _move: Tween
 var _fade: Tween
@@ -76,46 +73,27 @@ func art_scale(index: int) -> float:
 func band_rect() -> Rect2:
 	return _target
 
-func show_choice(index: int, word_centre_y: float) -> void:
-	_word_y = word_centre_y
-	var first := not showing
+## Shows a page's painting: it blooms in where the page sits, never travelling.
+func open_page(index: int) -> void:
 	showing = true
-	if index != _choice:
-		_choice = index
-		var paint := material as ShaderMaterial
-		var mix_now := float(paint.get_shader_parameter("mix_ab"))
-		if first:
-			_set_art("a", index)
-			_set_art("b", index)
-			mix_now = 1.0
-		elif mix_now >= 0.5:
-			# The incoming picture is mostly showing: it becomes the one fading out.
-			_set_art("a", art_b)
-			_set_art("b", index)
-			mix_now = 0.0
-		else:
-			# The outgoing picture is still mostly showing: keep it, swap the incoming one.
-			_set_art("b", index)
-		paint.set_shader_parameter("mix_ab", mix_now)
-		if _fade:
-			_fade.kill()
-		if mix_now < 1.0:
-			_fade = create_tween()
-			_fade.tween_property(paint, "shader_parameter/mix_ab", 1.0, FADE * (1.0 - mix_now))
-	if not page:
-		_go(_choice_rect(), first)
-	if first:
-		create_tween().tween_property(self, "modulate:a", 1.0, 0.25)
+	page = true
+	_set_art("a", index)
+	_set_art("b", index)
+	material.set_shader_parameter("mix_ab", 1.0)
+	material.set_shader_parameter("page", 1.0)
+	_go(_page_rect(), true)
+	_fade_to(1.0, MenuMotion.BLOOM)
 
-func hide_band() -> void:
+func close_page() -> void:
 	showing = false
-	_choice = -1
-	create_tween().tween_property(self, "modulate:a", 0.0, 0.25)
+	page = false
+	_fade_to(0.0, MenuMotion.FADE)
 
-func set_page(on: bool) -> void:
-	page = on
-	_go(_page_rect() if on else _choice_rect(), false)
-	create_tween().tween_property(material, "shader_parameter/page", 1.0 if on else 0.0, GLIDE)
+func _fade_to(alpha: float, seconds: float) -> void:
+	if _fade:
+		_fade.kill()
+	_fade = MenuMotion.tween(self)
+	_fade.tween_property(self, "modulate:a", alpha, seconds)
 
 func pulse() -> void:
 	if _pulse:
@@ -128,12 +106,8 @@ func pulse() -> void:
 ## page its top, right and bottom, whatever the window's shape.
 func set_screen(visible: Rect2) -> void:
 	screen = visible
-	if showing:
-		_go(_page_rect() if page else _choice_rect(), true)
-
-func _choice_rect() -> Rect2:
-	var left := minf(screen.position.x, 0.0)
-	return Rect2(left, _word_y - HEIGHT * 0.5, 1440.0 - left, HEIGHT)
+	if page:
+		_go(_page_rect(), true)
 
 func _page_rect() -> Rect2:
 	return Rect2(PAGE_LEFT, screen.position.y, screen.end.x - PAGE_LEFT, screen.size.y)

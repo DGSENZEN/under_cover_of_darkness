@@ -58,7 +58,7 @@ func _ready() -> void:
 	check(menu.words[1].position.y - menu.words[0].position.y >= 56.0, "words have room between them")
 	check(menu.words.all(func(w): return is_equal_approx(w.position.x, menu.words[0].position.x)), "words sit in one column")
 	check(menu.selected == -1, "nothing is selected before input")
-	check(not menu.band.showing, "no band before input")
+	check(menu.washes_showing() == 0, "no painting before input")
 	await key(KEY_DOWN)
 	check(menu.selected == 0 and menu.words[0].has_focus(), "first key press selects New Game")
 	await key(KEY_DOWN)
@@ -75,54 +75,41 @@ func _ready() -> void:
 	await get_tree().create_timer(0.25).timeout
 	check(is_equal_approx(menu.words[1].step_x, MenuWord.STEP) and is_equal_approx(menu.words[1].modulate.a, 1.0) and absf(menu.words[0].modulate.a - MenuWord.DIM) < 0.01, "the chosen word steps forward and lights within 0.2 s; the rest dim")
 
-	# Task 2: the painted band.
-	menu.select(2)
+	# Piece 1: a painterly wash per word.
+	menu.select(0)
 	await get_tree().create_timer(0.7).timeout
-	var r: Rect2 = menu.band.band_rect()
-	var wc: float = menu.words[2].position.y + menu.words[2].size.y * 0.5
-	check(absf(r.get_center().y - wc) < 2.0 and is_equal_approx(r.size.y, 360.0), "band is centred on the selected word")
-	check(absf(menu.band.position.y + menu.band.size.y * 0.5 - wc) < 2.0, "band has glided to the word")
-	var mat: ShaderMaterial = menu.band.material
-	check((mat.get_shader_parameter("glaze_b") as Color).is_equal_approx(Color("929fdb")) and is_equal_approx(mat.get_shader_parameter("glaze_amount"), 0.28), "band is glazed in its choice's colour")
+	check(menu.words[0].wash.level > 0.99 and menu.washes_showing() == 1, "the selected word's painting blooms in")
+	check(is_equal_approx(menu.city_dim(), 0.72) and is_equal_approx(menu.background.dim, 0.72), "the city dims a little behind it")
 	check(MenuBand.boil_step(0.0) == MenuBand.boil_step(0.1) and MenuBand.boil_step(0.0) != MenuBand.boil_step(0.12), "edges boil in steps at ~9 fps")
-	for i in range(4):
-		check(menu.band.art_scale(i) <= MenuBand.ART_MAX_SCALE, "painting %d is never enlarged past 1.5x design" % i)
-	check(is_equal_approx(menu.city_dim(), 0.72) and is_equal_approx(menu.background.dim, 0.72), "city dims behind the band")
-	menu.select(3)
-	await get_tree().process_frame
-	check(mat.get_shader_parameter("mix_ab") < 0.5, "art cross-fades, not re-wiped")
+	check(menu.words[0].wash.size.is_equal_approx(MenuWash.SIZE) and menu.words[0].wash.get_parent().get_index() < menu.words[0].get_index(), "a small wash, behind every word")
+	menu.select(1)
+	await get_tree().create_timer(0.08).timeout
+	check(menu.words[0].wash.level > 0.05 and menu.words[1].wash.level > 0.05, "the old painting fades while the new one blooms")
 	await get_tree().create_timer(0.7).timeout
+	check(menu.words[0].wash.level < 0.01 and menu.words[1].wash.level > 0.99, "then only the new one shows")
+	var at: Vector2 = menu.words[1].wash.get_global_rect().position
+	menu.select(2)
+	menu.select(1)
+	await get_tree().create_timer(0.7).timeout
+	check(menu.words[1].wash.get_global_rect().position.distance_to(at) < 12.0, "washes never travel between words")
+	menu.select(0)
+	await get_tree().create_timer(0.7).timeout
+	var most := 0
+	for k in range(3):
+		await key(KEY_DOWN)
+		most = maxi(most, menu.washes_showing())
+	check(most <= 2, "fast keys: never more than two paintings at once (saw %d)" % most)
+	await get_tree().create_timer(0.7).timeout
+	check(menu.washes_showing() == 1, "and it settles on one")
+	menu.words[menu.selected].mouse_exited.emit()
+	await get_tree().create_timer(0.5).timeout
+	check(menu.washes_showing() == 1, "leaving the words keeps the selection's painting")
+	check(menu.words[4].wash == null, "Quit has no painting")
 	for i in range(8):
 		menu.words[i % 4].mouse_entered.emit()
 		await get_tree().process_frame
 	await get_tree().create_timer(0.7).timeout
-	var last_word: float = menu.words[3].position.y + menu.words[3].size.y * 0.5
-	check(menu.selected == 3 and absf(menu.band.position.y + menu.band.size.y * 0.5 - last_word) < 2.0, "hover spam ends with the band on the last word")
-	var home := get_window().size
-	for screen in [Vector2i(2560, 1080), Vector2i(1024, 768)]:
-		get_window().size = screen
-		await get_tree().process_frame
-		await get_tree().process_frame
-		var c: float = menu.band.get_global_rect().get_center().y
-		var w: float = menu.words[3].get_global_rect().get_center().y
-		check(absf(c - w) < 3.0, "band stays on its word at %s" % screen)
-	get_window().size = home
-	await get_tree().process_frame
-
-	# Review fixes: the cross-fade never pops.
-	menu.select(0)
-	await get_tree().create_timer(0.8).timeout
-	menu.select(1)
-	await get_tree().process_frame
-	check((mat.get_shader_parameter("glaze_a") as Color).is_equal_approx(Color("ef774c")) and (mat.get_shader_parameter("glaze_b") as Color).is_equal_approx(Color("67c9ed")), "each picture keeps its own glaze through the fade")
-	await get_tree().create_timer(0.45).timeout
-	menu.select(2)
-	await get_tree().process_frame
-	check(menu.band.art_a == 1 and menu.band.art_b == 2 and float(mat.get_shader_parameter("mix_ab")) < 0.1, "interrupted late: the picture mostly showing fades out")
-	menu.select(3)
-	await get_tree().process_frame
-	check(menu.band.art_a == 1 and menu.band.art_b == 3, "interrupted early: the picture still showing stays")
-	await get_tree().create_timer(0.8).timeout
+	check(menu.selected == 3 and menu.words[3].wash.level > 0.99 and menu.washes_showing() == 1, "hover spam ends on the last word's painting")
 
 	# Review fixes: pages reach the screen's edges on any window shape.
 	var tall: Rect2 = MainMenu.visible_design_rect(Vector2(2560, 1600))

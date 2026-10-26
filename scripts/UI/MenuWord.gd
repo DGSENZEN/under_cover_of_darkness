@@ -21,6 +21,8 @@ var step_x := 0.0:
 		step_x = value
 		if _style:
 			_style.content_margin_left = value
+## This word's painting (none for Quit and Back).
+var wash: MenuWash
 var _style: StyleBoxEmpty
 var _motion: Tween
 
@@ -42,6 +44,11 @@ func configure(caption: String, at_index: int, tint: Color) -> void:
 	_style = StyleBoxEmpty.new()
 	for state in ["normal", "hover", "pressed", "focus", "hover_pressed"]:
 		add_theme_stylebox_override(state, _style)
+	if index >= 0 and index < MenuWash.FACE.size():
+		# The menu puts the wash on a layer behind every word (place_wash).
+		wash = MenuWash.new()
+		wash.name = "Wash%d" % index
+		wash.configure(index)
 	mouse_entered.connect(func(): chosen.emit(index))
 	focus_entered.connect(func(): chosen.emit(index))
 	modulate = Color(INK, DIM)
@@ -53,6 +60,17 @@ func set_selected(on: bool) -> void:
 	_motion = MenuMotion.tween(self)
 	_motion.tween_property(self, "modulate", LIT if on else Color(INK, DIM), MenuMotion.ANSWER)
 	_motion.tween_property(self, "step_x", STEP if on else 0.0, MenuMotion.ANSWER)
+	if wash:
+		if on:
+			wash.bloom()
+		else:
+			wash.fade()
+
+## The painting starts a little left of the word and is centred on it (in the
+## coordinates of the layer the menu put it on, the word's own parent's).
+func place_wash() -> void:
+	if wash:
+		wash.home = position + Vector2(-40.0, (size.y - MenuWash.SIZE.y) * 0.5)
 
 ## A page is open over the menu: the other words step back further.
 func set_page_dim(on: bool) -> void:
