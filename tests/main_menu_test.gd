@@ -43,6 +43,7 @@ func _ready() -> void:
 	check(menu.words[1].position.y - menu.words[0].position.y >= 56.0, "words have room between them")
 	check(menu.words.all(func(w): return is_equal_approx(w.position.x, menu.words[0].position.x)), "words sit in one column")
 	check(menu.selected == -1, "nothing is selected before input")
+	check(not menu.band.showing, "no band before input")
 	await key(KEY_DOWN)
 	check(menu.selected == 0 and menu.words[0].has_focus(), "first key press selects New Game")
 	await key(KEY_DOWN)
@@ -54,6 +55,34 @@ func _ready() -> void:
 	await get_tree().process_frame
 	check(menu.selected == 3 and menu.words.filter(func(w): return w.selected).size() == 1, "mouse after keyboard: one selection, the latest")
 	check(not menu.has_method("music_marker"), "the old music marker hook is gone")
+
+	# Task 2: the painted band.
+	menu.select(2)
+	await get_tree().create_timer(0.7).timeout
+	var r: Rect2 = menu.band.band_rect()
+	var wc: float = menu.words[2].position.y + menu.words[2].size.y * 0.5
+	check(absf(r.get_center().y - wc) < 2.0 and is_equal_approx(r.size.y, 360.0), "band is centred on the selected word")
+	check(absf(menu.band.position.y + menu.band.size.y * 0.5 - wc) < 2.0, "band has glided to the word")
+	var mat: ShaderMaterial = menu.band.material
+	check((mat.get_shader_parameter("glaze") as Color).is_equal_approx(Color("929fdb")) and is_equal_approx(mat.get_shader_parameter("glaze_amount"), 0.28), "band is glazed in its choice's colour")
+	check(MenuBand.boil_step(0.0) == MenuBand.boil_step(0.1) and MenuBand.boil_step(0.0) != MenuBand.boil_step(0.12), "edges boil in steps at ~9 fps")
+	for i in range(4):
+		check(menu.band.art_scale(i) <= MenuBand.ART_MAX_SCALE, "painting %d is never enlarged past 1.5x design" % i)
+	check(is_equal_approx(menu.city_dim(), 0.72), "city dims behind the band")
+	menu.select(3)
+	await get_tree().process_frame
+	check(mat.get_shader_parameter("mix_ab") < 0.5, "art cross-fades, not re-wiped")
+	await get_tree().create_timer(0.7).timeout
+	var home := get_window().size
+	for screen in [Vector2i(2560, 1080), Vector2i(1024, 768)]:
+		get_window().size = screen
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var c: float = menu.band.get_global_rect().get_center().y
+		var w: float = menu.words[3].get_global_rect().get_center().y
+		check(absf(c - w) < 3.0, "band stays on its word at %s" % screen)
+	get_window().size = home
+	await get_tree().process_frame
 
 	# Task 3 re-enables the page checks against open_page/close_page.
 	check(ResourceLoader.exists(menu.game_scene), "New Game points at an existing playable scene")

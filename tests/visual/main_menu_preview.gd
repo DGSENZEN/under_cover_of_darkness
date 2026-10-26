@@ -59,30 +59,39 @@ func run() -> void:
 		if absf(before.r - after.r) + absf(before.g - after.g) + absf(before.b - after.b) > 0.005:
 			changed += 1
 	check(changed > 5, "background pigment visibly moves over time")
-	menu.buttons[0].set_highlighted(true)
-	await create_timer(0.4).timeout
-	await capture("/private/tmp/main-menu-hover.png")
-	menu.buttons[0].button_down.emit()
+	for i in range(4):
+		menu.select(i)
+		await create_timer(0.9).timeout
+		await capture("/private/tmp/main-menu-band-%d.png" % i)
+	var full := root.get_texture().get_image()
+	full.get_region(Rect2i(820, 230, 400, 300)).save_png("/private/tmp/main-menu-band-edge.png")
+	print("Captured /private/tmp/main-menu-band-edge.png")
+	menu.select(1)
+	await create_timer(0.2).timeout
+	await capture("/private/tmp/main-menu-band-glide.png")
+	menu.words[0].button_down.emit()
 	await capture("/private/tmp/main-menu-click.png")
-	menu.buttons[0].set_highlighted(false)
-	await click_control(menu.buttons[2])
+	await click_control(menu.words[2])
 	check(menu.panel.visible and menu.panel_title.text == "Settings", "mouse click opens Settings")
 	await capture("/private/tmp/main-menu-settings.png")
 	await key(KEY_ESCAPE)
-	check(not menu.panel.visible and menu.buttons[2].has_focus(), "Escape restores the selected painting")
+	check(not menu.panel.visible and menu.words[2].has_focus(), "Escape restores the selected word")
 	await key(KEY_UP)
-	await key(KEY_RIGHT)
 	await key(KEY_DOWN)
-	check(menu.buttons[3].has_focus(), "arrow keys navigate the painted grid")
+	await key(KEY_DOWN)
+	check(menu.words[3].has_focus(), "arrow keys move through the column")
 	await key(KEY_ENTER)
-	check(menu.panel.visible and menu.panel_title.text == "Lore", "Enter activates the focused painting")
+	check(menu.panel.visible and menu.panel_title.text == "Lore", "Enter activates the focused word")
 	await capture("/private/tmp/main-menu-lore.png")
 	await key(KEY_ESCAPE)
+	root.size = Vector2i(2560, 1080)
+	await create_timer(0.3).timeout
+	await capture("/private/tmp/main-menu-wide.png")
 	root.size = Vector2i(900, 900)
 	await capture("/private/tmp/main-menu-square.png")
 	root.size = Vector2i(1280, 720)
 	await process_frame
-	await click_control(menu.buttons[0])
+	await click_control(menu.words[0])
 	var deadline := Time.get_ticks_msec() + 120000
 	var captured_loading := false
 	while Time.get_ticks_msec() < deadline:

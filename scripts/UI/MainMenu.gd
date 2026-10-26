@@ -20,6 +20,9 @@ const WORD_X := 72.0
 const WORD_TOP := 360.0
 const WORD_GAP := 64.0
 var words: Array[MenuWord] = []
+var band: MenuBand
+var background: TextureRect
+var _dim := 1.0
 var selected := -1
 var panel: Control
 var panel_title: Label
@@ -44,7 +47,7 @@ func _ready() -> void:
 	theme.default_font = _font
 	theme.default_font_size = 23
 	_root.theme = theme
-	var background := TextureRect.new()
+	background = TextureRect.new()
 	background.texture = CITY
 	var paint_motion := ShaderMaterial.new()
 	paint_motion.shader = LIVING_PAINT
@@ -71,6 +74,10 @@ func _ready() -> void:
 	_design.size = DESIGN
 	_design.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_design)
+	band = MenuBand.new()
+	band.name = "Band"
+	_design.add_child(band)
+	selection_changed.connect(func(i): band.show_choice(i, words[i].position.y + words[i].size.y * 0.5))
 	_text("UNDER COVER", Vector2(72, 115), 52)
 	_text("OF DARKNESS", Vector2(72, 175), 58)
 	for i in range(NAMES.size()):
@@ -108,6 +115,16 @@ func _layout() -> void:
 	var factor := minf(viewport.x / DESIGN.x, viewport.y / DESIGN.y)
 	_design.scale = Vector2.ONE * factor
 	_design.position = (viewport - DESIGN * factor) * 0.5
+	if band:
+		band.set_screen_left(-_design.position.x / factor)
+
+## The city's brightness: dimmed a little while a band is showing.
+func city_dim() -> float:
+	return _dim
+
+func _process(delta: float) -> void:
+	_dim = move_toward(_dim, 0.72 if band.showing else 1.0, delta / 0.5 * 0.28)
+	background.modulate = Color(_dim, _dim, _dim)
 
 func _build_panel() -> void:
 	panel = Control.new()
