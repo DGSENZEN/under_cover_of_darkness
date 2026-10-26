@@ -73,6 +73,10 @@ const PRESETS := {
 	"steam": [{"draw": "fumes", "width": 0.35, "rise": 1.4, "plumes": 3, "root": 0.12, "crown": 0.42,
 		"lit": Color(0.94, 0.94, 0.96), "shade": Color(0.55, 0.6, 0.7), "warmth": 0.0, "glow": 0.18, "opacity": 0.55,
 		"puffs": 6.0, "puff_life": 1.6, "puff_size": 0.42, "puff_speed": 0.6}],
+	# The curandera's copal gathered under the vault over her pitch (the candle lane's landmarks): a slow amber haze, lit
+	# from below by her bulb, so her warm colour is a place seen from the Pasaje.
+	"copal_pool": [{"draw": "pool", "size": Vector3(3.0, 0.9, 2.4), "at": Vector3.ZERO, "density": 0.9,
+		"albedo": Color(1.0, 0.8, 0.5), "emission": Color(0.95, 0.62, 0.16)}],
 	# A copal burner's column: pale, slow, climbing high, pooling in a haze over it.
 	"copal": [{"draw": "fumes", "width": 0.25, "rise": 2.6, "plumes": 3, "root": 0.16, "crown": 1.1,
 		"lit": Color("ECE6DA"), "shade": Color(0.5, 0.5, 0.56), "warmth": 0.04, "glow": 0.1, "opacity": 0.6,
@@ -673,7 +677,9 @@ static func _fog(p: Dictionary) -> FogVolume:
 static func _pool(p: Dictionary) -> FogVolume:
 	var haze := FogMaterial.new()
 	haze.density = p.get("density", 0.12)
-	haze.albedo = Color("ECE6DA")
+	haze.albedo = p.get("albedo", Color("ECE6DA"))
+	# (A haze lit from within by the lamp under it, as the curandera's copal by her bulb.)
+	haze.emission = p.get("emission", Color.BLACK)
 	haze.edge_fade = 0.6
 	var volume := FogVolume.new()
 	volume.name = "pool"

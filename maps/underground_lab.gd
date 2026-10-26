@@ -616,6 +616,13 @@ func _process(delta: float) -> void:
 	_breathe(delta)
 
 
+## The corridor's one draught now: its own, pushed harder as a train passes, and by the dark train's cold.
+func draught_now() -> Vector3:
+	var s := train.strength() if train != null else 0.0
+	var d := dark_train.strength() if dark_train != null else 0.0
+	return DRAUGHT * (1.0 + 4.0 * s) + DARK_DRAUGHT * d
+
+
 ## The metro breathing: everything answers the passing train's strength.
 func _breathe(delta: float) -> void:
 	if train == null:
@@ -636,7 +643,7 @@ func _breathe(delta: float) -> void:
 		neon.dim = sag
 
 	bulb_pivot.gust = GUST_SWING * maxf(s, 1.6 * d)
-	var draught := DRAUGHT * (1.0 + 4.0 * s) + DARK_DRAUGHT * d
+	var draught := draught_now()
 	Vfx.blow(censer, draught)
 
 	if vent_breath != null:

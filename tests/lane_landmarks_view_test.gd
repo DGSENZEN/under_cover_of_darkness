@@ -52,7 +52,11 @@ func _ready() -> void:
 	var crowd: Node3D = lane.get("crowd_of_shades")
 	if crowd != null:
 		crowd.visible = false
-	await _seconds(0.5)
+	# (Pages come every 8-20 s of their own accord: some lifted out a second before, so the two shots catch them.)
+	var pages: Node3D = lane.get("pages")
+	if pages != null:
+		pages.release_now()
+	await _seconds(1.0)
 	var a := _shot(VIEWS[0][2])
 	await _seconds(0.5)
 	var b := _shot("")

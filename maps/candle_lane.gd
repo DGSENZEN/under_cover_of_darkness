@@ -10,6 +10,7 @@ const WatchingEyes := preload("res://scripts/Visual/WatchingEyes.gd")
 const WispsScript := preload("res://scripts/Visual/Wisps.gd")
 const Silhouette := preload("res://scripts/Visual/Silhouette.gd")
 const ShadeCrowd := preload("res://scripts/Visual/ShadeCrowd.gd")
+const DriftingPagesScript := preload("res://scripts/Visual/DriftingPages.gd")
 ## Where the lane's middle is in the plan; how far the corridor runs each way from it (m: 28 tile modules, 7 vault spans).
 const PLAN_ORIGIN := Vector3(12.8, -11.0, 74.35)
 const LANE_HALF := 16.8
@@ -54,6 +55,9 @@ const LECTERN_TILT := deg_to_rad(20.0)
 const BOOK_HINGE := [Vector3(-0.15, -0.11, 0.066), Vector3(-0.15, 0.11, 0.066)]
 const BOOK_CHAIN_ANCHOR := Vector3(0.25, -0.05, -0.05)
 const BOOK_STAPLE := Vector3(0.155, -0.06, 0.066)
+## Where loose pages lift out of his arch (its foot), and where her copal pools under the vault over her pitch.
+const PAGES_FROM := Vector3(6.2, 0.1, 4.2)
+const COPAL_POOL := Vector3(0.0, 3.45, -0.8)
 const LANE_WICKS := "res://assets/eclipse/source/candle_lane_wicks.json"
 ## How far the end wall's opening reaches inside the doorway's frame (m, each side and over it): the wall's cut faces
 ## buried in the stone, the way through still the frame's 3 m.
@@ -220,6 +224,9 @@ var milagro_flame: Node3D
 var lantern_light: OmniLight3D
 ## The book chained to the lectern at his threshold (its own, not his desk's).
 var threshold_book: ChainedBook
+## Loose pages lifted out of his arch on the draught; her copal pooled under the vault (Vfx "copal_pool").
+var pages: Node3D
+var copal_haze: Node3D
 ## The shades one talks to: "librarian", "curandera", "market_curandera".
 var shades := {}
 
@@ -573,6 +580,18 @@ func _landmarks() -> void:
 	threshold_book.chain_anchor = to_global(_on_rest(BOOK_CHAIN_ANCHOR))
 	threshold_book.staple = to_global(_on_rest(BOOK_STAPLE))
 	add_child(threshold_book)
+	# Loose pages lifted out of his arch on the lane's draught; her copal pooled under the vault, lit by her bulb.
+	pages = DriftingPagesScript.new()
+	pages.name = "pages"
+	pages.from = PAGES_FROM
+	pages.end_x = half_run
+	pages.wind = draught_now
+	add_child(pages)
+	copal_haze = Vfx.system("copal_pool")
+	copal_haze.name = "copal_haze"
+	add_child(copal_haze)
+	Vfx.place(copal_haze, to_global(COPAL_POOL))
+	Vfx.emit(copal_haze, true)
 	milagro_pivot = Node3D.new()
 	milagro_pivot.name = "milagro_pivot"
 	add_child(milagro_pivot)
@@ -614,7 +633,7 @@ func _red_glass() -> StandardMaterial3D:
 func _sway(piece: MeshInstance3D, from: Vector3, to: Vector3, most: float) -> void:
 	if piece == null:
 		return
-	var blow := clampf(DRAUGHT.length() / (DRAUGHT.length() * 5.0), 0.0, 1.0)
+	var blow := clampf(draught_now().length() / (DRAUGHT.length() * 5.0), 0.0, 1.0)
 	var angle := most * (0.35 + 0.65 * blow) * sin(_clock * 0.9) * (0.7 + 0.3 * sin(_clock * 0.37 + 1.3))
 	var turn := Basis((to - from).normalized(), angle)
 	piece.transform = Transform3D(turn, from - turn * from)

@@ -767,6 +767,88 @@ func _landmarks() -> void:
 	var desk := await _walk_path(spawn, to_desk, 2400)
 	_check("L8b the player still walks through the arch to his desk", desk["ok"], "desk %s" % [desk])
 
+	# Her copal pooled under the vault over her pitch.
+	var haze: Node3D = lane.get("copal_haze")
+	var haze_at: Vector3 = lane.to_local(haze.global_position) if haze != null else Vector3.INF
+	var fog: int = haze.find_children("*", "FogVolume", true, false).size() if haze != null else 0
+	_check("L9 a copal haze pools under the vault over her pitch",
+		haze != null and absf(haze_at.x) <= 1.5 and haze_at.y >= 3.0 and haze_at.y <= 3.9 and haze_at.z >= -2.0
+		and haze_at.z <= 0.5 and fog >= 1, "haze at %s, %d pools" % [haze_at, fog])
+
+	# The lane's one draught, and the pages it carries out of his arch. (Measured still once neither train is passing.)
+	for i in 3600:
+		if not lane.train.passing() and not lane.dark_train.passing() and lane.train.strength() < 0.001 \
+				and lane.dark_train.strength() < 0.001:
+			break
+		await _frames(1)
+	var calm: bool = not lane.train.passing() and not lane.dark_train.passing()
+	var still: Vector3 = lane.call("draught_now") if lane.has_method("draught_now") else Vector3.INF
+	lane.train.start_pass()
+	var blown := still
+	for i in 1200:
+		await _frames(1)
+		if lane.train.strength() > 0.3:
+			blown = lane.call("draught_now")
+			break
+	_check("L11 draught_now is the lane's one draught: its own still, more as a train passes",
+		calm and still.is_equal_approx(lane.DRAUGHT) and blown.x > still.x * 1.5, "still %s blown %s" % [still, blown])
+	for i in 900:
+		await _frames(1)
+		if not lane.train.passing():
+			break
+
+	var pages: Node3D = lane.get("pages")
+	var released := 0
+	var drifted := []
+	if pages != null:
+		pages.wind = func(): return lane.DRAUGHT
+		released = pages.release_now()
+		# (These pages alone, the last released: others may come of their own accord meanwhile.)
+		var starts := {}
+		for page in pages.pages.slice(pages.pages.size() - released):
+			starts[page] = lane.to_local(page.global_position)
+		await _frames(180)
+		for page in starts:
+			var now: Vector3 = lane.to_local(page.global_position) if is_instance_valid(page) else Vector3.INF
+			drifted.append([now.x - starts[page].x, now.z, now.y])
+	var carried: bool = released >= 1 and released <= 3 and drifted.size() == released and drifted.all(func(d):
+		return d[0] >= 1.5 and d[1] >= 0.5 and d[1] <= 3.0)
+	var settled: bool = not drifted.is_empty() and drifted.all(func(d): return d[2] <= 0.1)
+	_check("L10 pages lift out of his arch and drift with the draught onto the walk, and settle",
+		carried and settled, "released %d, drifted (x, z) %s, settled %s" % [released, drifted, settled])
+	var released_before: int = pages.released if pages != null else 0
+	await _frames(1500)
+	_check("L10b they come of their own accord", pages != null and pages.released > released_before,
+		"released %d then %d" % [released_before, pages.released if pages != null else 0])
+	var farther := 0.0
+	var most := 0
+	var past_end := 0
+	if pages != null:
+		var gust: Vector3 = lane.DRAUGHT * 5.0 + lane.DARK_DRAUGHT
+		var went := []
+		for wind in [lane.DRAUGHT, gust]:
+			pages.wind = func(): return wind
+			pages.release_now()
+			var page: Node3D = pages.pages.back()
+			var from := lane.to_local(page.global_position).x
+			# (Over a second: under the full gust a page crosses the rest of the lane in less than three, and is gone.)
+			await _frames(60)
+			went.append(lane.to_local(page.global_position).x - from if is_instance_valid(page) else INF)
+		farther = went[1] - went[0]
+		# Under the gust a while, more released all the time: never past the lane's end, never piling up.
+		for i in 600:
+			await _frames(1)
+			if i % 60 == 0:
+				pages.release_now()
+			most = maxi(most, pages.pages.size())
+			for p: Node3D in pages.pages:
+				if lane.to_local(p.global_position).x > 16.8:
+					past_end += 1
+		pages.wind = Callable(lane, "draught_now")
+	_check("L10c a gust carries them farther, never past the lane's end, never piling up",
+		farther > 0.0 and farther < INF and past_end == 0 and most <= 6,
+		"gust over calm %.2f m, past the end %d, most at once %d" % [farther, past_end, most])
+
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:
 	var space := lane.get_world_3d().direct_space_state
