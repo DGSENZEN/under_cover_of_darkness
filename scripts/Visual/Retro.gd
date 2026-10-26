@@ -69,6 +69,10 @@ var _levels := [24.0, 32.0, 0.0]
 
 
 func _ready() -> void:
+	# The player's settings, read and applied at start-up; sound buses made
+	# later (by levels, the menu) get their volumes as they appear.
+	GameSettings.value("video/grid")
+	AudioServer.bus_layout_changed.connect(_on_buses_changed)
 	# Under the HUD (layer 5), over the world.
 	layer = 4
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -94,6 +98,10 @@ func _ready() -> void:
 
 
 ## Development keys for comparing looks.
+func _on_buses_changed() -> void:
+	GameSettings.apply_buses()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not OS.is_debug_build():
 		return

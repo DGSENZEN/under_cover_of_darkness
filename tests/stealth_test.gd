@@ -415,7 +415,7 @@ func _signs_checks() -> void:
 	var view: Vector2 = get_viewport().get_visible_rect().size
 	# Settings of the test's own: the player's are left alone.
 	SettingsScript.path = "user://settings_stealth_test.cfg"
-	SettingsScript.reload()
+	SettingsScript.reread()
 
 	# D1 at his ease and unaware of you: no mark
 	var easy := _new_guard(Vector3(-32, 0, 0), 0.0)
@@ -562,7 +562,7 @@ func _signs_checks() -> void:
 	var quiet: bool = int(hud.ticks) == ticks_shown
 	var kept := ConfigFile.new()
 	var read: bool = kept.load(SettingsScript.path) == OK and kept.get_value("hud", "awareness_marks", true) == false
-	SettingsScript.reload()
+	SettingsScript.reread()
 	var stays: bool = not SettingsScript.awareness_marks()
 	SettingsScript.set_awareness_marks(true)
 	await _frames(20)
@@ -604,7 +604,7 @@ func _signs_checks() -> void:
 	torch8.queue_free()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsScript.path))
 	SettingsScript.path = "user://settings.cfg"
-	SettingsScript.reload()
+	SettingsScript.reread()
 	await _frames(3)
 
 

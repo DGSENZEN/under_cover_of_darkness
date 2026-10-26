@@ -31,7 +31,7 @@ func _ready() -> void:
 	var original_volume := AudioServer.get_bus_volume_db(0)
 	Settings.path = "/private/tmp/main-menu-settings-test.cfg"
 	DirAccess.remove_absolute(Settings.path)
-	Settings.reload()
+	Settings.reread()
 	if not ResourceLoader.exists("res://main_menu.tscn"):
 		check(false, "game has a playable main menu")
 		get_tree().quit(1)
@@ -182,10 +182,10 @@ func _ready() -> void:
 	check(menu.pages.volume.has_theme_stylebox_override("slider") and menu.pages.volume.has_theme_icon_override("grabber"), "settings controls are painted, not default")
 	menu.pages.volume.value = 0.35
 	await get_tree().process_frame
-	Settings.reload()
+	Settings.reread()
 	check(is_equal_approx(Settings.master_volume(), 0.35) and is_equal_approx(db_to_linear(AudioServer.get_bus_volume_db(0)), 0.35), "volume changes reach the audio bus and survive a settings reload")
 	Settings.set_awareness_marks(false)
-	Settings.reload()
+	Settings.reread()
 	check(not Settings.awareness_marks() and is_equal_approx(Settings.master_volume(), 0.35), "awareness and volume settings preserve each other")
 	menu.close_page()
 	await get_tree().create_timer(0.7).timeout
@@ -296,7 +296,7 @@ func _ready() -> void:
 	check(not is_instance_valid(old_music) or old_music.is_queued_for_deletion(), "leaving the menu (not for a game) stops its music")
 	DirAccess.remove_absolute(Settings.path)
 	Settings.path = original_path
-	Settings.reload()
+	Settings.reread()
 	AudioServer.set_bus_volume_db(0, original_volume)
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failures else 0)

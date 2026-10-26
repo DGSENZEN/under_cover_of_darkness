@@ -507,7 +507,7 @@ func _ui_checks() -> void:
 	# U13 the pause screen's setting: a click on it changes it (and is kept),
 	# and does not resume
 	SettingsScript.path = "user://settings_interaction_test.cfg"
-	SettingsScript.reload()
+	SettingsScript.reread()
 	hud._marks_toggle.pressed.emit()
 	await get_tree().process_frame
 	var turned: bool = not SettingsScript.awareness_marks() and hud._marks_toggle.text.contains("hidden") and get_tree().paused
@@ -518,7 +518,7 @@ func _ui_checks() -> void:
 	var turned_back: bool = SettingsScript.awareness_marks() and hud._marks_toggle.text.contains("shown")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsScript.path))
 	SettingsScript.path = "user://settings.cfg"
-	SettingsScript.reload()
+	SettingsScript.reread()
 	_check("U13 the pause screen's setting changes with a click, is kept, and does not resume", turned and written and turned_back,
 		"hidden and still paused %s written %s shown again %s" % [turned, written, turned_back])
 
