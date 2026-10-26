@@ -27,6 +27,11 @@ const VIEWS := [
 	[Vector3(0.0, 1.65, 6.0), Vector3(0.0, 1.5, 20.0), "8i_the_south_end"],
 	[Vector3(-1.6, 1.4, -6.7), Vector3(4.7, 1.4, -6.7), "8j_wall_east_by_the_lanes_mouth"],
 	[Vector3(1.6, 1.4, -18.4), Vector3(-4.7, 1.4, -18.4), "8k_wall_west_at_the_north_end"],
+	[Vector3(0.6, 1.65, -15.4), Vector3(-2.6, 0.0, -18.6), "9a_ward_the_north_circle"],
+	[Vector3(-0.6, 1.65, 15.8), Vector3(2.0, 0.0, 19.15), "9b_ward_under_the_canopy"],
+	[Vector3(1.4, 1.6, -6.7), Vector3(4.3, 0.3, -6.7), "9c_ward_the_copal_alcove"],
+	[Vector3(-1.2, 1.6, -1.0), Vector3(-4.8, 0.7, -1.0), "9d_ward_the_herb_markets_threshold"],
+	[Vector3(1.6, 1.6, 0.45), Vector3(4.8, 0.3, 0.45), "9e_ward_the_lanes_threshold"],
 ]
 ## The close views lit: [eye, looks at, name].
 const CLOSE := [
@@ -35,6 +40,7 @@ const CLOSE := [
 	[Vector3(-1.0, 1.65, -9.5), Vector3(-4.0, 0.7, -11.6), "11_lit_fruit_barrow"],
 	[Vector3(-1.2, 1.65, 9.6), Vector3(-4.0, 1.4, 11.6), "12_lit_coffee_lean_to"],
 	[Vector3(1.6, 0.5, -4.75), Vector3(4.2, 0.15, -4.75), "13_lit_under_the_copal_counter"],
+	[Vector3(-3.0, 1.3, -3.4), Vector3(-4.85, 0.0, -1.0), "14_lit_herb_sill_salt"],
 ]
 
 var eye: Camera3D

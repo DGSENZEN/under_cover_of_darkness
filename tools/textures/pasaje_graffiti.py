@@ -184,10 +184,10 @@ def _eye_mask(draw, cx, cy, w, h, iris, pupil):
     draw.ellipse((cx - pupil, cy - pupil, cx + pupil, cy + pupil), fill=255)
 
 
-def _sigil(glyphs, script, rng):
+def _sigil(glyphs, script, rng, paint=None, line=0.011):
     cx = cy = BIG / 2
     r1, r2 = BIG * 0.44, BIG * 0.35
-    line = BIG * 0.011
+    line = BIG * line
     ink = _canvas()
     draw = ImageDraw.Draw(ink)
     for r in (r1, r2):
@@ -206,7 +206,7 @@ def _sigil(glyphs, script, rng):
     r3 = BIG * 0.11
     draw.ellipse((cx - r3, cy - r3, cx + r3, cy + r3), outline=255, width=int(line))
     _eye_mask(draw, cx, cy, r3 * 1.5, r3 * 0.55, r3 * 0.32, r3 * 0.14)
-    paint = [CHALK, BLOOD, OCHRE][rng.randrange(3)]
+    paint = paint or [CHALK, BLOOD, OCHRE][rng.randrange(3)]
     return [(_f(ink), paint, "chalk" if paint == CHALK else "brush")]
 
 
@@ -341,8 +341,115 @@ def make(brushes_dir=brush_sheets.BRUSHES):
     return Image.fromarray(sheet, "RGBA")
 
 
+# --- the wards ------------------------------------------------------------------------------------------
+
+# The wards' sheet (2 x 2): the circle drawn round a rite on the floor in charcoal (chalk and ochre are lost on the
+# chequer's cream and terracotta), its glyph band, its star, salt dropped round it; the arc drawn out from a wall, the
+# candles' places marked on it; the salt line laid across a threshold; the ward sigil painted on a wall beside a
+# doorway.
+WARD_GRID = 2
+WARDS = ["circle", "arc", "salt", "ward"]
+SALT = (240, 238, 232)
+
+
+def _salt_dots(draw, rng, centre, radius, spread, count):
+    for _ in range(count):
+        a = rng.uniform(0, 2 * math.pi)
+        d = radius + rng.gauss(0, spread)
+        x, y = centre[0] + d * math.cos(a), centre[1] + d * math.sin(a)
+        r = rng.uniform(1.5, 3.5)
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=255)
+
+
+def _ward_circle(script, rng):
+    layers = _sigil([rng.randrange(len(script)) for _ in range(12)], script, rng, BLACK, line=0.024)
+    salt = _canvas()
+    _salt_dots(ImageDraw.Draw(salt), rng, (BIG / 2, BIG / 2), BIG * 0.465, BIG * 0.008, 900)
+    return layers + [(_f(salt), SALT, "stencil")]
+
+
+def _ward_arc(script, rng):
+    """The arc drawn in charcoal out from a wall (the image's top), its band written round, the candles' places ringed on it."""
+    cx, cy = BIG / 2, BIG * 0.08
+    r1, r2 = BIG * 0.44, BIG * 0.34
+    line = BIG * 0.024
+    ink = _canvas()
+    draw = ImageDraw.Draw(ink)
+    for r in (r1, r2):
+        draw.arc((cx - r, cy - r, cx + r, cy + r), 0, 180, fill=255, width=int(line))
+    draw.line([(cx - r1, cy), (cx + r1, cy)], fill=255, width=int(line))
+    band = (r1 + r2) / 2
+    for k in range(9):
+        a = math.pi * (k + 0.5) / 9
+        g = script[rng.randrange(len(script))]
+        _draw_glyph(draw, g, (cx + band * math.cos(a), cy + band * math.sin(a)), (r1 - r2) * 0.9, line * 0.9,
+                    turn=a - math.pi / 2)
+    for k in range(5):
+        a = math.pi * k / 4
+        x, y = cx + r1 * 1.02 * math.cos(a), cy + r1 * 1.02 * math.sin(a)
+        rr = BIG * 0.03
+        draw.ellipse((x - rr, y - rr, x + rr, y + rr), outline=255, width=int(line * 0.8))
+    _eye_mask(draw, cx, cy + BIG * 0.17, BIG * 0.16, BIG * 0.06, BIG * 0.025, BIG * 0.011)
+    return [(_f(ink), BLACK, "brush")]
+
+
+def _salt_line(rng):
+    """Salt poured across a threshold: a line of grains, thick down its middle, scuffed where feet crossed it."""
+    salt = _canvas()
+    draw = ImageDraw.Draw(salt)
+    for _ in range(4200):
+        x = rng.uniform(0.06, 0.94) * BIG
+        if abs(x - BIG * 0.4) < BIG * 0.05 and rng.random() < 0.7:
+            continue
+        y = BIG / 2 + rng.gauss(0, BIG * 0.09)
+        r = rng.uniform(3.0, 7.0)
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=255)
+    return [(_f(salt), SALT, "stencil")]
+
+
+def _ward_sigil(script, rng):
+    """A ward painted on a wall by a doorway: rings, a cross whose arms end in crossbars (centred on the arm, never
+    turned one way: a hooked cross would read as something else entirely), dots, an eye at its heart, in blood-red
+    ochre."""
+    cx = cy = BIG / 2
+    line = BIG * 0.02
+    ink = _canvas()
+    draw = ImageDraw.Draw(ink)
+    for r in (BIG * 0.4, BIG * 0.3):
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline=255, width=int(line))
+    for k in range(4):
+        a = math.pi / 2 * k
+        x0, y0 = cx + BIG * 0.1 * math.cos(a), cy + BIG * 0.1 * math.sin(a)
+        x1, y1 = cx + BIG * 0.36 * math.cos(a), cy + BIG * 0.36 * math.sin(a)
+        draw.line([(x0, y0), (x1, y1)], fill=255, width=int(line))
+        h = a + math.pi / 2
+        bar = BIG * 0.06
+        draw.line([(x1 - bar * math.cos(h), y1 - bar * math.sin(h)), (x1 + bar * math.cos(h), y1 + bar * math.sin(h))],
+                  fill=255, width=int(line))
+        d = a + math.pi / 4
+        x, y, r = cx + BIG * 0.35 * math.cos(d), cy + BIG * 0.35 * math.sin(d), BIG * 0.022
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=255)
+    _eye_mask(draw, cx, cy, BIG * 0.16, BIG * 0.06, BIG * 0.026, BIG * 0.012)
+    return [(_f(ink), BLOOD, "brush")]
+
+
+def make_wards(brushes_dir=brush_sheets.BRUSHES):
+    """The wards' sheet: WARD_GRID x WARD_GRID, laid out as WARDS."""
+    rng = random.Random(1935)
+    script = library_glyphs.script_glyphs(seed=SCRIPT_SEED)
+    grains = [_grain("brush_%02d" % i, brushes_dir) for i in range(5)]
+    sheet = np.zeros((WARD_GRID * CELL, WARD_GRID * CELL, 4), np.uint8)
+    for k, kind in enumerate(WARDS):
+        layers = {"circle": lambda: _ward_circle(script, rng), "arc": lambda: _ward_arc(script, rng),
+                  "salt": lambda: _salt_line(rng), "ward": lambda: _ward_sigil(script, rng)}[kind]()
+        j, i = divmod(k, WARD_GRID)
+        sheet[j * CELL:(j + 1) * CELL, i * CELL:(i + 1) * CELL] = _cell(layers, grains[(k + 2) % len(grains)])
+    return Image.fromarray(sheet, "RGBA")
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    path = OUT / "pasaje_graffiti.png"
-    make().save(path)
-    print("wrote", path.relative_to(ROOT))
+    for name, made in (("pasaje_graffiti.png", make), ("pasaje_wards.png", make_wards)):
+        path = OUT / name
+        made().save(path)
+        print("wrote", path.relative_to(ROOT))

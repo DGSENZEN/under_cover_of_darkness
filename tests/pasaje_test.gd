@@ -3,6 +3,8 @@ extends Node3D
 ## --fixed-fps 60.
 
 const PASAJE := preload("res://maps/pasaje.tscn")
+## The set's shadowless lights at most: the stalls' sixteen neons and eight bulbs, and one to each ward's candles.
+const LIGHT_BUDGET := 30
 
 var results: Array[String] = []
 var failures := 0
@@ -20,6 +22,7 @@ func _ready() -> void:
 	await _wares()
 	await _overhead()
 	_marks()
+	_wards()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -238,7 +241,7 @@ func _wares() -> void:
 		else:
 			plain += 1
 	var lights: Array = pasaje.get("lights") if pasaje.get("lights") != null else []
-	_check("P5c the set's light stays in budget", plain <= 24 and shadowed <= 2 and lights.size() == plain + shadowed,
+	_check("P5c the set's light stays in budget", plain <= LIGHT_BUDGET and shadowed <= 2 and lights.size() == plain + shadowed,
 		"%d shadowless, %d with shadows; %d listed" % [plain, shadowed, lights.size()])
 
 
@@ -322,6 +325,36 @@ func _marks() -> void:
 	_check("P7c the walls carry every kind of mark, the sigils where the uncanny comes close",
 		kinds.get("sigil", 0) >= 3 and kinds.get("tag", 0) >= 6 and kinds.get("throwup", 0) >= 3 and stencils >= 3
 		and stray.is_empty(), "%s; %s" % [kinds, stray])
+
+
+## The wards where the uncanny comes close: each spot its chalk or salt, its candles stood and lit from among their
+## flames, none of them in the walk's middle.
+func _wards() -> void:
+	var wards: Dictionary = pasaje.get("wards") if pasaje.get("wards") != null else {}
+	var wrong := []
+	for spot in ["lane_threshold", "herb_threshold", "north_circle", "canopy_circle", "copal_alcove"]:
+		if not wards.has(spot):
+			wrong.append("%s missing" % spot)
+			continue
+		var root: Node3D = wards[spot]
+		var stubs: Array = root.find_children("candle_stub*", "MeshInstance3D", true, false)
+		var drawn: Array = root.find_children("*", "Decal", true, false)
+		var lights: Array = root.find_children("*", "OmniLight3D", true, false)
+		if stubs.size() < 5 or drawn.is_empty() or lights.is_empty():
+			wrong.append("%s: %d candles, %d drawn, %d lights" % [spot, stubs.size(), drawn.size(), lights.size()])
+			continue
+		var top := -INF
+		for stub: MeshInstance3D in stubs:
+			var box := _local_box(stub)
+			top = maxf(top, box.end.y)
+			if absf(box.get_center().x) < 1.2:
+				wrong.append("%s candle in the walk" % spot)
+		for light: OmniLight3D in lights:
+			var y := pasaje.to_local(light.global_position).y
+			if y < top - 0.02 or y > top + 0.2:
+				wrong.append("%s light %.2f over candles' top %.2f" % [spot, y, top])
+	_check("P7d the wards stand where the uncanny comes close, their candles lit, the walk clear",
+		wrong.is_empty(), "%d spots; %s" % [wards.size(), wrong.slice(0, 4)])
 
 
 ## Whether a Vfx system's fumes are breathing.

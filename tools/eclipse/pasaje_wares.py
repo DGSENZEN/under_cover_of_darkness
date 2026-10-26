@@ -383,6 +383,22 @@ def bulb(m):
            at=(0.0, 0.0, 0.0))
 
 
+# --- the wards' candles ------------------------------------------------------------------------------
+
+def _stub(radius, tall, pool, slot):
+    """A candle burnt down in its own pool of wax: one turned solid, the pool spread on the floor, the body, its rim
+    melted in round the wick (the flame stands just over its top)."""
+    def made(m):
+        turned(m, [(pool, 0.0), (pool * 0.85, 0.005), (radius * 1.1, 0.009), (radius, 0.02), (radius * 0.97, tall),
+                   (radius * 0.6, tall + 0.005)], 10, slot, at=(0.0, 0.0, 0.0),
+               jitter=0.04, twist=rng.uniform(0, 1))
+    return made
+
+
+STUBS = {"candle_stub_a": (0.017, 0.17, 0.04, "wax_white"), "candle_stub_b": (0.028, 0.09, 0.06, "wax"),
+         "candle_stub_c": (0.02, 0.05, 0.07, "wax_red")}
+
+
 PIECES = [("tamales_basket", tamales_basket), ("tamales_crate", tamales_crate), ("tortas_board", tortas_board),
           ("tortas_jars", tortas_jars), ("atole_urn", atole_urn), ("atole_cups", atole_cups), ("coffee_pot", coffee_pot),
           ("coffee_sacks", coffee_sacks), ("fruit_pile", fruit_pile), ("fruit_crates", fruit_crates),
@@ -394,6 +410,7 @@ PIECES = [("tamales_basket", tamales_basket), ("tamales_crate", tamales_crate), 
           ("tinsmith_sheets", tinsmith_sheets), ("herbs_bundles", herbs_bundles), ("herbs_sacks", herbs_sacks),
           ("chiles_ristras", chiles_ristras), ("chiles_baskets", chiles_baskets), ("flowers_buckets", flowers_buckets),
           ("flowers_bunches", flowers_bunches), ("bulb", bulb)]
+PIECES += [(n, _stub(*STUBS[n])) for n in STUBS]
 
 BUDGET = {name: 3000 for name, _ in PIECES}
 SLIVER = {name: 0.004 for name in BUDGET}

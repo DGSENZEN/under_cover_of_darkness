@@ -39,6 +39,9 @@ const SPILL_SHY := 1 << 5
 ## A wall's own tiles and plaster (layer 7), the only thing the wall paint sprayed on it lands on (the Pasaje's
 ## graffiti decals): not the stalls, pipes or bills in front of it.
 const PAINTED_WALL := 1 << 6
+## A floor's own tiles and sills (layer 8), the only thing chalk and salt laid on it land on (the Pasaje's wards):
+## not the candles standing in them.
+const PAINTED_FLOOR := 1 << 7
 ## A fixture's glowing parts (a pitch head, coals, horn panes): they shine by
 ## their own glow, and a burner's light (a hand's breadth away) would blow
 ## them out, so burners leave this layer unlit.

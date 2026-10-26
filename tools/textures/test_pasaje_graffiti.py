@@ -74,5 +74,50 @@ class Graffiti(unittest.TestCase):
                 self.assertGreater(q.mean(), 0.01, k)
 
 
+class Wards(unittest.TestCase):
+    """The wards' sheet (pasaje_graffiti.make_wards): the chalk ritual circle, the threshold's arc, the salt line, the
+    wall's ward sigil, each painted in its cell, a clear border, written in the invented script."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        brushes = Path(cls.tmp.name)
+        rng = np.random.default_rng(6)
+        for i in range(5):
+            grey = (rng.random((64, 64)) * 255).astype(np.uint8)
+            Image.fromarray(np.dstack([grey, np.full_like(grey, 255)]), "LA").save(brushes / ("brush_%02d.png" % i))
+        cls.sheet = np.asarray(pasaje_graffiti.make_wards(brushes))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_four_wards_each_painted_with_a_clear_border(self):
+        n, size = pasaje_graffiti.WARD_GRID, pasaje_graffiti.CELL
+        self.assertEqual(self.sheet.shape, (n * size, n * size, 4))
+        self.assertEqual(pasaje_graffiti.WARDS, ["circle", "arc", "salt", "ward"])
+        b = pasaje_graffiti.BORDER
+        for k in range(n * n):
+            j, i = divmod(k, n)
+            cell = self.sheet[j * size:(j + 1) * size, i * size:(i + 1) * size]
+            self.assertGreater((cell[..., 3] > 128).mean(), 0.01, k)
+            self.assertEqual(int(max(cell[:b, :, 3].max(), cell[-b:, :, 3].max(), cell[:, :b, 3].max(),
+                                     cell[:, -b:, 3].max())), 0, k)
+
+    def test_the_circle_is_round_and_the_salt_a_line(self):
+        size = pasaje_graffiti.CELL
+        circle = self.sheet[:size, :size, 3] > 128
+        h = size // 2
+        for q in (circle[:h, :h], circle[:h, h:], circle[h:, :h], circle[h:, h:]):
+            self.assertGreater(q.mean(), 0.01)
+        # (The salt laid along the cell's width, thickest down its middle: the set stretches it across a sill.)
+        salt = self.sheet[size:, :size, 3] > 64
+        ys, xs = np.nonzero(salt)
+        self.assertGreater(xs.max() - xs.min(), 0.8 * size)
+        third = size // 3
+        middle, outer = salt[third:2 * third].mean(), np.concatenate([salt[:third], salt[2 * third:]]).mean()
+        self.assertGreater(middle, 3 * outer)
+
+
 if __name__ == "__main__":
     unittest.main()

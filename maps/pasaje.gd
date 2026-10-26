@@ -136,6 +136,13 @@ const OPENING_CLEAR := 0.35
 const ALCOVE_LEAST := 0.6
 ## How far a piece of wall paint may run past its alcove behind the stalls either side.
 const SPILL := 0.5
+## The wards: the sheet they are drawn from (its cells: the chalk circle, the threshold's arc, the salt line, the
+## wall's ward sigil), the kinds of candle stood in them.
+const WARDS := "pasaje_wards.png"
+const WARD_CELLS := ["circle", "arc", "salt", "ward"]
+const STUBS := ["candle_stub_a", "candle_stub_b", "candle_stub_c"]
+## How far a ward circle's candles stand out on its ring (its image's ring at this share of its size).
+const RING := 0.47
 ## How far a sign swings at most (radians) and at what draught it does (m/s).
 const SWING := deg_to_rad(4.0)
 const SWING_FULL := 1.0
@@ -177,6 +184,8 @@ var hanging: Array[Node3D] = []
 var _swing_clock := 0.0
 ## The posters and the graffiti decals on the walls.
 var marks: Array[Node3D] = []
+## The wards by their spot: each a root holding its chalk and salt, its candles, their flames.
+var wards := {}
 
 
 func _ready() -> void:
@@ -186,6 +195,7 @@ func _ready() -> void:
 	_wares()
 	_overhead()
 	_marks()
+	_wards()
 	if standalone:
 		_environment()
 		_stubs()
@@ -270,7 +280,9 @@ func _shell_dressing() -> void:
 	for name in OPENINGS:
 		var spec: Array = OPENINGS[name]
 		wall_panels.append(_wall_piece(meshes, look, "lintel_" + name, spec[0], spec[1], spec[2] - spec[1]))
-		SetKit.place(dressing, meshes["reveal_" + name], look, "reveal_" + name, Vector3.ZERO, 0.0, false)
+		# (Its sill takes the salt laid across it.)
+		SetKit.place(dressing, meshes["reveal_" + name], look, "reveal_" + name, Vector3.ZERO, 0.0, false).layers = \
+			Layers.WORLD | Layers.PAINTED_FLOOR
 
 	_ceiling(meshes)
 	_floor(meshes, look)
@@ -345,6 +357,9 @@ func _floor(meshes: Dictionary, look: Material) -> void:
 	# (Each joint's lip reaches under the next stretch's floor.)
 	floor_tiles.append(SetKit.place(dressing, meshes["floor_joint"], look, "floor_joint", Vector3(0.0, 0.0, -HALF_L + SEAM), PI, false))
 	floor_tiles.append(SetKit.place(dressing, meshes["floor_joint"], look, "floor_joint", Vector3(0.0, 0.0, HALF_L - SEAM), 0.0, false))
+	# (The chalk and salt laid on it land on it.)
+	for tile in floor_tiles:
+		tile.layers = Layers.WORLD | Layers.PAINTED_FLOOR
 	shell[0].visible = false
 
 
@@ -632,6 +647,135 @@ func _marks() -> void:
 			z += size + lerpf(2.4, 0.3, south) * (0.6 + 0.8 * _hash(z * 0.7 + side * 3.0))
 
 
+## The wards, where the uncanny comes close and the market keeps it out:
+## - at the candle lane's mouth (her trade's), salt poured across its sill, candles burning at both its jambs;
+## - at the herb market's mouth, salt across its sill, the ward sigil painted on the wall either side, candles at its
+##   jambs;
+## - at the stretch's north end, facing the dark stretch beyond, a chalk circle round a rite, candles on its points;
+## - under the canopy at the south end, a smaller circle, its candles;
+## - in the alcove between the candle-seller's booth and the copal stall, under the sigil on the wall there, the arc
+##   chalked out from the wall, candles in its rings, marigolds laid in it.
+func _wards() -> void:
+	if not ResourceLoader.exists(WARES_KIT):
+		return
+	var kit := SetKit.kit(WARES_KIT)
+	var look := Painterly.material(SetKit.painted(["pasaje_wares.png", "pasaje_wares_base.png"]), &"bespoke")
+	var cells := _sheet_cells(WARDS, 2)
+	if cells.is_empty():
+		return
+	var lane: Array = OPENINGS["candle_lane"]
+	var herbs: Array = OPENINGS["herb_market"]
+	var face := HALF_W - WALL - FACE
+	var sill := HALF_W - WALL / 2.0
+
+	var at_lane := _ward_root("lane_threshold")
+	_laid(at_lane, cells[2], Vector3(sill, 0.0, 0.5 * (lane[1] + lane[2])), Vector2(lane[2] - lane[1] - 0.1, 0.4), PI / 2.0)
+	_candles_at(at_lane, kit, look, [Vector3(4.35, 0.0, lane[1] + 0.3), Vector3(4.35, 0.0, lane[2] - 0.3)], 4, 0.16)
+
+	var at_herbs := _ward_root("herb_threshold")
+	_laid(at_herbs, cells[2], Vector3(-sill, 0.0, 0.5 * (herbs[1] + herbs[2])), Vector2(herbs[2] - herbs[1] - 0.1, 0.4), PI / 2.0)
+	for z in [herbs[1] - 0.5, herbs[2] + 0.45]:
+		var sigil := _graffito(at_herbs, cells[3], "ward", -1, z, 2.0, 0.5)
+		sigil.name = "ward_sigil"
+	_candles_at(at_herbs, kit, look, [Vector3(-4.35, 0.0, herbs[1] + 0.3), Vector3(-4.35, 0.0, herbs[2] - 0.3)], 4, 0.16)
+
+	for spec in [["north_circle", Vector3(-2.6, 0.0, -18.6), 2.0, 7], ["canopy_circle", Vector3(2.0, 0.0, 19.15), 1.5, 5]]:
+		var root := _ward_root(spec[0])
+		var size: float = spec[2]
+		_laid(root, cells[0], spec[1], Vector2(size, size), 0.0)
+		var points: Array[Vector3] = []
+		for k in spec[3]:
+			var a: float = TAU * k / spec[3] - PI / 2.0
+			points.append(spec[1] + Vector3(cos(a), 0.0, sin(a)) * size * RING)
+		_candles_at(root, kit, look, points, 1, 0.0)
+
+	# The arc against the east wall: its image's top at the wall, its candles in the five rings round its rim.
+	var alcove := _ward_root("copal_alcove")
+	var size := 1.2
+	var z_mid := -6.7
+	_laid(alcove, cells[1], Vector3(face - size / 2.0, 0.0, z_mid), Vector2(size, size), 0.0, Vector3(-1.0, 0.0, 0.0))
+	var rings: Array[Vector3] = []
+	for k in 5:
+		var a := PI * k / 4.0
+		var u := 0.5 + 0.449 * cos(a)
+		var v := 0.08 + 0.449 * sin(a)
+		rings.append(Vector3(face - v * size, 0.0, z_mid + (u - 0.5) * size))
+	_candles_at(alcove, kit, look, rings, 1, 0.0)
+	SetKit.place(alcove, kit["flowers_bunches"], look, "marigolds", Vector3(face - 0.3 * size, 0.0, z_mid), PI / 2.0, false)
+
+
+## A ward's root, kept by its spot's name.
+func _ward_root(spot: String) -> Node3D:
+	var root := Node3D.new()
+	root.name = spot
+	add_child(root)
+	wards[spot] = root
+	return root
+
+
+## Chalk or salt laid on the floor (or a sill) at `at`, `size` across (x) and along (z) its image, turned `yaw` (or
+## its image's top toward `top`): on the floor's own tiles and sills only.
+func _laid(root: Node3D, cell: Texture2D, at: Vector3, size: Vector2, yaw: float, top := Vector3.ZERO) -> Decal:
+	var laid := Decal.new()
+	laid.name = "laid"
+	laid.texture_albedo = cell
+	laid.size = Vector3(size.x, 0.3, size.y)
+	laid.normal_fade = 0.6
+	laid.cull_mask = Layers.PAINTED_FLOOR
+	root.add_child(laid)
+	laid.position = at
+	if top != Vector3.ZERO:
+		# (Its image's down, local Z, away from `top`.)
+		var down := -top.normalized()
+		laid.basis = Basis(Vector3.UP.cross(down), Vector3.UP, down)
+	else:
+		laid.rotation.y = yaw
+	return laid
+
+
+## Candles stood at each of `places` on the floor (`per` to a place, clustered `spread` round it), burnt to their
+## own heights, their flames on their wicks, one light among them.
+func _candles_at(root: Node3D, kit: Dictionary, look: Material, places: Array, per: int, spread: float) -> void:
+	var wicks := []
+	var middle := Vector3.ZERO
+	var k := 0
+	for place: Vector3 in places:
+		for i in per:
+			var a := TAU * i / maxf(per, 1) + 0.7 * k
+			var at := place + Vector3(cos(a), 0.0, sin(a)) * spread * (0.4 + 0.6 * _hash(k * 1.3 + i))
+			var kind: String = STUBS[(k + i) % STUBS.size()]
+			var stub := SetKit.place(root, kit[kind], look, "candle_stub", at, _hash(k + i * 2.1) * TAU, false)
+			var top: float = stub.get_aabb().end.y
+			var wick := to_global(at + Vector3(0.0, top + 0.004, 0.0))
+			wicks.append([wick.x, wick.y, wick.z])
+			middle += wick
+		k += 1
+	middle /= wicks.size()
+	var flames := Vfx.system("candles")
+	flames.name = "flames"
+	root.add_child(flames)
+	Vfx.place(flames, middle, {"wicks": wicks})
+	Vfx.emit(flames, true)
+	for light: OmniLight3D in flames.find_children("*", "OmniLight3D", false, false):
+		lights.append(light)
+
+
+## A painted sheet cut into its cells (GRID x GRID), each its own texture (a decal draws a whole texture).
+func _sheet_cells(file: String, grid: int) -> Array[Texture2D]:
+	var cells: Array[Texture2D] = []
+	var sheet := SetKit.painted([file], SetKit.ATLAS_DIR, true)
+	if sheet == null:
+		return cells
+	var image := sheet.get_image()
+	if image.is_compressed():
+		image.decompress()
+	var size := image.get_width() / grid
+	for j in grid:
+		for i in grid:
+			cells.append(ImageTexture.create_from_image(image.get_region(Rect2i(i * size, j * size, size, size))))
+	return cells
+
+
 ## Whether `z` on the `side` wall lies within `margin` of one of its openings.
 func _by_opening_z(side: int, z: float, margin: float) -> bool:
 	for name in OPENINGS:
@@ -682,20 +826,9 @@ func _alcoves(side: int) -> Array:
 	return free
 
 
-## The graffiti sheet cut into its cells, each its own texture (a decal draws a whole texture).
+## The graffiti sheet cut into its cells.
 func _graffiti_cells() -> Array[Texture2D]:
-	var cells: Array[Texture2D] = []
-	var sheet := SetKit.painted([GRAFFITI], SetKit.ATLAS_DIR, true)
-	if sheet == null:
-		return cells
-	var image := sheet.get_image()
-	if image.is_compressed():
-		image.decompress()
-	var size := image.get_width() / GRAFFITI_GRID
-	for j in GRAFFITI_GRID:
-		for i in GRAFFITI_GRID:
-			cells.append(ImageTexture.create_from_image(image.get_region(Rect2i(i * size, j * size, size, size))))
-	return cells
+	return _sheet_cells(GRAFFITI, GRAFFITI_GRID)
 
 
 ## A graffito of `kind` sprayed on the `side` wall's tiles, its middle at (z, height), `size` across.
