@@ -34,6 +34,7 @@ func run_for(music: MenuMusic, seconds: float) -> void:
 func _ready() -> void:
 	clock_checks()
 	layer_checks()
+	jingle_checks()
 	await get_tree().process_frame
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failures else 0)
@@ -99,3 +100,39 @@ func layer_checks() -> void:
 	silent.step(0.1)
 	check(not silent.available and silent.layer_energy(&"base") == 0.0, "no score: silent, no errors")
 	silent.queue_free()
+
+func jingle_checks() -> void:
+	pos = 0.2
+	var music := make_music()
+	music.hover(1)
+	check(music.last_jingle.get("kind") == "hover" and music.last_jingle.get("button") == 1 and is_equal_approx(music.last_jingle.get("started_at_pos", -1.0), 0.2), "hover plays on the same frame")
+	check(music.last_jingle.get("chord") == "Dm", "hover is in the chord sounding now")
+	var first: int = music.last_jingle.variant
+	music.hover(1)
+	check(music.last_jingle.variant == 1 - first, "hovering again rotates the variant")
+	pos = 0.01
+	music.last_jingle = {}
+	music.press(0)
+	check(music.last_jingle.is_empty(), "a press waits for the next eighth")
+	while pos < 0.5 and music.last_jingle.is_empty():
+		pos += 1.0 / 60.0
+		music.step(1.0 / 60.0)
+	var started: float = music.last_jingle.get("started_at_pos", -1.0)
+	check(music.last_jingle.get("kind") == "press" and started >= 0.38462 and started - 0.38462 < 1.0 / 60.0, "a press lands on the eighth, at most a frame late")
+	pos = 5.0 * BAR + 0.1
+	music.press(2)
+	run_for(music, 0.5)
+	check(music.last_jingle.get("chord") == "Gm" and music.last_jingle.get("button") == 2, "a press in bar 5 plays in G minor")
+	pos = 1.0
+	var most := 0
+	for i in range(8):
+		music.hover(i % 4)
+		pos += 1.0 / 60.0
+		music.step(1.0 / 60.0)
+		most = maxi(most, music.hover_voices_playing())
+	check(most <= MenuMusic.HOVER_VOICES, "hover spam never stacks more than %d voices (saw %d)" % [MenuMusic.HOVER_VOICES, most])
+	music.press(3)
+	music.press(3)
+	run_for(music, 0.5)
+	check(music.press_voices_playing(3) <= MenuMusic.PRESS_VOICES, "one press voice per word")
+	music.queue_free()

@@ -78,6 +78,12 @@ func _ready() -> void:
 	await get_tree().process_frame
 	check(mat.get_shader_parameter("mix_ab") < 0.5, "art cross-fades, not re-wiped")
 	await get_tree().create_timer(0.7).timeout
+	for i in range(8):
+		menu.words[i % 4].mouse_entered.emit()
+		await get_tree().process_frame
+	await get_tree().create_timer(0.7).timeout
+	var last_word: float = menu.words[3].position.y + menu.words[3].size.y * 0.5
+	check(menu.selected == 3 and absf(menu.band.position.y + menu.band.size.y * 0.5 - last_word) < 2.0, "hover spam ends with the band on the last word")
 	var home := get_window().size
 	for screen in [Vector2i(2560, 1080), Vector2i(1024, 768)]:
 		get_window().size = screen

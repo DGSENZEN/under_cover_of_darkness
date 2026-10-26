@@ -28,6 +28,10 @@ const ACTIVITY_FALL := 0.12
 const LEAN := 4.0
 ## How fast a stem's gain moves toward its target (dB per second).
 const SLEW := 24.0
+## Jingles at once: hovers overall, presses per word; the oldest gives way.
+const HOVER_VOICES := 2
+const PRESS_VOICES := 1
+const GIVE_WAY := 0.03
 
 @export var score_json_path := SCORE_JSON
 var available := false
@@ -43,6 +47,13 @@ var _stream: AudioStreamSynchronized
 var _gains: Dictionary = {}
 var _idle := 0.0
 var _wake_from := -1
+## The last jingle started: {button, kind, chord, variant, started_at_pos}.
+var last_jingle := {}
+var _voices: Array[Dictionary] = []
+var _pending: Array[Dictionary] = []
+var _turns := {}
+var _streams := {}
+var _warned := {}
 
 func _ready() -> void:
 	Sfx._ensure_buses()
@@ -100,6 +111,78 @@ func step(delta: float) -> void:
 		var id := StringName(stem.id)
 		_gains[id] = move_toward(float(_gains[id]), stem_target_db(id), SLEW * delta)
 	_mix()
+	# Presses waiting for their eighth note (which may lie past the loop's end).
+	for press_at in _pending.duplicate():
+		var due: bool = pos >= float(press_at.at) and (not press_at.wraps or pos < float(press_at.from))
+		if due:
+			_pending.erase(press_at)
+			_play(int(press_at.button), "press", String(press_at.chord), pos)
+	_voices = _voices.filter(func(v): return is_instance_valid(v.player) and v.player.playing)
+
+## A word was hovered or focused: its instrument answers at once, in the chord now.
+func hover(button: int) -> void:
+	if not available or state == State.STARTING:
+		return
+	var pos := loop_position()
+	_play(button, "hover", _chord_at(pos), pos)
+
+## A word was pressed: its phrase starts on the next eighth note.
+func press(button: int) -> void:
+	if not available or state == State.STARTING:
+		return
+	var pos := loop_position()
+	var at := MenuClock.next_eighth(pos, float(score.bpm))
+	var loop := float(score.loop_seconds)
+	var wraps := at >= loop
+	if wraps:
+		at -= loop
+	_pending = _pending.filter(func(p): return int(p.button) != button)
+	_pending.append({"button": button, "at": at, "wraps": wraps, "from": pos, "chord": _chord_at(at)})
+
+func hover_voices_playing() -> int:
+	return _voices.filter(func(v): return v.kind == "hover" and not v.fading and v.player.playing).size()
+
+func press_voices_playing(button: int) -> int:
+	return _voices.filter(func(v): return v.kind == "press" and v.button == button and not v.fading and v.player.playing).size()
+
+func _chord_at(pos: float) -> String:
+	return MenuClock.chord_at(score.chords, MenuClock.bar_at(pos, float(score.bpm), int(score.beats_per_bar)), int(score.bars))
+
+func _play(button: int, kind: String, chord: String, pos: float) -> void:
+	var table: Dictionary = score.get("jingles", {}).get(str(button), {}).get(kind, {})
+	if table.is_empty():
+		return
+	if not table.has(chord):
+		if not _warned.has(chord):
+			_warned[chord] = true
+			push_warning("Menu score has no %s jingle in %s; using the loop's first chord." % [kind, chord])
+		chord = String(score.chords[0].name) if table.has(String(score.chords[0].name)) else String(table.keys()[0])
+	var paths: Array = table[chord]
+	var key := "%d|%s|%s" % [button, kind, chord]
+	var variant: int = int(_turns.get(key, 0)) % paths.size()
+	_turns[key] = variant + 1
+	var path := String(paths[variant])
+	if not _streams.has(path):
+		_streams[path] = load(path)
+	# Make room: hovers share HOVER_VOICES, each word has PRESS_VOICES presses.
+	var same := _voices.filter(func(v): return not v.fading and v.player.playing and v.kind == kind and (kind == "hover" or v.button == button))
+	var limit := HOVER_VOICES if kind == "hover" else PRESS_VOICES
+	while same.size() >= limit:
+		_give_way(same.pop_front())
+	var voice := AudioStreamPlayer.new()
+	voice.bus = player.bus
+	voice.stream = _streams[path]
+	add_child(voice)
+	voice.play()
+	voice.finished.connect(voice.queue_free)
+	_voices.append({"player": voice, "kind": kind, "button": button, "fading": false})
+	last_jingle = {"button": button, "kind": kind, "chord": chord, "variant": variant, "started_at_pos": pos}
+
+func _give_way(voice: Dictionary) -> void:
+	voice.fading = true
+	var fade := create_tween()
+	fade.tween_property(voice.player, "volume_db", OUT, GIVE_WAY)
+	fade.tween_callback(voice.player.queue_free)
 
 func set_state(next: State) -> void:
 	if not available or state == State.STARTING:
