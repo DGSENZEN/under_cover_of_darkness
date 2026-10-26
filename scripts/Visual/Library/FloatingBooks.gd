@@ -8,6 +8,10 @@ extends Node3D
 ## there shut a while, and rise to their ring again. Positions in the shop's frame.
 
 ## A book coming down changed what it does: k, what (descending, resting, rising, aloft), where it is (world).
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): its clock and the books on their way.
+const SAVED := ["_clock", "_rng"]
+
 signal moved(k: int, what: StringName, at: Vector3)
 
 const LIVE_HINGE := Vector3(-0.012, 0.0, 0.03)
@@ -195,3 +199,31 @@ func _fan(k: int) -> float:
 static func _between(a: Transform3D, b: Transform3D, t: float) -> Transform3D:
 	var q := a.basis.get_rotation_quaternion().slerp(b.basis.get_rotation_quaternion(), t)
 	return Transform3D(Basis(q), a.origin.lerp(b.origin, t))
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## Its clock and the books on their way, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	var moving := {}
+
+	for k in _transfer:
+		var t: Dictionary = _transfer[k]
+		moving[k] = {"state": t["state"], "clock": t.get("clock", 0.0), "wait": t.get("wait", 0.0), "rest_for": t.get("rest_for", 0.0), "from": t.get("from", Transform3D())}
+
+	state["transfer"] = moving
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	for k in state.get("transfer", {}):
+		if _transfer.has(k):
+			_transfer[k].merge(state["transfer"][k], true)

@@ -5,6 +5,10 @@ extends Node3D
 ## start, so two runs of a scene fly alike. `around` is the light they
 ## circle; without one they circle this node.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): its clock.
+const SAVED := ["_time"]
+
 @export var count := 3
 ## How far out they circle (m), how fast (turns a second), how high they rise and dip (m).
 @export var reach := 0.28
@@ -19,6 +23,11 @@ var _phases: Array[Vector3] = []
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	var look := StandardMaterial3D.new()
@@ -71,3 +80,13 @@ func _wings() -> ArrayMesh:
 		surface.add_vertex(Vector3(0, 0, 0.01))
 
 	return surface.commit()
+
+
+## Its clock, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

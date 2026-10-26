@@ -5,6 +5,10 @@ extends Node
 ## book's cover creaking and its leaves riffling as it starts to open, its clap shut. Every one-shot asks Focus first;
 ## what was played is counted with sound off too.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): what it is about to play and why.
+const SAVED := ["_clock", "_rng", "_pending", "_happenings", "_let", "_levels"]
+
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
 
@@ -153,3 +157,21 @@ func _play(sound: StringName, at: Vector3, db: float, ask := true) -> bool:
 		heard.pop_front()
 
 	return true
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## What it is about to play and why, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

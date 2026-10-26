@@ -10,6 +10,10 @@ extends Node3D
 ## its limit, those nearest them first and brightest, and the chalk glows with them; all of it dies down slowly
 ## when the words are thrown back.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): the ward's strength, glow and crawl.
+const SAVED := ["strength", "glow", "_crawl", "_was", "_sigil_time"]
+
 const Glyphs := preload("res://scripts/Visual/Library/LibraryGlyphs.gd")
 const WordChain := preload("res://scripts/Visual/Library/WordChain.gd")
 
@@ -353,3 +357,22 @@ func _smoothed(controls: Array) -> PackedVector3Array:
 			out.append(_frame * p1.cubic_interpolate(p2, p0, p3, float(i) / steps))
 	out.append(_frame * (controls[controls.size() - 1] as Vector3))
 	return out
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## The ward's strength, glow and crawl, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	_drawn = -1.0

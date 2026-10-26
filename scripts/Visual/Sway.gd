@@ -8,6 +8,10 @@ extends Node3D
 
 ## The widest swing (degrees), the slow swing's period (s), and the way the
 ## draught blows (the swing runs along it).
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): its clock.
+const SAVED := ["_time"]
+
 @export var amplitude := 2.5
 @export var period := 2.6
 @export var draught := Vector3(1.0, 0.0, 0.0)
@@ -46,3 +50,21 @@ func _seeded() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	_phase = rng.randf() * TAU
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## Its clock, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

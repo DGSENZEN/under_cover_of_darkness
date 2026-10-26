@@ -13,6 +13,10 @@ extends StaticBody3D
 ## head alone (the library's Yes is a thumbs-up, not a nod).
 ## Written for any later spirit too: nothing in it is the curandera's own.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): its light's state, at rest and in a line, and which way it faces.
+const SAVED := ["_now", "_drift", "_resting", "_line", "_speaking", "_talk_time", "_gesture", "_gesture_time", "_nod", "_facing", "_face_point", "_head"]
+
 const Humanoid := preload("res://scripts/Visual/Humanoid.gd")
 const DialogueBook := preload("res://scripts/Level/DialogueBook.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
@@ -112,6 +116,11 @@ var _wisp_material: ShaderMaterial
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	if character != "":
 		dialogue = DialogueBook.character(character)
 	elif type_id != "":
@@ -747,3 +756,20 @@ func _apply() -> void:
 
 	if _haze != null and man != null and is_inside_tree():
 		_haze.global_position = man.skeleton.global_transform * head
+
+
+## Its light's state, at rest and in a line, and which way it faces, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	if man != null:
+		state["man_yaw"] = man.rotation.y
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	if man != null and state.has("man_yaw"):
+		man.rotation.y = float(state["man_yaw"])
+
+	# What the shader was last sent is sent again.
+	_sent.clear()

@@ -9,6 +9,10 @@ extends Node3D
 ## (shadow_volume.gdshader: a decal could not darken the shop's painted light, which glows): from just before the
 ## case's front into its books, short of the wall behind; floors and tops turned away from it fade it out.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): where his shadow walks and waits.
+const SAVED := ["wait", "route", "along", "_going", "_seen", "_walked", "frame", "_alpha", "darkness", "_rng"]
+
 const Corridor := preload("res://scripts/Visual/OwnerlessShadow.gd")
 const IMAGE := "res://textures/painted/underground/librarian_shadow_walk.png"
 const WALK := "res://textures/painted/underground/librarian_shadow_walk.json"
@@ -210,3 +214,30 @@ func _angle_to(at: Vector3) -> float:
 		return 180.0
 	var look := -eye.global_transform.basis.z
 	return rad_to_deg(look.angle_to((at - eye.global_position).normalized()))
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## Where his shadow walks and waits, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	if _look != null:
+		_look.set_shader_parameter(&"frame", frame)
+		_look.set_shader_parameter(&"flip", _going > 0)
+		_look.set_shader_parameter(&"darkness", darkness)
+
+	if route >= 0 and route < routes.size():
+		place(routes[route], along)
+
+	_show()

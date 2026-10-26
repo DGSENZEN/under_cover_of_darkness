@@ -8,6 +8,10 @@ extends Node3D
 ## in file at a walking pace, facing their way; at the old stone each is eaten away into it. The ánimas
 ## gather to them as they pass (`animas`).
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): how far along her dead walk, and who has faded.
+const SAVED := ["walking", "_along", "_gone", "_next", "_rng"]
+
 const SHADE := preload("res://scripts/Visual/shade.gdshader")
 ## How far apart they walk (along the trail, m), how fast (m/s), how high their candles' flames
 ## stand over their hands, how bright the candles.
@@ -182,3 +186,24 @@ func _process(delta: float) -> void:
 	# The ánimas gather to the file while it walks.
 	if animas != null and is_instance_valid(animas):
 		animas.gather = figures[mini(figures.size() - 1, 2)] if walking else null
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## How far along her dead walk, and who has faded, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	state["presence"] = _looks.map(func(look): return look.get_shader_parameter(&"presence"))
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	for i in mini(_looks.size(), (state.get("presence", []) as Array).size()):
+		_set_all(i, &"presence", state["presence"][i])

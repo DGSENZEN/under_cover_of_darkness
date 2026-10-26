@@ -7,6 +7,10 @@ extends Node3D
 ## its pages to +x, up y. What each kind does once open (the novels' words, the studies' spectres, the spells'
 ## chains) is the effects' (Part 2); here they share one look.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): how open it is and wants to be.
+const SAVED := ["open", "wanted", "_was_open", "_clock"]
+
 signal opening(book: LiveBook)
 signal opened(book: LiveBook)
 signal closed(book: LiveBook)
@@ -143,3 +147,22 @@ func _pose() -> void:
 		var pivot := _leaves[i].get_parent() as Node3D
 		pivot.rotation.z = PI * t
 		_leaves[i].visible = t > 0.02 and t < 0.98
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## How open it is and wants to be, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	_pose()

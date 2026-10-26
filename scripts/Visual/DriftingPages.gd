@@ -8,6 +8,10 @@ extends Node3D
 
 ## How often they come (s), how many at once, how long each lasts (s), how far out of the arch they tumble into the
 ## walk (its near and far edges, z), how much of the wind they take, the most there may be at once.
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): when the next page goes (the pages in flight are stage 2's).
+const SAVED := ["_next", "released", "_rng"]
+
 const COUNT := Vector2i(1, 3)
 const LIFE := Vector2(4.0, 7.0)
 const WALK := Vector2(0.5, 3.0)
@@ -45,6 +49,11 @@ var _mesh: BoxMesh
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_rng.seed = seed
 	_next = _rng.randf_range(every.x, every.y)
 	_mesh = BoxMesh.new()
@@ -129,3 +138,13 @@ func _retire(page: MeshInstance3D) -> void:
 	pages.erase(page)
 	_state.erase(page)
 	page.queue_free()
+
+
+## When the next page goes (the pages in flight are stage 2's), for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

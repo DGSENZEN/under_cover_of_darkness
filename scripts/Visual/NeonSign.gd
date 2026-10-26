@@ -1,6 +1,10 @@
 class_name NeonSign
 extends Node3D
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): its clock, ticks and zap.
+const SAVED := ["_time", "ticks", "_was_lit", "_last_tick", "_zap"]
+
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
 ## A neon sign: its tube (the first MeshInstance3D child) drawn with
@@ -58,6 +62,11 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	for child in get_children():
 		if child is MeshInstance3D and tube == null:
 			tube = child
@@ -170,3 +179,13 @@ func _apply() -> void:
 
 	if _tube_material != null:
 		_tube_material.set_shader_parameter("flicker", now)
+
+
+## Its clock, ticks and zap, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

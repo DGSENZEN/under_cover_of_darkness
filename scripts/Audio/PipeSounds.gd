@@ -5,6 +5,10 @@ extends Node3D
 ## what happens at one place on one (a gulp, a valve's breath, the weeping joint's drops, the gas line's tick).
 ## Places in this node's frame. Every one-shot asks Focus first; what was played is counted with sound off too.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): when each knock and event comes next, how loud each run is.
+const SAVED := ["_clock", "_look_in", "_rng", "_trains", "_let", "_strikes"]
+
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
 
@@ -41,6 +45,11 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_rng.seed = seed
 
 
@@ -196,3 +205,28 @@ func _play(sound: StringName, at: Vector3, db: float, pitch: float, ask := true)
 		heard.pop_front()
 
 	return true
+
+
+## When each knock and event comes next, how loud each run is, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	state["knocks"] = _knocks.map(func(k): return k["next"])
+	state["events"] = _events.map(func(e): return e["next"])
+	state["runs"] = _runs.map(func(r): return [r.get("level", 0.0), r.get("target", 0.0), r.get("cutoff", 0.0), r.get("cutoff_to", 0.0)])
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	for i in mini(_knocks.size(), (state.get("knocks", []) as Array).size()):
+		_knocks[i]["next"] = state["knocks"][i]
+
+	for i in mini(_events.size(), (state.get("events", []) as Array).size()):
+		_events[i]["next"] = state["events"][i]
+
+	for i in mini(_runs.size(), (state.get("runs", []) as Array).size()):
+		var kept: Array = state["runs"][i]
+		_runs[i]["level"] = kept[0]
+		_runs[i]["target"] = kept[1]
+		_runs[i]["cutoff"] = kept[2]
+		_runs[i]["cutoff_to"] = kept[3]

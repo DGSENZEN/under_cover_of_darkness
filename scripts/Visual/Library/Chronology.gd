@@ -6,6 +6,10 @@ extends Node3D
 ## heart, sand climbing from the pages through a waist into the rings, and a ghost leaf caught mid-turn at the
 ## gutter that yellows and crumbles, then grows young again, the hands running backward while it does. It stands upright in the room whatever the pages' pitch, scaled to the room above.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): the hand's angle.
+const SAVED := ["_hand_angle", "_last_time"]
+
 const MeshVfx := preload("res://scripts/Visual/MeshVfx.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 
@@ -260,3 +264,21 @@ static func _leaf(size: Vector2, rows := 8) -> ArrayMesh:
 		MeshVfx._quad(st, corners, uvs)
 	st.generate_normals()
 	return st.commit()
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## The hand's angle, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

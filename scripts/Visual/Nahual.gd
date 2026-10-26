@@ -8,6 +8,10 @@ extends Node3D
 
 ## Where the head turns on the body, where its eyes are on the head (each, and between them), and
 ## its body's middle (this node's axes: the dog lies along +X, the kit's frame turned Godot's way).
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): where it lies or whether it is away, and how much it shows.
+const SAVED := ["away", "visible", "presence", "_burst", "_vanishing", "_seen_time", "_unseen_time", "_watched", "_back_in", "_rng", "position", "rotation"]
+
 const NECK := Vector3(0.88, 0.64, 0.0)
 const EYES := Vector3(0.15, 0.075, 0.0)
 const EYE := Vector3(0.165, 0.075, 0.052)
@@ -360,3 +364,35 @@ func _come_back() -> void:
 	_show()
 	solid.process_mode = Node.PROCESS_MODE_INHERIT
 	solid.collision_layer = 1
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## Where it lies or whether it is away, and how much it shows, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	if head != null:
+		state["head"] = Vector2(head.rotation.y, head.rotation.z)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	if head != null and state.has("head"):
+		head.rotation.y = (state["head"] as Vector2).x
+		head.rotation.z = (state["head"] as Vector2).y
+
+	if solid != null:
+		solid.process_mode = Node.PROCESS_MODE_DISABLED if away else Node.PROCESS_MODE_INHERIT
+		solid.collision_layer = 0 if away else 1
+
+	if not away:
+		_show()
+
+	reset_physics_interpolation()

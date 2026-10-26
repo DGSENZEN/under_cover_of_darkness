@@ -6,6 +6,10 @@ extends Node3D
 ## Its points are in the world; the node itself stays at the origin of whatever holds it.
 
 ## How many at once; how long between one and the next (s); how fast one goes (m/s), and its least and most time.
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): the wisps in flight and the next.
+const SAVED := ["next_in", "_rng", "flights"]
+
 const AT_ONCE := 3
 const EVERY := Vector2(4.0, 11.0)
 const SPEED := 2.4
@@ -40,6 +44,11 @@ var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_rng.seed = seed
 	next_in = _rng.randf_range(EVERY.x, EVERY.y)
 	for k in AT_ONCE:
@@ -119,3 +128,13 @@ func _at(w: Dictionary, t: float) -> Vector3:
 	# (Its curl widest midway, gathered in at both ends.)
 	var curl := (side * cos(a) + Vector3.UP * sin(a)) * CURL * sin(PI * t)
 	return line + up + curl
+
+
+## The wisps in flight and the next, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

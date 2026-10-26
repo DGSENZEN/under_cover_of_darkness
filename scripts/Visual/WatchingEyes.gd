@@ -5,6 +5,10 @@ extends Node3D
 ## The node stands where the eyes look out from, its -Z out through the grating.
 
 ## How far apart the eyes are, how big, their colour (the nahual's ember) and glow; their light.
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): how open the eyes are and when they next blink.
+const SAVED := ["open", "_want", "_next", "_blink_in", "_blink", "_rng"]
+
 const APART := 0.13
 const SIZE := 0.022
 const EMBER := Color(1.0, 0.36, 0.08)
@@ -39,6 +43,11 @@ var _blink := 0.0
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_rng.seed = seed
 	_next = _rng.randf_range(SHUT_FOR.x, SHUT_FOR.y)
 	_blink_in = _rng.randf_range(BLINK_EVERY.x, BLINK_EVERY.y)
@@ -114,3 +123,13 @@ func _show() -> void:
 		eye.visible = lid > 0.02
 		eye.scale = Vector3(1.0, maxf(lid, 0.02), 1.0)
 	light.light_energy = LIGHT * open
+
+
+## How open the eyes are and when they next blink, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

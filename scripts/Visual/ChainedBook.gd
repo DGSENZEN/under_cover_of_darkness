@@ -6,6 +6,10 @@ extends Node3D
 ## come with Part 2.)
 
 ## How often it strains (s), for how long, how far its cover lifts at most (degrees).
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): its strain on the chain.
+const SAVED := ["_next", "_clock", "strain", "angle", "_rng"]
+
 const STRAIN_EVERY := Vector2(10.0, 20.0)
 const STRAIN_FOR := 2.0
 const LIFT_DEG := 20.0
@@ -35,6 +39,11 @@ var _chain_rest := Transform3D.IDENTITY
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_rng.seed = seed
 	_next = _rng.randf_range(STRAIN_EVERY.x, STRAIN_EVERY.y)
 	if cover == null:
@@ -114,3 +123,13 @@ func _swing() -> Basis:
 	var k := now.length() / maxf(was.length(), 1e-6) - 1.0
 	var taut := Basis(Vector3(1, 0, 0) + d * d.x * k, Vector3(0, 1, 0) + d * d.y * k, Vector3(0, 0, 1) + d * d.z * k)
 	return taut * turn
+
+
+## Its strain on the chain, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

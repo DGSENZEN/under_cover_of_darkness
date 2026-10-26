@@ -2,6 +2,10 @@ extends Node3D
 ## One book's effects, attached to its actual page surface and orientation.
 ## Shape families are added here as they pass their visual review.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): its clock.
+const SAVED := ["_clock"]
+
 const BookRadiance := preload("res://scripts/Visual/Library/BookRadiance.gd")
 ## Each section's projection over its studies, as each family passes its review (the spellbooks' wards and the
 ## novels' characters are their own, Task 4).
@@ -103,3 +107,21 @@ func page_extent() -> Vector2:
 		return Vector2(0.22, 0.3)
 	var size := _page.get_aabb().size * _page.global_basis.get_scale()
 	return Vector2(size.x, size.z)
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## Its clock, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

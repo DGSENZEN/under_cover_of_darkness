@@ -6,6 +6,10 @@ extends Node3D
 ## start and are gone at its end, fading at both, and come again; a loop runs round and round. Its text and atlas can
 ## change at any time (the user's own words for the invented script).
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): where its words have flowed to.
+const SAVED := ["_flow", "_clock", "presence", "weights"]
+
 const Glyphs := preload("res://scripts/Visual/Library/LibraryGlyphs.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const SHADER := preload("res://scripts/Visual/Library/library_glyph.gdshader")
@@ -239,3 +243,23 @@ func _bounds() -> AABB:
 	for p in path:
 		box = box.expand(p)
 	return box.grow(size)
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## Where its words have flowed to, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	set_presence(presence)
+	_lay()

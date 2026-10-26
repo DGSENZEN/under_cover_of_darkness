@@ -7,6 +7,10 @@ extends Node3D
 ## Its frame is the plan's moved to PLAN_ORIGIN: x across the street (the west wall at -HALF_W, the east at +HALF_W),
 ## z along it (the stretch from -HALF_L, plan z 55, to +HALF_L, plan z 95), y up from the floor.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): the hanging pieces' clock.
+const SAVED := ["_swing_clock"]
+
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const PLAYER := preload("res://Player.tscn")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
@@ -230,6 +234,11 @@ var happened := {}
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_shell()
 	_shell_dressing()
 	_stalls()
@@ -1129,3 +1138,13 @@ func _box(lo: Vector3, hi: Vector3, kind: String) -> MeshInstance3D:
 	body.add_child(shape)
 	mesh.add_child(body)
 	return mesh
+
+
+## The hanging pieces' clock, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

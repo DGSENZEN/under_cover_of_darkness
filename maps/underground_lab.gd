@@ -14,6 +14,10 @@ extends Node3D
 ## stall.png before the painter's stall_base.png); the bay never reads the
 ## user's local brush sheets.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): the bay's clock, its next spark and the rattles heard.
+const SAVED := ["_clock", "next_spark", "_sparks", "rattles"]
+
 const PLAYER := preload("res://Player.tscn")
 const Vfx := preload("res://scripts/Level/Vfx.gd")
 const FireParticles := preload("res://scripts/Visual/Lights/FireParticles.gd")
@@ -241,6 +245,11 @@ var hushed := false
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	reset_physics_interpolation.call_deferred()
 	if not embedded:
 		_environment()
@@ -1502,3 +1511,13 @@ func _name_keys() -> void:
 
 	keys_label.text = "F1 work lights %s  ·  F2 form light %s  ·  F3 decals %s  ·  F4 a train  ·  F5 the dark train  ·  F9 the procession" % [
 		"ON" if work_lights[0].visible else "off", "ON" if _form else "off", "ON" if decals[0].visible else "off"]
+
+
+## The bay's clock, its next spark and the rattles heard, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

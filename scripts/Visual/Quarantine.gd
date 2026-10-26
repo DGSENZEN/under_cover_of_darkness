@@ -4,6 +4,10 @@ extends Node3D
 ## waiting to be exorcised: each stirs now and then, a small jolt on its shelf, each on its own clock, never in step.
 
 ## How often each twitches (s), how long a jolt lasts, how far it turns (degrees) and lifts (m).
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): when each book next jolts.
+const SAVED := ["_age", "_next", "_clock", "_axis", "jolts", "together", "_rng"]
+
 const EVERY := Vector2(6.0, 20.0)
 const JOLT := 0.9
 const TURN_DEG := 6.5
@@ -26,6 +30,11 @@ var _age := 0.0
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_rng.seed = seed
 
 	for book in books:
@@ -77,3 +86,13 @@ func _process(delta: float) -> void:
 
 	if began >= 2:
 		together += 1
+
+
+## When each book next jolts, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

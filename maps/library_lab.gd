@@ -6,6 +6,8 @@ extends Node3D
 ##   F2  form light: everything neutral grey under one white light, to judge shape
 ##   F3  decals (his chalk ward and its salt) on / off
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+
 const PLAYER := preload("res://Player.tscn")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
@@ -186,6 +188,11 @@ var _inspection_overrides := {}
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	reset_physics_interpolation.call_deferred()
 	if standalone:
 		_environment()
@@ -865,3 +872,16 @@ func _box(lo: Vector3, hi: Vector3, material: Material, node_name: String) -> vo
 	shape.shape = solid
 	body.add_child(shape)
 	mesh.add_child(body)
+
+
+## The armillary's turn, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := {}
+	if armillary != null:
+		state["armillary"] = armillary.rotation.y
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	if armillary != null and state.has("armillary"):
+		armillary.rotation.y = float(state["armillary"])

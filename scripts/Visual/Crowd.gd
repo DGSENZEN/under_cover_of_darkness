@@ -5,6 +5,10 @@ extends Node3D
 ## and then a cough, a laugh, a sigh from somewhere down the corridor. Heard,
 ## not seen, until the people themselves come. Seeded, on game time.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): where each walker is.
+const SAVED := ["_rng", "next_voice", "steps_played", "voices_played"]
+
 const BED := "res://audio/ambience/crowd_murmur.wav"
 const STEP := "res://audio/sfx/step_tile_%d.wav"
 const STEPS := 8
@@ -41,6 +45,11 @@ var _voice_player: AudioStreamPlayer3D
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_rng.seed = seed
 
 	for k in STEPS:
@@ -141,3 +150,16 @@ func _new_walk(w: Dictionary) -> void:
 	w["pace"] = _rng.randf_range(PACE.x, PACE.y)
 	w["wait"] = _rng.randf_range(WAIT.x, WAIT.y)
 	w["stride"] = 0.0
+
+
+## Where each walker is, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	state["walkers"] = walkers.map(func(w): return {"x": w["x"], "z": w["z"], "dir": w["dir"], "pace": w["pace"], "wait": w["wait"], "stride": w["stride"]})
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	for i in mini(walkers.size(), (state.get("walkers", []) as Array).size()):
+		walkers[i].merge(state["walkers"][i], true)

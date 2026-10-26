@@ -8,6 +8,10 @@ extends Node3D
 ## now and then the crossbow looses a bolt of fire, and the beast flinches, frays and gathers itself again. The lechuza
 ## and the chupacabra join it once their own models pass review. Upright in the room, scaled to the room above.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): the shots and the beast's hit.
+const SAVED := ["_hit_at", "_last_shot", "shots"]
+
 const MeshVfx := preload("res://scripts/Visual/MeshVfx.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const Alchemy := preload("res://scripts/Visual/Library/Alchemy.gd")
@@ -274,3 +278,21 @@ func _geometry(label: String, mesh: Mesh, look: Material, parent: Node3D) -> Mes
 	part.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(part)
 	return part
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## The shots and the beast's hit, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

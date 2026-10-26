@@ -6,6 +6,10 @@ extends Node3D
 ## emptied platform. Walked into, a shade comes apart at once.
 ## Its routes are in its parent's frame, on the floor.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): when each route next sends a walker (the walkers in flight are stage 2's).
+const SAVED := ["_next", "_queued", "started", "scattered", "_rng"]
+
 const Silhouette := preload("res://scripts/Visual/Silhouette.gd")
 ## The walkers it is made of (the loops' sheet).
 const WALKS := ["walk_coat", "walk_rebozo", "walk_carry", "walk_jacket"]
@@ -39,6 +43,11 @@ var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_rng.seed = 17
 	for route in routes:
 		_next[route["name"]] = _rng.randf_range(0.0, float(route["every"].y) * 0.5)
@@ -143,3 +152,13 @@ func _length(points: PackedVector3Array) -> float:
 	for i in points.size() - 1:
 		length += points[i].distance_to(points[i + 1])
 	return length
+
+
+## When each route next sends a walker (the walkers in flight are stage 2's), for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

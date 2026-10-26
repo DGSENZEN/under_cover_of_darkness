@@ -6,6 +6,10 @@ extends Node3D
 ## Its wall runs along X at `wall_z`; it crosses between `from_x` and `to_x` (all in its parent's frame: it stands at
 ## its parent's origin, wherever that is set).
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): where the shadow is and when it next goes.
+const SAVED := ["_next", "_x", "_going", "_seen", "_rng"]
+
 const IMAGE := "res://textures/painted/underground/shadow_figure.png"
 ## Its size on the wall (m: wide, tall, and how far the decal reaches into the wall), how fast it
 ## crosses (m/s), how long between crossings (s).
@@ -37,6 +41,11 @@ var _seen := false
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_rng.seed = seed
 	_next = _rng.randf_range(EVERY.x, EVERY.y)
 	decal = Decal.new()
@@ -112,3 +121,19 @@ func _looked_at(at: Vector3) -> bool:
 func _corner_of_eye(at: Vector3) -> bool:
 	var a := _angle_to(at)
 	return a >= LOOKED and a < SEEN_FROM
+
+
+## Where the shadow is and when it next goes, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	if decal != null:
+		state["decal"] = [decal.visible, decal.position.x, decal.modulate.a]
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	if decal != null and state.has("decal"):
+		decal.visible = state["decal"][0]
+		decal.position.x = state["decal"][1]
+		decal.modulate.a = state["decal"][2]

@@ -28,6 +28,10 @@ extends Node3D
 ## at the foot of its face, local +Z out of the wall (its slots at `lanes` heights).
 
 ## Under the grate: how deep their wrists are, how far along the slots they wander.
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): the souls, their paths and voices, and the hands' reach.
+const SAVED := ["_time", "presence", "spoken", "_next_rise", "_next_call", "_trail_clock", "_living_was", "_still_for", "_souls", "_paths", "_rng", "_traits", "_voice_rng"]
+
 const HOME := Vector3(0.0, -0.24, 0.0)
 const SLIDE := 0.17
 ## How far from the drain they can go (m), and where a climbing hand holds (its wrist at the grate).
@@ -236,6 +240,11 @@ static var _voice_frame := -1
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	_rng.seed = seed
 	# (Their sizes and tempers from a draw of their own, so the rest of their lives go as they did without them.)
 	_traits.seed = seed * 7919 + 13
@@ -1134,3 +1143,31 @@ func _build_glow() -> void:
 		plane.orientation = PlaneMesh.FACE_Z
 		sheet.position = Vector3(0.0, middle, -0.03)
 		glow.position = Vector3(0.0, middle, BEHIND + 0.05)
+
+
+## The souls, their paths and voices, and the hands' reach, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	state["voices"] = {"until": _voices_until.duplicate(), "clock": _voice_clock, "frame": _voice_frame}
+	var hands := {}
+
+	for child in get_children():
+		if String(child.name).begins_with("anima_"):
+			hands[String(child.name)] = (child as Node3D).quaternion
+
+	state["hands"] = hands
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	if state.has("voices"):
+		_voices_until.assign(state["voices"]["until"])
+		_voice_clock = float(state["voices"]["clock"])
+		_voice_frame = int(state["voices"]["frame"])
+
+	for hand_name in state.get("hands", {}):
+		var hand := get_node_or_null(NodePath(hand_name)) as Node3D
+
+		if hand != null:
+			hand.quaternion = state["hands"][hand_name]

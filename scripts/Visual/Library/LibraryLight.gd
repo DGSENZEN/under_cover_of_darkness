@@ -2,6 +2,10 @@ extends Node3D
 ## The room's real light comes from its books. These lights intentionally
 ## illuminate the lightgem probe; transient spectre flashes use fx_light instead.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): its clock.
+const SAVED := ["_clock"]
+
 const COLOURS := {
 	&"chronology": Color("e5ae48"), &"necromancy": Color("b2ea3a"),
 	&"alchemy": Color("ef8b40"), &"metaphysics": Color("a486ed"), &"hunting": Color("d55b55"),
@@ -236,3 +240,21 @@ func _glow(look: ShaderMaterial, amount: float, lift := 1.0) -> void:
 func _uniform(look: ShaderMaterial, key: String, fallback: Variant) -> Variant:
 	var value: Variant = look.get_shader_parameter(key)
 	return fallback if value == null else value
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## Its clock, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

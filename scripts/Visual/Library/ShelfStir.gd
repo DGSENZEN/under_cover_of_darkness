@@ -10,6 +10,10 @@ extends Node3D
 
 ## How long a board must have gone unseen before it may change (s); how often the stirs come (s); how often it looks
 ## at which boards are seen (s); how soon it tries again when nothing could change.
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): what it has changed on the shelves, and when it may next.
+const SAVED := ["changes", "last_kind", "_seen", "_clock", "_look_in", "_next", "_rng"]
+
 const UNSEEN := 5.0
 const EVERY := Vector2(20.0, 40.0)
 const LOOK := 0.1
@@ -299,3 +303,31 @@ func _valid(spot: Dictionary, entries: Array, moves: Array) -> bool:
 		if k > 0 and box.position.x < sorted[k - 1].end.x + 0.001:
 			return false
 	return true
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## What it has changed on the shelves, and when it may next, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	if _lab != null:
+		state["layout"] = _lab.book_layout.map(func(e): return [e["local"], e["box"], e["pose"]])
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	if _lab != null and state.has("layout") and (state["layout"] as Array).size() == _lab.book_layout.size():
+		for i in _lab.book_layout.size():
+			var entry: Dictionary = _lab.book_layout[i]
+			var kept: Array = state["layout"][i]
+			entry["local"] = kept[0]
+			entry["box"] = kept[1]
+			entry["pose"] = kept[2]
+			(_lab.book_draws[entry["draw"]] as MultiMeshInstance3D).multimesh.set_instance_transform(entry["instance"], _frames[entry["spot"]] * (kept[0] as Transform3D))
