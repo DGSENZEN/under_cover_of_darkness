@@ -8,7 +8,7 @@ This is piece 1 of four, in order:
 3. archetype screen
 4. official settings and the in-game pause menu
 
-It builds on `2026-10-25-main-menu-overhaul-design.md` and replaces that document's band selection. Approved mockup (local only): `.superpowers/brainstorm/27138-1792977562/content/menu-look-final.html`.
+It builds on `2026-10-25-main-menu-overhaul-design.md` and replaces that document's band selection. Approved mockup (local only): `.superpowers/brainstorm/27138-1792977562/content/menu-look-final-v2.html`.
 
 ## Why
 
@@ -18,17 +18,15 @@ The user played the menu and found it janky in its motion and timing. The select
 
 **Type: deco title, book chapters ("Mix 2").**
 - **Title:** "UNDER COVER / OF DARKNESS" in wide deco capitals (Poiret One, letter-spacing about 0.32 em), with a gold hairline under it (`d9b46a` fading to clear). Nothing else under the title: no tagline and no captions anywhere.
-- **Choices:** book small capitals (Cormorant SC 500), each led by a gold italic roman numeral (Cormorant Garamond italic): I. New Game, II. Continue, III. Settings, IV. Lore, V. Quit.
+- **Choices:** book small capitals (Cormorant SC 500): New Game, Continue, Settings, Lore, Quit. There are no numerals and no markers.
 - **Unselected choices:** dim, at about 50% opacity.
 - **The selected choice:**
   - turns white
   - steps about 10 design px to the right
-  - its numeral turns full gold
-  - a small gold diamond appears to its left
   - a soft dark shadow around the letters keeps it readable over any painting
 
 **Selection: one wash per word.**
-- **The wash:** each word has its own wash, about 512×200 design px. It holds that word's painting at full colour and brushwork, with no desaturation, darkening or dark gradient.
+- **The wash:** each word has its own wash, about 440×170 design px. It holds that word's painting at full colour and brushwork, with no desaturation, darkening or dark gradient.
 - **Placement:** the wash sits right around the word, starting a little left of it.
 - **Edges:** torn and dry-brushed at top and bottom, fading softly on every side, most of all to the left, where it melts into the city.
 - **Strength:** about 92% opacity.
@@ -43,8 +41,7 @@ This is the fix for the jank.
 
 - **Easing:** one ease-out curve everywhere: cubic-bezier(.22, 1, .36, 1), Godot's `TRANS_QUINT` + `EASE_OUT`.
 - **Hover/focus:**
-  - the word's colour, step and numeral answer within 0.2 s
-  - the diamond pops in over 0.3 s with a slight overshoot (`TRANS_BACK`)
+  - the word's colour and step answer within 0.2 s
   - the wash blooms over 0.6 s, from 94% scale and offset about 10 px left to full
 - **Leaving a word:** its wash fades over 0.4 s while the next word's blooms, so the two overlap with no snap.
 - **Press:** a 0.12 s press-in on the word (scale to 0.97 and back), then the action.
