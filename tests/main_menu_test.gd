@@ -146,7 +146,8 @@ func _ready() -> void:
 	menu.close_page()
 	await get_tree().create_timer(0.7).timeout
 	check(menu.page_open == -1 and menu.words[2].has_focus(), "closing a page returns keyboard focus to its word")
-	await get_tree().process_frame
+	menu.select(3)
+	await get_tree().create_timer(0.1).timeout
 	var art_last: float = menu.band.art_left()
 	var widest := 0.0
 	menu.open_page(3)
@@ -161,7 +162,10 @@ func _ready() -> void:
 	check(float((menu.background.material as ShaderMaterial).get_shader_parameter("fx")) > 0.5, "the occult layer stirs the city while Lore is open")
 	var shown: Rect2 = MainMenu.visible_design_rect(get_viewport().get_visible_rect().size)
 	check(menu.band.page and menu.band.band_rect().is_equal_approx(Rect2(530, shown.position.y, shown.end.x - 530, shown.size.y)), "Lore spreads its band over the right of the screen (%s on %s)" % [menu.band.band_rect(), get_viewport().get_visible_rect().size])
-	check(is_equal_approx(menu.band.material.get_shader_parameter("page"), 1.0), "the band's edges turn into a page's")
+	check(menu.band.modulate.a > 0.99 and menu.washes_showing() == 0, "a page shows only its own painting, the word's wash fades")
+	check(menu.pages.title_label.get_theme_font("font").get_font_name().contains("Cormorant SC") and menu.pages.body_label.get_theme_font("font").get_font_name().contains("Cormorant Garamond"), "pages are set like a book")
+	check(menu.pages.find_child("Hairline", true, false) is TextureRect, "a gold hairline under the page's heading")
+	check(menu.band.material.shader.resource_path.ends_with("menu_page.gdshader") and not menu.band.material.shader.code.contains("screen_tex"), "the page's painting is full colour, with no darkened city behind it")
 	for screen in [tall, ultra, MainMenu.visible_design_rect(Vector2(1024, 768))]:
 		menu.band.set_screen(screen)
 		var page_rect: Rect2 = menu.band.band_rect()
@@ -173,6 +177,7 @@ func _ready() -> void:
 	await get_tree().create_timer(0.7).timeout
 	check(menu.page_open == -1 and menu.words[3].has_focus() and not menu.band.page, "Escape folds the page back to its word")
 	check(absf(menu.words[0].modulate.a - MenuWord.DIM) < 0.01, "words come back when the page closes")
+	check(menu.words[3].wash.level > 0.99 and menu.washes_showing() == 1, "and the word's own painting returns")
 	check(ResourceLoader.exists(menu.game_scene), "New Game points at an existing playable scene")
 	var starts := [0]
 	menu.music.started.connect(func(): starts[0] += 1)

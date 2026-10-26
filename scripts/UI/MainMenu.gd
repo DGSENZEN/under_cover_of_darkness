@@ -215,9 +215,12 @@ func open_page(index: int, message := "") -> void:
 		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if word.index != index:
 			word.set_page_dim(true)
+		# The page's own painting takes over from the words'.
+		if word.wash:
+			word.wash.fade()
 	if is_instance_valid(music) and index > 0:
 		music.set_state([MenuMusic.State.BROWSING, MenuMusic.State.CONTINUE, MenuMusic.State.SETTINGS, MenuMusic.State.LORE][index])
-	await get_tree().create_timer(MenuBand.GLIDE).timeout
+	await get_tree().create_timer(MenuMotion.ANSWER).timeout
 	if turn == _page_turn and page_open == index:
 		pages.show_page(index, NAMES[index], COLOURS[index], message)
 

@@ -4,7 +4,8 @@ extends Control
 ## Lore's text, the Settings controls painted like the band, Continue's line.
 const Settings := preload("res://scripts/UI/Settings.gd")
 const INK := Color("f4e6cc")
-const AREA := Rect2(600, 110, 560, 680)
+const GOLD := Color("d9b46a")
+const AREA := Rect2(620, 270, 560, 560)
 const CONTINUE_LINE := "No saved game yet. Choose New Game to begin."
 
 var title_label: Label
@@ -42,16 +43,31 @@ func build(font: Font, lore: String) -> void:
 	column.add_theme_constant_override("separation", 22)
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(column)
-	title_label = _label(font, 44, INK)
+	title_label = _label(MenuType.choice(), 52, INK)
 	column.add_child(title_label)
-	body_label = _label(font, 22, Color("e2d8c6"))
+	# A gold hairline under the heading, fading to nothing.
+	var fade := Gradient.new()
+	fade.colors = PackedColorArray([GOLD, Color(GOLD, 0.0)])
+	var rule := GradientTexture2D.new()
+	rule.gradient = fade
+	rule.width = 256
+	rule.height = 1
+	var hairline := TextureRect.new()
+	hairline.name = "Hairline"
+	hairline.texture = rule
+	hairline.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	hairline.custom_minimum_size = Vector2(220, 1.5)
+	hairline.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	hairline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(hairline)
+	body_label = _label(MenuType.body(), 22, Color("e2d8c6"))
 	body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body_label.custom_minimum_size.x = AREA.size.x
 	column.add_child(body_label)
 	_settings = VBoxContainer.new()
 	_settings.add_theme_constant_override("separation", 18)
 	column.add_child(_settings)
-	_settings.add_child(_label(font, 24, INK, "Master volume"))
+	_settings.add_child(_label(MenuType.body(), 26, INK, "Master volume"))
 	volume = HSlider.new()
 	volume.name = "Volume"
 	volume.max_value = 1.0
@@ -64,8 +80,8 @@ func build(font: Font, lore: String) -> void:
 	marks = CheckButton.new()
 	marks.text = "Awareness marks above guards"
 	marks.button_pressed = Settings.awareness_marks()
-	marks.add_theme_font_override("font", font)
-	marks.add_theme_font_size_override("font_size", 24)
+	marks.add_theme_font_override("font", MenuType.body())
+	marks.add_theme_font_size_override("font_size", 26)
 	for state in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color", "font_hover_pressed_color"]:
 		marks.add_theme_color_override(state, INK)
 	for state in ["normal", "hover", "pressed", "focus", "hover_pressed"]:
