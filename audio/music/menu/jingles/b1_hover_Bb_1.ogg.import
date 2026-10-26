@@ -2,10 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
+uid="uid://c27tfoumuck4p"
+path="res://.godot/imported/b1_hover_Bb_1.ogg-4c91940c3021fda98296d9d71b23883f.oggvorbisstr"
 
 [deps]
 
 source_file="res://audio/music/menu/jingles/b1_hover_Bb_1.ogg"
+dest_files=["res://.godot/imported/b1_hover_Bb_1.ogg-4c91940c3021fda98296d9d71b23883f.oggvorbisstr"]
 
 [params]
 

@@ -2,10 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
+uid="uid://1urmnvnitqd0"
+path="res://.godot/imported/b3_press_Bb_1.ogg-e565a229d2cde0f8029771a855e7ceb4.oggvorbisstr"
 
 [deps]
 
 source_file="res://audio/music/menu/jingles/b3_press_Bb_1.ogg"
+dest_files=["res://.godot/imported/b3_press_Bb_1.ogg-e565a229d2cde0f8029771a855e7ceb4.oggvorbisstr"]
 
 [params]
 

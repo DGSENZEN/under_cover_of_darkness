@@ -12,16 +12,16 @@
       "name": "Dm"
     },
     {
+      "bar": 2,
+      "name": "Bb"
+    },
+    {
       "bar": 4,
       "name": "Gm"
     },
     {
       "bar": 6,
       "name": "Eb"
-    },
-    {
-      "bar": 7,
-      "name": "Dm"
     }
   ],
   "stems": [
@@ -57,6 +57,10 @@
           "res://audio/music/menu/jingles/b0_hover_Dm_0.ogg",
           "res://audio/music/menu/jingles/b0_hover_Dm_1.ogg"
         ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b0_hover_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b0_hover_Bb_1.ogg"
+        ],
         "Gm": [
           "res://audio/music/menu/jingles/b0_hover_Gm_0.ogg",
           "res://audio/music/menu/jingles/b0_hover_Gm_1.ogg"
@@ -70,6 +74,10 @@
         "Dm": [
           "res://audio/music/menu/jingles/b0_press_Dm_0.ogg",
           "res://audio/music/menu/jingles/b0_press_Dm_1.ogg"
+        ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b0_press_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b0_press_Bb_1.ogg"
         ],
         "Gm": [
           "res://audio/music/menu/jingles/b0_press_Gm_0.ogg",
@@ -87,6 +95,10 @@
           "res://audio/music/menu/jingles/b1_hover_Dm_0.ogg",
           "res://audio/music/menu/jingles/b1_hover_Dm_1.ogg"
         ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b1_hover_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b1_hover_Bb_1.ogg"
+        ],
         "Gm": [
           "res://audio/music/menu/jingles/b1_hover_Gm_0.ogg",
           "res://audio/music/menu/jingles/b1_hover_Gm_1.ogg"
@@ -100,6 +112,10 @@
         "Dm": [
           "res://audio/music/menu/jingles/b1_press_Dm_0.ogg",
           "res://audio/music/menu/jingles/b1_press_Dm_1.ogg"
+        ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b1_press_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b1_press_Bb_1.ogg"
         ],
         "Gm": [
           "res://audio/music/menu/jingles/b1_press_Gm_0.ogg",
@@ -117,6 +133,10 @@
           "res://audio/music/menu/jingles/b2_hover_Dm_0.ogg",
           "res://audio/music/menu/jingles/b2_hover_Dm_1.ogg"
         ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b2_hover_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b2_hover_Bb_1.ogg"
+        ],
         "Gm": [
           "res://audio/music/menu/jingles/b2_hover_Gm_0.ogg",
           "res://audio/music/menu/jingles/b2_hover_Gm_1.ogg"
@@ -130,6 +150,10 @@
         "Dm": [
           "res://audio/music/menu/jingles/b2_press_Dm_0.ogg",
           "res://audio/music/menu/jingles/b2_press_Dm_1.ogg"
+        ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b2_press_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b2_press_Bb_1.ogg"
         ],
         "Gm": [
           "res://audio/music/menu/jingles/b2_press_Gm_0.ogg",
@@ -147,6 +171,10 @@
           "res://audio/music/menu/jingles/b3_hover_Dm_0.ogg",
           "res://audio/music/menu/jingles/b3_hover_Dm_1.ogg"
         ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b3_hover_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b3_hover_Bb_1.ogg"
+        ],
         "Gm": [
           "res://audio/music/menu/jingles/b3_hover_Gm_0.ogg",
           "res://audio/music/menu/jingles/b3_hover_Gm_1.ogg"
@@ -160,6 +188,10 @@
         "Dm": [
           "res://audio/music/menu/jingles/b3_press_Dm_0.ogg",
           "res://audio/music/menu/jingles/b3_press_Dm_1.ogg"
+        ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b3_press_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b3_press_Bb_1.ogg"
         ],
         "Gm": [
           "res://audio/music/menu/jingles/b3_press_Gm_0.ogg",
