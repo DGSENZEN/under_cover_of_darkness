@@ -707,6 +707,30 @@ func _landmarks() -> void:
 	_check("L6c her votive burns under the heart and lights it", votive != null and lit,
 		"votive %s, lights the heart %s" % [votive != null, lit])
 
+	# His red lantern over the arch: the lane's only red light (the shop's own aside), sagging with the train.
+	var lantern_light: OmniLight3D = lane.get("lantern_light")
+	var reds := []
+	for light: Light3D in lane.find_children("*", "Light3D", true, false):
+		if lane.shop != null and lane.shop.is_ancestor_of(light):
+			continue
+		var hue := light.light_color.h * 360.0
+		if (hue >= 350.0 or hue <= 10.0) and light.light_color.s > 0.45:
+			reds.append(String(light.name))
+	var lantern_hue := lantern_light.light_color.h * 360.0 if lantern_light != null else -1.0
+	_check("L7 his red lantern hangs over the arch, the lane's only red light",
+		marks.has("red_lantern") and lantern_light != null and (lantern_hue >= 350.0 or lantern_hue <= 10.0) and reds.size() == 1,
+		"lantern %s, its hue %.0f°, red lights %s" % [marks.has("red_lantern"), lantern_hue, reds])
+	var sagged := false
+	if lantern_light != null and lane.train != null:
+		var full: float = lantern_light.light_energy
+		lane.train.start_pass()
+		for i in 1200:
+			await _frames(1)
+			if lantern_light.light_energy < full * 0.95:
+				sagged = true
+				break
+	_check("L7b it sags with the train", sagged, "sagged %s" % sagged)
+
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:
 	var space := lane.get_world_3d().direct_space_state

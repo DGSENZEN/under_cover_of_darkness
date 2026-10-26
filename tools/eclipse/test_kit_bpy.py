@@ -2327,6 +2327,20 @@ class LaneLandmarks(unittest.TestCase):
         self.assertLessEqual(abs(max(zs)), 0.05)
         self.assertTrue(0.55 <= max(zs) - min(zs) <= 0.8, max(zs) - min(zs))
 
+    def test_the_lantern_bracket_misses_the_pipes(self):
+        # (The south wall's fire main and air line over the arch, x 4.7-7.7: their axes (lane z, height) and how far
+        # their flanges reach; no part of the lantern within 2 cm of them.)
+        mains = [((4.55 - 0.15, 3.1), 0.075 + 0.035), ((4.55 - 0.085, 2.75), 0.035 + 0.035)]
+        near = [tuple(round(c, 3) for c in v) for v in _world(self.objects["red_lantern"])
+                if 4.7 <= v.x <= 7.7 and any(math.hypot(-v.y - z, v.z - h) < r + 0.02 for (z, h), r in mains)]
+        self.assertEqual(near[:3], [])
+
+    def test_the_lantern_hangs_over_the_arch_clear_of_its_head(self):
+        vs = _world(self.objects["red_lantern"])
+        self.assertTrue(5.6 <= min(v.x for v in vs) and max(v.x for v in vs) <= 6.8)
+        # (Out from the wall over the threshold, its foot over every head.)
+        self.assertGreaterEqual(min(v.z for v in vs), 2.3)
+
 
 if __name__ == "__main__":
     # (`-- Class` or `-- Class.test_name` after Blender's own arguments runs just those.)

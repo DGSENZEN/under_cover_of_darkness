@@ -26,9 +26,9 @@ from underground_shapes import box, pipe, smooth_object, turned  # noqa: E402
 
 NAME = "lane_landmarks"
 ATLAS = 2048
-SLOTS = ["marigold", "herb", "picado", "picado_b", "iron", "tin", "brass", "wax_red"]
+SLOTS = ["marigold", "herb", "picado", "picado_b", "iron", "tin", "brass", "wax_red", "glass_red"]
 # (The garland is a rope of heads ~15 cm thick, three round the cord at each step, so it reads from the Pasaje.)
-BUDGET = {"garland": 6000, "milagro_heart": 2000, "milagro_bracket": 1200}
+BUDGET = {"garland": 6000, "milagro_heart": 2000, "milagro_bracket": 1200, "red_lantern": 2500}
 # Cords, flags and lashings are millimetres across by nature: a face there is a sliver under 4 mm.
 SLIVER = {name: 0.004 for name in BUDGET}
 
@@ -63,6 +63,16 @@ CUP_AT = (-1.55, 0.12, 2.42)
 CUP = (0.04, 0.07)
 STUB_H = 0.05
 CANDLE_WICK = (CUP_AT[0], CUP_AT[1], CUP_AT[2] + CUP[1] / 2 + STUB_H + 0.01)
+# His red lantern over the arch (lane x, z, height): the arch's middle, its bracket's height on the wall (above the fire
+# main, its flanges' top at 3.21), how far out it hangs, the lantern's square and its glass's height, the cap's.
+ARCH_X = 6.2
+ARM_H = 3.4
+LANTERN_Z = 3.9
+LANTERN_W = 0.2
+GLASS = (2.95, 3.22)
+CAP_H = 0.1
+# (Base and cap rim 4.5 cm deep: at 3 cm the glass's top and bottom lay over theirs, layered.)
+PLATE_T = 0.045
 
 
 def _lane(x, z, y):
@@ -261,11 +271,57 @@ def milagro_bracket(m):
            at=tuple(_lane(cx, cz, cy)))
 
 
+def red_lantern(m):
+    """His lantern of red glass on an iron bracket over the arch: the bracket's plate above the fire main, its arm out
+    over the threshold with a stay and a scroll, the lantern hung from its hook (square base, corner posts just outside
+    the glass, a peaked cap, a ring). A bookseller who works by night; the glass is old darkroom glass."""
+    wall = 4.55
+    x = ARCH_X
+    # The plate on the wall, the arm, the stay up to it, the scroll at its end, the hook.
+    box(m, _lane(x - 0.05, wall - 0.016, ARM_H - 0.09), _lane(x + 0.05, wall, ARM_H + 0.09), "iron", r=0.004)
+    pipe(m, [_lane(x, wall - 0.016, ARM_H), _lane(x, LANTERN_Z, ARM_H)], 0.013, 6, "iron")
+    m.shell()
+    pipe(m, [_lane(x, wall - 0.016, ARM_H - 0.08), _lane(x, (wall + LANTERN_Z) / 2, ARM_H - 0.005)], 0.008, 4, "iron")
+    m.shell()
+    end = _lane(x, LANTERN_Z, ARM_H)
+    scroll = [end + Vector((0.0, 0.035 * math.sin(a) * (1 - 0.07 * k), 0.035 * (math.cos(a) - 1) * (1 - 0.07 * k)))
+              for k, a in enumerate(2.2 * math.pi * j / 10 for j in range(11))]
+    pipe(m, scroll, 0.007, 4, "iron")
+    top = GLASS[1] + PLATE_T + CAP_H
+    m.shell()
+    pipe(m, [_lane(x, LANTERN_Z + 0.02, ARM_H), _lane(x, LANTERN_Z, ARM_H - 0.04), _lane(x, LANTERN_Z, top + 0.035)],
+         0.005, 4, "iron")
+    m.shell()
+    ring = [_lane(x, LANTERN_Z + 0.018 * math.cos(a), top + 0.018 + 0.018 * math.sin(a))
+            for a in (2 * math.pi * k / 8 for k in range(8))]
+    pipe(m, ring, 0.004, 4, "iron", closed=True)
+    # The lantern: base, glass, posts outside its corners, the cap's rim and its peak.
+    h = LANTERN_W / 2
+    z = LANTERN_Z
+    box(m, _lane(x - h - 0.03, z - h - 0.03, GLASS[0] - PLATE_T), _lane(x + h + 0.03, z + h + 0.03, GLASS[0]), "iron", r=0.004)
+    box(m, _lane(x - h, z - h, GLASS[0]), _lane(x + h, z + h, GLASS[1]), "glass_red", r=0.0)
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            cx, cz = x + sx * (h + 0.012), z + sz * (h + 0.012)
+            box(m, _lane(cx - 0.012, cz - 0.012, GLASS[0]), _lane(cx + 0.012, cz + 0.012, GLASS[1]), "iron", r=0.0)
+    box(m, _lane(x - h - 0.035, z - h - 0.035, GLASS[1]), _lane(x + h + 0.035, z + h + 0.035, GLASS[1] + PLATE_T), "iron",
+        r=0.004)
+    m.shell()
+    rim = [_lane(x + sx * (h + 0.02), z + sz * (h + 0.02), GLASS[1] + PLATE_T) for sx, sz in ((-1, -1), (1, -1), (1, 1),
+                                                                                     (-1, 1))]
+    apex = _lane(x, z, top)
+    m.face(rim[::-1], "iron")
+    for a, b in zip(rim, rim[1:] + rim[:1]):
+        m.face([a, b, apex], "iron")
+    # The finial under it.
+    turned(m, [(0.03, -0.06), (0.012, -0.005), (0.02, 0.0)], 8, "iron", at=tuple(_lane(x, z, GLASS[0] - PLATE_T)))
+
+
 def build():
     common.reset()
     underground_shapes.rng = rng
     rng.seed(2410)
-    for f in (garland, milagro_heart, milagro_bracket):
+    for f in (garland, milagro_heart, milagro_bracket, red_lantern):
         smooth_object(f.__name__, f)
 
 

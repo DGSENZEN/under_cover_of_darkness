@@ -20,7 +20,7 @@ const CLOSE := [
 ## The lane's frame: its walls, its height.
 const NORTH := -2.35
 const SOUTH := 4.55
-const RED_BAND := Vector2(350.0, 15.0)
+const RED_BAND := Vector2(350.0, 10.0)
 
 var results: Array[String] = []
 var failures := 0

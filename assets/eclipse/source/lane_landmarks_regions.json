@@ -7,8 +7,9 @@
   "iron",
   "tin",
   "brass",
-  "wax_red"
+  "wax_red",
+  "glass_red"
  ],
  "atlas_px": 2048,
- "px_per_m": 352.09
+ "px_per_m": 329.88
 }

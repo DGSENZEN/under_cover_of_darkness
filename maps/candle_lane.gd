@@ -41,6 +41,11 @@ const GARLAND_SWAY := deg_to_rad(3.0)
 const MILAGRO_HOOK := Vector3(-1.35, 3.0, 0.45)
 const MILAGRO_TURN := deg_to_rad(25.0)
 const MILAGRO_WICK := Vector3(-1.55, 2.515, 0.12)
+## His red lantern over the arch (lane_landmarks.py's red_lantern): its glass's middle, his shade's red, its light
+## [energy, reach (m)]. The lane's only red light (hue 350-10°).
+const LANTERN_AT := Vector3(6.2, 3.085, 3.9)
+const LANTERN_RED := Color("e63833")
+const LANTERN_LIGHT := Vector2(1.2, 6.0)
 const LANE_WICKS := "res://assets/eclipse/source/candle_lane_wicks.json"
 ## How far the end wall's opening reaches inside the doorway's frame (m, each side and over it): the wall's cut faces
 ## buried in the stone, the way through still the frame's 3 m.
@@ -138,7 +143,9 @@ const POCKETS := [
 ## energy), her neon's glow (colour, energy, reach), the Pasaje's neon spilling into the mouth (where, colour, energy,
 ## reach), the shop's book-light spilling out of his arch (where, colour, energy, reach).
 const WORK_DIM := Vector3(1.1, 6.0, 0.4)
-const STALL_NEON := [Color(1.0, 0.3, 0.6), 1.6, 4.5]
+# (Her neon a magenta of ~328°, a touch cooler than it was: his lantern's red, ~2°, is her neighbour's, and the two
+# read apart; cooler still and it turned her garland pink.)
+const STALL_NEON := [Color(1.0, 0.28, 0.66), 1.6, 4.5]
 const MOUTH_NEON := [Vector3(-17.3, 2.4, 1.1), Color(0.25, 0.85, 0.9), 2.3, 5.5]
 const ARCH_SPILL := [Vector3(6.2, 1.9, FAR_WALL - 0.3), Color(1.0, 0.68, 0.38), 0.7, 4.5]
 ## How brightly the backdrops glow (the Pasaje's, the chapel's): dim as the lane's own light, never a lit screen.
@@ -201,6 +208,8 @@ var landmarks := {}
 ## What her tin heart turns on: the bracket's hook. Her votive's flame under it (Vfx "candles").
 var milagro_pivot: Node3D
 var milagro_flame: Node3D
+## His lantern's light (LANTERN_RED), sagging with the lane's lights when a train draws on the line.
+var lantern_light: OmniLight3D
 ## The shades one talks to: "librarian", "curandera", "market_curandera".
 var shades := {}
 
@@ -521,8 +530,23 @@ func _landmarks() -> void:
 		return
 	var meshes := _kit(LANDMARKS_KIT)
 	var look := Painterly.material(_painted(["lane_landmarks.png", "lane_landmarks_base.png"]), &"bespoke")
-	for kind in ["garland", "milagro_bracket"]:
+	for kind in ["garland", "milagro_bracket", "red_lantern"]:
 		landmarks[kind] = _place(meshes[kind], look, kind, Vector3.ZERO, 0.0, false)
+	# His lantern's glass, red and lit from within, and its light.
+	var lantern: MeshInstance3D = landmarks["red_lantern"]
+	for i in lantern.mesh.get_surface_count():
+		var slot: Material = lantern.mesh.surface_get_material(i)
+		if slot != null and slot.resource_name == "glass_red":
+			lantern.set_surface_override_material(i, _red_glass())
+	lantern_light = OmniLight3D.new()
+	lantern_light.name = "lantern_light"
+	lantern_light.light_color = LANTERN_RED
+	lantern_light.light_energy = LANTERN_LIGHT.x
+	lantern_light.omni_range = LANTERN_LIGHT.y
+	lantern_light.shadow_enabled = false
+	add_child(lantern_light)
+	lantern_light.position = LANTERN_AT
+	_full[lantern_light] = LANTERN_LIGHT.x
 	milagro_pivot = Node3D.new()
 	milagro_pivot.name = "milagro_pivot"
 	add_child(milagro_pivot)
@@ -538,6 +562,19 @@ func _landmarks() -> void:
 	add_child(milagro_flame)
 	Vfx.place(milagro_flame, wick, {"wicks": [[wick.x, wick.y, wick.z]]})
 	Vfx.emit(milagro_flame, true)
+
+
+## His lantern's old darkroom glass: red, half see-through, lit from within.
+func _red_glass() -> StandardMaterial3D:
+	var glass := StandardMaterial3D.new()
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.cull_mode = BaseMaterial3D.CULL_DISABLED
+	glass.albedo_color = Color(LANTERN_RED, 0.6)
+	glass.emission_enabled = true
+	glass.emission = LANTERN_RED
+	glass.emission_energy_multiplier = 1.6
+	glass.roughness = 0.15
+	return glass
 
 
 ## A hung piece swaying about the line from `from` to `to` (the lane's frame), at most `most` radians, as far as the
