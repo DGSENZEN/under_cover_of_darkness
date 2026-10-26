@@ -15,19 +15,28 @@ MARKET = -11.0
 
 def lay(P):
     P.space("market_stairs", rect(-14, 14, -6, 34), floor=MARKET, height=HALL + 5.0 - MARKET, layer=2,
-            openings=[{"to": "hall", "at": (-10, 14)}, {"to": "pasaje", "at": (-10, 34)}])
+            openings=[{"to": "hall", "at": (-10, 14)}, {"to": "pasaje_n", "at": (-10, 34)}])
     P.route("market_stairs_flight", "stair", [(-10, HALL, 14.0), (-10, MARKET, 23.0)])
-    P.space("pasaje", rect(-14, 34, -4, 150), floor=MARKET, height=4.5, layer=2,
+    # The Pasaje in three stretches (docs/superpowers/specs/2026-10-26-pasaje-market-design.md): the arrival by the
+    # market stairs, the middle round the herb market and the candle lane (a set of its own, maps/pasaje), the
+    # secondhand south half to the square; each open on the next its whole width.
+    P.space("pasaje_n", rect(-14, 34, -4, 55), floor=MARKET, height=4.5, layer=2,
             openings=[{"to": "market_stairs", "at": (-10, 34)}, {"to": "cistern_lane", "at": (-14, 43)},
+                      {"to": "pasaje", "at": (-9, 55), "width": 10.0}])
+    P.space("pasaje", rect(-14, 55, -4, 95), floor=MARKET, height=4.5, layer=2,
+            openings=[{"to": "pasaje_n", "at": (-9, 55), "width": 10.0},
                       {"to": "herb_market", "at": (-14, 74), "width": 4.0},
                       {"to": "candle_lane", "at": (-4, 75.45), "width": 6.9, "height": 4.0},
+                      {"to": "pasaje_s", "at": (-9, 95), "width": 10.0}])
+    P.space("pasaje_s", rect(-14, 95, -4, 150), floor=MARKET, height=4.5, layer=2,
+            openings=[{"to": "pasaje", "at": (-9, 95), "width": 10.0},
                       {"to": "tianguis_lane", "at": (-4, 122.5)}, {"to": "rag_lane", "at": (-14, 140.5)},
                       {"to": "square_s", "at": (-9, 150), "width": 6.0}])
 
     # West: the lane down to the old cistern, the herb market and the lane
     # up to the south-west kiosk corridor.
     P.space("cistern_lane", rect(-20, 40, -14, 46), floor=MARKET, height=4.0, layer=2,
-            openings=[{"to": "pasaje", "at": (-14, 43)}, {"to": "cistern", "at": (-20, 43)}])
+            openings=[{"to": "pasaje_n", "at": (-14, 43)}, {"to": "cistern", "at": (-20, 43)}])
     P.space("herb_market", rect(-44, 58, -14, 90), floor=MARKET, height=6.0, layer=2,
             openings=[{"to": "pasaje", "at": (-14, 74), "width": 4.0}, {"to": "lane_sw", "at": (-44, 62.5)}])
     P.space("lane_sw", rect(-87, 60, -44, 65), floor=MARKET, height=6.0, layer=2,
@@ -55,12 +64,12 @@ def lay(P):
 
     # Further south: the fondas east, the storeroom west, the square.
     P.space("tianguis_lane", rect(-4, 120, 36, 125), floor=MARKET, height=3.5, layer=2,
-            openings=[{"to": "pasaje", "at": (-4, 122.5)}, {"to": "fondas", "at": (36, 122.5)}])
+            openings=[{"to": "pasaje_s", "at": (-4, 122.5)}, {"to": "fondas", "at": (36, 122.5)}])
     P.space("fondas", rect(36, 108, 62, 140), floor=MARKET, height=5.0, layer=2,
             openings=[{"to": "tianguis_lane", "at": (36, 122.5)}])
     P.space("rag_lane", rect(-48, 138, -14, 143), floor=MARKET, height=3.5, layer=2,
-            openings=[{"to": "pasaje", "at": (-14, 140.5)}, {"to": "storeroom", "at": (-48, 140.5)}])
+            openings=[{"to": "pasaje_s", "at": (-14, 140.5)}, {"to": "storeroom", "at": (-48, 140.5)}])
     P.space("storeroom", rect(-66, 128, -48, 156), floor=MARKET, height=7.0, layer=2,
             openings=[{"to": "rag_lane", "at": (-48, 140.5)}, {"to": "loft", "at": (-60, 156)}])
     P.space("square_s", rect(-24, 150, 6, 174), floor=MARKET, height=6.0, layer=2,
-            openings=[{"to": "pasaje", "at": (-9, 150), "width": 6.0}])
+            openings=[{"to": "pasaje_s", "at": (-9, 150), "width": 6.0}])

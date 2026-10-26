@@ -85,9 +85,15 @@ SCENES = [
 # off it (design notes for the stall sets; no words in the game).
 PUESTOS = [
     (-5.5, MARKET, 39, "tortas"), (-5.5, MARKET, 41.5, "aguas frescas"),
-    (-12.5, MARKET, 52, "candles"), (-12.5, MARKET, 54.5, "saints"), (-12.5, MARKET, 57, "charms"),
-    (-5.5, MARKET, 64, "records"), (-5.5, MARKET, 67, "gloves"),
-    (-12.5, MARKET, 86, "herbs"),
+    (-12.5, MARKET, 52, "candles"), (-12.5, MARKET, 54.5, "saints"),
+    # The middle stretch (docs/superpowers/specs/2026-10-26-pasaje-market-design.md): the candle, copal and milagro
+    # sellers round the candle lane's mouth on the east, her trade drawing them; herbs, chiles and flowers spilling out
+    # of the herb market's mouth on the west; food between.
+    (-5.5, MARKET, 60, "tamales"), (-12.5, MARKET, 61, "tortas"), (-12.5, MARKET, 64.5, "fruit"),
+    (-5.5, MARKET, 67, "candles"), (-5.5, MARKET, 69.5, "copal"), (-5.5, MARKET, 81, "milagros"),
+    (-5.5, MARKET, 83.5, "saints"),
+    (-12.5, MARKET, 69.5, "herbs"), (-12.5, MARKET, 78.5, "chiles"), (-12.5, MARKET, 81, "flowers"),
+    (-12.5, MARKET, 87, "coffee"), (-5.5, MARKET, 88, "atole"), (-5.5, MARKET, 91.5, "sweets"),
     (-5.5, MARKET, 96, "toys"), (-5.5, MARKET, 98.5, "sweets"), (-5.5, MARKET, 101, "perfume"),
     (-12.5, MARKET, 108, "shoes"), (-12.5, MARKET, 111, "mending"),
     (-5.5, MARKET, 130, "tamales"), (-12.5, MARKET, 133, "keys"),

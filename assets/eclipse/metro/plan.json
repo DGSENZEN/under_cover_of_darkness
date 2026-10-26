@@ -1425,7 +1425,7 @@
      "width": 3.0
     },
     {
-     "to": "pasaje",
+     "to": "pasaje_n",
      "at": [
       -10.0,
       34.0
@@ -1435,7 +1435,7 @@
    ]
   },
   {
-   "name": "pasaje",
+   "name": "pasaje_n",
    "polygon": [
     [
      -14.0,
@@ -1447,11 +1447,11 @@
     ],
     [
      -4.0,
-     150.0
+     55.0
     ],
     [
      -14.0,
-     150.0
+     55.0
     ]
    ],
    "floor": -11.0,
@@ -1476,6 +1476,49 @@
      "width": 3.0
     },
     {
+     "to": "pasaje",
+     "at": [
+      -9.0,
+      55.0
+     ],
+     "width": 10.0
+    }
+   ]
+  },
+  {
+   "name": "pasaje",
+   "polygon": [
+    [
+     -14.0,
+     55.0
+    ],
+    [
+     -4.0,
+     55.0
+    ],
+    [
+     -4.0,
+     95.0
+    ],
+    [
+     -14.0,
+     95.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 4.5,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "pasaje_n",
+     "at": [
+      -9.0,
+      55.0
+     ],
+     "width": 10.0
+    },
+    {
      "to": "herb_market",
      "at": [
       -14.0,
@@ -1491,6 +1534,49 @@
      ],
      "width": 6.9,
      "height": 4.0
+    },
+    {
+     "to": "pasaje_s",
+     "at": [
+      -9.0,
+      95.0
+     ],
+     "width": 10.0
+    }
+   ]
+  },
+  {
+   "name": "pasaje_s",
+   "polygon": [
+    [
+     -14.0,
+     95.0
+    ],
+    [
+     -4.0,
+     95.0
+    ],
+    [
+     -4.0,
+     150.0
+    ],
+    [
+     -14.0,
+     150.0
+    ]
+   ],
+   "floor": -11.0,
+   "height": 4.5,
+   "interior": false,
+   "layer": 2,
+   "openings": [
+    {
+     "to": "pasaje",
+     "at": [
+      -9.0,
+      95.0
+     ],
+     "width": 10.0
     },
     {
      "to": "tianguis_lane",
@@ -1544,7 +1630,7 @@
    "layer": 2,
    "openings": [
     {
-     "to": "pasaje",
+     "to": "pasaje_n",
      "at": [
       -14.0,
       43.0
@@ -1848,7 +1934,7 @@
    "layer": 2,
    "openings": [
     {
-     "to": "pasaje",
+     "to": "pasaje_s",
      "at": [
       -4.0,
       122.5
@@ -1926,7 +2012,7 @@
    "layer": 2,
    "openings": [
     {
-     "to": "pasaje",
+     "to": "pasaje_s",
      "at": [
       -14.0,
       140.5
@@ -2012,7 +2098,7 @@
    "layer": 2,
    "openings": [
     {
-     "to": "pasaje",
+     "to": "pasaje_s",
      "at": [
       -9.0,
       150.0
@@ -3196,28 +3282,40 @@
    "name": "puesto_04",
    "kind": "puesto",
    "at": [
-    -12.5,
+    -5.5,
     -11.0,
-    57.0
+    60.0
    ],
    "props": {
-    "sells": "charms"
+    "sells": "tamales"
    }
   },
   {
    "name": "puesto_05",
    "kind": "puesto",
    "at": [
-    -5.5,
+    -12.5,
     -11.0,
-    64.0
+    61.0
    ],
    "props": {
-    "sells": "records"
+    "sells": "tortas"
    }
   },
   {
    "name": "puesto_06",
+   "kind": "puesto",
+   "at": [
+    -12.5,
+    -11.0,
+    64.5
+   ],
+   "props": {
+    "sells": "fruit"
+   }
+  },
+  {
+   "name": "puesto_07",
    "kind": "puesto",
    "at": [
     -5.5,
@@ -3225,23 +3323,119 @@
     67.0
    ],
    "props": {
-    "sells": "gloves"
+    "sells": "candles"
    }
   },
   {
-   "name": "puesto_07",
+   "name": "puesto_08",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    69.5
+   ],
+   "props": {
+    "sells": "copal"
+   }
+  },
+  {
+   "name": "puesto_09",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    81.0
+   ],
+   "props": {
+    "sells": "milagros"
+   }
+  },
+  {
+   "name": "puesto_10",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    83.5
+   ],
+   "props": {
+    "sells": "saints"
+   }
+  },
+  {
+   "name": "puesto_11",
    "kind": "puesto",
    "at": [
     -12.5,
     -11.0,
-    86.0
+    69.5
    ],
    "props": {
     "sells": "herbs"
    }
   },
   {
-   "name": "puesto_08",
+   "name": "puesto_12",
+   "kind": "puesto",
+   "at": [
+    -12.5,
+    -11.0,
+    78.5
+   ],
+   "props": {
+    "sells": "chiles"
+   }
+  },
+  {
+   "name": "puesto_13",
+   "kind": "puesto",
+   "at": [
+    -12.5,
+    -11.0,
+    81.0
+   ],
+   "props": {
+    "sells": "flowers"
+   }
+  },
+  {
+   "name": "puesto_14",
+   "kind": "puesto",
+   "at": [
+    -12.5,
+    -11.0,
+    87.0
+   ],
+   "props": {
+    "sells": "coffee"
+   }
+  },
+  {
+   "name": "puesto_15",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    88.0
+   ],
+   "props": {
+    "sells": "atole"
+   }
+  },
+  {
+   "name": "puesto_16",
+   "kind": "puesto",
+   "at": [
+    -5.5,
+    -11.0,
+    91.5
+   ],
+   "props": {
+    "sells": "sweets"
+   }
+  },
+  {
+   "name": "puesto_17",
    "kind": "puesto",
    "at": [
     -5.5,
@@ -3253,7 +3447,7 @@
    }
   },
   {
-   "name": "puesto_09",
+   "name": "puesto_18",
    "kind": "puesto",
    "at": [
     -5.5,
@@ -3265,7 +3459,7 @@
    }
   },
   {
-   "name": "puesto_10",
+   "name": "puesto_19",
    "kind": "puesto",
    "at": [
     -5.5,
@@ -3277,7 +3471,7 @@
    }
   },
   {
-   "name": "puesto_11",
+   "name": "puesto_20",
    "kind": "puesto",
    "at": [
     -12.5,
@@ -3289,7 +3483,7 @@
    }
   },
   {
-   "name": "puesto_12",
+   "name": "puesto_21",
    "kind": "puesto",
    "at": [
     -12.5,
@@ -3301,7 +3495,7 @@
    }
   },
   {
-   "name": "puesto_13",
+   "name": "puesto_22",
    "kind": "puesto",
    "at": [
     -5.5,
@@ -3313,7 +3507,7 @@
    }
   },
   {
-   "name": "puesto_14",
+   "name": "puesto_23",
    "kind": "puesto",
    "at": [
     -12.5,
@@ -3325,7 +3519,7 @@
    }
   },
   {
-   "name": "puesto_15",
+   "name": "puesto_24",
    "kind": "puesto",
    "at": [
     -5.5,
@@ -3337,7 +3531,7 @@
    }
   },
   {
-   "name": "puesto_16",
+   "name": "puesto_25",
    "kind": "puesto",
    "at": [
     -40.0,
@@ -3349,7 +3543,7 @@
    }
   },
   {
-   "name": "puesto_17",
+   "name": "puesto_26",
    "kind": "puesto",
    "at": [
     -40.0,
@@ -3361,7 +3555,7 @@
    }
   },
   {
-   "name": "puesto_18",
+   "name": "puesto_27",
    "kind": "puesto",
    "at": [
     -30.0,
@@ -3373,7 +3567,7 @@
    }
   },
   {
-   "name": "puesto_19",
+   "name": "puesto_28",
    "kind": "puesto",
    "at": [
     -18.0,
@@ -3385,7 +3579,7 @@
    }
   },
   {
-   "name": "puesto_20",
+   "name": "puesto_29",
    "kind": "puesto",
    "at": [
     40.0,
@@ -3397,7 +3591,7 @@
    }
   },
   {
-   "name": "puesto_21",
+   "name": "puesto_30",
    "kind": "puesto",
    "at": [
     40.0,
@@ -3409,7 +3603,7 @@
    }
   },
   {
-   "name": "puesto_22",
+   "name": "puesto_31",
    "kind": "puesto",
    "at": [
     58.0,
@@ -3421,7 +3615,7 @@
    }
   },
   {
-   "name": "puesto_23",
+   "name": "puesto_32",
    "kind": "puesto",
    "at": [
     -88.5,
@@ -3433,7 +3627,7 @@
    }
   },
   {
-   "name": "puesto_24",
+   "name": "puesto_33",
    "kind": "puesto",
    "at": [
     -91.5,
@@ -3614,6 +3808,11 @@
     -10.0,
     -11.0,
     34.0
+   ],
+   [
+    -9.0,
+    -11.0,
+    55.0
    ],
    [
     -14.0,

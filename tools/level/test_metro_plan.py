@@ -19,7 +19,7 @@ import city_metro  # noqa: E402
 import greybox  # noqa: E402
 import plan  # noqa: E402
 import plan_check  # noqa: E402
-from metro import walk  # noqa: E402
+from metro import places, walk  # noqa: E402
 
 DATA = city_metro.plan()
 # The Zócalo plan's crypt (x -50..10, z -250..-160) and kiosks.
@@ -257,6 +257,34 @@ class MetroPlan(unittest.TestCase):
                          [("candle_lane", (19.0, 78.9), 3.0)])
         self.assertIn(("librarian_shop", (19.0, 78.9)),
                       [(o["to"], tuple(o["at"])) for o in _space("candle_lane")["openings"]])
+
+    def test_the_pasaje_is_three_stretches(self):
+        # (The Pasaje market design: its middle stretch a set of its own, the north and south greybox meanwhile.)
+        stretches = {"pasaje_n": (34.0, 55.0), "pasaje": (55.0, 95.0), "pasaje_s": (95.0, 150.0)}
+        for name, (z0, z1) in stretches.items():
+            s = _space(name)
+            xs = [p[0] for p in s["polygon"]]
+            zs = [p[1] for p in s["polygon"]]
+            self.assertEqual((min(xs), max(xs), min(zs), max(zs)), (-14.0, -4.0, z0, z1), name)
+            self.assertEqual((s["floor"], s["height"], s["layer"]), (-11.0, 4.5, 2), name)
+        for a, b, z in (("pasaje_n", "pasaje", 55.0), ("pasaje", "pasaje_s", 95.0)):
+            for one, other in ((a, b), (b, a)):
+                o = next(o for o in _space(one)["openings"] if o["to"] == other)
+                self.assertEqual((tuple(o["at"]), o["width"]), ((-9.0, z), 10.0), one)
+        on = {"pasaje_n": ["market_stairs", "cistern_lane"], "pasaje": ["herb_market", "candle_lane"],
+              "pasaje_s": ["tianguis_lane", "rag_lane", "square_s"]}
+        for name, others in on.items():
+            opens = [o["to"] for o in _space(name)["openings"]]
+            for other in others:
+                self.assertIn(other, opens, name)
+                self.assertIn(name, [o["to"] for o in _space(other)["openings"]], other)
+
+    def test_the_middle_puestos_are_the_markets(self):
+        trades = {"candles", "copal", "milagros", "saints", "herbs", "chiles", "flowers", "tamales", "tortas", "atole",
+                  "coffee", "fruit", "sweets", "lottery", "tinsmith", "radio"}
+        middle = [sells for x, _, z, sells in places.PUESTOS if -14 <= x <= -4 and 55 <= z <= 95]
+        self.assertTrue(middle)
+        self.assertEqual([s for s in middle if s not in trades], [])
 
     def test_the_lane_opens_wide_on_the_pasaje(self):
         for name, other in (("candle_lane", "pasaje"), ("pasaje", "candle_lane")):
