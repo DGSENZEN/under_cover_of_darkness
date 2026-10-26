@@ -35,6 +35,9 @@ var job: RefCounted = JobStateScript.new()
 ## What people remember of him (PeopleState: flags, moods, who he has met,
 ## the talk goals and notes): kept for good, a new mission does not reset it.
 var people: RefCounted = PeopleStateScript.new()
+## Who the player chose to be on the archetype screen (&"derive",
+## &"thaumaturge" or &"factotum"; empty before a choice): kept for the game.
+var archetype: StringName = &""
 
 
 func _init() -> void:

@@ -129,3 +129,10 @@ and painted over by `tools/textures/eclipse_atlas.py`:
 - **The living words' Latin atlas** (`textures/painted/library/glyphs_latin.png`, baked by
   `tools/textures/library_glyphs.py`): Roboto Bold by **Christian Robertson** (Google), Apache License 2.0,
   already in `examples_dd3d/`.
+
+## Fonts
+
+- Poiret One, © 2011 The Poiret One Project Authors, SIL Open Font License 1.1.
+- Cormorant SC and Cormorant Garamond, © 2015 The Cormorant Project Authors, SIL Open Font License 1.1.
+
+The files and licence texts are in `assets/fonts/` (see its README).

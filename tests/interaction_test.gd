@@ -490,9 +490,25 @@ func _ui_checks() -> void:
 	_check("U10 health shows only when hurt", hidden_full and hud._shields.modulate.a > 0.9 and hud._vignette.modulate.a > 0.1,
 		"hidden at full %s shields %.2f vignette %.2f" % [hidden_full, hud._shields.modulate.a, hud._vignette.modulate.a])
 
-	# U7 Esc pauses, a click resumes. Esc's handler is called directly
-	# (injected input can arrive twice in a headless run, and Esc toggles);
-	# the click is a real one, on the pause screen.
+	# U15 a pause that isn't the player's (a loading hold) neither opens the
+	# pause menu nor answers Escape
+	get_tree().paused = true
+	await _frames(3)
+	var stayed_shut: bool = not hud._pause.visible
+	var esc_hold := InputEventAction.new()
+	esc_hold.action = &"ui_cancel"
+	esc_hold.pressed = true
+	hud._unhandled_input(esc_hold)
+	var still_held: bool = get_tree().paused
+	get_tree().paused = false
+	await _frames(2)
+	_check("U15 a pause that isn't the player's opens no menu and ignores Escape", stayed_shut and still_held,
+		"menu shut %s still paused after Esc %s" % [stayed_shut, still_held])
+
+	# U7 Esc pauses and shows the pause menu (its words on the left, like
+	# the main menu's); a click on the painting does not resume, Resume does.
+	# Esc's handler is called directly (injected input can arrive twice in a
+	# headless run, and Esc toggles).
 	var esc := InputEventAction.new()
 	esc.action = &"ui_cancel"
 	esc.pressed = true
@@ -500,32 +516,36 @@ func _ui_checks() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	var paused: bool = get_tree().paused and hud._pause.visible
-	var middle: Rect2 = hud._pause.get_child(1).get_global_rect()
+	var column: Rect2 = hud._pause.menu_rect()
 	var view: Rect2 = get_viewport().get_visible_rect()
-	var centred: bool = absf(middle.get_center().x - view.get_center().x) < 2.0 and absf(middle.get_center().y - view.get_center().y) < 2.0
+	var placed: bool = view.encloses(column) and column.position.x < view.size.x * 0.3
 
-	# U13 the pause screen's setting: a click on it changes it (and is kept),
-	# and does not resume
+	# U13 the pause menu's settings: a setting changed there is kept, and
+	# the game stays paused
+	var settings_before: String = SettingsScript.path
 	SettingsScript.path = "user://settings_interaction_test.cfg"
-	SettingsScript.reload()
-	hud._marks_toggle.pressed.emit()
+	SettingsScript.reread()
+	hud._pause.open_settings()
+	var marks_row: SettingsPage.Row = hud._pause.settings.row_for("hud/awareness_marks")
+	marks_row.press()
 	await get_tree().process_frame
-	var turned: bool = not SettingsScript.awareness_marks() and hud._marks_toggle.text.contains("hidden") and get_tree().paused
+	var turned: bool = not SettingsScript.awareness_marks() and marks_row.value_text() == "Off" and get_tree().paused
 	var kept := ConfigFile.new()
 	var written: bool = kept.load(SettingsScript.path) == OK and kept.get_value("hud", "awareness_marks", true) == false
-	hud._marks_toggle.pressed.emit()
+	marks_row.press()
 	await get_tree().process_frame
-	var turned_back: bool = SettingsScript.awareness_marks() and hud._marks_toggle.text.contains("shown")
+	var turned_back: bool = SettingsScript.awareness_marks() and marks_row.value_text() == "On"
+	hud._pause.close_settings()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsScript.path))
-	SettingsScript.path = "user://settings.cfg"
-	SettingsScript.reload()
-	_check("U13 the pause screen's setting changes with a click, is kept, and does not resume", turned and written and turned_back,
-		"hidden and still paused %s written %s shown again %s" % [turned, written, turned_back])
+	SettingsScript.path = settings_before
+	SettingsScript.reread()
+	_check("U13 the pause menu's settings change there, are kept, and do not resume", turned and written and turned_back,
+		"off and still paused %s written %s on again %s" % [turned, written, turned_back])
 
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
-	click.position = Vector2(2, 2)
+	click.position = view.size * Vector2(0.8, 0.5)
 	click.global_position = click.position
 	get_viewport().push_input(click)
 	var up: InputEventMouseButton = click.duplicate()
@@ -533,8 +553,13 @@ func _ui_checks() -> void:
 	get_viewport().push_input(up)
 	await get_tree().process_frame
 	await _frames(3)
-	_check("U7 Esc pauses and shows the pause screen (in the middle); a click on it resumes", paused and centred and not get_tree().paused and not hud._pause.visible,
-		"paused with screen %s centred %s now paused %s screen %s" % [paused, centred, get_tree().paused, hud._pause.visible])
+	var held: bool = get_tree().paused and hud._pause.visible
+	hud._pause.words[0].pressed.emit()
+	await get_tree().create_timer(MenuMotion.PRESS + 0.05, true, false, true).timeout
+	await _frames(2)
+	_check("U7 Esc pauses and shows the pause menu (words on the left); a click on the painting does not resume, Resume does",
+		paused and placed and held and not get_tree().paused and not hud._pause.visible,
+		"paused with menu %s placed %s held through a click %s now paused %s menu %s" % [paused, placed, held, get_tree().paused, hud._pause.visible])
 
 	# U14 a torch on the wall: [E] Put out the torch, and it is out (dark,
 	#     nothing more to do with it)
@@ -627,7 +652,7 @@ func _fit_checks() -> void:
 		if rects.has("subtitles") and (rects["subtitles"] as Rect2).size.x > view.size.x * hud.SUBTITLE_WIDTH + 40.0:
 			failures.append("%s subtitles not wrapped: %s" % [size, rects["subtitles"]])
 
-		# The pause screen, in the middle.
+		# The pause menu, on the screen's left.
 		var esc := InputEventAction.new()
 		esc.action = &"ui_cancel"
 		esc.pressed = true
@@ -637,8 +662,8 @@ func _fit_checks() -> void:
 		var paused_rects: Dictionary = hud.layout_rects()
 		var column: Rect2 = paused_rects.get("pause", Rect2())
 
-		if column.size == Vector2.ZERO or not view.encloses(column) or column.get_center().distance_to(view.get_center()) > 2.0:
-			failures.append("%s pause screen at %s in %s" % [size, column, view.size])
+		if column.size == Vector2.ZERO or not view.encloses(column) or column.position.x > view.size.x * 0.3:
+			failures.append("%s pause menu at %s in %s" % [size, column, view.size])
 
 		# Nothing of the play HUD through it.
 		if paused_rects.size() != 1:

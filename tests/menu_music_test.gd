@@ -1,0 +1,262 @@
+extends Node
+## The menu score: its clock, layers, jingles and ending, against a test score.
+var failures := 0
+
+func check(ok: bool, message: String) -> void:
+	print(("PASS  " if ok else "FAIL  ") + message)
+	if not ok:
+		failures += 1
+
+func near(a: float, b: float, within := 0.0005) -> bool:
+	return absf(a - b) <= within
+
+const FIXTURE := "res://tests/fixtures/menu_score/score.json"
+const BEAT := 60.0 / 78.0
+const BAR := BEAT * 4.0
+var pos := 0.0
+
+func make_music(path := FIXTURE) -> MenuMusic:
+	var music := MenuMusic.new()
+	music.score_json_path = path
+	music.position_source = func() -> float: return pos
+	add_child(music)
+	music.set_process(false)
+	music.score.chords = [{"bar": 0, "name": "Dm"}, {"bar": 4, "name": "Gm"}]
+	return music
+
+## Advance simulated time in 1/60 s steps, moving the song position with it.
+func run_for(music: MenuMusic, seconds: float) -> void:
+	var steps := roundi(seconds * 60.0)
+	for i in range(steps):
+		pos += 1.0 / 60.0
+		music.step(1.0 / 60.0)
+
+func _ready() -> void:
+	clock_checks()
+	layer_checks()
+	jingle_checks()
+	await ending_checks()
+	await review_checks()
+	bus_checks()
+	await get_tree().process_frame
+	print("==== RESULTS ====")
+	get_tree().quit(1 if failures else 0)
+
+func clock_checks() -> void:
+	check(near(MenuClock.beat_seconds(78.0), 0.76923), "a beat at 78 bpm")
+	check(MenuClock.next_eighth(0.0, 78.0) == 0.0, "on an eighth, it is now")
+	check(MenuClock.next_eighth(0.001, 78.0) == 0.0, "just after an eighth still counts as it")
+	check(near(MenuClock.next_eighth(0.01, 78.0), 0.38462), "otherwise the next eighth")
+	check(MenuClock.bar_at(3.1, 78.0, 4) == 1, "bar from position")
+	var chords := [{"bar": 0, "name": "Dm"}, {"bar": 4, "name": "Gm"}]
+	check(MenuClock.chord_at(chords, 5, 16) == "Gm", "chord in a later bar")
+	check(MenuClock.chord_at(chords, 17, 16) == "Dm", "chords wrap with the loop")
+	check(near(MenuClock.phrase_end_after(10.0, 78.0, 4, 8), 24.615, 0.001), "end of the current phrase")
+	check(near(MenuClock.corrected(1.0, 0.01, 0.03), 0.98), "latency-corrected position")
+	check(MenuClock.corrected(0.01, 0.0, 0.03) == 0.0, "corrected position never negative")
+
+func layer_checks() -> void:
+	pos = 0.0
+	var music := make_music()
+	check(music.available and music.score.stems.size() == 7, "the test score loads")
+	check(music.player.bus == &"Music", "plays on the Music bus, made if missing")
+	check(music.state == MenuMusic.State.ARRIVAL, "the menu opens arriving")
+	var table := func(m: MenuMusic) -> Array: return [m.layer_target_db(&"base"), m.layer_target_db(&"low"), m.layer_target_db(&"high"), m.layer_target_db(&"fx")]
+	check(table.call(music) == [0.0, 0.0, -80.0, -80.0], "arrival: base and low from the first moment")
+	run_for(music, 4.0 * BAR + 0.05)
+	check(music.state == MenuMusic.State.BROWSING and table.call(music) == [0.0, 0.0, -80.0, -80.0], "browsing: base and low")
+	music.activity = 1.0
+	music.set_selected(2)
+	check(music.layer_target_db(&"high") == -80.0 and music.stem_target_db(&"rhodes") == music.stem_target_db(&"trumpet"), "moving around brings nothing in, and no word's instrument leans")
+	for screen in [MenuMusic.State.CONTINUE, MenuMusic.State.SETTINGS]:
+		music.set_state(screen)
+		check(table.call(music) == [0.0, 0.0, -80.0, -80.0], "Continue and Settings stay on base and low")
+	music.set_state(MenuMusic.State.LORE)
+	check(table.call(music) == [0.0, 0.0, -80.0, 0.0], "Lore brings in fx")
+	music.set_state(MenuMusic.State.ARCHETYPE)
+	check(table.call(music) == [0.0, 0.0, 0.0, -80.0], "the archetype screen brings in high")
+	run_for(music, 4.0)
+	check(is_equal_approx(music.stem_gain_db(&"trumpet"), 0.0) and music.layer_energy(&"high") > 0.99, "gains glide to their targets")
+	music.set_state(MenuMusic.State.BROWSING)
+	run_for(music, 4.0)
+	check(music.layer_energy(&"high") == 0.0 and music.layer_energy(&"fx") == 0.0, "and back out")
+	music.set_state(MenuMusic.State.BROWSING)
+	music.activity = 0.0
+	music.note_input()
+	run_for(music, 30.5)
+	check(music.state == MenuMusic.State.IDLE and music.layer_target_db(&"base") == -10.0 and music.layer_target_db(&"low") == -80.0, "30 s untouched: idle floor")
+	pos = 9.5 * BAR
+	music.note_input()
+	music.step(0.0)
+	check(music.state == MenuMusic.State.IDLE, "waking waits for the bar line")
+	pos = 10.0 * BAR - 0.01
+	music.step(0.0)
+	check(music.state == MenuMusic.State.IDLE, "still waiting just before it")
+	pos = 10.0 * BAR + 0.001
+	music.step(0.0)
+	check(music.state == MenuMusic.State.BROWSING, "back to browsing on the bar line")
+	music.state = MenuMusic.State.IDLE
+	music.set_state(MenuMusic.State.LORE)
+	check(table.call(music) == [0.0, 0.0, -80.0, 0.0], "Lore from idle: everything Lore needs comes back")
+	music.queue_free()
+	var silent := make_music("res://tests/fixtures/no_such_score.json")
+	silent.set_state(MenuMusic.State.LORE)
+	silent.set_selected(1)
+	silent.note_input()
+	silent.step(0.1)
+	check(not silent.available and silent.layer_energy(&"base") == 0.0, "no score: silent, no errors")
+	silent.queue_free()
+
+func jingle_checks() -> void:
+	pos = 0.2
+	var music := make_music()
+	music.hover(1)
+	check(music.last_jingle.get("kind") == "hover" and music.last_jingle.get("button") == 1 and is_equal_approx(music.last_jingle.get("started_at_pos", -1.0), 0.2), "hover plays on the same frame")
+	check(music.last_jingle.get("chord") == "Dm", "hover is in the chord sounding now")
+	var first: int = music.last_jingle.variant
+	music.hover(1)
+	check(music.last_jingle.variant == 1 - first, "hovering again rotates the variant")
+	pos = 0.01
+	music.last_jingle = {}
+	music.press(0)
+	check(music.last_jingle.is_empty(), "a press waits for the next eighth")
+	while pos < 0.5 and music.last_jingle.is_empty():
+		pos += 1.0 / 60.0
+		music.step(1.0 / 60.0)
+	var started: float = music.last_jingle.get("started_at_pos", -1.0)
+	check(music.last_jingle.get("kind") == "press" and started >= 0.38462 and started - 0.38462 < 1.0 / 60.0, "a press lands on the eighth, at most a frame late")
+	pos = 5.0 * BAR + 0.1
+	music.press(2)
+	run_for(music, 0.5)
+	check(music.last_jingle.get("chord") == "Gm" and music.last_jingle.get("button") == 2, "a press in bar 5 plays in G minor")
+	pos = 1.0
+	var most := 0
+	for i in range(8):
+		music.hover(i % 4)
+		pos += 1.0 / 60.0
+		music.step(1.0 / 60.0)
+		most = maxi(most, music.hover_voices_playing())
+	check(most <= MenuMusic.HOVER_VOICES, "hover spam never stacks more than %d voices (saw %d)" % [MenuMusic.HOVER_VOICES, most])
+	music.press(3)
+	music.press(3)
+	run_for(music, 0.5)
+	check(music.press_voices_playing(3) <= MenuMusic.PRESS_VOICES, "one press voice per word")
+	music.queue_free()
+
+func ending_checks() -> void:
+	pos = 3.0 * BAR
+	var music := make_music()
+	run_for(music, 0.5)
+	music.set_state(MenuMusic.State.BROWSING)
+	music.set_state(MenuMusic.State.ARCHETYPE)
+	for i in range(240):
+		pos += 1.0 / 60.0
+		music.step(1.0 / 60.0)
+	check(music.stem_gain_db(&"trumpet") > -4.0, "high is in before the ending (%.1f dB)" % music.stem_gain_db(&"trumpet"))
+	check(music.process_mode == Node.PROCESS_MODE_ALWAYS, "plays on under the paused loading screen")
+	var ended := [false]
+	music.ended.connect(func(): ended[0] = true)
+	music.start_game()
+	check(music.state == MenuMusic.State.STARTING, "New Game starts the ending")
+	music.set_state(MenuMusic.State.LORE)
+	music.last_jingle = {}
+	music.hover(1)
+	music.press(1)
+	check(music.state == MenuMusic.State.STARTING and music.last_jingle.is_empty(), "nothing else plays once it is ending")
+	var end := 8.0 * BAR
+	var high_out_at := -1.0
+	var base_at_end := 0.0
+	while pos < end + 0.2 and not ended[0]:
+		pos += 1.0 / 60.0
+		music.step(1.0 / 60.0)
+		if high_out_at < 0.0 and music.stem_gain_db(&"trumpet") <= MenuMusic.OUT:
+			high_out_at = pos
+		if pos >= end - 1.0 / 60.0 and pos < end:
+			base_at_end = music.stem_gain_db(&"piano")
+	var span := end - (3.0 * BAR + 4.5)
+	check(ended[0] and absf(pos - end) <= 1.0 / 60.0 + 0.0001, "the song ends on its phrase's last bar line (at %.3f, bar line %.3f)" % [pos, end])
+	check(high_out_at > 0.0 and absf(high_out_at - (end - span * 0.6)) < 0.1, "the high layer leaves first")
+	check(base_at_end < -20.0, "the base is all but gone by then")
+	await get_tree().create_timer(0.3).timeout
+	check(not is_instance_valid(music) or music.is_queued_for_deletion(), "it frees itself when done")
+	pos = 7.5 * BAR
+	var late := make_music()
+	run_for(late, 0.1)
+	late.start_game()
+	var phrase := 8.0 * BAR
+	check(absf(late.ending_at() - 2.0 * phrase) < 0.001, "less than a bar left: it finishes the next phrase instead")
+	late.queue_free()
+
+func review_checks() -> void:
+	# The arrival cue plays first; the loop starts as it lands.
+	pos = 0.0
+	var music := make_music()
+	check(music.arrival_player != null and music.arrival_player.playing and not music.player.playing, "the arrival cue plays before the loop")
+	music.step(float(music.score.arrival_seconds) + 0.02)
+	check(music.player.playing, "the loop starts as the arrival lands")
+	# A heard position that steps back a hair is jitter, not a loop wrap.
+	pos = 2.0 * BAR
+	music.state = MenuMusic.State.BROWSING
+	music.start_game()
+	pos += 0.3
+	music.step(0.3)
+	pos -= 0.004
+	music.step(0.0)
+	check(music.state == MenuMusic.State.STARTING and music.ending_progress() < 0.5, "jitter does not end the song early (progress %.2f)" % music.ending_progress())
+	# A stall past the bar line still fades rather than cutting.
+	pos = 8.0 * BAR + 0.5
+	music.step(0.016)
+	check(is_instance_valid(music.player) and music.player.playing and music.player.volume_db > -79.0, "a stall past the bar line fades out instead of cutting")
+	await get_tree().create_timer(0.3).timeout
+	check(not is_instance_valid(music) or music.is_queued_for_deletion(), "and then it is gone")
+	# A voice freed between frames is skipped, not an error.
+	pos = 0.5
+	var again := make_music()
+	again.hover(0)
+	(again._voices[0].player as Node).free()
+	again.hover(1)
+	again.press(2)
+	check(again.last_jingle.get("button") == 1, "a freed voice is skipped")
+	again.queue_free()
+
+func bus_checks() -> void:
+	pos = 0.5
+	var music := make_music()
+	var bus := AudioServer.get_bus_index(MenuMusic.JINGLE_BUS)
+	check(bus >= 0 and AudioServer.get_bus_send(bus) == &"Music" and is_equal_approx(AudioServer.get_bus_volume_db(bus), -6.0), "the jingles have their own bus, under the song")
+	var delay := AudioServer.get_bus_effect(bus, 0) as AudioEffectDelay
+	var room := AudioServer.get_bus_effect(bus, 1) as AudioEffectReverb
+	check(delay != null and absf(delay.tap1_delay_ms - 577.0) <= 1.0 and delay.feedback_active and room != null and is_equal_approx(room.wet, 0.35), "a dotted-eighth delay, then a reverb")
+	var again := make_music()
+	check(AudioServer.get_bus_effect_count(bus) == 2, "a second menu doesn't stack the effects")
+	again.queue_free()
+	music.hover(1)
+	check(music._voices.size() > 0 and music._voices[-1].player.bus == MenuMusic.JINGLE_BUS, "jingles play through it")
+	var most := 0
+	for i in range(8):
+		music.hover(i % 4)
+		pos += 1.0 / 60.0
+		music.step(1.0 / 60.0)
+		most = maxi(most, music.hover_voices_playing())
+	check(most <= MenuMusic.HOVER_VOICES and MenuMusic.HOVER_VOICES == 3, "up to three hovers ring together (saw %d)" % most)
+	music.queue_free()
+	duck_checks()
+
+## The archetypes' sounds (buttons 5 and up) dip the song for a moment.
+func duck_checks() -> void:
+	pos = 0.5
+	var music := make_music()
+	music.set_state(MenuMusic.State.ARCHETYPE)
+	run_for(music, 3.0)
+	var stem := int(music.score.stems[0].index)
+	var steady: float = music._stream.get_sync_stream_volume(stem)
+	music.hover(1)
+	run_for(music, 1.0 / 60.0)
+	check(near(music._stream.get_sync_stream_volume(stem), steady, 0.5), "a menu word's jingle doesn't dip the song")
+	music.hover(5)
+	run_for(music, 1.0 / 60.0)
+	var dipped: float = music._stream.get_sync_stream_volume(stem)
+	check(dipped <= steady - MenuMusic.DUCK_DB + 0.5, "an archetype's sound dips the song %.0f dB (%.1f -> %.1f)" % [MenuMusic.DUCK_DB, steady, dipped])
+	run_for(music, 1.5)
+	check(near(music._stream.get_sync_stream_volume(stem), steady, 0.1), "and it comes back within a second and a half")
+	music.queue_free()
