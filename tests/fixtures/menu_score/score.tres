@@ -1,0 +1,26 @@
+[gd_resource type="AudioStreamSynchronized" load_steps=8 format=3]
+
+[ext_resource type="AudioStream" path="res://tests/fixtures/menu_score/piano.ogg" id="piano"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/menu_score/drums.ogg" id="drums"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/menu_score/trumpet.ogg" id="trumpet"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/menu_score/guitar.ogg" id="guitar"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/menu_score/rhodes.ogg" id="rhodes"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/menu_score/bells.ogg" id="bells"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/menu_score/drone.ogg" id="drone"]
+
+[resource]
+stream_count = 7
+stream_0/stream = ExtResource("piano")
+stream_0/volume = -80.0
+stream_1/stream = ExtResource("drums")
+stream_1/volume = -80.0
+stream_2/stream = ExtResource("trumpet")
+stream_2/volume = -80.0
+stream_3/stream = ExtResource("guitar")
+stream_3/volume = -80.0
+stream_4/stream = ExtResource("rhodes")
+stream_4/volume = -80.0
+stream_5/stream = ExtResource("bells")
+stream_5/volume = -80.0
+stream_6/stream = ExtResource("drone")
+stream_6/volume = -80.0

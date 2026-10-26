@@ -1,0 +1,177 @@
+{
+  "bpm": 78.0,
+  "beats_per_bar": 4,
+  "bars": 16,
+  "phrase_bars": 8,
+  "loop_seconds": 49.23076923076923,
+  "sample_rate": 48000,
+  "common_gain_db": -8.000000000000002,
+  "chords": [
+    {
+      "bar": 0,
+      "name": "Dm"
+    },
+    {
+      "bar": 4,
+      "name": "Gm"
+    },
+    {
+      "bar": 8,
+      "name": "Dm"
+    },
+    {
+      "bar": 12,
+      "name": "Gm"
+    }
+  ],
+  "stems": [
+    {
+      "id": "piano",
+      "layer": "base",
+      "button": -1,
+      "index": 0,
+      "peak_db": -21.980195013512297,
+      "sha256": "bd2f5f1c6123044e65db79ff15a12b6b6370a2fd9ba85e6b257c9ddfb5757e48"
+    },
+    {
+      "id": "drums",
+      "layer": "low",
+      "button": -1,
+      "index": 1,
+      "peak_db": -21.980195013512297,
+      "sha256": "52e3b5ff2e923d727930db81c794e12ad168636911cc8f68095d0674b703d15e"
+    },
+    {
+      "id": "trumpet",
+      "layer": "high",
+      "button": 0,
+      "index": 2,
+      "peak_db": -21.980195013512297,
+      "sha256": "3c4300ddea70fb0c5953c9a426aa43868aaa5bb2ece2fd4d782ea0c59d694957"
+    },
+    {
+      "id": "guitar",
+      "layer": "high",
+      "button": 1,
+      "index": 3,
+      "peak_db": -21.980195013512297,
+      "sha256": "eff27ee38995c2b9cb8a4efacca8c7a276a48c8ebfd5379ea395f8440801ceaa"
+    },
+    {
+      "id": "rhodes",
+      "layer": "high",
+      "button": 2,
+      "index": 4,
+      "peak_db": -21.980195013512297,
+      "sha256": "e08346961c9eba0b3f5e2d77d6ff5e21285a6a49033bf4acd988e51ed52f3797"
+    },
+    {
+      "id": "bells",
+      "layer": "high",
+      "button": 3,
+      "index": 5,
+      "peak_db": -21.980195013512297,
+      "sha256": "4504523421d4bf46b4bb7beee6f446a35f02bb00bd77f7d93b39f026f93a7d87"
+    },
+    {
+      "id": "drone",
+      "layer": "fx",
+      "button": -1,
+      "index": 6,
+      "peak_db": -21.980195013512297,
+      "sha256": "d7788c139f129ff80f15c8efa8e0a4671298a569d20b2138cb1c7ec386bb6872"
+    }
+  ],
+  "jingles": {
+    "0": {
+      "hover": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b0_hover_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b0_hover_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b0_hover_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b0_hover_Gm_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b0_press_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b0_press_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b0_press_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b0_press_Gm_1.ogg"
+        ]
+      }
+    },
+    "1": {
+      "hover": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b1_hover_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b1_hover_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b1_hover_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b1_hover_Gm_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b1_press_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b1_press_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b1_press_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b1_press_Gm_1.ogg"
+        ]
+      }
+    },
+    "2": {
+      "hover": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b2_hover_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b2_hover_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b2_hover_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b2_hover_Gm_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b2_press_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b2_press_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b2_press_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b2_press_Gm_1.ogg"
+        ]
+      }
+    },
+    "3": {
+      "hover": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b3_hover_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b3_hover_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b3_hover_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b3_hover_Gm_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b3_press_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b3_press_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b3_press_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b3_press_Gm_1.ogg"
+        ]
+      }
+    }
+  },
+  "arrival": null,
+  "arrival_seconds": 0.0
+}
