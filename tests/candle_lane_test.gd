@@ -27,6 +27,7 @@ func _ready() -> void:
 	await _crowd_of_shades()
 	await _landmarks()
 	await _landmarks_review()
+	_candle_light()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -861,6 +862,35 @@ func _landmarks() -> void:
 	_check("L10c a gust carries them farther, never past the lane's end, never piling up",
 		farther > 0.0 and farther < INF and past_end == 0 and most <= 6,
 		"gust over calm %.2f m, past the end %d, most at once %d" % [farther, past_end, most])
+
+
+## The candles' light comes from their flames: each run's light just over its flames (not a hand above them), off the
+## wall its ledge stands on (no hot ring on the tiles), its reach a candle's.
+func _candle_light() -> void:
+	var wrong := []
+	var systems: Array = lane.get("candles") if lane.get("candles") != null else []
+	for flames: Node3D in systems:
+		var lights: Array = flames.find_children("*", "OmniLight3D", false, false)
+		var draws: Array = flames.find_children("candles", "MultiMeshInstance3D", false, false)
+		if lights.is_empty() or draws.is_empty() or not draws[0].has_meta("flames"):
+			wrong.append("%s unlit" % flames.name)
+			continue
+		var places: PackedVector3Array = draws[0].get_meta("flames")
+		var high := -INF
+		for p in places:
+			high = maxf(high, lane.to_local(flames.to_global(p)).y)
+		var light: OmniLight3D = lights[0]
+		var at := lane.to_local(light.global_position)
+		var off_wall := minf(absf(at.z - lane.BACK_WALL), absf(at.z - lane.FAR_WALL))
+		var on_ledge := String(flames.name).begins_with("votives_back") or String(flames.name).begins_with("votives_far")
+		if at.y < high - 0.05 or at.y > high + 0.2:
+			wrong.append("%s light %.2f over flames' top %.2f" % [flames.name, at.y, high])
+		if on_ledge and off_wall < 0.45:
+			wrong.append("%s light %.2f off the wall" % [flames.name, off_wall])
+		if light.omni_range > 3.2:
+			wrong.append("%s reaches %.1f" % [flames.name, light.omni_range])
+	_check("C23 the candles light from their flames: just over them, off the wall, a candle's reach",
+		not systems.is_empty() and wrong.is_empty(), "%d runs; %s" % [systems.size(), wrong.slice(0, 4)])
 
 
 ## The landmarks' final review (docs/superpowers/plans/2026-10-25-lane-landmarks.md): what a player or an F2 pass would

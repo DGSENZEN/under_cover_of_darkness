@@ -64,6 +64,8 @@ const LANE_WICKS := "res://assets/eclipse/source/candle_lane_wicks.json"
 const DOOR_INSET := 0.05
 ## How far along a ledge the wicks sharing one flame system (and its one light) run (m).
 const CANDLE_RUN := 1.5
+## How far out from its wall a ledge run's light stands (m).
+const CANDLE_OUT := 0.5
 ## The station's sign under the vault: how far in from the mouth.
 const SIGN_IN := 0.9
 ## The way's arrows on the walls, at ARROW_Y: [piece, x along the lane, its wall (-1 the back, 1 the far), where it
@@ -759,7 +761,10 @@ func _candles() -> void:
 		var flames := Vfx.system("candles")
 		flames.name = "votives_%s" % key
 		add_child(flames)
-		Vfx.place(flames, middle, {"wicks": wicks})
+		# (A ledge's run lit from among its flames, out from the wall it stands on, so the tiles take a soft wash, not
+		# a ring; a mass on the floor from over its middle.)
+		var out := 0.0 if not (key.begins_with("back") or key.begins_with("far")) else (CANDLE_OUT if key.begins_with("back") else -CANDLE_OUT)
+		Vfx.place(flames, middle, {"wicks": wicks, "out": global_basis * Vector3(0.0, 0.0, out)})
 		Vfx.emit(flames, true)
 		candles.append(flames)
 

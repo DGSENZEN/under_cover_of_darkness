@@ -52,6 +52,8 @@ const FADE_OVER := 10.0
 const DRIFT_ACROSS := 1.2
 const WALL_REACH := 20.0
 const CANDLE_COLOUR := Color("#ffc070")
+## How far over the tallest of a cluster's flames its light stands (m).
+const CANDLE_LIGHT_LIFT := 0.08
 ## A candle's flame at a size of 1: its widest across and its height (m), a little bigger than a
 ## real one's, so it reads.
 const CANDLE_FLAME := Vector2(0.065, 0.085)
@@ -122,7 +124,7 @@ const PRESETS := {
 		"velocity": [0.02, 0.06], "spread": 180.0, "gravity": Vector3.ZERO, "box": Vector3(2.0, 1.5, 2.0), "fps": 15,
 		"breathed": true}],
 	"canal_fog": [{"draw": "fog", "shader": FOG, "size": Vector3(40.0, 2.0, 12.0), "at": Vector3.ZERO, "density": 1.5}],
-	"candles": [{"draw": "candles"}, {"draw": "light", "colour": CANDLE_COLOUR, "range": 4.0, "at": Vector3(0, 0.4, 0)}],
+	"candles": [{"draw": "candles"}, {"draw": "light", "colour": CANDLE_COLOUR, "range": 3.0, "at": Vector3(0, 0.4, 0)}],
 	"brazier": [{"draw": "flames"}, {"draw": "trailed"}, {"draw": "haze"},
 		{"draw": "light", "colour": FIRE_COLOUR, "range": 9.0, "at": Vector3(0, 0.5, 0)},
 		{"draw": "fumes", "width": 0.3, "rise": 2.0, "plumes": 2, "root": 0.2, "crown": 0.7,
@@ -814,7 +816,7 @@ static func place(node: Node3D, at: Vector3, emitter := {}) -> void:
 	node.global_position = at
 
 	if emitter.has("wicks"):
-		_on_wicks(node, at, emitter["wicks"])
+		_on_wicks(node, at, emitter["wicks"], emitter.get("out", Vector3.ZERO))
 
 	# What falls from it lands on its ground (`ground` m under its spot).
 	if emitter.has("ground"):
@@ -829,9 +831,12 @@ static func place(node: Node3D, at: Vector3, emitter := {}) -> void:
 				look.set_shader_parameter(&"lamp", at + Vector3(0, DUST_UNDER_LAMP, 0))
 
 
-## Candles' flames stood each on its wick (world), their light over them
-## all; where they stand kept on the draw ("flames", local).
-static func _on_wicks(node: Node3D, at: Vector3, wicks: Array) -> void:
+## Candles' flames stood each on its wick (world), their light among them,
+## just over the tallest flame (a hand above them, it lit the wall over a
+## ledge in a hot ring and the flames under it read unlit), stood `out`
+## (world) from the wall they burn against; where they stand kept on the
+## draw ("flames", local).
+static func _on_wicks(node: Node3D, at: Vector3, wicks: Array, out := Vector3.ZERO) -> void:
 	var draws := node.find_children("candle*", "MultiMeshInstance3D", false, false)
 
 	if draws.is_empty():
@@ -839,6 +844,7 @@ static func _on_wicks(node: Node3D, at: Vector3, wicks: Array) -> void:
 
 	var places := PackedVector3Array()
 	var middle := Vector3.ZERO
+	var top := -INF
 
 	for draw: MultiMeshInstance3D in draws:
 		draw.multimesh.instance_count = wicks.size()
@@ -847,6 +853,7 @@ static func _on_wicks(node: Node3D, at: Vector3, wicks: Array) -> void:
 		var w := Vector3(wicks[i][0], wicks[i][1], wicks[i][2]) - at
 		places.append(w)
 		middle += w
+		top = maxf(top, w.y)
 		# (Each flame its own size and phase, from where it stands.)
 		var seed := absf(sin(w.x * 12.9898 + w.z * 78.233) * 43758.5453)
 		_set_flame(draws, i, w, 0.85 + 0.3 * fposmod(seed, 1.0), fposmod(seed * 7.0, 1.0))
@@ -855,8 +862,10 @@ static func _on_wicks(node: Node3D, at: Vector3, wicks: Array) -> void:
 		draw.set_meta("flames", places)
 
 	if wicks.size() > 0:
+		var from := middle / wicks.size()
+		from.y = top + CANDLE_LIGHT_LIFT
 		for light in node.find_children("*", "OmniLight3D", false, false):
-			light.position = middle / wicks.size() + Vector3(0, 0.3, 0)
+			light.position = from + node.global_basis.inverse() * out
 
 
 ## A climbing noise texture of our own (seamless), shared.
