@@ -17,12 +17,12 @@ TOOL = ROOT / 'tools/prepare_menu_score.py'
 RATE = 48000
 
 
-def write_wav(path, seconds, freq):
+def write_wav(path, seconds, freq, channels=2):
     t = np.arange(round(seconds * RATE)) / RATE
     tone = (0.3 * np.sin(2 * np.pi * freq * t) * (1 + 0.5 * np.sin(2 * np.pi * 0.5 * t)))
-    pcm = (np.column_stack([tone, tone * 0.9]) * 32767).astype('<i2')
+    pcm = (np.column_stack([tone, tone * 0.9][:channels]) * 32767).astype('<i2')
     with wave.open(str(path), 'wb') as out:
-        out.setnchannels(2)
+        out.setnchannels(channels)
         out.setsampwidth(2)
         out.setframerate(RATE)
         out.writeframes(pcm.tobytes())
@@ -104,6 +104,37 @@ class PrepareMenuScore(unittest.TestCase):
         self.assertEqual(score['jingles']['0']['press']['Gm'], ['res://fixture/jingles/b0_press_Gm_0.ogg'])
         self.assertEqual([s['index'] for s in score['stems']], [0, 1])
         self.assertIn('stream_1/stream', (work / 'out/score.tres').read_text())
+
+    def test_ring_out_folds_onto_the_loop_start(self):
+        # A stem that sounds past the loop's end: its ring-out continues at the
+        # top of the loop instead of being cut off (no click at the seam).
+        work, result = self.build(fixture_map(), seconds=5.0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        loop = decode(work / 'out/piano.ogg')
+        source = decode(work / 'src/stems/piano.wav')
+        n = round(4.0 * RATE)
+        gain = 10 ** (json.loads((work / 'out/score.json').read_text())['common_gain_db'] / 20)
+        expected = (source[:64] + source[n:n + 64]) * gain
+        self.assertLess(np.abs(loop[:64] - expected).max(), 0.02)
+
+    def test_mono_stem_becomes_stereo(self):
+        work = Path(tempfile.mkdtemp())
+        (work / 'src/stems').mkdir(parents=True)
+        write_wav(work / 'src/stems/piano.wav', 4.0, 220)
+        write_wav(work / 'src/stems/drums.wav', 4.0, 440, channels=1)
+        (work / 'src/map.json').write_text(json.dumps(fixture_map()))
+        result = subprocess.run([sys.executable, str(TOOL), '--source', str(work / 'src'), '--out', str(work / 'out')],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        drums = decode(work / 'out/drums.ogg')
+        self.assertGreater(np.abs(drums).max(), 0.05)
+        self.assertLess(np.abs(drums[:, 0] - drums[:, 1]).max(), 0.01)
+
+    def test_cut_jingle_fades_in(self):
+        work, result = self.build(fixture_map())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        hover = decode(work / 'out/jingles/b0_hover_Dm_0.ogg')
+        self.assertLess(np.abs(hover[:8]).max(), 0.01)
 
     def test_unknown_layer_is_named(self):
         mapping = fixture_map()

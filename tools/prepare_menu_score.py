@@ -28,6 +28,8 @@ RATE = 48000
 LAYERS = ('base', 'low', 'high', 'fx')
 KINDS = ('hover', 'press')
 FADE_OUT = round(0.005 * RATE)
+# A cut can start mid-note: ease in so it never clicks.
+FADE_IN = round(0.003 * RATE)
 
 
 def fail(message):
@@ -43,13 +45,24 @@ def read_audio(path):
     if int(info['sample_rate']) != RATE:
         raise ValueError(f'{path.name} is {info["sample_rate"]} Hz, not {RATE}')
     audio = np.frombuffer(data, dtype='<f4').reshape(-1, int(info['channels']))
+    if audio.shape[1] == 1:
+        return np.repeat(audio, 2, axis=1)
     return stereo(audio) if audio.shape[1] != 2 else audio.copy()
+
+
+# Whatever sounds past the loop's end (notes ringing over the bar line) is
+# folded back onto the loop's start, fading out over this long, so the
+# seam continues instead of cutting off.
+FOLD = round(0.25 * RATE)
 
 
 def fit(audio, samples):
     out = np.zeros((samples, 2), dtype=np.float32)
     n = min(samples, len(audio))
     out[:n] = audio[:n]
+    tail = audio[samples:samples + FOLD]
+    if len(tail):
+        out[:len(tail)] += tail * np.linspace(1, 0, FOLD)[:len(tail), None]
     return out
 
 
@@ -135,6 +148,8 @@ def main():
             pcm = audio[cut['stem']][start:start + count].copy() * gain
             if len(pcm) != count:
                 fail(f'Jingle {name}: cut runs past the loop')
+            ease = min(FADE_IN, len(pcm))
+            pcm[:ease] *= np.linspace(0, 1, ease)[:, None]
         fade = min(FADE_OUT, len(pcm))
         pcm[-fade:] *= np.linspace(1, 0, fade)[:, None]
         write_ogg(args.out / 'jingles' / f'{name}.ogg', pcm, f'{prefix}/jingles/{name}.ogg', False)

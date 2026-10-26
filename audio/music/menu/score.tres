@@ -1,0 +1,14 @@
+[gd_resource type="AudioStreamSynchronized" load_steps=4 format=3]
+
+[ext_resource type="AudioStream" path="res://audio/music/menu/piano.ogg" id="piano"]
+[ext_resource type="AudioStream" path="res://audio/music/menu/bass.ogg" id="bass"]
+[ext_resource type="AudioStream" path="res://audio/music/menu/drums.ogg" id="drums"]
+
+[resource]
+stream_count = 3
+stream_0/stream = ExtResource("piano")
+stream_0/volume = -80.0
+stream_1/stream = ExtResource("bass")
+stream_1/volume = -80.0
+stream_2/stream = ExtResource("drums")
+stream_2/volume = -80.0

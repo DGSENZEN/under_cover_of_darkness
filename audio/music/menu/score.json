@@ -1,0 +1,177 @@
+{
+  "bpm": 78.0,
+  "beats_per_bar": 4,
+  "bars": 8,
+  "phrase_bars": 4,
+  "loop_seconds": 24.615384615384617,
+  "sample_rate": 48000,
+  "common_gain_db": -8.000000000000002,
+  "chords": [
+    {
+      "bar": 0,
+      "name": "Dm"
+    },
+    {
+      "bar": 4,
+      "name": "Gm"
+    },
+    {
+      "bar": 6,
+      "name": "Eb"
+    },
+    {
+      "bar": 7,
+      "name": "Dm"
+    }
+  ],
+  "stems": [
+    {
+      "id": "piano",
+      "layer": "base",
+      "button": -1,
+      "index": 0,
+      "peak_db": -19.377512893729012,
+      "sha256": "65e9b6ec6123b886bccc85edf3eb8d22e4f56ac0db9c3b9f28083d769ddd1343"
+    },
+    {
+      "id": "bass",
+      "layer": "base",
+      "button": -1,
+      "index": 1,
+      "peak_db": -17.16847860074941,
+      "sha256": "588b47be0cbcc3e4624e7006dd7da301d17199916beebfa41be34d073583c3e2"
+    },
+    {
+      "id": "drums",
+      "layer": "low",
+      "button": -1,
+      "index": 2,
+      "peak_db": -11.406625319964846,
+      "sha256": "0ced607dbde256f2edd13fce66566f2b7f9bdbb273fff509c378960564b8bea7"
+    }
+  ],
+  "jingles": {
+    "0": {
+      "hover": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b0_hover_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b0_hover_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b0_hover_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b0_hover_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b0_hover_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b0_hover_Eb_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b0_press_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b0_press_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b0_press_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b0_press_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b0_press_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b0_press_Eb_1.ogg"
+        ]
+      }
+    },
+    "1": {
+      "hover": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b1_hover_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b1_hover_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b1_hover_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b1_hover_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b1_hover_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b1_hover_Eb_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b1_press_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b1_press_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b1_press_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b1_press_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b1_press_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b1_press_Eb_1.ogg"
+        ]
+      }
+    },
+    "2": {
+      "hover": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b2_hover_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b2_hover_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b2_hover_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b2_hover_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b2_hover_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b2_hover_Eb_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b2_press_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b2_press_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b2_press_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b2_press_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b2_press_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b2_press_Eb_1.ogg"
+        ]
+      }
+    },
+    "3": {
+      "hover": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b3_hover_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b3_hover_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b3_hover_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b3_hover_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b3_hover_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b3_hover_Eb_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b3_press_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b3_press_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b3_press_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b3_press_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b3_press_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b3_press_Eb_1.ogg"
+        ]
+      }
+    }
+  },
+  "arrival": null,
+  "arrival_seconds": 0.0
+}
