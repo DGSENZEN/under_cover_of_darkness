@@ -160,14 +160,17 @@ def percussion():
 
 
 KICK, RIM, SNARE, HAT, HAT_OPEN = 36, 37, 38, 42, 46
+# Layers for punch: a deeper kick under the kick, a clap under the backbeat.
+KICK_LOW, CLAP = 35, 39
 
 
 def drums():
-    """Trip-hop: a heavy backbeat on 2 and 4 that sits a touch late, a broken
-    kick that answers the bass, swung sixteenth hats that breathe, ghost
-    snares, and an open hat and small fill closing each four bars."""
-    kicks = [[(0.0, 112), (1.75, 84), (2.5, 104)],
-             [(0.0, 112), (2.25, 88), (2.75, 100), (3.75, 66)]]
+    """Trip-hop: a heavy backbeat on 2 and 4 (snare with a clap under it) that
+    sits a hair late, a broken kick doubled by a deeper one, quiet swung
+    sixteenth hats so the hits punch through, ghost snares, and an open hat
+    and small fill closing each four bars."""
+    kicks = [[(0.0, 127), (1.75, 96), (2.5, 118)],
+             [(0.0, 127), (2.25, 100), (2.75, 114), (3.75, 76)]]
     ghosts = [[(2.25, 30), (3.75, 26)], [(1.75, 30), (3.25, 28)]]
     notes = []
     for bar in range(BARS):
@@ -176,8 +179,10 @@ def drums():
         for beat, vel in kicks[bar % 2]:
             if not (phrase_end and beat == 3.75):
                 notes.append((at + beat, 0.25, KICK, vel))
+                notes.append((at + beat, 0.25, KICK_LOW, vel - 14))
         for beat in (1.0, 3.0):
-            notes.append((at + beat + 0.02, 0.25, SNARE, 118 if beat == 3.0 else 112))
+            notes.append((at + beat + 0.012, 0.25, SNARE, 127 if beat == 3.0 else 124))
+            notes.append((at + beat + 0.012, 0.25, CLAP, 92))
         for beat, vel in ghosts[bar % 2]:
             notes.append((at + beat, 0.2, SNARE, vel))
         for k in range(16):
@@ -185,11 +190,11 @@ def drums():
             if phrase_end and beat >= 3.5:
                 break
             # Downbeats lead, eighths answer, sixteenths whisper; swing the sixteenths.
-            vel = 72 if k % 4 == 0 else 54 if k % 2 == 0 else 34 + (k * 7) % 11
+            vel = 62 if k % 4 == 0 else 46 if k % 2 == 0 else 28 + (k * 7) % 10
             notes.append((at + beat + (0.035 if k % 2 else 0.0), 0.2, HAT, vel))
         notes.append((at + 2.75, 0.2, RIM, 38))
         if phrase_end:
-            notes += [(at + 3.5, 0.5, HAT_OPEN, 62), (at + 3.25, 0.2, KICK, 90),
+            notes += [(at + 3.5, 0.5, HAT_OPEN, 58), (at + 3.25, 0.2, KICK, 108), (at + 3.25, 0.2, KICK_LOW, 94),
                       (at + 3.5, 0.2, SNARE, 46), (at + 3.75, 0.2, SNARE, 60)]
     return notes
 

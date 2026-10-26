@@ -38,8 +38,8 @@ python3 tools/prepare_menu_score.py
 Change the script and re-run it to revise a part.
 
 `parts/trip_hop_drums.mid`, from the same script, is a new trip-hop kit part. It is on the Mixed Boom Bap kit, track 12, in the Logic project, and the sketch's Back in the Day Beat track is muted:
-- a heavy backbeat on 2 and 4, a touch late
-- a broken kick
-- swung 16th hats
+- a heavy backbeat on 2 and 4, a hair late, with a clap layered under the snare
+- a broken kick, doubled by a deeper kick
+- swung 16th hats, kept quiet so the hits punch through
 - ghost snares and a rim
 - an open hat and a small fill at the end of each four bars
