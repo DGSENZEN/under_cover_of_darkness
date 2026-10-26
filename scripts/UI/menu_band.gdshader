@@ -34,7 +34,7 @@ float torn(float d, vec2 at, vec2 boil, float depth) {
 	return smoothstep(0.0, depth, d + (n - 0.5) * depth * 1.3 + (fine - 0.5) * depth * 0.35);
 }
 
-vec4 art(vec2 uv, vec4 rect, vec4 box, vec2 boil, float t) {
+vec4 art(vec2 uv, vec4 rect, vec4 box, vec2 boil, float t, float as_page) {
 	vec2 p = (uv - box.xy) / box.zw;
 	// Slow drift inside the band: 18 s each way, scale 1.04-1.08, pan +-1.2%.
 	float s = 0.5 + 0.5 * sin(t * 6.2831853 / 36.0);
@@ -46,6 +46,9 @@ vec4 art(vec2 uv, vec4 rect, vec4 box, vec2 boil, float t) {
 	float bleed = min(p.x / 0.3, (1.0 - p.x) / 0.26);
 	float n = texture(noise, vec2(p.x * 0.8, p.y * 2.2) + boil).r;
 	float a = smoothstep(0.0, 1.0, bleed + (n - 0.5) * 0.5) * step(0.0, p.x) * step(p.x, 1.0) * step(0.0, p.y) * step(p.y, 1.0);
+	// On a page there is no band edge above and below it, so it tears there too.
+	float rise = smoothstep(0.0, 1.0, min(p.y, 1.0 - p.y) / 0.24 + (n - 0.5) * 0.5);
+	a *= mix(1.0, rise, as_page);
 	return vec4(c.rgb, c.a * a);
 }
 
@@ -73,8 +76,8 @@ void fragment() {
 	vec3 tint = glaze.rgb / max(lum(glaze.rgb), 0.05);
 	behind = mix(behind, lum(behind) * tint, glaze_amount * 1.4);
 
-	vec4 a = art(uv, rect_a, box_a, boil, TIME);
-	vec4 b = art(uv, rect_b, box_b, boil, TIME);
+	vec4 a = art(uv, rect_a, box_a, boil, TIME, page);
+	vec4 b = art(uv, rect_b, box_b, boil, TIME, page);
 	vec4 pic = mix(a, b, mix_ab);
 	// Glazed into the night: a little desaturated and darker, washed in the
 	// choice's colour, with firelight bleeding through on the right.

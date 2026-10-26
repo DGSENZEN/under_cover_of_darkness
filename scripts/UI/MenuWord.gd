@@ -12,6 +12,7 @@ var index := -1
 var colour := Color.WHITE
 var selected := false
 var _tick: ColorRect
+var _glow: ColorRect
 var _style: StyleBoxEmpty
 
 func configure(caption: String, at_index: int, tint: Color, font: Font) -> void:
@@ -34,6 +35,10 @@ func configure(caption: String, at_index: int, tint: Color, font: Font) -> void:
 	_style.content_margin_left = 18
 	for state in ["normal", "hover", "pressed", "focus", "hover_pressed"]:
 		add_theme_stylebox_override(state, _style)
+	_glow = ColorRect.new()
+	_glow.color = Color(tint, 0.22)
+	_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_glow)
 	_tick = ColorRect.new()
 	_tick.color = tint
 	_tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -50,6 +55,7 @@ func set_selected(on: bool) -> void:
 		add_theme_color_override(state, LIT if on else INK)
 	_style.content_margin_left = 18 + (NUDGE if on else 0.0)
 	_tick.visible = on
+	_glow.visible = on
 	_place_tick()
 
 func _place_tick() -> void:
@@ -57,3 +63,5 @@ func _place_tick() -> void:
 		return
 	_tick.size = Vector2(4, size.y * 0.64)
 	_tick.position = Vector2(0, size.y * 0.18)
+	_glow.size = Vector2(12, size.y * 0.76)
+	_glow.position = Vector2(-4, size.y * 0.12)

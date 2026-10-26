@@ -1,0 +1,184 @@
+class_name MenuPages
+extends Control
+## What a page says once its band has spread over the right two-thirds:
+## Lore's text, the Settings controls painted like the band, Continue's line.
+const Settings := preload("res://scripts/UI/Settings.gd")
+const INK := Color("f4e6cc")
+const AREA := Rect2(600, 110, 560, 680)
+const CONTINUE_LINE := "No saved game yet. Choose New Game to begin."
+
+var title_label: Label
+var body_label: Label
+var volume: HSlider
+var marks: CheckButton
+var back: MenuWord
+var _settings: VBoxContainer
+var _scrim: TextureRect
+var _fade: Tween
+
+func build(font: Font, lore: String) -> void:
+	name = "Pages"
+	size = Vector2(1600, 900)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	set_meta(&"lore", lore)
+	# A feathered dark wash behind the words, so text reads over the painting.
+	_scrim = TextureRect.new()
+	var wash := Gradient.new()
+	wash.colors = PackedColorArray([Color(0.01, 0.02, 0.03, 0.55), Color(0.01, 0.02, 0.03, 0.0)])
+	var soft := GradientTexture2D.new()
+	soft.gradient = wash
+	soft.fill = GradientTexture2D.FILL_RADIAL
+	soft.fill_from = Vector2(0.5, 0.5)
+	soft.fill_to = Vector2(1.0, 0.5)
+	_scrim.texture = soft
+	_scrim.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_scrim.position = AREA.position - Vector2(80, 60)
+	_scrim.size = AREA.size + Vector2(160, 120)
+	_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_scrim)
+	var column := VBoxContainer.new()
+	column.position = AREA.position
+	column.size = AREA.size
+	column.add_theme_constant_override("separation", 22)
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(column)
+	title_label = _label(font, 44, INK)
+	column.add_child(title_label)
+	body_label = _label(font, 22, Color("e2d8c6"))
+	body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body_label.custom_minimum_size.x = AREA.size.x
+	column.add_child(body_label)
+	_settings = VBoxContainer.new()
+	_settings.add_theme_constant_override("separation", 18)
+	column.add_child(_settings)
+	_settings.add_child(_label(font, 24, INK, "Master volume"))
+	volume = HSlider.new()
+	volume.name = "Volume"
+	volume.max_value = 1.0
+	volume.step = 0.01
+	volume.value = Settings.master_volume()
+	volume.custom_minimum_size = Vector2(520, 40)
+	volume.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	volume.value_changed.connect(Settings.set_master_volume)
+	_settings.add_child(volume)
+	marks = CheckButton.new()
+	marks.text = "Awareness marks above guards"
+	marks.button_pressed = Settings.awareness_marks()
+	marks.add_theme_font_override("font", font)
+	marks.add_theme_font_size_override("font_size", 24)
+	for state in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color", "font_hover_pressed_color"]:
+		marks.add_theme_color_override(state, INK)
+	for state in ["normal", "hover", "pressed", "focus", "hover_pressed"]:
+		marks.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	marks.toggled.connect(Settings.set_awareness_marks)
+	marks.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_settings.add_child(marks)
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(spacer)
+	back = MenuWord.new()
+	back.configure("Back", -1, INK, font)
+	back.custom_minimum_size = Vector2(240, 52)
+	back.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	back.focus_entered.connect(func(): back.set_selected(true))
+	back.focus_exited.connect(func(): back.set_selected(false))
+	back.mouse_entered.connect(back.grab_focus)
+	column.add_child(back)
+	hide()
+
+func show_page(index: int, title: String, colour: Color, message := "") -> void:
+	title_label.text = title
+	if not message.is_empty():
+		body_label.text = message
+	elif index == 1:
+		body_label.text = CONTINUE_LINE
+	elif index == 3:
+		body_label.text = String(get_meta(&"lore"))
+	else:
+		body_label.text = ""
+	body_label.visible = not body_label.text.is_empty()
+	_settings.visible = index == 2
+	if index == 2:
+		volume.set_value_no_signal(Settings.master_volume())
+		marks.set_pressed_no_signal(Settings.awareness_marks())
+		_paint_controls(colour)
+	back.colour = colour
+	show()
+	modulate.a = 0.0
+	if _fade:
+		_fade.kill()
+	_fade = create_tween()
+	_fade.tween_property(self, "modulate:a", 1.0, 0.25)
+	if index == 2:
+		volume.grab_focus()
+	else:
+		back.grab_focus()
+
+func hide_page() -> void:
+	if _fade:
+		_fade.kill()
+	hide()
+
+func _label(font: Font, point_size: int, colour: Color, words := "") -> Label:
+	var label := Label.new()
+	label.text = words
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_override("font", font)
+	label.add_theme_font_size_override("font_size", point_size)
+	label.add_theme_color_override("font_color", colour)
+	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
+	label.add_theme_constant_override("shadow_offset_y", 2)
+	return label
+
+## The slider's track is a dry brush stroke; the filled part and the handle
+## are pigment in the page's colour; the switch is a dab, filled when on.
+func _paint_controls(colour: Color) -> void:
+	var stroke := _stroke_texture(INK * Color(1, 1, 1, 0.45))
+	var filled := _stroke_texture(colour)
+	var track := StyleBoxTexture.new()
+	track.texture = stroke
+	track.content_margin_top = 8
+	track.content_margin_bottom = 8
+	var lit := StyleBoxTexture.new()
+	lit.texture = filled
+	lit.content_margin_top = 8
+	lit.content_margin_bottom = 8
+	volume.add_theme_stylebox_override("slider", track)
+	volume.add_theme_stylebox_override("grabber_area", lit)
+	volume.add_theme_stylebox_override("grabber_area_highlight", lit)
+	var dab := _dab_texture(colour, true)
+	volume.add_theme_icon_override("grabber", dab)
+	volume.add_theme_icon_override("grabber_highlight", _dab_texture(colour.lightened(0.25), true))
+	marks.add_theme_icon_override("checked", _dab_texture(colour, true))
+	marks.add_theme_icon_override("unchecked", _dab_texture(INK, false))
+	marks.add_theme_icon_override("checked_disabled", _dab_texture(colour, true))
+	marks.add_theme_icon_override("unchecked_disabled", _dab_texture(INK, false))
+
+static func _stroke_texture(colour: Color) -> ImageTexture:
+	var grain := FastNoiseLite.new()
+	grain.seed = 31
+	grain.frequency = 0.08
+	var image := Image.create(256, 20, false, Image.FORMAT_RGBA8)
+	for x in range(256):
+		# Bristles: each row frays a little differently toward the ends.
+		var taper := minf(float(x) / 24.0, float(255 - x) / 40.0)
+		for y in range(20):
+			var edge := 1.0 - absf(float(y) - 9.5) / 9.5
+			var a := clampf(edge * 2.2 + grain.get_noise_2d(x * 0.6, y * 5.0) * 1.2 - 0.35, 0.0, 1.0) * clampf(taper, 0.0, 1.0)
+			image.set_pixel(x, y, Color(colour.r, colour.g, colour.b, colour.a * a))
+	return ImageTexture.create_from_image(image)
+
+static func _dab_texture(colour: Color, solid: bool) -> ImageTexture:
+	var grain := FastNoiseLite.new()
+	grain.seed = 7
+	grain.frequency = 0.25
+	var image := Image.create(30, 30, false, Image.FORMAT_RGBA8)
+	for x in range(30):
+		for y in range(30):
+			var r := Vector2(x - 14.5, y - 14.5).length() / 13.0 + grain.get_noise_2d(x, y) * 0.18
+			var a := clampf((1.0 - r) * 6.0, 0.0, 1.0)
+			if not solid:
+				a *= clampf((r - 0.62) * 8.0, 0.0, 1.0)
+			image.set_pixel(x, y, Color(colour.r, colour.g, colour.b, a))
+	return ImageTexture.create_from_image(image)

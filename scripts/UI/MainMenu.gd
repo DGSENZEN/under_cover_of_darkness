@@ -24,15 +24,12 @@ var band: MenuBand
 var background: TextureRect
 var _dim := 1.0
 var selected := -1
-var panel: Control
-var panel_title: Label
-var panel_body: Label
-var settings_box: VBoxContainer
+var pages: MenuPages
+var page_open := -1
 var _root: Control
 var _design: Control
 var _font: SystemFont
-var _return_focus := 0
-var _close: Button
+var _page_turn := 0
 var _transitioning := false
 
 func _ready() -> void:
@@ -94,7 +91,10 @@ func _ready() -> void:
 		words[i].focus_neighbor_bottom = words[mini(i + 1, words.size() - 1)].get_path()
 		words[i].focus_neighbor_left = words[i].get_path()
 		words[i].focus_neighbor_right = words[i].get_path()
-	_build_panel()
+	pages = MenuPages.new()
+	pages.build(_font, LORE)
+	pages.back.pressed.connect(close_page)
+	_design.add_child(pages)
 	get_viewport().size_changed.connect(_layout)
 	_layout()
 	# No automatic focus highlight until keyboard navigation is used.
@@ -126,73 +126,9 @@ func _process(delta: float) -> void:
 	_dim = move_toward(_dim, 0.72 if band.showing else 1.0, delta / 0.5 * 0.28)
 	background.modulate = Color(_dim, _dim, _dim)
 
-func _build_panel() -> void:
-	panel = Control.new()
-	panel.name = "Overlay"
-	panel.size = DESIGN
-	panel.visible = false
-	_design.add_child(panel)
-	var shade := ColorRect.new()
-	shade.size = DESIGN
-	shade.color = Color(0.005, 0.012, 0.02, 0.78)
-	panel.add_child(shade)
-	var card := PanelContainer.new()
-	card.position = Vector2(390, 145)
-	card.size = Vector2(820, 610)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("101e25")
-	style.border_color = Color("866e52")
-	style.set_border_width_all(1)
-	style.content_margin_left = 42
-	style.content_margin_right = 42
-	style.content_margin_top = 30
-	style.content_margin_bottom = 28
-	card.add_theme_stylebox_override("panel", style)
-	panel.add_child(card)
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 20)
-	card.add_child(column)
-	panel_title = Label.new()
-	panel_title.add_theme_font_size_override("font_size", 40)
-	panel_title.add_theme_color_override("font_color", INK)
-	column.add_child(panel_title)
-	panel_body = Label.new()
-	panel_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	panel_body.add_theme_font_size_override("font_size", 21)
-	panel_body.add_theme_color_override("font_color", Color("cec7b9"))
-	column.add_child(panel_body)
-	settings_box = VBoxContainer.new()
-	settings_box.add_theme_constant_override("separation", 20)
-	column.add_child(settings_box)
-	var volume_text := Label.new()
-	volume_text.text = "Master volume"
-	settings_box.add_child(volume_text)
-	var volume := HSlider.new()
-	volume.name = "Volume"
-	volume.max_value = 1.0
-	volume.step = 0.01
-	volume.value = Settings.master_volume()
-	volume.custom_minimum_size.y = 36
-	volume.value_changed.connect(Settings.set_master_volume)
-	settings_box.add_child(volume)
-	var marks := CheckButton.new()
-	marks.text = "Awareness marks above guards"
-	marks.button_pressed = Settings.awareness_marks()
-	marks.toggled.connect(Settings.set_awareness_marks)
-	settings_box.add_child(marks)
-	var spacer := Control.new()
-	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	column.add_child(spacer)
-	_close = Button.new()
-	_close.text = "Back"
-	_close.custom_minimum_size.y = 45
-	_close.pressed.connect(close_panel)
-	column.add_child(_close)
-
 func _activate(index: int) -> void:
-	if _transitioning:
+	if _transitioning or page_open >= 0:
 		return
-	_return_focus = index
 	if index == 0:
 		_transitioning = true
 		# Draw the click response before beginning the existing game's scene.
@@ -201,32 +137,40 @@ func _activate(index: int) -> void:
 		var error: Error = await cover.change_to(game_scene)
 		if error != OK:
 			_transitioning = false
-			_show_panel("New Game", "The game scene could not be opened. Please try again.")
-	elif index == 1:
-		_show_panel("Continue", "No saved game is available yet.\n\nThis build does not have a disk-save system. Choose New Game to begin.")
-	elif index == 2:
-		_show_panel("Settings", "Adjust your sound and awareness cues.")
-		settings_box.show()
-		settings_box.get_node("Volume").grab_focus()
+			open_page(0, "The game scene could not be opened. Please try again.")
 	else:
-		_show_panel("Lore", LORE)
+		open_page(index)
 
-func _show_panel(title: String, body: String) -> void:
-	panel_title.text = title
-	panel_body.text = body
-	settings_box.hide()
-	panel.show()
+## Spreads the choice's band over the right two-thirds and writes its page on it.
+func open_page(index: int, message := "") -> void:
+	select(index)
+	page_open = index
+	_page_turn += 1
+	var turn := _page_turn
+	band.set_page(true)
 	for word in words:
 		word.focus_mode = Control.FOCUS_NONE
 		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_close.grab_focus()
+		if word.index != index:
+			word.modulate.a = 0.35
+	await get_tree().create_timer(MenuBand.GLIDE).timeout
+	if turn == _page_turn and page_open == index:
+		pages.show_page(index, NAMES[index], COLOURS[index], message)
 
-func close_panel() -> void:
-	panel.hide()
+## Folds the page back into its word's band.
+func close_page() -> void:
+	if page_open < 0:
+		return
+	var index := page_open
+	page_open = -1
+	_page_turn += 1
+	pages.hide_page()
+	band.set_page(false)
 	for word in words:
 		word.focus_mode = Control.FOCUS_ALL
 		word.mouse_filter = Control.MOUSE_FILTER_STOP
-	words[_return_focus].grab_focus()
+		word.set_selected(word.index == index)
+	words[index].grab_focus()
 
 ## The one path for mouse, keyboard and controller: lights one word.
 func select(index: int) -> void:
@@ -240,9 +184,9 @@ func select(index: int) -> void:
 	selection_changed.emit(index)
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel") and panel.visible:
-		close_panel()
+	if event.is_action_pressed("ui_cancel") and page_open >= 0:
+		close_page()
 		get_viewport().set_input_as_handled()
-	elif not panel.visible and get_viewport().gui_get_focus_owner() == null and (event.is_action_pressed("ui_down") or event.is_action_pressed("ui_up") or event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right") or event.is_action_pressed("ui_accept")):
+	elif page_open < 0 and get_viewport().gui_get_focus_owner() == null and (event.is_action_pressed("ui_down") or event.is_action_pressed("ui_up") or event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right") or event.is_action_pressed("ui_accept")):
 		words[0].grab_focus()
 		get_viewport().set_input_as_handled()

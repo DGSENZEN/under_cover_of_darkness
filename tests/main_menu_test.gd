@@ -84,7 +84,38 @@ func _ready() -> void:
 	get_window().size = home
 	await get_tree().process_frame
 
-	# Task 3 re-enables the page checks against open_page/close_page.
+	# Task 3: pages open inside the band.
+	menu.open_page(1)
+	await get_tree().create_timer(0.7).timeout
+	check(menu.page_open == 1 and menu.pages.title_label.text == "Continue" and menu.pages.body_label.text.contains("save"), "Continue explains the missing save rather than starting a new game")
+	check(menu.pages.body_label.text == "No saved game yet. Choose New Game to begin.", "Continue says it in one line")
+	menu.close_page()
+	await get_tree().create_timer(0.7).timeout
+	menu.open_page(2)
+	await get_tree().create_timer(0.7).timeout
+	check(menu.page_open == 2 and menu.pages.title_label.text == "Settings" and menu.pages.volume.is_visible_in_tree(), "Settings opens existing game preferences")
+	check(menu.pages.volume.has_theme_stylebox_override("slider") and menu.pages.volume.has_theme_icon_override("grabber"), "settings controls are painted, not default")
+	menu.pages.volume.value = 0.35
+	await get_tree().process_frame
+	Settings.reload()
+	check(is_equal_approx(Settings.master_volume(), 0.35) and is_equal_approx(db_to_linear(AudioServer.get_bus_volume_db(0)), 0.35), "volume changes reach the audio bus and survive a settings reload")
+	Settings.set_awareness_marks(false)
+	Settings.reload()
+	check(not Settings.awareness_marks() and is_equal_approx(Settings.master_volume(), 0.35), "awareness and volume settings preserve each other")
+	menu.close_page()
+	await get_tree().create_timer(0.7).timeout
+	check(menu.page_open == -1 and menu.words[2].has_focus(), "closing a page returns keyboard focus to its word")
+	menu.open_page(3)
+	await get_tree().create_timer(0.7).timeout
+	check(menu.pages.title_label.text == "Lore" and not menu.pages.body_label.text.is_empty(), "Lore opens the city's existing setting")
+	check(menu.band.page and menu.band.band_rect() == Rect2(530, 0, 1070, 900), "Lore spreads its band over the right two-thirds")
+	check(is_equal_approx(menu.band.material.get_shader_parameter("page"), 1.0), "the band's edges turn into a page's")
+	check(menu.words[0].modulate.a < 0.4 and menu.words[0].visible, "other words dim but stay")
+	check(menu.find_children("*", "PanelContainer", true, false).is_empty(), "the grey panel is gone")
+	await key(KEY_ESCAPE)
+	await get_tree().create_timer(0.7).timeout
+	check(menu.page_open == -1 and menu.words[3].has_focus() and not menu.band.page, "Escape folds the page back to its word")
+	check(menu.words[0].modulate.a > 0.5, "words come back when the page closes")
 	check(ResourceLoader.exists(menu.game_scene), "New Game points at an existing playable scene")
 	check(ProjectSettings.get_setting("application/run/main_scene") == "res://main_menu.tscn", "normal game launch opens the new menu")
 	menu.queue_free()

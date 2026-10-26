@@ -72,18 +72,27 @@ func run() -> void:
 	menu.words[0].button_down.emit()
 	await capture("/private/tmp/main-menu-click.png")
 	await click_control(menu.words[2])
-	check(menu.panel.visible and menu.panel_title.text == "Settings", "mouse click opens Settings")
-	await capture("/private/tmp/main-menu-settings.png")
+	await create_timer(0.9).timeout
+	check(menu.page_open == 2 and menu.pages.title_label.text == "Settings", "mouse click opens Settings")
+	await capture("/private/tmp/main-menu-page-settings.png")
 	await key(KEY_ESCAPE)
-	check(not menu.panel.visible and menu.words[2].has_focus(), "Escape restores the selected word")
+	await create_timer(0.6).timeout
+	check(menu.page_open == -1 and menu.words[2].has_focus(), "Escape restores the selected word")
 	await key(KEY_UP)
 	await key(KEY_DOWN)
 	await key(KEY_DOWN)
 	check(menu.words[3].has_focus(), "arrow keys move through the column")
 	await key(KEY_ENTER)
-	check(menu.panel.visible and menu.panel_title.text == "Lore", "Enter activates the focused word")
-	await capture("/private/tmp/main-menu-lore.png")
+	await create_timer(0.9).timeout
+	check(menu.page_open == 3 and menu.pages.title_label.text == "Lore", "Enter activates the focused word")
+	await capture("/private/tmp/main-menu-page-lore.png")
 	await key(KEY_ESCAPE)
+	await create_timer(0.6).timeout
+	menu.open_page(1)
+	await create_timer(0.9).timeout
+	await capture("/private/tmp/main-menu-page-continue.png")
+	menu.close_page()
+	await create_timer(0.6).timeout
 	root.size = Vector2i(2560, 1080)
 	await create_timer(0.3).timeout
 	await capture("/private/tmp/main-menu-wide.png")

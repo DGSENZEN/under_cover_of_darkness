@@ -49,6 +49,10 @@ func _ready() -> void:
 	paint.set_shader_parameter("noise", texture)
 	paint.set_shader_parameter("boil_fps", BOIL_FPS)
 	paint.set_shader_parameter("glaze_amount", 0.28)
+	# Values that are tweened must exist on the material first.
+	paint.set_shader_parameter("page", 0.0)
+	paint.set_shader_parameter("pulse", 0.0)
+	paint.set_shader_parameter("mix_ab", 1.0)
 	material = paint
 	modulate.a = 0.0
 
@@ -151,8 +155,9 @@ func _process(_delta: float) -> void:
 	# The picture keeps its size while the band glides or spreads; it sits in
 	# the right half of a choice band and high in the middle of a page.
 	var art := Vector2(ART_WIDTH, HEIGHT)
-	var right := size.x * 0.86 if not page else size.x * 0.5 + art.x * 0.5
-	var top := (size.y - art.y) * 0.5 if not page else 90.0
+	# On a page the picture moves to the right, clear of most of the text.
+	var right := size.x * 0.86 if not page else size.x - 30.0
+	var top := (size.y - art.y) * 0.5 if not page else (size.y - art.y) * 0.5 - 70.0
 	var box := Vector4((right - art.x) / size.x, top / size.y, art.x / size.x, art.y / size.y)
 	paint.set_shader_parameter("box_a", box)
 	paint.set_shader_parameter("box_b", box)
