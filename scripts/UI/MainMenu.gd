@@ -31,6 +31,13 @@ var _root: Control
 var _design: Control
 var _font: SystemFont
 var _page_turn := 0
+## Quit's confirm: open while asking; its two answers.
+var confirming := false
+var confirm_yes: MenuWord
+var confirm_no: MenuWord
+var _confirm: Control
+## What Yes does (tests replace it).
+var quit_game: Callable
 var _transitioning := false
 var _pressing := false
 
@@ -111,6 +118,8 @@ func _ready() -> void:
 	pages.build(_font, LORE)
 	pages.back.pressed.connect(close_page)
 	_design.add_child(pages)
+	_build_confirm()
+	quit_game = func(): get_tree().quit()
 	_start_music()
 	get_viewport().size_changed.connect(_layout)
 	_layout()
@@ -178,7 +187,7 @@ func _exit_tree() -> void:
 		music.queue_free()
 
 func _activate(index: int) -> void:
-	if _transitioning or page_open >= 0 or index >= 4 or _pressing:
+	if _transitioning or page_open >= 0 or confirming or _pressing:
 		return
 	# The word dips in first; the action follows it.
 	_pressing = true
@@ -186,6 +195,9 @@ func _activate(index: int) -> void:
 	await get_tree().create_timer(MenuMotion.PRESS).timeout
 	_pressing = false
 	if _transitioning or page_open >= 0:
+		return
+	if index == 4:
+		open_quit_confirm()
 		return
 	if is_instance_valid(music):
 		music.press(index)
@@ -241,6 +253,80 @@ func close_page() -> void:
 		word.set_selected(word.index == index)
 	words[index].grab_focus()
 
+## "Quit?" beside the Quit word, in the book's style: No is ready, Yes leaves.
+func _build_confirm() -> void:
+	_confirm = Control.new()
+	_confirm.name = "QuitConfirm"
+	_confirm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_confirm.position = words[4].position + Vector2(170, 0)
+	_design.add_child(_confirm)
+	# A feathered dark wash so the answers read over the lit city.
+	var shade := Gradient.new()
+	shade.colors = PackedColorArray([Color(0.01, 0.02, 0.03, 0.75), Color(0.01, 0.02, 0.03, 0.0)])
+	var soft := GradientTexture2D.new()
+	soft.gradient = shade
+	soft.fill = GradientTexture2D.FILL_RADIAL
+	soft.fill_from = Vector2(0.5, 0.5)
+	soft.fill_to = Vector2(1.0, 0.5)
+	var scrim := TextureRect.new()
+	scrim.texture = soft
+	scrim.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	scrim.position = Vector2(-60, -40)
+	scrim.size = Vector2(460, 130)
+	scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_confirm.add_child(scrim)
+	var ask := Label.new()
+	ask.text = "Quit?"
+	ask.add_theme_font_override("font", MenuType.body_italic())
+	ask.add_theme_font_size_override("font_size", 34)
+	ask.add_theme_color_override("font_color", GOLD)
+	ask.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_confirm.add_child(ask)
+	confirm_yes = MenuWord.new()
+	confirm_yes.configure("Yes", -1, GOLD)
+	confirm_yes.position = Vector2(100, -2)
+	confirm_yes.size = Vector2(110, 52)
+	confirm_no = MenuWord.new()
+	confirm_no.configure("No", -1, GOLD)
+	confirm_no.position = Vector2(220, -2)
+	confirm_no.size = Vector2(110, 52)
+	for answer in [confirm_yes, confirm_no]:
+		_confirm.add_child(answer)
+		answer.focus_entered.connect(func(): confirm_yes.set_selected(answer == confirm_yes); confirm_no.set_selected(answer == confirm_no))
+		answer.mouse_entered.connect(answer.grab_focus)
+	confirm_yes.focus_neighbor_right = confirm_no.get_path()
+	confirm_no.focus_neighbor_left = confirm_yes.get_path()
+	for edge in ["focus_neighbor_top", "focus_neighbor_bottom"]:
+		confirm_yes.set(edge, confirm_yes.get_path())
+		confirm_no.set(edge, confirm_no.get_path())
+	confirm_yes.pressed.connect(func():
+		confirm_yes.press_in()
+		await get_tree().create_timer(MenuMotion.PRESS).timeout
+		quit_game.call())
+	confirm_no.pressed.connect(close_quit_confirm)
+	_confirm.hide()
+
+func open_quit_confirm() -> void:
+	confirming = true
+	for word in words:
+		word.focus_mode = Control.FOCUS_NONE
+		if word.index != 4:
+			word.set_page_dim(true)
+	_confirm.show()
+	_confirm.modulate.a = 0.0
+	MenuMotion.tween(_confirm).tween_property(_confirm, "modulate:a", 1.0, MenuMotion.ANSWER)
+	confirm_no.grab_focus()
+
+func close_quit_confirm() -> void:
+	if not confirming:
+		return
+	confirming = false
+	_confirm.hide()
+	for word in words:
+		word.focus_mode = Control.FOCUS_ALL
+		word.set_selected(word.index == selected)
+	words[4].grab_focus()
+
 ## The one path for mouse, keyboard and controller: lights one word.
 func select(index: int) -> void:
 	if index == selected or index < 0 or index >= words.size():
@@ -257,7 +343,10 @@ func select(index: int) -> void:
 	selection_changed.emit(index)
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel") and page_open >= 0:
+	if event.is_action_pressed("ui_cancel") and confirming:
+		close_quit_confirm()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("ui_cancel") and page_open >= 0:
 		close_page()
 		get_viewport().set_input_as_handled()
 	elif page_open < 0 and get_viewport().gui_get_focus_owner() == null and (event.is_action_pressed("ui_down") or event.is_action_pressed("ui_up") or event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right") or event.is_action_pressed("ui_accept")):

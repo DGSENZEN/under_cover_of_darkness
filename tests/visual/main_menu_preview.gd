@@ -129,6 +129,12 @@ func run() -> void:
 	await capture("/private/tmp/main-menu-page-lore.png")
 	await key(KEY_ESCAPE)
 	await create_timer(0.6).timeout
+	menu.select(4)
+	menu.open_quit_confirm()
+	await create_timer(0.5).timeout
+	await capture("/private/tmp/main-menu-quit.png")
+	menu.close_quit_confirm()
+	await create_timer(0.3).timeout
 	menu.open_page(1)
 	await create_timer(0.9).timeout
 	await capture("/private/tmp/main-menu-page-continue.png")

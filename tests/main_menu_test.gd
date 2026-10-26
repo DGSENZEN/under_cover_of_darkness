@@ -120,6 +120,25 @@ func _ready() -> void:
 	menu.close_page()
 	await get_tree().create_timer(0.6).timeout
 
+	# Piece 1: Quit asks first.
+	var quits := [0]
+	menu.quit_game = func(): quits[0] += 1
+	menu.words[4].pressed.emit()
+	await get_tree().create_timer(MenuMotion.PRESS + 0.1).timeout
+	check(menu.confirming and menu.confirm_no.has_focus() and menu.confirm_yes.visible, "Quit asks first, with No ready")
+	await key(KEY_ESCAPE)
+	await get_tree().create_timer(0.3).timeout
+	check(not menu.confirming and quits[0] == 0 and menu.words[4].has_focus(), "Escape says no; nothing quits")
+	menu.words[4].pressed.emit()
+	await get_tree().create_timer(MenuMotion.PRESS + 0.1).timeout
+	menu.confirm_yes.pressed.emit()
+	await get_tree().create_timer(MenuMotion.PRESS + 0.1).timeout
+	check(quits[0] == 1, "Yes quits")
+	menu.close_quit_confirm()
+	menu.music.last_jingle = {}
+	menu.select(4)
+	check(menu.music.last_jingle.is_empty(), "Quit plays no jingle")
+
 	# Review fixes: pages reach the screen's edges on any window shape.
 	var tall: Rect2 = MainMenu.visible_design_rect(Vector2(2560, 1600))
 	var ultra: Rect2 = MainMenu.visible_design_rect(Vector2(2560, 1080))
