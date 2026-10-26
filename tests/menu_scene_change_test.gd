@@ -22,12 +22,21 @@ func run() -> void:
 		await process_frame
 	var music: MenuMusic = menu.music
 	check(music != null and music.available and music.get_parent() == root, "the menu's music is under the root")
-	# A fast clock, so the phrase ends within a second or so.
+	# Real time through the archetype's transition, then a fast clock, so the
+	# phrase ends within a second or so once the game is in.
 	var started_ms := Time.get_ticks_msec()
-	music.position_source = func() -> float: return 2.0 + (Time.get_ticks_msec() - started_ms) / 1000.0 * 20.0
+	var changed_ms := [-1]
+	music.position_source = func() -> float:
+		var now := Time.get_ticks_msec()
+		if changed_ms[0] < 0:
+			return 2.0 + (now - started_ms) / 1000.0
+		return 2.0 + (changed_ms[0] - started_ms) / 1000.0 + (now - changed_ms[0]) / 1000.0 * 20.0
+	scene_changed.connect(func(): changed_ms[0] = Time.get_ticks_msec(), CONNECT_ONE_SHOT)
 	var ended := [false]
 	music.ended.connect(func(): ended[0] = true)
 	menu.words[0].pressed.emit()
+	await create_timer(MenuMotion.PRESS + 0.1).timeout
+	menu.archetypes.confirm()
 	await scene_changed
 	check(current_scene != null and current_scene.name == "TinyGame", "New Game changed the scene")
 	check(is_instance_valid(music) and music.get_parent() == root and music.state == MenuMusic.State.STARTING and not ended[0], "the music is still finishing its phrase after the menu is gone")

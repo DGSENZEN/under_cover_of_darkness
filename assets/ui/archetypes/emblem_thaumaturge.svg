@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 64 64" fill="none" stroke="#d9b46a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- an eye with a slit pupil, inside a ring of twelve rays -->
+  <circle cx="32" cy="32" r="17.5" stroke-width="1.6"/>
+  <path d="M32.00 11.50L32.00 5.00 M42.25 14.25L44.25 10.78 M49.75 21.75L55.38 18.50 M52.50 32.00L56.50 32.00 M49.75 42.25L55.38 45.50 M42.25 49.75L44.25 53.22 M32.00 52.50L32.00 59.00 M21.75 49.75L19.75 53.22 M14.25 42.25L8.62 45.50 M11.50 32.00L7.50 32.00 M14.25 21.75L8.62 18.50 M21.75 14.25L19.75 10.78" stroke-width="1.8"/>
+  <path d="M15 32Q32 17 49 32Q32 47 15 32Z"/>
+  <circle cx="32" cy="32" r="6.5" stroke-width="1.6"/>
+  <path d="M32 24.5Q35 32 32 39.5Q29 32 32 24.5Z" fill="#d9b46a" stroke-width="1"/>
+</svg>

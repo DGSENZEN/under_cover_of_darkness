@@ -64,6 +64,11 @@ func _ready() -> void:
 	spinner.offset_bottom = -17
 	_root.add_child(spinner)
 
+## Comes up out of the dark instead of cutting in.
+func fade_in(seconds: float) -> void:
+	_root.modulate.a = 0.0
+	create_tween().tween_property(_root, "modulate:a", 1.0, seconds)
+
 func advance(fraction: float) -> void:
 	target = maxf(target, clampf(fraction, 0.0, 1.0))
 

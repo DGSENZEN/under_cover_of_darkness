@@ -31,6 +31,9 @@ var followers: Array = []
 ## What he has done of the job (JobState: goals, notes, readables, the
 ## districts' facts and tallies).
 var job: RefCounted = JobStateScript.new()
+## Who the player chose to be on the archetype screen (&"derive",
+## &"thaumaturge" or &"factotum"; empty before a choice): kept for the game.
+var archetype: StringName = &""
 
 
 ## A new mission: nothing remembered, nothing carried.

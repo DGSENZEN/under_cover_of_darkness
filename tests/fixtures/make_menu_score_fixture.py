@@ -43,7 +43,8 @@ def main():
         out.setframerate(RATE)
         out.writeframes((np.column_stack([cue, cue]) * 32767).astype('<i2').tobytes())
     jingles = []
-    for button, stem in enumerate(['trumpet', 'guitar', 'rhodes', 'bells']):
+    # Buttons 5-7 are the archetypes' sounds.
+    for button, stem in [(0, 'trumpet'), (1, 'guitar'), (2, 'rhodes'), (3, 'bells'), (5, 'trumpet'), (6, 'rhodes'), (7, 'bells')]:
         for chord, bar in (('Dm', 0), ('Gm', 4)):
             for variant in (0, 1):
                 jingles.append(dict(button=button, kind='hover', chord=chord, variant=variant, file=None,

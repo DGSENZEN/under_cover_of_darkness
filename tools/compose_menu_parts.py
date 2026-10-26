@@ -281,6 +281,99 @@ def jingles():
     return hover, press, table
 
 
+# The archetype screen's sounds: each archetype's own two instruments, from
+# the song's own band, in each of the loop's chords. Buttons 5-7 in the score
+# (after the menu's five words); every hover and confirm has its own slot.
+ARCHETYPES_OUT = ROOT / 'assets/audio/source/menu_theme/parts/archetype_jingles.mid'
+ARCHETYPES_TABLE = ROOT / 'assets/audio/source/menu_theme/parts/archetype_jingles.json'
+ARCHETYPE_SLOT_BEATS = 8.0
+ARCHETYPE_HOVER_BEATS, ARCHETYPE_PRESS_BEATS = 3.0, 6.0
+# (track, button), with the General MIDI channel and program they ask for.
+ARCHETYPE_TRACKS = [('Derive Piano', 5), ('Derive Drums', 5), ('Thaumaturge Glockenspiel', 6),
+                    ('Thaumaturge Choir', 6), ('Factotum Rhodes', 7), ('Factotum Trumpet', 7)]
+ARCHETYPE_VOICES = {'Derive Piano': (0, 0), 'Derive Drums': (9, None), 'Thaumaturge Glockenspiel': (1, 9),
+                    'Thaumaturge Choir': (2, 52), 'Factotum Rhodes': (3, 4), 'Factotum Trumpet': (4, 59)}
+CRASH = 49
+
+
+def _base(octave_c, pc):
+    """The chord's root near `octave_c`: the upper keys drop an octave, so
+    every chord sits in the same register."""
+    return octave_c + pc - (12 if pc >= 7 else 0)
+
+
+def _derive(hover, at, pc, stack, lift, notes):
+    """Body, gut and fists: low piano octaves struck with the trip-hop kick
+    and snare: a one-two on hover, a combination ending in a heavy blow on confirm."""
+    piano, drums = notes['Derive Piano'], notes['Derive Drums']
+    low, mid = _base(36, pc), _base(48, pc)
+    if hover:
+        piano += [(at, 0.4, low, 100), (at, 0.4, low + 12, 92)]
+        drums += [(at, 0.25, KICK, 120), (at, 0.25, KICK_LOW, 106)]
+        fifth = _tone(mid, stack, 2 + lift)
+        piano += [(at + 0.5, 0.4, fifth, 96), (at + 0.5, 0.4, fifth + 12, 84)]
+        drums += [(at + 0.5, 0.25, SNARE, 112), (at + 0.5, 0.25, CLAP, 82)]
+    else:
+        piano += [(at, 0.25, low, 100), (at, 0.25, low + 12, 92)]
+        drums += [(at, 0.25, KICK, 118), (at, 0.25, KICK_LOW, 104), (at + 0.25, 0.25, KICK, 100)]
+        piano += [(at + 0.5, 0.35, _tone(mid, stack, s + lift), 94) for s in (0, 2, 4)]
+        drums += [(at + 0.5, 0.25, SNARE, 116), (at + 0.5, 0.25, CLAP, 86)]
+        piano += [(at + 1.0, 3.0, low, 118), (at + 1.0, 3.0, low + 12, 108)]
+        piano += [(at + 1.0, 3.0, _tone(mid + 12, stack, s), 80) for s in (1, 2, 4)]
+        drums += [(at + 1.0, 0.25, KICK, 127), (at + 1.0, 0.25, KICK_LOW, 120), (at + 1.0, 1.0, CRASH, 96)]
+
+
+def _thaumaturge(hover, at, pc, stack, lift, notes):
+    """People and the occult: a glockenspiel that hangs over a choir's
+    breath: two tones on hover, a rising triplet spell over a swelling chord on confirm."""
+    glock, choir = notes['Thaumaturge Glockenspiel'], notes['Thaumaturge Choir']
+    high, voices = _base(72, pc), _base(60, pc)
+    if hover:
+        glock += [(at, 0.6, _tone(high, stack, 4 + lift), 70), (at + 0.375, 0.9, _tone(high, stack, 2 + lift), 62)]
+        choir.append((at, 2.0, _tone(voices, stack, 1 + lift), 46))
+    else:
+        choir += [(at, 4.5, _tone(voices, stack, s), 58) for s in (2, 3, 5, 6)]
+        for k in range(6):
+            glock.append((at + k / 3.0, 0.5, _tone(high, stack, k + lift), 60 + k * 4))
+        glock.append((at + 2.25, 1.5, _tone(high, stack, 7 + lift), 84))
+
+
+def _factotum(hover, at, pc, stack, lift, notes):
+    """Knowledge and experience: quick Rhodes and a muted trumpet that
+    answers it: a three-note turn and a blip on hover, a Charleston stab and a
+    trumpet phrase on confirm."""
+    rhodes, trumpet = notes['Factotum Rhodes'], notes['Factotum Trumpet']
+    keys, horn = _base(60, pc), _base(60, pc)
+    if hover:
+        rhodes += [(at + k * 0.25, 0.3, _tone(keys, stack, s + lift), 70) for k, s in enumerate((1, 2, 3))]
+        trumpet.append((at + 0.75, 0.25, _tone(horn, stack, 4 + lift), 62))
+    else:
+        for t, length in ((0.0, 0.6), (0.75, 2.5)):
+            rhodes += [(at + t, length, _tone(keys - 12, stack, s), 72) for s in (1, 3, 4)]
+        for t, length, s, vel in ((1.0, 0.22, 2, 70), (1.25, 0.22, 3, 66), (1.5, 0.4, 4, 74), (2.0, 1.8, 6, 80)):
+            trumpet.append((at + t, length, _tone(horn, stack, s + lift), vel))
+
+
+def archetype_jingles():
+    """Every archetype's hover and confirm in each chord and variant, one
+    slot each; returns the parts (one per instrument) and the slot table."""
+    notes = {name: [] for name, _ in ARCHETYPE_TRACKS}
+    table = []
+    slot = 0
+    for button, voice in ((5, _derive), (6, _thaumaturge), (7, _factotum)):
+        for kind in ('hover', 'press'):
+            for chord, pc, stack in JINGLE_CHORDS:
+                for variant in (0, 1):
+                    at = slot * ARCHETYPE_SLOT_BEATS
+                    voice(kind == 'hover', at, pc, stack, variant, notes)
+                    beats = ARCHETYPE_HOVER_BEATS if kind == 'hover' else ARCHETYPE_PRESS_BEATS
+                    table.append(dict(button=button, kind=kind, chord=chord, variant=variant, start_beat=at, beats=beats))
+                    slot += 1
+    parts = [{'name': name, 'channel': ARCHETYPE_VOICES[name][0], 'program': ARCHETYPE_VOICES[name][1],
+              'notes': sorted(notes[name])} for name, _ in ARCHETYPE_TRACKS]
+    return parts, table
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, default=OUT)
@@ -303,6 +396,10 @@ def main():
                                   {'name': 'Piano (press)', 'channel': 1, 'program': 0, 'notes': press}])
     JINGLES_TABLE.write_text(json.dumps(table, indent=1) + '\n')
     print(f'wrote {JINGLES_OUT}: {len(table)} jingles in {len(table) // 2} slots')
+    parts, table = archetype_jingles()
+    write_song(ARCHETYPES_OUT, BPM, parts)
+    ARCHETYPES_TABLE.write_text(json.dumps(table, indent=1) + '\n')
+    print(f'wrote {ARCHETYPES_OUT}: {len(table)} archetype jingles, one slot each')
 
 
 if __name__ == '__main__':

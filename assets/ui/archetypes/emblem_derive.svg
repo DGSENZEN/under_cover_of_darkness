@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 64 64" fill="none" stroke="#d9b46a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- a ring, struck and broken at two points -->
+  <path d="M41.5 6.8A27 27 0 0 0 7.2 41.6"/>
+  <path d="M22.5 57.2A27 27 0 0 0 56.8 22.4"/>
+  <path d="M45 6l3.5-4M49 10l5-1.5M19 58l-3.5 4M15 54l-5 1.5" stroke-width="1.6"/>
+  <!-- the fist: four knuckles, the thumb across, the wrist -->
+  <path d="M19 29a3.25 3.25 0 0 1 6.5 0a3.25 3.25 0 0 1 6.5 0a3.25 3.25 0 0 1 6.5 0a3.25 3.25 0 0 1 6.5 0"/>
+  <path d="M19 29v9q0 6 6 6h14q6 0 6-6v-9"/>
+  <path d="M25.5 29v5M32 29v5M38.5 29v5" stroke-width="1.6"/>
+  <path d="M21 38h13q4 0 4-3.5"/>
+  <path d="M26 44v6M38 44v6"/>
+</svg>

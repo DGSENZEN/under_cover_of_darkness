@@ -158,6 +158,49 @@ class PrepareMenuScore(unittest.TestCase):
         body = slice(round(0.01 * RATE), len(got) - round(0.01 * RATE))
         self.assertLess(np.sqrt(np.mean((got[body] - source[body] * gain) ** 2)), 0.01)
 
+    def test_jingle_cut_from_several_rendered_files_sums_them(self):
+        # An archetype's sound is two instruments, each exported on its own track.
+        mapping = fixture_map()
+        mapping['jingles'] = [{'button': 5, 'kind': 'hover', 'chord': 'Dm', 'variant': 0, 'file': None,
+                               'cut': {'file': ['jingles/piano.wav', 'jingles/kick.wav'], 'start_beat': 8.0, 'beats': 2.0}}]
+        work = Path(tempfile.mkdtemp())
+        (work / 'src/stems').mkdir(parents=True)
+        (work / 'src/jingles').mkdir()
+        for i, stem in enumerate(('piano', 'drums')):
+            write_wav(work / f'src/stems/{stem}.wav', 4.0, 220 * (i + 1))
+        write_wav(work / 'src/jingles/piano.wav', 12.0, 660)
+        write_wav(work / 'src/jingles/kick.wav', 12.0, 110)
+        (work / 'src/map.json').write_text(json.dumps(mapping))
+        result = subprocess.run([sys.executable, str(TOOL), '--source', str(work / 'src'), '--out', str(work / 'out')],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        got = decode(work / 'out/jingles/b5_hover_Dm_0.ogg')
+        at = round(4.0 * RATE)
+        source = (decode(work / 'src/jingles/piano.wav') + decode(work / 'src/jingles/kick.wav'))[at:at + len(got)]
+        gain = 10 ** (json.loads((work / 'out/score.json').read_text())['common_gain_db'] / 20)
+        body = slice(round(0.01 * RATE), len(got) - round(0.01 * RATE))
+        self.assertLess(np.sqrt(np.mean((got[body] - source[body] * gain) ** 2)), 0.01)
+
+    def test_rendered_take_trimmed_short_is_padded_with_silence(self):
+        # Logic trims a take's trailing silence, so its last cut can run past its end.
+        mapping = fixture_map()
+        mapping['jingles'] = [{'button': 7, 'kind': 'press', 'chord': 'Dm', 'variant': 0, 'file': None,
+                               'cut': {'file': 'jingles/horn.wav', 'start_beat': 4.0, 'beats': 4.0}}]
+        work = Path(tempfile.mkdtemp())
+        (work / 'src/stems').mkdir(parents=True)
+        (work / 'src/jingles').mkdir()
+        for i, stem in enumerate(('piano', 'drums')):
+            write_wav(work / f'src/stems/{stem}.wav', 4.0, 220 * (i + 1))
+        write_wav(work / 'src/jingles/horn.wav', 3.0, 440)
+        (work / 'src/map.json').write_text(json.dumps(mapping))
+        result = subprocess.run([sys.executable, str(TOOL), '--source', str(work / 'src'), '--out', str(work / 'out')],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        path = work / 'out/jingles/b7_press_Dm_0.ogg'
+        self.assertEqual(frames(path), round(4.0 * 0.5 * RATE))
+        tail = decode(path)[round(1.1 * RATE):]
+        self.assertLess(float(np.max(np.abs(tail))), 1e-3)
+
     def test_jingle_level_trim(self):
         mapping = fixture_map()
         mapping['jingles'][0]['gain_db'] = 6.0

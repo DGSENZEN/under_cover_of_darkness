@@ -137,8 +137,9 @@ next eighth note, at most one frame late.
 **Arrival.** If the score has an arrival cue, it plays first and the loop
 starts as it lands.
 
-**New Game.** Pressing New Game opens the loading cover at once and calls
-`start_game()`. The song plays on to the end of its current phrase. If less
+**New Game.** Pressing New Game opens the archetype screen (below) on the
+ARCHETYPE layers (base, low and high). Confirming an archetype calls
+`start_game()` under its transition and the loading cover. The song plays on to the end of its current phrase. If less
 than a bar is left, it plays the next phrase too. Over that span the layers
 leave in order:
 - high is gone at 40%
@@ -169,7 +170,62 @@ One common gain is applied, capped at −8 dB. `map.json` carries:
 - `stems` (id, file, layer, button, trim_db)
 - `arrival`
 - `jingles`: button, kind (hover or press), chord and variant, plus either a
-  rendered `file` or a `cut` (stem, start_bar, beats) from a stem
+  rendered `file` or a `cut`: from a stem (stem, start_bar, beats), or from
+  rendered takes (file, start_beat, beats). `cut.file` may list several takes,
+  which are summed, and a take Logic trimmed short is padded with silence.
+
+## The archetypes
+
+After New Game, [ArchetypeScreen](../../scripts/UI/ArchetypeScreen.gd) shows
+the user's three portraits as a triptych over the dimmed city (0.55): Derivé,
+Thaumaturge and Factotum, each with the user's own line. There is no heading.
+- **Cards.** [ArchetypeCard](../../scripts/UI/ArchetypeCard.gd) cuts its
+  panel from `assets/ui/archetypes/archetypes_sheet.webp` (columns 4–649,
+  664–1330, 1345–1996). Each card has stepped gold corner brackets, its SVG
+  emblem, its name, a ruled lozenge and its line. The chosen card is full size
+  and full colour. The others step back to 0.84, dimmed and greyed.
+  `archetype_card.gdshader` gives the portrait torn, boiling edges that sink
+  into the dark at the rim. It never tints or glazes the painting.
+- **Effects.** `archetype_fx.gdshader` paints each archetype's effects in
+  oils, stepped at 9 fps. They sit on one layer behind every portrait (the
+  screen's "Effects" node) and spill past the card.
+  - Derivé: a burst of strokes behind his fists on a 1.6 s punch rhythm, fire
+    licks with bright cores, ember daubs, and cracks beside his feet. Choosing
+    him jolts the card.
+  - Thaumaturge: a smoke halo and rising wisps, a gold glyph ring turning in
+    steps, and a dashed lilac ring turning against it. Choosing him breathes
+    the card up.
+  - Factotum: ink blots, construction lines with ruler ticks, a compass arc,
+    and pages lifting. The lines ink in over 1.4 s.
+- **Input.** Hover or Left/Right/A/D chooses; the middle card is chosen on
+  arrival. A click on the chosen card, Enter or Space confirms. Escape or Back
+  returns to the menu, which comes back exactly as it was, closed pages
+  included. Back and double confirms are ignored once confirming.
+- **Confirm.** The chosen card surges and the others fall away (0.55 s).
+  Then `CityState.archetype` is set to `&"derive"`, `&"thaumaturge"` or
+  `&"factotum"`, the confirm sound is queued, `start_game()` begins, and
+  [ArchetypeTransition](../../scripts/UI/ArchetypeTransition.gd) plays its
+  1.3 s full-screen transition from the card. It ends in the dark, and the
+  loading cover fades in over 0.35 s.
+  - Derivé: the screen cracks, then shockwaves, sparks, a red radial blast,
+    and soot closing in with an ember front.
+  - Thaumaturge: smoke closes like eyelids onto his card, with a gold rayed
+    lid line, drifting glyphs and gold dust, and ends on a gold slit.
+  - Factotum: a drafting grid, rules, compass circles and a protractor, then
+    watercolour ink with spatter, then a page turning into the dark.
+- **Sounds.** Buttons 5, 6 and 7 in the score (`MainMenu.ARCHETYPE_JINGLES`).
+  Each archetype has a hover and a confirm motif, in every chord with two
+  variants, played on the `MenuJingles` bus.
+  - Composed by `tools/compose_menu_parts.py` into
+    `parts/archetype_jingles.mid` and `.json`: one 8-beat slot each; hover cuts
+    are 3 beats and confirm cuts 6.
+  - Rendered in the Logic project, dry, on the song's own patches: Derivé on
+    Studio Grand and Vintage Cinema, Thaumaturge on Toy Glockenspiel and
+    Mellotron Choir, Factotum on Deluxe Classic and Sugar Hill. They are
+    tracks 32, 33 and 50–53, muted in the song, exported as
+    `stems_jingles/<patch>_archetype.wav`.
+  - Derivé is trimmed 6 dB in the map: his drums made him 8 dB louder than
+    the others.
 
 ## Loading
 
@@ -195,6 +251,10 @@ walk, facing the curandera.
   - the living city's wiring
   - music wiring: hover jingles, Lore stirring the haze, a single New Game,
     and recovery when the game fails to load
+  - the archetypes: opening on the high layer, the user's names and lines,
+    effects behind every portrait, layout, keys, Back restoring the menu as it
+    was, the archetype sounds, a single confirm with its transition before the
+    cover, and the choice kept in CityState
 - `tests/menu_music_test.tscn` (headless) covers the clock, layer targets and
   glides, idle and waking, the lean, the silent fallback, jingle timing,
   chords, variants and voice limits, and the ending landing on its bar line.
@@ -205,8 +265,10 @@ walk, facing the curandera.
   into `tests/fixtures/tiny_game.tscn`. It checks that the theme is still
   in the root, finishing its phrase, after the menu is gone, and that it
   then frees itself.
-- `tests/tools/test_make_city_masks.py` and
-  `tests/tools/test_prepare_menu_score.py` use stdlib unittest:
+- `tests/tools/test_make_city_masks.py`,
+  `tests/tools/test_prepare_menu_score.py` and
+  `tests/tools/test_archetype_jingles.py` (every slot, chord tones only, each
+  archetype in its own slots) use stdlib unittest:
   `python3 -m unittest discover -s tests/tools -p '<file>'`.
 - `tests/visual/main_menu_preview.gd` (native renderer) parks the pointer,
   then:
@@ -214,3 +276,9 @@ walk, facing the curandera.
   - captures each band, a band edge, a mid-glide frame, every page and a
     2560×1080 window to `/private/tmp/main-menu-*.png`
   - plays New Game through to the Metro
+- `tests/visual/archetype_preview.gd` (native) captures each archetype
+  chosen, checks their effects move, and captures each transition at seven
+  points, checking that it ends in the dark (`/private/tmp/archetype-*.png`).
+- `tests/visual/menu_showcase.gd` is a scripted tour of the whole menu for a
+  showcase video, recorded with Godot's movie maker:
+  `godot --path . --resolution 1600x900 --fixed-fps 30 --write-movie out.avi --script res://tests/visual/menu_showcase.gd`

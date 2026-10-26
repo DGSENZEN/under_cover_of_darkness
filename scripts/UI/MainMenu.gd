@@ -19,6 +19,9 @@ const GOLD := Color("d9b46a")
 const WORD_X := 72.0
 const WORD_TOP := 400.0
 const WORD_GAP := 64.0
+## The archetypes' own sounds in the menu score: Derivé, Thaumaturge and
+## Factotum are buttons 5, 6 and 7, after the five words.
+const ARCHETYPE_JINGLES := 5
 var words: Array[MenuWord] = []
 var band: MenuBand
 var background: LivingCity
@@ -40,6 +43,14 @@ var _confirm: Control
 var quit_game: Callable
 var _transitioning := false
 var _pressing := false
+## After New Game: who you are (the archetype triptych), open while choosing.
+var archetypes: ArchetypeScreen
+var choosing := false
+## Each of the menu's own pieces' opacity when the archetypes opened, so a
+## closed page's painting comes back closed.
+var _front_alpha := {}
+## The chosen archetype's paint over the whole screen, on the way in.
+var transition: ArchetypeTransition
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -119,6 +130,13 @@ func _ready() -> void:
 	pages.back.pressed.connect(close_page)
 	_design.add_child(pages)
 	_build_confirm()
+	archetypes = ArchetypeScreen.new()
+	archetypes.chosen.connect(_sound_archetype)
+	archetypes.confirmed.connect(_start_game)
+	archetypes.back_out.connect(close_archetypes)
+	_design.add_child(archetypes)
+	transition = ArchetypeTransition.new()
+	add_child(transition)
 	quit_game = func(): get_tree().quit()
 	_start_music()
 	get_viewport().size_changed.connect(_layout)
@@ -164,7 +182,8 @@ func city_dim() -> float:
 	return _dim
 
 func _process(delta: float) -> void:
-	_dim = move_toward(_dim, 0.72 if washes_showing() > 0 or band.page else 1.0, delta / 0.5 * 0.28)
+	var target := 0.55 if choosing else (0.72 if washes_showing() > 0 or band.page else 1.0)
+	_dim = move_toward(_dim, target, delta / 0.5 * 0.28)
 	background.dim = _dim
 	if is_instance_valid(music):
 		background.set_energy(music.layer_energy(&"base"), music.layer_energy(&"low"), music.layer_energy(&"high"), music.layer_energy(&"fx"))
@@ -187,7 +206,7 @@ func _exit_tree() -> void:
 		music.queue_free()
 
 func _activate(index: int) -> void:
-	if _transitioning or page_open >= 0 or confirming or _pressing:
+	if _transitioning or page_open >= 0 or confirming or _pressing or choosing:
 		return
 	# The word dips in first; the action follows it.
 	_pressing = true
@@ -202,18 +221,90 @@ func _activate(index: int) -> void:
 	if is_instance_valid(music):
 		music.press(index)
 	if index == 0:
-		_transitioning = true
-		# The loading cover opens at once; the song finishes its phrase under it.
-		if is_instance_valid(music):
-			music.start_game()
-		var cover := ArtLoading.open(get_tree())
-		var error: Error = await cover.change_to(game_scene)
-		if error != OK:
-			_transitioning = false
-			_start_music()
-			open_page(0, "The game scene could not be opened. Please try again.")
+		open_archetypes()
 	else:
 		open_page(index)
+
+## New Game: the menu steps away and the three archetypes rise in, on the
+## song's high layer.
+func open_archetypes() -> void:
+	if choosing or _transitioning:
+		return
+	choosing = true
+	for word in words:
+		word.focus_mode = Control.FOCUS_NONE
+		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if word.has_focus():
+			word.release_focus()
+		if word.wash:
+			word.wash.fade()
+	var away := MenuMotion.tween(_design)
+	_front_alpha.clear()
+	for node in _front():
+		_front_alpha[node] = node.modulate.a
+		away.tween_property(node, "modulate:a", 0.0, MenuMotion.FADE)
+	if is_instance_valid(music):
+		music.set_state(MenuMusic.State.ARCHETYPE)
+	archetypes.open()
+
+## Back from the archetypes: the menu returns as it was.
+func close_archetypes() -> void:
+	if not choosing:
+		return
+	choosing = false
+	archetypes.close()
+	var back := MenuMotion.tween(_design)
+	for node in _front():
+		# The words light or dim themselves (set_selected, below).
+		if not node is MenuWord:
+			back.tween_property(node, "modulate:a", _front_alpha.get(node, 1.0), MenuMotion.BLOOM)
+	for word in words:
+		word.focus_mode = Control.FOCUS_ALL
+		word.mouse_filter = Control.MOUSE_FILTER_STOP
+		word.set_selected(word.index == selected)
+	if is_instance_valid(music):
+		music.set_state(MenuMusic.State.BROWSING)
+	if selected >= 0:
+		words[selected].grab_focus()
+
+## The main menu's own pieces (all but the archetypes).
+func _front() -> Array[Node]:
+	return _design.get_children().filter(func(n): return n != archetypes)
+
+func _sound_archetype(index: int) -> void:
+	if is_instance_valid(music):
+		music.hover(ARCHETYPE_JINGLES + index)
+		music.note_input()
+
+## An archetype confirmed: it is who the player is; the game begins.
+func _start_game(index: int) -> void:
+	if _transitioning:
+		return
+	_transitioning = true
+	# CityState is an autoload (absent when a test runs the menu as a script).
+	var city := get_node_or_null("/root/CityState")
+	if city:
+		city.archetype = ArchetypeScreen.IDS[index]
+	# The song finishes its phrase under the transition and the loading cover.
+	if is_instance_valid(music):
+		music.press(ARCHETYPE_JINGLES + index)
+		music.start_game()
+	await play_transition(index)
+	var cover := ArtLoading.open(get_tree())
+	cover.fade_in(0.35)
+	var error: Error = await cover.change_to(game_scene)
+	if error != OK:
+		_transitioning = false
+		transition.clear()
+		_start_music()
+		close_archetypes()
+		open_page(0, "The game scene could not be opened. Please try again.")
+
+## The chosen archetype's paint takes the screen from its card, into the dark.
+func play_transition(index: int) -> void:
+	var card := archetypes.cards[index]
+	transition.play(index, card.get_global_rect().get_center())
+	await transition.finished
 
 ## Spreads the choice's band over the right two-thirds and writes its page on it.
 func open_page(index: int, message := "") -> void:
@@ -336,7 +427,7 @@ func close_quit_confirm() -> void:
 
 ## The one path for mouse, keyboard and controller: lights one word.
 func select(index: int) -> void:
-	if index == selected or index < 0 or index >= words.size() or confirming or page_open >= 0:
+	if index == selected or index < 0 or index >= words.size() or confirming or page_open >= 0 or choosing:
 		return
 	var previous := selected
 	selected = index
@@ -356,6 +447,6 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("ui_cancel") and page_open >= 0:
 		close_page()
 		get_viewport().set_input_as_handled()
-	elif page_open < 0 and get_viewport().gui_get_focus_owner() == null and (event.is_action_pressed("ui_down") or event.is_action_pressed("ui_up") or event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right") or event.is_action_pressed("ui_accept")):
+	elif page_open < 0 and not choosing and get_viewport().gui_get_focus_owner() == null and (event.is_action_pressed("ui_down") or event.is_action_pressed("ui_up") or event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right") or event.is_action_pressed("ui_accept")):
 		words[0].grab_focus()
 		get_viewport().set_input_as_handled()

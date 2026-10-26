@@ -6,7 +6,8 @@ names, and writes to <out>:
   <stem id>.ogg            one seamless loop per stem, all the same length
   score.tres               AudioStreamSynchronized, one stream per stem in map order
   jingles/b<button>_<kind>_<chord>_<variant>.ogg   (cut from a stem by bar, or from a
-                           rendered jingle file by beat: cut.file + cut.start_beat)
+                           rendered jingle file by beat: cut.file + cut.start_beat;
+                           cut.file may list several takes, summed)
   arrival.ogg              when the map names one
   score.json               the map's timing plus stem indices, jingle paths, levels
 Requires ffmpeg, libsndfile (with Vorbis) and numpy, as tools/prepare_score.py.
@@ -55,6 +56,11 @@ def read_audio(path):
 # folded back onto the loop's start, fading out over this long, so the
 # seam continues instead of cutting off.
 FOLD = round(0.25 * RATE)
+
+
+def fit_end(audio, samples):
+    """Pads with silence to `samples` (takes exported to different lengths)."""
+    return np.vstack([audio, np.zeros((samples - len(audio), audio.shape[1]), audio.dtype)]) if len(audio) < samples else audio
 
 
 def fit(audio, samples):
@@ -144,14 +150,25 @@ def main():
         else:
             cut = jingle['cut']
             if cut.get('file'):
-                # A rendered take (the glockenspiel or piano jingle track), cut by beats.
-                path = args.source / cut['file']
-                if not path.exists():
-                    fail(f'Jingle {name}: missing file {path}')
-                if path not in rendered:
-                    rendered[path] = read_audio(path)
-                source = rendered[path]
+                # A rendered take (the glockenspiel or piano jingle track), cut by
+                # beats; several takes (an archetype's two instruments) are summed.
+                files = cut['file'] if isinstance(cut['file'], list) else [cut['file']]
+                source = None
+                for file in files:
+                    path = args.source / file
+                    if not path.exists():
+                        fail(f'Jingle {name}: missing file {path}')
+                    if path not in rendered:
+                        rendered[path] = read_audio(path)
+                    take = rendered[path]
+                    if source is None:
+                        source = take
+                    else:
+                        length = max(len(source), len(take))
+                        source = fit_end(source, length) + fit_end(take, length)
                 start = round(float(cut['start_beat']) * beat * RATE)
+                # Logic trims a take's trailing silence: the last cut may run past it.
+                source = fit_end(source, start + round(float(cut['beats']) * beat * RATE))
             else:
                 if cut['stem'] not in audio:
                     fail(f'Jingle {name}: unknown stem {cut["stem"]!r}')

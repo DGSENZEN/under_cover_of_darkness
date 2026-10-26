@@ -229,12 +229,63 @@ func _ready() -> void:
 	var covers := [0]
 	var count_covers := func(n: Node): if n.name.begins_with("ArtLoading"): covers[0] += 1
 	get_tree().root.child_entered_tree.connect(count_covers)
+	var band_alpha: float = menu.band.modulate.a
+	var pages_alpha: float = menu.pages.modulate.a
 	menu.words[0].pressed.emit()
 	await get_tree().process_frame
 	menu.words[0].pressed.emit()
 	await get_tree().create_timer(MenuMotion.PRESS + 0.05).timeout
+	# Piece 3: New Game opens the archetypes first.
+	var screen: ArchetypeScreen = menu.archetypes
+	check(menu.choosing and screen.opened and screen.visible and starts[0] == 0 and covers[0] == 0, "New Game opens the archetype screen, not the game")
+	await get_tree().create_timer(0.7).timeout
+	check(screen.selected == 1 and screen.cards[1].wake > 0.99 and screen.cards[0].wake < 0.01, "the middle archetype wakes first")
+	check(menu.music.state == MenuMusic.State.ARCHETYPE and menu.music.layer_target_db(&"high") == 0.0, "the archetypes play on the high layer")
+	check(menu.words.all(func(w): return w.mouse_filter == Control.MOUSE_FILTER_IGNORE and w.modulate.a < 0.01) and menu.washes_showing() == 0, "the menu steps away behind them")
+	check(screen.cards.map(func(c): return c.title.text) == ["Derivé", "Thaumaturge", "Factotum"] and screen.cards[0].line.text == "Guided by their body, their gut instinct and their fists.", "the user's names and lines")
+	var effects: Node = screen.get_node("Effects")
+	check(screen.cards.all(func(c): return c.fx.get_parent() == effects and effects.get_index() < c.get_index()), "every effect is on one layer behind every portrait")
+	check(screen.cards.all(func(c): return c.emblem.texture != null), "each archetype has its emblem")
+	var lead: ArchetypeCard = screen.cards[1]
+	check(screen.cards.all(func(c): return c == lead or c.scale.x < lead.scale.x), "the chosen card stands larger than the others")
+	var spans: Array = screen.cards.map(func(c): return Rect2(c.position + c.pivot_offset * (Vector2.ONE - c.scale), ArchetypeCard.SIZE * c.scale))
+	check(not spans[0].intersects(spans[1]) and not spans[1].intersects(spans[2]) and spans[0].position.x > 0.0 and spans[2].end.x < MainMenu.DESIGN.x, "the portraits sit apart, inside the screen")
+	await key(KEY_LEFT)
+	check(screen.selected == 0, "Left wakes the archetype to the left")
+	check(menu.music.last_jingle.get("button") == MainMenu.ARCHETYPE_JINGLES and menu.music.last_jingle.get("kind") == "hover", "each archetype sounds its own hover")
+	await key(KEY_LEFT)
+	check(screen.selected == 0, "and stops at the first")
+	await key(KEY_D)
+	await key(KEY_RIGHT)
+	check(screen.selected == 2, "D and Right move right")
+	await get_tree().create_timer(0.7).timeout
+	check(screen.cards[2].drawn > 0.5 and screen.cards[0].wake < 0.01, "Factotum inks his lines; the others sleep")
+	await key(KEY_ESCAPE)
+	check(not menu.choosing and not screen.opened and menu.music.state == MenuMusic.State.BROWSING, "Escape goes back to the menu and its layers")
+	await get_tree().create_timer(0.7).timeout
+	check(not screen.visible and menu.words.all(func(w): return w.mouse_filter == Control.MOUSE_FILTER_STOP), "the menu returns as it was")
+	check(menu.words.all(func(w): return absf(w.modulate.a - (1.0 if w.index == menu.selected else MenuWord.DIM)) < 0.01), "the words come back lit and dimmed as they were")
+	check(is_equal_approx(menu.band.modulate.a, band_alpha) and is_equal_approx(menu.pages.modulate.a, pages_alpha), "a closed page's painting stays closed when the menu returns")
+	menu.words[0].pressed.emit()
+	await get_tree().create_timer(MenuMotion.PRESS + 0.7).timeout
+	check(screen.opened and screen.cards.all(func(c): return c.modulate.a > 0.99) and screen.selected == 1, "opening again starts fresh")
+	CityState.archetype = &""
+	screen.select(0)
+	await get_tree().process_frame
+	check(menu.music.last_jingle.get("button") == MainMenu.ARCHETYPE_JINGLES, "Derivé's hover on choosing him")
+	var confirming_music: MenuMusic = menu.music
+	screen.confirm()
+	screen.confirm()
+	await key(KEY_ESCAPE)
+	check(menu.choosing and starts[0] == 0, "Back is ignored once an archetype is confirmed")
+	await get_tree().create_timer(ArchetypeScreen.SURGE_HOLD + 0.05).timeout
+	check(menu.transition.visible and covers[0] == 0, "the chosen archetype's transition plays before the loading cover")
+	await get_tree().create_timer(ArchetypeTransition.TIME + 0.1).timeout
 	get_tree().root.child_entered_tree.disconnect(count_covers)
-	check(starts[0] == 1 and covers[0] == 1, "pressing New Game twice starts one game (one cover)")
+	check(starts[0] == 1 and covers[0] == 1, "confirming twice starts one game (one cover)")
+	check(CityState.archetype == &"derive", "the chosen archetype is kept for the game")
+	# (Headless audio never advances, so the press stays queued for its eighth.)
+	check(is_instance_valid(confirming_music) and confirming_music._pending.any(func(p): return int(p.button) == MainMenu.ARCHETYPE_JINGLES), "and his own confirm is queued on the next eighth")
 	await get_tree().create_timer(0.3).timeout
 	check(menu.page_open == 0 and menu.music != null and is_instance_valid(menu.music) and menu.music.state != MenuMusic.State.STARTING, "a game that will not open: the menu says so and its music returns")
 	menu.close_page()

@@ -170,6 +170,72 @@
           "res://tests/fixtures/menu_score/jingles/b3_press_Gm_1.ogg"
         ]
       }
+    },
+    "5": {
+      "hover": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b5_hover_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b5_hover_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b5_hover_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b5_hover_Gm_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b5_press_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b5_press_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b5_press_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b5_press_Gm_1.ogg"
+        ]
+      }
+    },
+    "6": {
+      "hover": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b6_hover_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b6_hover_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b6_hover_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b6_hover_Gm_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b6_press_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b6_press_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b6_press_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b6_press_Gm_1.ogg"
+        ]
+      }
+    },
+    "7": {
+      "hover": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b7_hover_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b7_hover_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b7_hover_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b7_hover_Gm_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://tests/fixtures/menu_score/jingles/b7_press_Dm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b7_press_Dm_1.ogg"
+        ],
+        "Gm": [
+          "res://tests/fixtures/menu_score/jingles/b7_press_Gm_0.ogg",
+          "res://tests/fixtures/menu_score/jingles/b7_press_Gm_1.ogg"
+        ]
+      }
     }
   },
   "arrival": "res://tests/fixtures/menu_score/arrival.ogg",

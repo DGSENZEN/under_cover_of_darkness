@@ -266,6 +266,120 @@
           "res://audio/music/menu/jingles/b3_press_Eb_1.ogg"
         ]
       }
+    },
+    "5": {
+      "hover": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b5_hover_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b5_hover_Dm_1.ogg"
+        ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b5_hover_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b5_hover_Bb_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b5_hover_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b5_hover_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b5_hover_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b5_hover_Eb_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b5_press_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b5_press_Dm_1.ogg"
+        ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b5_press_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b5_press_Bb_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b5_press_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b5_press_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b5_press_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b5_press_Eb_1.ogg"
+        ]
+      }
+    },
+    "6": {
+      "hover": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b6_hover_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b6_hover_Dm_1.ogg"
+        ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b6_hover_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b6_hover_Bb_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b6_hover_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b6_hover_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b6_hover_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b6_hover_Eb_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b6_press_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b6_press_Dm_1.ogg"
+        ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b6_press_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b6_press_Bb_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b6_press_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b6_press_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b6_press_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b6_press_Eb_1.ogg"
+        ]
+      }
+    },
+    "7": {
+      "hover": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b7_hover_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b7_hover_Dm_1.ogg"
+        ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b7_hover_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b7_hover_Bb_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b7_hover_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b7_hover_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b7_hover_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b7_hover_Eb_1.ogg"
+        ]
+      },
+      "press": {
+        "Dm": [
+          "res://audio/music/menu/jingles/b7_press_Dm_0.ogg",
+          "res://audio/music/menu/jingles/b7_press_Dm_1.ogg"
+        ],
+        "Bb": [
+          "res://audio/music/menu/jingles/b7_press_Bb_0.ogg",
+          "res://audio/music/menu/jingles/b7_press_Bb_1.ogg"
+        ],
+        "Gm": [
+          "res://audio/music/menu/jingles/b7_press_Gm_0.ogg",
+          "res://audio/music/menu/jingles/b7_press_Gm_1.ogg"
+        ],
+        "Eb": [
+          "res://audio/music/menu/jingles/b7_press_Eb_0.ogg",
+          "res://audio/music/menu/jingles/b7_press_Eb_1.ogg"
+        ]
+      }
     }
   },
   "arrival": null,
