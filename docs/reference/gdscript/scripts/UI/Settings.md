@@ -20,8 +20,39 @@ Long initializers are shortened; follow the source link for their full value.
 | `path` | `inferred from default` | `"user://settings.cfg"` | no | [Source:7](../../../../../scripts/UI/Settings.gd#L7) |
 | `_loaded` | `inferred from default` | `false` | no | [Source:9](../../../../../scripts/UI/Settings.gd#L9) |
 | `_awareness_marks` | `inferred from default` | `true` | no | [Source:10](../../../../../scripts/UI/Settings.gd#L10) |
+| `_master_volume` | `inferred from default` | `1.0` | no | [Source:11](../../../../../scripts/UI/Settings.gd#L11) |
 
 ## Functions
+
+### master_volume
+
+```gdscript
+static func master_volume() -> float
+```
+
+[Source:15](../../../../../scripts/UI/Settings.gd#L15)
+
+Linear master gain, 0–1; loads and applies the saved gain on first access.
+
+Parameters: none.
+
+Return type: `float`.
+
+### set_master_volume
+
+```gdscript
+static func set_master_volume(value: float) -> void
+```
+
+[Source:21](../../../../../scripts/UI/Settings.gd#L21)
+
+Clamps linear gain to 0–1, applies it to Master, and saves preferences.
+
+| Parameter | Type in source | Default |
+| --- | --- | --- |
+| `value` | `float` | required |
+
+Return type: `void`.
 
 ### awareness_marks
 
@@ -29,7 +60,7 @@ Long initializers are shortened; follow the source link for their full value.
 static func awareness_marks() -> bool
 ```
 
-[Source:15](../../../../../scripts/UI/Settings.gd#L15)
+[Source:30](../../../../../scripts/UI/Settings.gd#L30)
 
 The marks over men noticing you (StealthHUD's awareness marks), and the
 ticks as one makes you out.
@@ -44,7 +75,7 @@ Return type: `bool`.
 static func set_awareness_marks(on: bool) -> void
 ```
 
-[Source:22](../../../../../scripts/UI/Settings.gd#L22)
+[Source:37](../../../../../scripts/UI/Settings.gd#L37)
 
 Updates the cached bool and immediately writes hud/awareness_marks to path, preserving other config entries.
 ConfigFile save errors are not surfaced; the in-memory value still changes.
@@ -61,7 +92,7 @@ Return type: `void`.
 static func reload() -> void
 ```
 
-[Source:29](../../../../../scripts/UI/Settings.gd#L29)
+[Source:44](../../../../../scripts/UI/Settings.gd#L44)
 
 Forget what was read: the next ask reads `path` again (tests).
 
@@ -75,7 +106,7 @@ Return type: `void`.
 static func _load() -> void
 ```
 
-[Source:34](../../../../../scripts/UI/Settings.gd#L34)
+[Source:50](../../../../../scripts/UI/Settings.gd#L50)
 
 Parameters: none.
 
@@ -89,7 +120,7 @@ Internal helper or engine callback; use system entry points for integration.
 static func _as_bool(value: Variant, otherwise: bool) -> bool
 ```
 
-[Source:47](../../../../../scripts/UI/Settings.gd#L47)
+[Source:67](../../../../../scripts/UI/Settings.gd#L67)
 
 A value from the file as a switch, however it was written (true, 1,
 "false"); `otherwise` if it is not one.
@@ -109,7 +140,7 @@ Internal helper or engine callback; use system entry points for integration.
 static func _save() -> void
 ```
 
-[Source:65](../../../../../scripts/UI/Settings.gd#L65)
+[Source:85](../../../../../scripts/UI/Settings.gd#L85)
 
 Parameters: none.
 
