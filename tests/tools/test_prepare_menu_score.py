@@ -136,6 +136,36 @@ class PrepareMenuScore(unittest.TestCase):
         hover = decode(work / 'out/jingles/b0_hover_Dm_0.ogg')
         self.assertLess(np.abs(hover[:8]).max(), 0.01)
 
+    def test_jingle_cut_from_a_rendered_file(self):
+        mapping = fixture_map()
+        mapping['jingles'] = [{'button': 2, 'kind': 'press', 'chord': 'Gm', 'variant': 0, 'file': None,
+                               'cut': {'file': 'jingles/piano.wav', 'start_beat': 8.0, 'beats': 2.0}}]
+        work = Path(tempfile.mkdtemp())
+        (work / 'src/stems').mkdir(parents=True)
+        (work / 'src/jingles').mkdir()
+        for i, stem in enumerate(('piano', 'drums')):
+            write_wav(work / f'src/stems/{stem}.wav', 4.0, 220 * (i + 1))
+        write_wav(work / 'src/jingles/piano.wav', 12.0, 660)
+        (work / 'src/map.json').write_text(json.dumps(mapping))
+        result = subprocess.run([sys.executable, str(TOOL), '--source', str(work / 'src'), '--out', str(work / 'out')],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        path = work / 'out/jingles/b2_press_Gm_0.ogg'
+        self.assertEqual(frames(path), round(2.0 * 0.5 * RATE))
+        got = decode(path)
+        source = decode(work / 'src/jingles/piano.wav')[round(4.0 * RATE):round(4.0 * RATE) + len(got)]
+        gain = 10 ** (json.loads((work / 'out/score.json').read_text())['common_gain_db'] / 20)
+        body = slice(round(0.01 * RATE), len(got) - round(0.01 * RATE))
+        self.assertLess(np.sqrt(np.mean((got[body] - source[body] * gain) ** 2)), 0.01)
+
+    def test_jingle_file_missing_is_named(self):
+        mapping = fixture_map()
+        mapping['jingles'] = [{'button': 1, 'kind': 'hover', 'chord': 'Dm', 'variant': 0, 'file': None,
+                               'cut': {'file': 'jingles/nope.wav', 'start_beat': 0.0, 'beats': 2.0}}]
+        _, result = self.build(mapping)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('b1_hover_Dm_0', result.stderr)
+
     def test_unknown_layer_is_named(self):
         mapping = fixture_map()
         mapping['stems'][1]['layer'] = 'loud'

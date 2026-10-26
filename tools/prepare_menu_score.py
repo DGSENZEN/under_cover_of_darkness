@@ -5,7 +5,8 @@ Reads <source>/map.json (see docs/systems/audio.md) and the Logic exports it
 names, and writes to <out>:
   <stem id>.ogg            one seamless loop per stem, all the same length
   score.tres               AudioStreamSynchronized, one stream per stem in map order
-  jingles/b<button>_<kind>_<chord>_<variant>.ogg
+  jingles/b<button>_<kind>_<chord>_<variant>.ogg   (cut from a stem by bar, or from a
+                           rendered jingle file by beat: cut.file + cut.start_beat)
   arrival.ogg              when the map names one
   score.json               the map's timing plus stem indices, jingle paths, levels
 Requires ffmpeg, libsndfile (with Vorbis) and numpy, as tools/prepare_score.py.
@@ -130,6 +131,7 @@ def main():
                                     peak_db=float(20 * np.log10(max(float(np.max(np.abs(pcm))), 1e-9))),
                                     sha256=hashlib.sha256(source).hexdigest()))
 
+    rendered = {}
     for jingle in mapping.get('jingles', []):
         if jingle['kind'] not in KINDS:
             fail(f'Jingle for button {jingle["button"]}: unknown kind {jingle["kind"]!r}')
@@ -141,13 +143,24 @@ def main():
             pcm = read_audio(path) * gain
         else:
             cut = jingle['cut']
-            if cut['stem'] not in audio:
-                fail(f'Jingle {name}: unknown stem {cut["stem"]!r}')
-            start = round(float(cut['start_bar']) * bar_beats * beat * RATE)
+            if cut.get('file'):
+                # A rendered take (the glockenspiel or piano jingle track), cut by beats.
+                path = args.source / cut['file']
+                if not path.exists():
+                    fail(f'Jingle {name}: missing file {path}')
+                if path not in rendered:
+                    rendered[path] = read_audio(path)
+                source = rendered[path]
+                start = round(float(cut['start_beat']) * beat * RATE)
+            else:
+                if cut['stem'] not in audio:
+                    fail(f'Jingle {name}: unknown stem {cut["stem"]!r}')
+                source = audio[cut['stem']]
+                start = round(float(cut['start_bar']) * bar_beats * beat * RATE)
             count = round(float(cut['beats']) * beat * RATE)
-            pcm = audio[cut['stem']][start:start + count].copy() * gain
+            pcm = source[start:start + count].copy() * gain
             if len(pcm) != count:
-                fail(f'Jingle {name}: cut runs past the loop')
+                fail(f'Jingle {name}: cut runs past its source')
             ease = min(FADE_IN, len(pcm))
             pcm[:ease] *= np.linspace(0, 1, ease)[:, None]
         fade = min(FADE_OUT, len(pcm))

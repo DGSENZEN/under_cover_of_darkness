@@ -21,6 +21,7 @@ the sketch's drum loop (General MIDI drum map, for a Drum Machine Designer
 kit such as Mixed Boom Bap).
 """
 import argparse
+import json
 from pathlib import Path
 import random
 import sys
@@ -31,6 +32,8 @@ from menu_midi import write_song  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'assets/audio/source/menu_theme/parts/menu_parts.mid'
 DRUMS_OUT = ROOT / 'assets/audio/source/menu_theme/parts/trip_hop_drums.mid'
+JINGLES_OUT = ROOT / 'assets/audio/source/menu_theme/parts/menu_jingles.mid'
+JINGLES_TABLE = ROOT / 'assets/audio/source/menu_theme/parts/menu_jingles.json'
 BPM = 78
 BARS = 8
 PASSES = 2
@@ -232,6 +235,52 @@ def humanize(notes, rng, swing):
     return out
 
 
+# The menu's jingles: each word's own motif in each of the loop's chords.
+# Chord tones stacked up from the root (semitones): 9ths for the minor
+# chords, the #11 on top of the major-seventh ones.
+JINGLE_CHORDS = [('Dm', 2, (0, 3, 7, 10, 14)), ('Bb', 10, (0, 4, 7, 11, 18)),
+                 ('Gm', 7, (0, 3, 7, 10, 14)), ('Eb', 3, (0, 4, 7, 11, 18))]
+# Which stacked tones each word plays, and when (beats): New Game rises
+# root-5th-top, Continue answers 3rd-7th, Settings rings one tone and its
+# octave, Lore falls from the top through the 7th to the 5th.
+HOVER_SHAPES = [((0, 2, 4), (0.0, 0.125, 0.25)), ((1, 3), (0.0, 0.25)),
+                ((2, 7), (0.0, 0.125)), ((4, 3, 2), (0.0, 0.125, 0.25))]
+SLOT_BEATS = 8.0
+HOVER_BEATS, PRESS_BEATS = 2.0, 4.0
+
+
+def _tone(root, stack, step):
+    """The step-th tone of a chord stacked upward, past the top in octaves."""
+    octave, i = divmod(step, len(stack))
+    return root + stack[i] + 12 * octave
+
+
+def jingles():
+    """Glockenspiel hover motifs and piano press motifs, one per 2-bar slot,
+    in order word / chord / variant; returns the two parts and the slot table."""
+    hover, press, table = [], [], []
+    slot = 0
+    for word, (steps, times) in enumerate(HOVER_SHAPES):
+        for chord, pc, stack in JINGLE_CHORDS:
+            for variant in (0, 1):
+                at = slot * SLOT_BEATS
+                lift = variant  # the second variant starts one chord tone higher
+                glock_root = 72 + pc
+                for step, t in zip(steps, times):
+                    hover.append((at + t, 0.5, _tone(glock_root, stack, step + lift), 72))
+                piano_root = 60 + pc
+                for k, step in enumerate(steps):
+                    press.append((at + k * 0.5, 0.45, _tone(piano_root, stack, step + lift), 66))
+                # Resolve inside the chord: root and 3rd above (the 5th too on the bII).
+                close = (0, 1, 2) if chord == 'Eb' else (0, 1)
+                for step in close:
+                    press.append((at + 1.5, 1.5, _tone(piano_root + 12, stack, step), 58))
+                table += [dict(button=word, kind='hover', chord=chord, variant=variant, start_beat=at, beats=HOVER_BEATS),
+                          dict(button=word, kind='press', chord=chord, variant=variant, start_beat=at, beats=PRESS_BEATS)]
+                slot += 1
+    return hover, press, table
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, default=OUT)
@@ -249,6 +298,11 @@ def main():
     beat = [(s + bars(BARS) * p, l, n, v) for p in range(PASSES) for s, l, n, v in drums()]
     write_song(DRUMS_OUT, BPM, [{'name': 'Trip-Hop Drums', 'channel': 9, 'notes': humanize(beat, rng, False)}])
     print(f'wrote {DRUMS_OUT}')
+    hover, press, table = jingles()
+    write_song(JINGLES_OUT, BPM, [{'name': 'Glockenspiel (hover)', 'channel': 0, 'program': 9, 'notes': hover},
+                                  {'name': 'Piano (press)', 'channel': 1, 'program': 0, 'notes': press}])
+    JINGLES_TABLE.write_text(json.dumps(table, indent=1) + '\n')
+    print(f'wrote {JINGLES_OUT}: {len(table)} jingles in {len(table) // 2} slots')
 
 
 if __name__ == '__main__':
