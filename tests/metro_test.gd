@@ -144,10 +144,38 @@ func _sets() -> void:
 	await _set_in_place(lane)
 	await _pasaje_in_place()
 	_one_crowd()
+	_pasaje_shows()
 
 
 ## The Pasaje set (docs/superpowers/plans/2026-10-26-pasaje-market.md): in its place, the greybox gone from its middle
 ## only; its seams to the lane's standard; walked from the market stairs down it into the lane.
+## M17: everything the Pasaje set lights, sounds and shows stands in the map's Pasaje, at its floor's level (its crowd,
+## which walks, excepted; and what is drawn in the world's frame).
+func _pasaje_shows() -> void:
+	var pasaje: Node3D = map.get_node_or_null("pasaje")
+	if pasaje == null:
+		_check("M17 everything the Pasaje lights, sounds and shows stands in the Pasaje", false, "no Pasaje")
+		return
+	var own: Rect2 = _rect("pasaje").grow(0.5)
+	var crowd: Node3D = pasaje.get("crowd_of_shades")
+	var strays := []
+	for node: Node in pasaje.find_children("*", "VisualInstance3D", true, false) + pasaje.find_children("*", "AudioStreamPlayer3D", true, false):
+		if (crowd != null and crowd.is_ancestor_of(node)) or not (node as Node3D).is_visible_in_tree():
+			continue
+		var drawn_in_world := false
+		var up: Node = node
+		while up != pasaje and up != null:
+			drawn_in_world = drawn_in_world or (up is Node3D and up.top_level and up.global_transform.origin == Vector3.ZERO)
+			up = up.get_parent()
+		if drawn_in_world:
+			continue
+		var at: Vector3 = (node as Node3D).global_position
+		if not own.has_point(Vector2(at.x, at.z)) or at.y < -11.5 or at.y > -11.0 + 5.5:
+			strays.append("%s %s" % [node.name, at])
+	_check("M17 everything the Pasaje lights, sounds and shows stands in the Pasaje", strays.is_empty(),
+		"%d out: %s" % [strays.size(), strays.slice(0, 6)])
+
+
 ## M16: in the Metro the Pasaje walks its own crowd and the lane its own: no lane route runs in the Pasaje (but where
 ## into_lane begins and out_of_lane ends, at the mouth), and no Pasaje route enters the lane.
 func _one_crowd() -> void:

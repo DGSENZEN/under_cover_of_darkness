@@ -11,6 +11,7 @@ extends Node
 const SHOP := preload("res://maps/library_lab.tscn")
 const UNDER := preload("res://maps/underground_lab.tscn")
 const LANE := preload("res://maps/candle_lane.tscn")
+const METRO := preload("res://maps/metro.tscn")
 
 
 func _ready() -> void:
@@ -19,6 +20,10 @@ func _ready() -> void:
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	if "--set" in OS.get_cmdline_user_args():
 		await _candle_lane()
+		get_tree().quit()
+		return
+	if "--pasaje" in OS.get_cmdline_user_args():
+		await _pasaje()
 		get_tree().quit()
 		return
 
@@ -64,6 +69,25 @@ func _candle_lane() -> void:
 	var theirs: Vector2 = await _measure(under, [at, at + Vector3(0.0, 0.0, -2.0), at + Vector3(2.0, 0.0, 0.0)])
 	print("render: candle lane frame %.2f ms CPU %.2f ms; underground bay frame %.2f ms CPU %.2f ms (%.2f times)"
 		% [ours.x, ours.y, theirs.x, theirs.y, ours.x / maxf(theirs.x, 0.001)])
+
+
+## (-- --pasaje) The Metro with the Pasaje set (docs/superpowers/plans/2026-10-26-pasaje-market.md, Task 9): three eyes
+## along the Pasaje's middle stretch against the candle lane's own three, in the same map and run; the stretch passes
+## at no more than 1.25 times the lane's frame time.
+func _pasaje() -> void:
+	var map: Node3D = METRO.instantiate()
+	add_child(map)
+	await _frames(120)
+	var pasaje: Node3D = map.get_node("pasaje")
+	var lane: Node3D = map.get_node("candle_lane")
+	var ours: Vector2 = await _measure(map, [Vector3(0.0, 1.7, -15.0), Vector3(0.0, 1.7, 0.0), Vector3(0.0, 1.7, 15.0)].map(
+		func(p): return pasaje.to_global(p)))
+	var theirs: Vector2 = await _measure(map, [Vector3(-12.0, 1.7, 1.1), Vector3(0.0, 1.7, 1.1), Vector3(12.0, 1.7, 1.1)].map(
+		func(p): return lane.to_global(p)))
+	print("render: the Pasaje frame %.2f ms CPU %.2f ms; the candle lane frame %.2f ms CPU %.2f ms (%.2f times)"
+		% [ours.x, ours.y, theirs.x, theirs.y, ours.x / maxf(theirs.x, 0.001)])
+	print("%s  the Pasaje's frames take no more than 1.25 times the candle lane's, drawn   [%.2f vs %.2f ms]"
+		% ["PASS" if ours.x > 0.0 and theirs.x > 0.0 and ours.x <= 1.25 * theirs.x else "FAIL", ours.x, theirs.x])
 
 
 ## Median (frame, CPU render) time (ms) with an eye at each of `eyes`, looking four ways from each.
