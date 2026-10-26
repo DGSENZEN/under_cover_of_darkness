@@ -46,6 +46,21 @@ class MenuMidi(unittest.TestCase):
         self.assertEqual(got, sorted(notes))
         self.assertEqual({n[4] for n in song['tracks'][0]['notes']}, {3})
 
+    def test_song_has_one_track_per_part(self):
+        path = Path(tempfile.mkdtemp()) / 'song.mid'
+        menu_midi.write_song(path, 78, [
+            {'name': 'Trumpet', 'channel': 0, 'program': 59, 'notes': [(0.0, 1.0, 69, 80)]},
+            {'name': 'Percussion', 'channel': 9, 'notes': [(0.5, 0.25, 62, 60)]},
+        ])
+        data = path.read_bytes()
+        self.assertEqual(data[8:12], b'\x00\x01\x00\x03')  # format 1, tempo track + 2 parts
+        song = menu_midi.read_midi(path)
+        self.assertAlmostEqual(song['bpm'], 78, places=2)
+        self.assertEqual([t['name'] for t in song['tracks']], ['', 'Trumpet', 'Percussion'])
+        self.assertEqual(song['tracks'][1]['notes'], [(0.0, 1.0, 69, 80, 0)])
+        self.assertEqual(song['tracks'][2]['notes'], [(0.5, 0.25, 62, 60, 9)])
+        self.assertIn(b'\x00\xc0\x3b', data)  # trumpet's program change
+
 
 if __name__ == '__main__':
     unittest.main()

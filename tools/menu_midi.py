@@ -58,7 +58,7 @@ def vlq(value):
     return bytes(reversed(out))
 
 
-def write_part(path, bpm, notes, ppq=PPQ, channel=0, name='', program=None):
+def _track(notes, ppq, channel=0, name='', program=None, bpm=None):
     events = []
     for start, length, pitch, velocity in notes:
         on = round(start * ppq)
@@ -70,9 +70,10 @@ def write_part(path, bpm, notes, ppq=PPQ, channel=0, name='', program=None):
     if name:
         label = name.encode()
         track += b'\x00\xff\x03' + vlq(len(label)) + label
-    tempo = round(60_000_000 / bpm)
-    track += b'\x00\xff\x51\x03' + tempo.to_bytes(3, 'big')
-    track += b'\x00\xff\x58\x04\x04\x02\x18\x08'
+    if bpm is not None:
+        tempo = round(60_000_000 / bpm)
+        track += b'\x00\xff\x51\x03' + tempo.to_bytes(3, 'big')
+        track += b'\x00\xff\x58\x04\x04\x02\x18\x08'
     if program is not None:
         track += b'\x00' + bytes([0xC0 | channel, program])
     now = 0
@@ -80,8 +81,23 @@ def write_part(path, bpm, notes, ppq=PPQ, channel=0, name='', program=None):
         track += vlq(tick - now) + data
         now = tick
     track += b'\x00\xff\x2f\x00'
+    return b'MTrk' + struct.pack('>I', len(track)) + bytes(track)
+
+
+def write_part(path, bpm, notes, ppq=PPQ, channel=0, name='', program=None):
+    """One part as a format-0 file."""
     header = b'MThd' + struct.pack('>IHHH', 6, 0, 1, ppq)
-    Path(path).write_bytes(header + b'MTrk' + struct.pack('>I', len(track)) + bytes(track))
+    Path(path).write_bytes(header + _track(notes, ppq, channel, name, program, bpm))
+
+
+def write_song(path, bpm, parts, ppq=PPQ):
+    """Several parts as a format-1 file: a tempo track, then one track per part
+    ({'name', 'notes', 'channel'=0, 'program'=None}), so one import makes them all."""
+    chunks = [_track([], ppq, bpm=bpm)]
+    for part in parts:
+        chunks.append(_track(part['notes'], ppq, part.get('channel', 0), part.get('name', ''), part.get('program')))
+    header = b'MThd' + struct.pack('>IHHH', 6, 1, len(chunks), ppq)
+    Path(path).write_bytes(header + b''.join(chunks))
 
 
 def _read_vlq(data, at):

@@ -1,0 +1,16 @@
+[remap]
+
+importer="oggvorbisstr"
+type="AudioStreamOggVorbis"
+
+[deps]
+
+source_file="res://audio/music/menu/jingles/b3_hover_Bb_1.ogg"
+
+[params]
+
+loop=false
+loop_offset=0.0
+bpm=0.0
+beat_count=0
+bar_beats=4

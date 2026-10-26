@@ -9,16 +9,16 @@
    "name": "Dm"
   },
   {
+   "bar": 2,
+   "name": "Bb"
+  },
+  {
    "bar": 4,
    "name": "Gm"
   },
   {
    "bar": 6,
    "name": "Eb"
-  },
-  {
-   "bar": 7,
-   "name": "Dm"
   }
  ],
  "stems": [
@@ -97,6 +97,54 @@
   {
    "button": 0,
    "kind": "hover",
+   "chord": "Bb",
+   "variant": 0,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 2.0,
+    "beats": 0.5
+   }
+  },
+  {
+   "button": 0,
+   "kind": "press",
+   "chord": "Bb",
+   "variant": 0,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 2.0,
+    "beats": 1.5
+   }
+  },
+  {
+   "button": 0,
+   "kind": "hover",
+   "chord": "Bb",
+   "variant": 1,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 3.0,
+    "beats": 0.5
+   }
+  },
+  {
+   "button": 0,
+   "kind": "press",
+   "chord": "Bb",
+   "variant": 1,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 3.0,
+    "beats": 1.5
+   }
+  },
+  {
+   "button": 0,
+   "kind": "hover",
    "chord": "Gm",
    "variant": 0,
    "file": null,
@@ -174,7 +222,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.125,
+    "start_bar": 7.0,
     "beats": 0.5
    }
   },
@@ -186,7 +234,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.125,
+    "start_bar": 7.0,
     "beats": 1.5
    }
   },
@@ -235,6 +283,54 @@
    "cut": {
     "stem": "piano",
     "start_bar": 1.25,
+    "beats": 1.5
+   }
+  },
+  {
+   "button": 1,
+   "kind": "hover",
+   "chord": "Bb",
+   "variant": 0,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 2.25,
+    "beats": 0.5
+   }
+  },
+  {
+   "button": 1,
+   "kind": "press",
+   "chord": "Bb",
+   "variant": 0,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 2.25,
+    "beats": 1.5
+   }
+  },
+  {
+   "button": 1,
+   "kind": "hover",
+   "chord": "Bb",
+   "variant": 1,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 3.25,
+    "beats": 0.5
+   }
+  },
+  {
+   "button": 1,
+   "kind": "press",
+   "chord": "Bb",
+   "variant": 1,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 3.25,
     "beats": 1.5
    }
   },
@@ -294,7 +390,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.1875,
+    "start_bar": 6.25,
     "beats": 0.5
    }
   },
@@ -306,7 +402,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.1875,
+    "start_bar": 6.25,
     "beats": 1.5
    }
   },
@@ -318,7 +414,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.3125,
+    "start_bar": 7.25,
     "beats": 0.5
    }
   },
@@ -330,7 +426,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.3125,
+    "start_bar": 7.25,
     "beats": 1.5
    }
   },
@@ -379,6 +475,54 @@
    "cut": {
     "stem": "piano",
     "start_bar": 1.5,
+    "beats": 1.5
+   }
+  },
+  {
+   "button": 2,
+   "kind": "hover",
+   "chord": "Bb",
+   "variant": 0,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 2.5,
+    "beats": 0.5
+   }
+  },
+  {
+   "button": 2,
+   "kind": "press",
+   "chord": "Bb",
+   "variant": 0,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 2.5,
+    "beats": 1.5
+   }
+  },
+  {
+   "button": 2,
+   "kind": "hover",
+   "chord": "Bb",
+   "variant": 1,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 3.5,
+    "beats": 0.5
+   }
+  },
+  {
+   "button": 2,
+   "kind": "press",
+   "chord": "Bb",
+   "variant": 1,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 3.5,
     "beats": 1.5
    }
   },
@@ -438,7 +582,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.375,
+    "start_bar": 6.5,
     "beats": 0.5
    }
   },
@@ -450,7 +594,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.375,
+    "start_bar": 6.5,
     "beats": 1.5
    }
   },
@@ -462,7 +606,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.5,
+    "start_bar": 7.5,
     "beats": 0.5
    }
   },
@@ -474,7 +618,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.5,
+    "start_bar": 7.5,
     "beats": 1.5
    }
   },
@@ -523,6 +667,54 @@
    "cut": {
     "stem": "piano",
     "start_bar": 1.75,
+    "beats": 1.5
+   }
+  },
+  {
+   "button": 3,
+   "kind": "hover",
+   "chord": "Bb",
+   "variant": 0,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 2.75,
+    "beats": 0.5
+   }
+  },
+  {
+   "button": 3,
+   "kind": "press",
+   "chord": "Bb",
+   "variant": 0,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 2.75,
+    "beats": 1.5
+   }
+  },
+  {
+   "button": 3,
+   "kind": "hover",
+   "chord": "Bb",
+   "variant": 1,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 3.75,
+    "beats": 0.5
+   }
+  },
+  {
+   "button": 3,
+   "kind": "press",
+   "chord": "Bb",
+   "variant": 1,
+   "file": null,
+   "cut": {
+    "stem": "piano",
+    "start_bar": 3.75,
     "beats": 1.5
    }
   },
@@ -582,7 +774,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.5625,
+    "start_bar": 6.75,
     "beats": 0.5
    }
   },
@@ -594,7 +786,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.5625,
+    "start_bar": 6.75,
     "beats": 1.5
    }
   },
@@ -606,7 +798,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.6875,
+    "start_bar": 7.75,
     "beats": 0.5
    }
   },
@@ -618,7 +810,7 @@
    "file": null,
    "cut": {
     "stem": "piano",
-    "start_bar": 6.6875,
+    "start_bar": 7.75,
     "beats": 1.5
    }
   }
