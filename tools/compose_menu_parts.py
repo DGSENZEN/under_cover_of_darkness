@@ -15,6 +15,10 @@ suggestions (General MIDI programs); the user picks the real ones.
   Base:  Montuno Piano — a quiet guajeo under the sketch's rolled chords
   Low:   Latin Percussion — conga tumbao, güiro, maracas, swung
   FX:    Choir — long ooh tones;  Drone — D pedal and its fifth
+
+It also writes parts/trip_hop_drums.mid: a new trip-hop kit part to replace
+the sketch's drum loop (General MIDI drum map, for a Drum Machine Designer
+kit such as Mixed Boom Bap).
 """
 import argparse
 from pathlib import Path
@@ -26,6 +30,7 @@ from menu_midi import write_song  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'assets/audio/source/menu_theme/parts/menu_parts.mid'
+DRUMS_OUT = ROOT / 'assets/audio/source/menu_theme/parts/trip_hop_drums.mid'
 BPM = 78
 BARS = 8
 PASSES = 2
@@ -154,6 +159,41 @@ def percussion():
     return notes
 
 
+KICK, RIM, SNARE, HAT, HAT_OPEN = 36, 37, 38, 42, 46
+
+
+def drums():
+    """Trip-hop: a heavy backbeat on 2 and 4 that sits a touch late, a broken
+    kick that answers the bass, swung sixteenth hats that breathe, ghost
+    snares, and an open hat and small fill closing each four bars."""
+    kicks = [[(0.0, 112), (1.75, 84), (2.5, 104)],
+             [(0.0, 112), (2.25, 88), (2.75, 100), (3.75, 66)]]
+    ghosts = [[(2.25, 30), (3.75, 26)], [(1.75, 30), (3.25, 28)]]
+    notes = []
+    for bar in range(BARS):
+        at = bars(bar)
+        phrase_end = bar % 4 == 3
+        for beat, vel in kicks[bar % 2]:
+            if not (phrase_end and beat == 3.75):
+                notes.append((at + beat, 0.25, KICK, vel))
+        for beat in (1.0, 3.0):
+            notes.append((at + beat + 0.02, 0.25, SNARE, 118 if beat == 3.0 else 112))
+        for beat, vel in ghosts[bar % 2]:
+            notes.append((at + beat, 0.2, SNARE, vel))
+        for k in range(16):
+            beat = k * 0.25
+            if phrase_end and beat >= 3.5:
+                break
+            # Downbeats lead, eighths answer, sixteenths whisper; swing the sixteenths.
+            vel = 72 if k % 4 == 0 else 54 if k % 2 == 0 else 34 + (k * 7) % 11
+            notes.append((at + beat + (0.035 if k % 2 else 0.0), 0.2, HAT, vel))
+        notes.append((at + 2.75, 0.2, RIM, 38))
+        if phrase_end:
+            notes += [(at + 3.5, 0.5, HAT_OPEN, 62), (at + 3.25, 0.2, KICK, 90),
+                      (at + 3.5, 0.2, SNARE, 46), (at + 3.75, 0.2, SNARE, 60)]
+    return notes
+
+
 def choir():
     """Long 'ooh' tones over each chord: the colour that makes it uncanny."""
     tops = [(69, 74), (69, 76), (70, 74), (69, 74)]
@@ -201,6 +241,9 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     write_song(args.out, BPM, parts)
     print(f'wrote {args.out}: {len(parts)} parts, {BARS * PASSES} bars at {BPM} bpm')
+    beat = [(s + bars(BARS) * p, l, n, v) for p in range(PASSES) for s, l, n, v in drums()]
+    write_song(DRUMS_OUT, BPM, [{'name': 'Trip-Hop Drums', 'channel': 9, 'notes': humanize(beat, rng, False)}])
+    print(f'wrote {DRUMS_OUT}')
 
 
 if __name__ == '__main__':
