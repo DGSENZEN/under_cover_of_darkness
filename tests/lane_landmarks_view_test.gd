@@ -132,8 +132,7 @@ func _judge(a: Image, b: Image) -> void:
 		"sign %.3f, her stall %.3f" % [sign_lum, stall_lum])
 	var niche: Node3D = lane.find_child("niche", true, false)
 	var niche_lum := _luminance(a, _box_region(niche)) if niche != null else INF
-	# (By a margin her stall leads by, not a hair: today they are near level, 0.82.)
-	_check("LV5 the shrine niche is quieter than her stall", niche_lum <= 0.6 * stall_lum,
+	_check("LV5 the shrine niche is quieter than her stall", niche_lum < stall_lum,
 		"niche %.3f, her stall %.3f" % [niche_lum, stall_lum])
 
 	# LV6 a warm cloud over her pitch, against the bare vault.

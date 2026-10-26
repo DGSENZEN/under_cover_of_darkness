@@ -33,6 +33,9 @@ const BREATHED := 1 << 3
 ## What a shaded lamp's shade keeps its light off (layer 5): the Metro corridor's vault above its work lamps, which
 ## leave this layer out of their cull mask (lit by them, the vault showed a bright disc, a moon in a night sky).
 const SHADED_ABOVE := 1 << 4
+## What a colour spill close under it leaves unlit (layer 6): the candle lane's blank station sign, which the Pasaje's
+## teal neon a metre below washed into the brightest thing seen from the mouth.
+const SPILL_SHY := 1 << 5
 ## A fixture's glowing parts (a pitch head, coals, horn panes): they shine by
 ## their own glow, and a burner's light (a hand's breadth away) would blow
 ## them out, so burners leave this layer unlit.

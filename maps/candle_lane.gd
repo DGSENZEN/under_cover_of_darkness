@@ -160,6 +160,8 @@ const WORK_DIM := Vector3(1.1, 6.0, 0.4)
 const STALL_NEON := [Color(1.0, 0.28, 0.66), 1.6, 4.5]
 const MOUTH_NEON := [Vector3(-17.3, 2.4, 1.1), Color(0.25, 0.85, 0.9), 2.3, 5.5]
 const ARCH_SPILL := [Vector3(6.2, 1.9, FAR_WALL - 0.3), Color(1.0, 0.68, 0.38), 0.7, 4.5]
+## The Virgin's niche's candles here, as a share of the bay's: quieter than her stall from the mouth.
+const NICHE_DIM := 0.35
 ## How brightly the backdrops glow (the Pasaje's, the chapel's): dim as the lane's own light, never a lit screen.
 const BACKDROP_GLOW := Vector2(0.035, 0.03)
 ## How much of the stubs' lights the fog takes up.
@@ -472,9 +474,17 @@ func _pocket_lights() -> void:
 		light.light_energy = spill[1][2]
 		light.omni_range = spill[1][3]
 		light.shadow_enabled = false
+		# (Not on the blank station sign a metre over it: its teal washed the sign into the mouth's brightest thing.)
+		light.light_cull_mask &= ~Layers.SPILL_SHY
 		add_child(light)
 		light.position = spill[1][0]
 		by_name[spill[2]]["lights"].append(light)
+	if mouth_sign != null:
+		mouth_sign.layers = Layers.SPILL_SHY
+	# The Virgin's niche quieter than her stall: its candles burn lower here (the train's guttering scales from this).
+	if niche_flames != null and "energy" in niche_flames:
+		niche_flames.energy = Vfx.CANDLES_ENERGY * NICHE_DIM
+		niche_flames.set_meta("full", niche_flames.energy)
 	for flames in candles:
 		var x := plan_point(flames.position).x
 		for p in pockets:

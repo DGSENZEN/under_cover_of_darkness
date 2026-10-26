@@ -845,6 +845,18 @@ func _landmarks() -> void:
 				if lane.to_local(p.global_position).x > 16.8:
 					past_end += 1
 		pages.wind = Callable(lane, "draught_now")
+	# Quieter than the landmarks: the niche's candles burn lower here than in the bay; the Pasaje's neon leaves the
+	# blank station sign alone (it washed its face into the mouth's brightest thing).
+	var niche_candles: Node3D = lane.get("niche_flames")
+	var niche_energy: float = niche_candles.get("energy") if niche_candles != null else INF
+	_check("L12 the niche's candles burn lower here than in the bay", niche_energy <= 0.6 * Vfx.CANDLES_ENERGY,
+		"energy %.3f against the bay's %.3f" % [niche_energy, Vfx.CANDLES_ENERGY])
+	var sign_mesh: MeshInstance3D = lane.get("mouth_sign")
+	var mouth_neon: OmniLight3D = lane.find_child("pasaje_neon", true, false)
+	_check("L12b the Pasaje's neon leaves the blank station sign alone",
+		sign_mesh != null and mouth_neon != null and (sign_mesh.layers & mouth_neon.light_cull_mask) == 0,
+		"sign layers %d, neon's mask %d" % [sign_mesh.layers if sign_mesh else -1, mouth_neon.light_cull_mask if mouth_neon else -1])
+
 	_check("L10c a gust carries them farther, never past the lane's end, never piling up",
 		farther > 0.0 and farther < INF and past_end == 0 and most <= 6,
 		"gust over calm %.2f m, past the end %d, most at once %d" % [farther, past_end, most])
