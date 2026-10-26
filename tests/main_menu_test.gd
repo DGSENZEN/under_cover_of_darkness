@@ -46,6 +46,9 @@ func _ready() -> void:
 	check(not FileAccess.get_file_as_string("res://scripts/UI/city_life.gdshader").contains("paint_phase") and not ResourceLoader.exists("res://scripts/UI/living_paint.gdshader"), "the flow warp is retired")
 	check((menu.background.material as ShaderMaterial).get_shader_parameter("masks") != null, "the city's masks are loaded")
 
+	# Piece 1: the bundled typefaces.
+	check(MenuType.title().get_font_name().contains("Poiret") and MenuType.choice().get_font_name().contains("Cormorant SC") and MenuType.body().get_font_name().contains("Cormorant Garamond") and MenuType.body_italic().get_font_style() & TextServer.FONT_ITALIC, "the bundled typefaces load")
+
 	# Task 1: the word column and one selection path.
 	check(menu.words.size() == 4 and menu.words.map(func(w): return w.text) == ["NEW GAME", "CONTINUE", "SETTINGS", "LORE"], "four words in reading order")
 	check(menu.words[1].position.y - menu.words[0].position.y >= 56.0, "words have room between them")

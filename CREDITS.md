@@ -101,3 +101,10 @@ and painted over by `tools/textures/eclipse_atlas.py`:
   ([blender.org](https://www.blender.org/download/demo-files/)). Turned, scaled,
   rigged, aged and painted for the game by `tools/arms/extract_base_hand.py` and
   `tools/arms/build_fp_arms.py`.
+
+## Fonts
+
+- Poiret One, © 2011 The Poiret One Project Authors, SIL Open Font License 1.1.
+- Cormorant SC and Cormorant Garamond, © 2015 The Cormorant Project Authors, SIL Open Font License 1.1.
+
+The files and licence texts are in `assets/fonts/` (see its README).
