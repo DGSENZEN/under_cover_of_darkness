@@ -142,6 +142,106 @@ func _sets() -> void:
 		"desk %s through %s in lane_se %s seams %s" % [to_desk, through, in_se, seams])
 
 	await _set_in_place(lane)
+	await _pasaje_in_place()
+
+
+## The Pasaje set (docs/superpowers/plans/2026-10-26-pasaje-market.md): in its place, the greybox gone from its middle
+## only; its seams to the lane's standard; walked from the market stairs down it into the lane.
+func _pasaje_in_place() -> void:
+	var pasaje: Node3D = map.get_node_or_null("pasaje")
+	var names: Array = map.greybox.get_children().map(func(n): return String(n.name))
+	var placed: bool = pasaje != null and pasaje.position.is_equal_approx(pasaje.PLAN_ORIGIN)
+	_check("M14 the Pasaje stands in its place, the greybox gone from its middle only",
+		placed and not "pasaje" in names and "pasaje_n" in names and "pasaje_s" in names,
+		"placed %s; greybox %s" % [placed, names.filter(func(n): return n.begins_with("pasaje"))])
+
+	var into := []
+	var flush := []
+	var sized := false
+	if pasaje != null:
+		var meshes: Array = pasaje.find_children("*", "MeshInstance3D", true, false).filter(func(m):
+			return m.is_visible_in_tree() and m.mesh != null)
+		into = _intrusions(meshes, map.SETS["pasaje"][1])
+		flush = _flush(meshes.filter(func(m): return m.mesh is BoxMesh or m.has_meta("built")))
+		# (The greybox's openings onto it as big as its own: the herb market's.)
+		var herb: Dictionary = _gaps_onto("pasaje").get("herb_market", {})
+		var own: Array = pasaje.OPENINGS["herb_market"]
+		var wide := Vector2(herb["a"][0], herb["a"][1]).distance_to(Vector2(herb["b"][0], herb["b"][1])) if not herb.is_empty() else 0.0
+		sized = not herb.is_empty() and absf(wide - (own[2] - own[1])) < 0.02 and absf(herb["y1"] - herb["y0"] - own[3]) < 0.02
+	_check("M15 the Pasaje's seams: none of it in the map's other spaces, no face flush with a greybox wall's, its openings their own size",
+		pasaje != null and into.is_empty() and flush.is_empty() and sized,
+		"into %s; flush %s; herb opening sized %s" % [into.slice(0, 4), flush.slice(0, 4), sized])
+
+	var down := await _tour([[-10.0, -11.0, 36.0], [-9.0, -11.0, 56.0], [-9.0, -11.0, 75.45], [-2.2, -11.0, 75.45]], true)
+	_check("M9b the player walks from the market stairs down the Pasaje into the candle lane", down["ok"], "%s" % [down])
+
+
+## The parts of `meshes` standing deeper than 6 cm in the map's spaces other than `own`.
+func _intrusions(meshes: Array, own: Array) -> Array:
+	var into := []
+	for s in map.plan["spaces"]:
+		if s["name"] in own:
+			continue
+		var r := _rect(s["name"])
+		var room := AABB(Vector3(r.position.x, s["floor"], r.position.y), Vector3(r.size.x, s["height"], r.size.y))
+		for mesh: MeshInstance3D in meshes:
+			var box: AABB = mesh.global_transform * mesh.get_aabb()
+			var cut := box.intersection(room)
+			if cut.has_volume() and minf(cut.size.x, minf(cut.size.y, cut.size.z)) > 0.06:
+				into.append("%s into %s %s" % [mesh.name, s["name"], cut.size])
+	return into
+
+
+## The greybox's faces the map builds (every set's spaces left out: none of their greybox stands).
+func _built_faces() -> Array:
+	var taken := []
+	for set_name in map.SETS:
+		taken += map.SETS[set_name][1]
+	var faces := []
+	var grey: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(map.GREYBOX))
+	for g in grey["meshes"]:
+		if not String(g["name"]) in taken:
+			faces += g.get("faces", [])
+	return faces
+
+
+## The greybox's openings onto `space`, by the space they open from.
+func _gaps_onto(space: String) -> Dictionary:
+	var gaps := {}
+	var grey: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(map.GREYBOX))
+	for g in grey["meshes"]:
+		for gap in g.get("gaps", []):
+			if gap["to"] == space:
+				gaps[g["name"]] = gap
+	return gaps
+
+
+## The faces of `built`'s boxes lying in the plane of a built greybox face, over it.
+func _flush(built: Array) -> Array:
+	var faces := _built_faces()
+	var flush := []
+	for mesh: MeshInstance3D in built:
+		var box: AABB = mesh.global_transform * mesh.get_aabb()
+		for f in faces:
+			var n: Vector3 = _v(f["normal"]).abs()
+			var axis := 0 if n.x > 0.9 else (2 if n.z > 0.9 else (1 if n.y > 0.9 else -1))
+			if axis < 0:
+				continue
+			var lo := Vector3.INF
+			var hi := -Vector3.INF
+			for p in f["points"]:
+				lo = lo.min(_v(p))
+				hi = hi.max(_v(p))
+			var plane: float = lo[axis]
+			if absf(box.position[axis] - plane) > 0.005 and absf(box.end[axis] - plane) > 0.005:
+				continue
+			var shared := 1.0
+			for other in 3:
+				if other != axis:
+					shared *= maxf(0.0, minf(box.end[other], hi[other]) - maxf(box.position[other], lo[other]))
+			if shared > 0.0001:
+				flush.append("%s %s=%.3f" % [mesh.name, "xyz"[axis], plane])
+	return flush
 
 
 ## The set at home in the map: its own keys asleep (the map's are the player's), everything it lights, sounds and
@@ -190,59 +290,16 @@ func _set_in_place(lane: Node3D) -> void:
 		"%d out: %s" % [strays.size(), strays])
 
 	# None of its building in the map's other spaces (deeper than 6 cm).
-	var into := []
 	var meshes: Array = lane.find_children("*", "MeshInstance3D", true, false).filter(func(m):
 		return m.is_visible_in_tree() and m.mesh != null \
 			and not (lane.crowd_of_shades != null and lane.crowd_of_shades.is_ancestor_of(m)))
-	for s in map.plan["spaces"]:
-		if s["name"] in ["candle_lane", "librarian_shop"]:
-			continue
-		var r := _rect(s["name"])
-		var room := AABB(Vector3(r.position.x, s["floor"], r.position.y), Vector3(r.size.x, s["height"], r.size.y))
-		for mesh: MeshInstance3D in meshes:
-			var box: AABB = mesh.global_transform * mesh.get_aabb()
-			var cut := box.intersection(room)
-			if cut.has_volume() and minf(cut.size.x, minf(cut.size.y, cut.size.z)) > 0.06:
-				into.append("%s into %s %s" % [mesh.name, s["name"], cut.size])
+	var into := _intrusions(meshes, map.SETS["candle_lane"][1])
 	_check("M12 none of the set's building stands in the map's other spaces", into.is_empty(),
 		"%d: %s" % [into.size(), into])
 
 	# No face of its walls, vault or tiles in a greybox wall's plane; the openings onto it as big as its own.
-	var faces: Array = []
-	var gaps := {}
-	var grey: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(map.GREYBOX))
-	for g in grey["meshes"]:
-		# (Not the set's own spaces: the map builds none of their greybox.)
-		if String(g["name"]) in map.SETS["candle_lane"][1]:
-			continue
-		for f in g.get("faces", []):
-			faces.append(f)
-		for gap in g.get("gaps", []):
-			if gap["to"] == "candle_lane":
-				gaps[g["name"]] = gap
-	var flush := []
-	var built: Array = meshes.filter(func(m): return m.mesh is BoxMesh or m in lane.wall_panels)
-	for mesh: MeshInstance3D in built:
-		var box: AABB = mesh.global_transform * mesh.get_aabb()
-		for f in faces:
-			var n: Vector3 = _v(f["normal"]).abs()
-			var axis := 0 if n.x > 0.9 else (2 if n.z > 0.9 else (1 if n.y > 0.9 else -1))
-			if axis < 0:
-				continue
-			var lo := Vector3.INF
-			var hi := -Vector3.INF
-			for p in f["points"]:
-				lo = lo.min(_v(p))
-				hi = hi.max(_v(p))
-			var plane: float = lo[axis]
-			if absf(box.position[axis] - plane) > 0.005 and absf(box.end[axis] - plane) > 0.005:
-				continue
-			var shared := 1.0
-			for other in 3:
-				if other != axis:
-					shared *= maxf(0.0, minf(box.end[other], hi[other]) - maxf(box.position[other], lo[other]))
-			if shared > 0.0001:
-				flush.append("%s %s=%.3f" % [mesh.name, "xyz"[axis], plane])
+	var gaps := _gaps_onto("candle_lane")
+	var flush := _flush(meshes.filter(func(m): return m.mesh is BoxMesh or m in lane.wall_panels))
 	var mouth: Dictionary = gaps.get("pasaje", {})
 	var door: Dictionary = gaps.get("chapel", {})
 	var door_wide := 0.0

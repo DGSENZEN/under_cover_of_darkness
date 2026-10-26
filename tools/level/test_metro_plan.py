@@ -270,7 +270,7 @@ class MetroPlan(unittest.TestCase):
         for a, b, z in (("pasaje_n", "pasaje", 55.0), ("pasaje", "pasaje_s", 95.0)):
             for one, other in ((a, b), (b, a)):
                 o = next(o for o in _space(one)["openings"] if o["to"] == other)
-                self.assertEqual((tuple(o["at"]), o["width"]), ((-9.0, z), 10.0), one)
+                self.assertEqual((tuple(o["at"]), o["width"], o.get("height")), ((-9.0, z), 10.0, 4.5), one)
         on = {"pasaje_n": ["market_stairs", "cistern_lane"], "pasaje": ["herb_market", "candle_lane"],
               "pasaje_s": ["tianguis_lane", "rag_lane", "square_s"]}
         for name, others in on.items():

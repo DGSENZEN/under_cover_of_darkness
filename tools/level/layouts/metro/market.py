@@ -22,14 +22,14 @@ def lay(P):
     # secondhand south half to the square; each open on the next its whole width.
     P.space("pasaje_n", rect(-14, 34, -4, 55), floor=MARKET, height=4.5, layer=2,
             openings=[{"to": "market_stairs", "at": (-10, 34)}, {"to": "cistern_lane", "at": (-14, 43)},
-                      {"to": "pasaje", "at": (-9, 55), "width": 10.0}])
+                      {"to": "pasaje", "at": (-9, 55), "width": 10.0, "height": 4.5}])
     P.space("pasaje", rect(-14, 55, -4, 95), floor=MARKET, height=4.5, layer=2,
-            openings=[{"to": "pasaje_n", "at": (-9, 55), "width": 10.0},
+            openings=[{"to": "pasaje_n", "at": (-9, 55), "width": 10.0, "height": 4.5},
                       {"to": "herb_market", "at": (-14, 74), "width": 4.0},
                       {"to": "candle_lane", "at": (-4, 75.45), "width": 6.9, "height": 4.0},
-                      {"to": "pasaje_s", "at": (-9, 95), "width": 10.0}])
+                      {"to": "pasaje_s", "at": (-9, 95), "width": 10.0, "height": 4.5}])
     P.space("pasaje_s", rect(-14, 95, -4, 150), floor=MARKET, height=4.5, layer=2,
-            openings=[{"to": "pasaje", "at": (-9, 95), "width": 10.0},
+            openings=[{"to": "pasaje", "at": (-9, 95), "width": 10.0, "height": 4.5},
                       {"to": "tianguis_lane", "at": (-4, 122.5)}, {"to": "rag_lane", "at": (-14, 140.5)},
                       {"to": "square_s", "at": (-9, 150), "width": 6.0}])
 

@@ -21,7 +21,8 @@ const LAMP_HEIGHT := 2.6
 const LABEL_RANGE := 30.0
 ## The built sets standing in for their spaces' greybox: {set: [its scene, the spaces whose greybox it takes over]}.
 ## Each is set in with standalone off (no stubs of its own; the map's player) at its PLAN_ORIGIN.
-const SETS := {"candle_lane": ["res://maps/candle_lane.tscn", ["candle_lane", "librarian_shop"]]}
+const SETS := {"candle_lane": ["res://maps/candle_lane.tscn", ["candle_lane", "librarian_shop"]],
+	"pasaje": ["res://maps/pasaje.tscn", ["pasaje"]]}
 
 var plan: Dictionary
 var greybox: GreyboxLoader
@@ -58,6 +59,11 @@ func _sets() -> void:
 		built.host_player = player
 		built.position = built.PLAN_ORIGIN
 		add_child(built)
+	# (One corridor, one draught: the Pasaje's hanging pieces swing on the candle lane's, trains and all.)
+	var lane := get_node_or_null("candle_lane")
+	var pasaje := get_node_or_null("pasaje")
+	if lane != null and pasaje != null:
+		pasaje.draught = lane.draught_now
 
 
 func _unhandled_input(event: InputEvent) -> void:
