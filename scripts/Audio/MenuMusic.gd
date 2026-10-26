@@ -12,6 +12,11 @@ signal ended
 enum State { ARRIVAL, BROWSING, IDLE, LORE, SETTINGS, CONTINUE, STARTING, ARCHETYPE }
 
 const SCORE_JSON := "res://audio/music/menu/score.json"
+## The jingles' own bus: dry notes, echoed on a dotted eighth and given a
+## room, so they ring inside the song instead of on top of it.
+const JINGLE_BUS := &"MenuJingles"
+const JINGLE_LEVEL := -6.0
+const ECHO_MS := 577.0
 const LAYERS: Array[StringName] = [&"base", &"low", &"high", &"fx"]
 const OUT := -80.0
 ## Each screen's layer levels (dB): the menu sits on base and low, Lore adds
@@ -33,7 +38,7 @@ const SLEW := 24.0
 ## Where a layer coming in from silence starts its swell (still inaudible).
 const ENTRY := -40.0
 ## Jingles at once: hovers overall, presses per word; the oldest gives way.
-const HOVER_VOICES := 2
+const HOVER_VOICES := 3
 const PRESS_VOICES := 1
 const GIVE_WAY := 0.03
 ## New Game: each layer is gone at this fraction of the way to the phrase's end.
@@ -72,6 +77,7 @@ func _ready() -> void:
 	# The loading screen pauses the tree; the song finishes its phrase under it.
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	Sfx._ensure_buses()
+	ensure_jingle_bus()
 	if not position_source.is_valid():
 		position_source = _heard_position
 	if not _load_score():
@@ -112,6 +118,33 @@ func _load_score() -> bool:
 	score = parsed
 	_stream = source.duplicate() as AudioStreamSynchronized
 	return true
+
+## Makes the jingles' bus once (a second menu finds it already there).
+static func ensure_jingle_bus() -> void:
+	if AudioServer.get_bus_index(JINGLE_BUS) >= 0:
+		return
+	AudioServer.add_bus()
+	var index := AudioServer.bus_count - 1
+	AudioServer.set_bus_name(index, JINGLE_BUS)
+	AudioServer.set_bus_send(index, Sfx.BUS_MUSIC if AudioServer.get_bus_index(Sfx.BUS_MUSIC) >= 0 else &"Master")
+	AudioServer.set_bus_volume_db(index, JINGLE_LEVEL)
+	var echo := AudioEffectDelay.new()
+	echo.dry = 1.0
+	echo.tap1_active = true
+	echo.tap1_delay_ms = ECHO_MS
+	echo.tap1_level_db = -12.0
+	echo.tap2_active = false
+	echo.feedback_active = true
+	echo.feedback_delay_ms = ECHO_MS
+	echo.feedback_level_db = -10.0
+	echo.feedback_lowpass = 3500.0
+	AudioServer.add_bus_effect(index, echo)
+	var room := AudioEffectReverb.new()
+	room.room_size = 0.8
+	room.damping = 0.6
+	room.wet = 0.35
+	room.dry = 1.0
+	AudioServer.add_bus_effect(index, room)
 
 func _process(delta: float) -> void:
 	step(delta)
@@ -215,7 +248,7 @@ func _play(button: int, kind: String, chord: String, pos: float) -> void:
 	while same.size() >= limit:
 		_give_way(same.pop_front())
 	var voice := AudioStreamPlayer.new()
-	voice.bus = player.bus
+	voice.bus = JINGLE_BUS if AudioServer.get_bus_index(JINGLE_BUS) >= 0 else player.bus
 	voice.stream = _streams[path]
 	add_child(voice)
 	voice.play()

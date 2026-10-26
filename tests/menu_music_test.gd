@@ -37,6 +37,7 @@ func _ready() -> void:
 	jingle_checks()
 	await ending_checks()
 	await review_checks()
+	bus_checks()
 	await get_tree().process_frame
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failures else 0)
@@ -217,3 +218,25 @@ func review_checks() -> void:
 	again.press(2)
 	check(again.last_jingle.get("button") == 1, "a freed voice is skipped")
 	again.queue_free()
+
+func bus_checks() -> void:
+	pos = 0.5
+	var music := make_music()
+	var bus := AudioServer.get_bus_index(MenuMusic.JINGLE_BUS)
+	check(bus >= 0 and AudioServer.get_bus_send(bus) == &"Music" and is_equal_approx(AudioServer.get_bus_volume_db(bus), -6.0), "the jingles have their own bus, under the song")
+	var delay := AudioServer.get_bus_effect(bus, 0) as AudioEffectDelay
+	var room := AudioServer.get_bus_effect(bus, 1) as AudioEffectReverb
+	check(delay != null and absf(delay.tap1_delay_ms - 577.0) <= 1.0 and delay.feedback_active and room != null and is_equal_approx(room.wet, 0.35), "a dotted-eighth delay, then a reverb")
+	var again := make_music()
+	check(AudioServer.get_bus_effect_count(bus) == 2, "a second menu doesn't stack the effects")
+	again.queue_free()
+	music.hover(1)
+	check(music._voices.size() > 0 and music._voices[-1].player.bus == MenuMusic.JINGLE_BUS, "jingles play through it")
+	var most := 0
+	for i in range(8):
+		music.hover(i % 4)
+		pos += 1.0 / 60.0
+		music.step(1.0 / 60.0)
+		most = maxi(most, music.hover_voices_playing())
+	check(most <= MenuMusic.HOVER_VOICES and MenuMusic.HOVER_VOICES == 3, "up to three hovers ring together (saw %d)" % most)
+	music.queue_free()
