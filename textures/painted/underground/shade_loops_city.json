@@ -1,0 +1,294 @@
+{
+ "cell_m": 2.1,
+ "frames": 8,
+ "loops": [
+  {
+   "name": "city_pelona",
+   "row": 0,
+   "height_m": 1.777,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.314,
+   "head": [
+    -0.114,
+    1.579
+   ],
+   "shoulders": [
+    -0.06,
+    1.395
+   ]
+  },
+  {
+   "name": "city_clerk",
+   "row": 1,
+   "height_m": 1.822,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.35,
+   "head": [
+    -0.129,
+    1.643
+   ],
+   "shoulders": [
+    -0.071,
+    1.463
+   ]
+  },
+  {
+   "name": "city_lineman",
+   "row": 2,
+   "height_m": 1.843,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.35,
+   "head": [
+    -0.129,
+    1.643
+   ],
+   "shoulders": [
+    -0.071,
+    1.463
+   ]
+  },
+  {
+   "name": "city_newsboy",
+   "row": 3,
+   "height_m": 1.438,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.053,
+   "head": [
+    -0.101,
+    1.282
+   ],
+   "shoulders": [
+    -0.056,
+    1.141
+   ]
+  },
+  {
+   "name": "city_water_carrier",
+   "row": 4,
+   "height_m": 1.771,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.35,
+   "head": [
+    -0.234,
+    1.61
+   ],
+   "shoulders": [
+    -0.156,
+    1.438
+   ]
+  },
+  {
+   "name": "city_porter",
+   "row": 5,
+   "height_m": 1.809,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.35,
+   "head": [
+    -0.234,
+    1.61
+   ],
+   "shoulders": [
+    -0.156,
+    1.438
+   ]
+  },
+  {
+   "name": "city_old_man",
+   "row": 6,
+   "height_m": 1.766,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.35,
+   "head": [
+    -0.271,
+    1.578
+   ],
+   "shoulders": [
+    -0.16,
+    1.425
+   ]
+  },
+  {
+   "name": "city_grandmother",
+   "row": 7,
+   "height_m": 1.719,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.314,
+   "head": [
+    -0.243,
+    1.524
+   ],
+   "shoulders": [
+    -0.132,
+    1.367
+   ]
+  },
+  {
+   "name": "city_priest",
+   "row": 8,
+   "height_m": 1.835,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.349,
+   "head": [
+    -0.111,
+    1.651
+   ],
+   "shoulders": [
+    -0.058,
+    1.469
+   ]
+  },
+  {
+   "name": "city_nun",
+   "row": 9,
+   "height_m": 1.791,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.314,
+   "head": [
+    -0.114,
+    1.579
+   ],
+   "shoulders": [
+    -0.06,
+    1.395
+   ]
+  },
+  {
+   "name": "city_devotee",
+   "row": 10,
+   "height_m": 1.76,
+   "facing": "left",
+   "seconds": 2.0,
+   "stride_m": 1.305,
+   "head": [
+    0.173,
+    1.504
+   ],
+   "shoulders": [
+    0.136,
+    1.321
+   ]
+  },
+  {
+   "name": "city_running",
+   "row": 11,
+   "height_m": 1.244,
+   "facing": "left",
+   "seconds": 1.167,
+   "stride_m": 4.011,
+   "head": [
+    -0.237,
+    1.053
+   ],
+   "shoulders": [
+    -0.175,
+    0.938
+   ]
+  },
+  {
+   "name": "city_nahual_coyote",
+   "row": 12,
+   "height_m": 1.947,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.35,
+   "head": [
+    -0.129,
+    1.643
+   ],
+   "shoulders": [
+    -0.071,
+    1.463
+   ]
+  },
+  {
+   "name": "city_nahual_jaguar",
+   "row": 13,
+   "height_m": 1.85,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.314,
+   "head": [
+    -0.114,
+    1.579
+   ],
+   "shoulders": [
+    -0.06,
+    1.395
+   ]
+  },
+  {
+   "name": "city_lechuza",
+   "row": 14,
+   "height_m": 1.835,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.314,
+   "head": [
+    -0.114,
+    1.579
+   ],
+   "shoulders": [
+    -0.06,
+    1.395
+   ]
+  },
+  {
+   "name": "city_susto",
+   "row": 15,
+   "height_m": 1.75,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.314,
+   "head": [
+    -0.18,
+    1.531
+   ],
+   "shoulders": [
+    -0.058,
+    1.394
+   ]
+  },
+  {
+   "name": "city_tall_man",
+   "row": 16,
+   "height_m": 1.986,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 1.026,
+   "head": [
+    -0.081,
+    1.791
+   ],
+   "shoulders": [
+    -0.037,
+    1.594
+   ]
+  },
+  {
+   "name": "city_chaneque",
+   "row": 17,
+   "height_m": 1.003,
+   "facing": "left",
+   "seconds": 1.667,
+   "stride_m": 0.675,
+   "head": [
+    -0.135,
+    0.789
+   ],
+   "shoulders": [
+    -0.08,
+    0.712
+   ]
+  }
+ ]
+}

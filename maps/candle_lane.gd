@@ -415,6 +415,9 @@ func _people() -> void:
 	crowd_of_shades = ShadeCrowd.new()
 	crowd_of_shades.name = "shade_crowd"
 	for route: Array in ROUTES:
+		# (In the Metro the Pasaje walks its own street: the lane keeps only its own ways in and out.)
+		if not standalone and String(route[0]).begins_with("pasaje_"):
+			continue
 		crowd_of_shades.routes.append({"name": route[0], "points": PackedVector3Array(route[1]), "every": route[2],
 			"keep": route[3], "along": route[4]})
 	crowd_of_shades.walked_into_by = player

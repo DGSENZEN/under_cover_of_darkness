@@ -26,6 +26,14 @@ const SURGE := Vector2(5, 4.0)
 var routes: Array[Dictionary] = []
 ## Whoever may walk into them.
 var walked_into_by: Node3D
+## The walkers it draws from (names on the loops' sheets; a name twice is drawn twice as often), and whether each
+## goes at its own loop's pace (its stride over its cycle) rather than SPEED's.
+var walks: Array = WALKS
+var paced_by_loop := false
+## The walkers whose own soul walks behind them (susto): its faint shade ECHO_LAG back along the way, ECHO as present.
+var echoes: Array = []
+const ECHO_LAG := 0.9
+const ECHO := 0.35
 ## The shades walking: {shade, route, length, at (m along), end (m along, where it comes apart), speed, phase
 ## ("forming", "walking", "going"), scatter (walked into)}.
 var walkers: Array[Dictionary] = []
@@ -52,8 +60,8 @@ func surge() -> void:
 
 
 ## One set out on `route` (by name): forming at its start, or (by its `along` chance) partway along it. Routes keep
-## to POOL between them; a surge (`forced`) may go over it, by SURGE's count.
-func start(route_name: String, forced := false) -> Dictionary:
+## to POOL between them; a surge (`forced`) may go over it, by SURGE's count. (`kind`: which walker, else drawn.)
+func start(route_name: String, forced := false, kind := "") -> Dictionary:
 	if walkers.size() >= POOL + (int(SURGE.x) if forced else 0):
 		return {}
 	var route: Dictionary = {}
@@ -62,7 +70,8 @@ func start(route_name: String, forced := false) -> Dictionary:
 			route = r
 	if route.is_empty():
 		return {}
-	var shade: MeshInstance3D = Silhouette.make_loop(WALKS[_rng.randi() % WALKS.size()])
+	var name: String = kind if kind != "" else walks[_rng.randi() % walks.size()]
+	var shade: MeshInstance3D = Silhouette.make_loop(name)
 	if shade == null:
 		return {}
 	add_child(shade)
@@ -71,8 +80,21 @@ func start(route_name: String, forced := false) -> Dictionary:
 	var length := _length(route["points"])
 	var from := length * _rng.randf_range(0.15, 0.6) if _rng.randf() < float(route.get("along", 0.0)) else 0.0
 	var end := minf(length, from + length * _rng.randf_range(route["keep"].x, route["keep"].y))
+	var speed := _rng.randf_range(SPEED.x, SPEED.y)
+	var pace: float = float(shade.loop.get("stride_m", 0.0)) / maxf(float(shade.loop.get("seconds", 1.0)), 0.1)
+	if paced_by_loop and pace > 0.0:
+		speed = pace * speed / (0.5 * (SPEED.x + SPEED.y))
 	var walker := {"shade": shade, "route": route, "length": length, "at": from, "end": end,
-		"speed": _rng.randf_range(SPEED.x, SPEED.y), "phase": "forming", "scatter": false}
+		"speed": speed, "phase": "forming", "scatter": false}
+	if name in echoes:
+		# Their soul a step behind them, faint, walking as they walk.
+		var echo: MeshInstance3D = Silhouette.make_loop(name)
+		if echo != null:
+			add_child(echo)
+			echo.presence = 0.0
+			echo.cycle = shade.cycle
+			walker["echo"] = echo
+			walker["echo_at"] = maxf(from - ECHO_LAG, 0.0)
 	walkers.append(walker)
 	started[route_name] += 1
 	_place(walker, 0.0)
@@ -116,7 +138,11 @@ func _advance(walker: Dictionary, delta: float) -> void:
 		if shade.presence <= 0.0:
 			walkers.erase(walker)
 			shade.queue_free()
+			if walker.has("echo"):
+				walker["echo"].queue_free()
 			return
+	if walker.has("echo"):
+		walker["echo"].presence = shade.presence * ECHO
 	_place(walker, delta)
 
 
@@ -125,8 +151,15 @@ func _place(walker: Dictionary, delta: float) -> void:
 	var step: float = walker["speed"] * delta
 	walker["at"] = minf(walker["at"] + step, walker["length"])
 	var points: PackedVector3Array = walker["route"]["points"]
-	var shade: MeshInstance3D = walker["shade"]
-	var left: float = walker["at"]
+	_put(walker["shade"], points, walker["at"], step)
+	if walker.has("echo"):
+		walker["echo_at"] = maxf(walker["at"] - ECHO_LAG, 0.0)
+		_put(walker["echo"], points, walker["echo_at"], step)
+
+
+## A shade `at` m along `points`, turned the way they go, its feet stepping `step` on.
+func _put(shade: MeshInstance3D, points: PackedVector3Array, at: float, step: float) -> void:
+	var left := at
 	for i in points.size() - 1:
 		var span := points[i].distance_to(points[i + 1])
 		if left <= span or i == points.size() - 2:

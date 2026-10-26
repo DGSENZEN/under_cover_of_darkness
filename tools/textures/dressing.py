@@ -333,8 +333,15 @@ def basket(bones, side="l"):
 
 # --- the Pasaje's stallkeepers' tools ---------------------------------------------------------------------------
 
+# The hand a walker carries in, kept through its loop (silhouettes.py sets it from its first frame); None, the hand
+# reaching furthest.
+REACH = None
+
+
 def _reaching(bones):
-    """The hand reaching furthest out from the chest (along the body's side, y): 'l' or 'r'."""
+    """The hand reaching furthest out from the chest (along the body's side, y): 'l' or 'r' (or REACH, if kept)."""
+    if REACH is not None:
+        return REACH
     chest = bones["spine_03"][0]
     return max("lr", key=lambda s: abs(bones["hand_" + s][0].y - chest.y))
 

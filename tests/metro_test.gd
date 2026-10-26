@@ -143,10 +143,38 @@ func _sets() -> void:
 
 	await _set_in_place(lane)
 	await _pasaje_in_place()
+	_one_crowd()
 
 
 ## The Pasaje set (docs/superpowers/plans/2026-10-26-pasaje-market.md): in its place, the greybox gone from its middle
 ## only; its seams to the lane's standard; walked from the market stairs down it into the lane.
+## M16: in the Metro the Pasaje walks its own crowd and the lane its own: no lane route runs in the Pasaje (but where
+## into_lane begins and out_of_lane ends, at the mouth), and no Pasaje route enters the lane.
+func _one_crowd() -> void:
+	var lane: Node3D = map.get_node_or_null("candle_lane")
+	var pasaje: Node3D = map.get_node_or_null("pasaje")
+	var doubled := []
+	if lane == null or pasaje == null or pasaje.get("crowd_of_shades") == null:
+		_check("M16 no shades doubled where the lane and the Pasaje meet", false, "no lane, Pasaje or Pasaje crowd")
+		return
+	var inside := func(p: Vector3) -> bool:
+		var at: Vector3 = pasaje.to_local(p)
+		return absf(at.x) < pasaje.HALF_W - pasaje.WALL and absf(at.z) < pasaje.HALF_L
+	for route: Dictionary in lane.crowd_of_shades.routes:
+		var points: PackedVector3Array = route["points"]
+		for i in points.size():
+			var at: Vector3 = lane.crowd_of_shades.to_global(points[i])
+			var end: bool = (route["name"] == "into_lane" and i == 0) or (route["name"] == "out_of_lane" and i == points.size() - 1)
+			if inside.call(at) and not end:
+				doubled.append("lane %s point %d" % [route["name"], i])
+	for route: Dictionary in pasaje.crowd_of_shades.routes:
+		for p: Vector3 in route["points"]:
+			var at: Vector3 = pasaje.crowd_of_shades.to_global(p)
+			if not inside.call(at):
+				doubled.append("Pasaje %s at %s" % [route["name"], pasaje.to_local(at)])
+	_check("M16 no shades doubled where the lane and the Pasaje meet", doubled.is_empty(), "%s" % [doubled])
+
+
 func _pasaje_in_place() -> void:
 	var pasaje: Node3D = map.get_node_or_null("pasaje")
 	var names: Array = map.greybox.get_children().map(func(n): return String(n.name))

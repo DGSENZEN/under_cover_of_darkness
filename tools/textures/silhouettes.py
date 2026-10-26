@@ -160,6 +160,37 @@ LOOPS = [
     ["talk_bargaining", "woman", "UAL1_Standard.glb", "Idle_Talking_Loop", ["skirt", "rebozo", "basket"]],
     ["idle_waiting", "man", "UAL2_Standard.glb", "Idle_FoldArms_Loop", ["jacket", "trousers", "sleeves", "boots", "fedora"]],
 ]
+# The Pasaje's walkers (--city-loops): [name, body, library, action, dress, turns], each a row of CITY_FRAMES cells
+# (fewer than the lane's, so the city's many fit one sheet): its people walking the street.
+CITY_LOOPS_OUT = common.ROOT / "textures" / "painted" / "underground" / "shade_loops_city.png"
+CITY_FRAMES = 8
+CITY_LOOPS = [
+    ["city_pelona", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", ["dress", "bob", "cloche"], {}],
+    ["city_clerk", "man", "UAL1_Standard.glb", "Walk_Loop", ["jacket", "trousers", "sleeves", "boots", "bowler"], {}],
+    ["city_lineman", "man", "UAL1_Standard.glb", "Walk_Loop",
+     ["vest", "overalls", "shirt_sleeves", "boots", "flat_cap", "cable_coil"], {}],
+    ["city_newsboy", "boy", "UAL1_Standard.glb", "Walk_Loop", ["jacket", "trousers", "sleeves", "boots", "flat_cap"], {}],
+    ["city_water_carrier", "man", "UAL1_Standard.glb", "Walk_Loop", ["shirt_sleeves", "vest", "trousers", "chochocol"],
+     "LADEN"],
+    ["city_porter", "man", "UAL1_Standard.glb", "Walk_Loop", ["shirt_sleeves", "vest", "trousers", "boots", "load"],
+     "LADEN"],
+    ["city_old_man", "man", "UAL1_Standard.glb", "Walk_Loop", ["coat", "sleeves", "boots", "fedora", "cane"], "STOOPED"],
+    ["city_grandmother", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", ["narrow_skirt", "shawl", "headscarf", "basket"],
+     "STOOPED"],
+    ["city_priest", "man", "UAL1_Standard.glb", "Walk_Formal_Loop", ["frock_coat", "sleeves", "trousers", "boots", "fedora"],
+     {}],
+    ["city_nun", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", ["habit", "veil"], {}],
+    ["city_devotee", "woman", "UAL2_Standard.glb", "Walk_Carry_Loop", ["narrow_skirt", "shawl", "headscarf", "saint"], {}],
+    ["city_running", "child", "UAL1_Standard.glb", "Jog_Fwd_Loop", ["shirt_sleeves", "vest", "trousers", "flat_cap"], {}],
+    ["city_nahual_coyote", "man", "UAL1_Standard.glb", "Walk_Loop",
+     ["jacket", "trousers", "sleeves", "boots", "coyote_head", "claws"], {}],
+    ["city_nahual_jaguar", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", ["dress", "jaguar_head", "claws", "tail"], {}],
+    ["city_lechuza", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", ["narrow_skirt", "shawl", "wings", "owl_head"], {}],
+    ["city_susto", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", ["narrow_skirt", "shawl", "bun"], "DAZED"],
+    ["city_tall_man", "tall", "UAL1_Standard.glb", "Walk_Loop", ["greatcoat", "sleeves", "boots", "bowler", "long_fingers"],
+     "LONG_ARMS"],
+    ["city_chaneque", "small", "UAL1_Standard.glb", "Walk_Loop", ["big_hat"], "STOOPED"],
+]
 
 
 def _rigged(body, library, action_name):
@@ -190,6 +221,17 @@ def _pose(body, library, action_name, through, turns):
     f = first + (last - first) * through
     scene = bpy.context.scene
     scene.frame_set(int(f), subframe=f - int(f))
+    _turn(rig, turns)
+    # (On the floor, whatever the pose does to its height.)
+    low = min(p.z for p in _points())
+    rig.location.z -= low
+    bpy.context.view_layer.update()
+    bones = {pb.name: (rig.matrix_world @ pb.head, rig.matrix_world @ pb.tail) for pb in rig.pose.bones}
+    return rig, bones
+
+
+def _turn(rig, turns):
+    """The extra turns on the pose (bone: [(axis, degrees)], or ("S", times) to draw a bone out along its length)."""
     for name, axes in turns.items():
         pb = rig.pose.bones[name]
         pb.rotation_mode = "XYZ"
@@ -200,12 +242,6 @@ def _pose(body, library, action_name, through, turns):
             else:
                 pb.rotation_euler.rotate_axis(axis, math.radians(deg))
     bpy.context.view_layer.update()
-    # (On the floor, whatever the pose does to its height.)
-    low = min(p.z for p in _points())
-    rig.location.z -= low
-    bpy.context.view_layer.update()
-    bones = {pb.name: (rig.matrix_world @ pb.head, rig.matrix_world @ pb.tail) for pb in rig.pose.bones}
-    return rig, bones
 
 
 def _sized(rig, body):
@@ -291,22 +327,33 @@ def _facing(bones):
     return "right" if ahead > bones["Head"][0].y else "left"
 
 
-def loops(out):
-    """The moving shades' loops, a row of LOOP_FRAMES cells each, the same scale and look as the still poses; and for
-    each, how long a cycle takes and (walking) how far one carries it."""
-    rows = len(LOOPS)
-    sheet = np.zeros((rows * CELL[1], LOOP_FRAMES * CELL[0], 4), np.float32)
-    meta = {"cell_m": CELL_M, "frames": LOOP_FRAMES, "loops": []}
-    for row, (name, body, library, action_name, dress) in enumerate(LOOPS):
+def loops(out, entries=None, frames=LOOP_FRAMES):
+    """The moving shades' loops, a row of `frames` cells each, the same scale and look as the still poses; and for
+    each, how long a cycle takes and (walking) how far one carries it. (`entries` LOOPS by default: [name, body,
+    library, action, dress, and the city's, turns (or a name of the turns above)].)"""
+    entries = LOOPS if entries is None else entries
+    rows = len(entries)
+    sheet = np.zeros((rows * CELL[1], frames * CELL[0], 4), np.float32)
+    meta = {"cell_m": CELL_M, "frames": frames, "loops": []}
+    for row, entry in enumerate(entries):
+        name, body, library, action_name, dress = entry[:5]
+        turns = entry[5] if len(entry) > 5 else {}
+        turns = globals()[turns] if isinstance(turns, str) else turns
         rig, action = _rigged(body, library, action_name)
         scene = bpy.context.scene
         first, last = action.frame_range
+        size = Matrix.Diagonal(SIZED[body][1]).to_4x4() if body in SIZED else Matrix.Identity(4)
+        dressing.REACH = None
 
         def at(f):
+            # (The turned bones handed back to the action's quaternions first: an Euler bone ignores them.)
+            for bone in turns:
+                rig.pose.bones[bone].rotation_mode = "QUATERNION"
             scene.frame_set(int(f), subframe=f - int(f))
+            _turn(rig, turns)
             return {pb.name: (rig.matrix_world @ pb.head, rig.matrix_world @ pb.tail) for pb in rig.pose.bones}
 
-        steps = [first + (last - first) * k / LOOP_FRAMES for k in range(LOOP_FRAMES)]
+        steps = [first + (last - first) * k / frames for k in range(frames)]
         # (One floor and one middle for every frame, so the figure neither bobs off the floor nor slides in its cell.)
         lows, middles = [], []
         for f in steps:
@@ -318,20 +365,28 @@ def loops(out):
         middle = sum(middles) / len(middles)
         # How far a cycle carries it: its planted foot's slide back, frame to frame (walking in place).
         stride = 0.0
-        if action_name.startswith("Walk"):
+        if action_name.startswith(("Walk", "Jog")):
             slides = []
             for f in range(int(first), int(last)):
                 a, b = at(f)["ball_l"][0], at(f + 1)["ball_l"][0]
                 if a.z < 0.05 and b.z < 0.05 and abs(b.y - a.y) > 1e-4:
                     slides.append(abs(b.y - a.y))
             slides.sort()
-            stride = slides[len(slides) // 2] * (last - first) if slides else 0.0
+            stride = slides[len(slides) // 2] * (last - first) * size[1][1] if slides else 0.0
+        middle *= size[1][1]
         height = 0.0
         facing, head, shoulders = "left", [0.0, 0.0], [0.0, 0.0]
         for k, f in enumerate(steps):
             bones = at(f)
             dressed = set(bpy.data.objects)
+            if k == 0:
+                dressing.REACH = dressing._reaching(bones)
             _dress(bones, dress)
+            # (Sized after dressing, so the clothes fit; undone after the frame.)
+            for o in [o for o in bpy.data.objects if o.parent is None and o.type in ("MESH", "ARMATURE")]:
+                o.matrix_world = size @ o.matrix_world
+            bpy.context.view_layer.update()
+            bones = {pb.name: (rig.matrix_world @ pb.head, rig.matrix_world @ pb.tail) for pb in rig.pose.bones}
             height = max(height, max(p.z for p in _points()))
             if k == 0:
                 facing = _facing(bones)
@@ -339,6 +394,7 @@ def loops(out):
                 shoulders = [round(bones["spine_03"][1].y - middle, 3), round(bones["spine_03"][1].z, 3)]
             cell = _render(str(out) + ".cell.png", middle)
             sheet[row * CELL[1]:(row + 1) * CELL[1], k * CELL[0]:(k + 1) * CELL[0]] = cell
+            rig.matrix_world = size.inverted() @ rig.matrix_world
             # (The frame's clothes undressed again; the eye stays.)
             for o in [o for o in bpy.data.objects if o not in dressed and o.type == "MESH"]:
                 mesh = o.data
@@ -399,6 +455,9 @@ def main():
             only = arg[len("--only="):].split(",")
     if "--loops" in args:
         loops(out if out != OUT else LOOPS_OUT)
+        return
+    if "--city-loops" in args:
+        loops(out if out != OUT else CITY_LOOPS_OUT, CITY_LOOPS, CITY_FRAMES)
         return
     if "--check-hats" in args:
         check_hats()

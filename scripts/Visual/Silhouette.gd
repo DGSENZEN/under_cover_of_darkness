@@ -13,6 +13,9 @@ const SHEET := "res://textures/painted/underground/silhouettes.png"
 const META := "res://textures/painted/underground/silhouettes.json"
 const LOOPS_SHEET := "res://textures/painted/underground/shade_loops.png"
 const LOOPS_META := "res://textures/painted/underground/shade_loops.json"
+## The city's walkers (the Pasaje's crowd): its people walking the street.
+const CITY_LOOPS_SHEET := "res://textures/painted/underground/shade_loops_city.png"
+const CITY_LOOPS_META := "res://textures/painted/underground/shade_loops_city.json"
 const SHADE := preload("res://scripts/Visual/shade_cutout.gdshader")
 ## How many cells across the poses' sheet is; how far a still figure turns toward the eye (rad).
 const COLS := 4
@@ -30,8 +33,8 @@ const FLIP_AT := 0.15
 
 static var _meta: Dictionary = {}
 static var _sheet: Texture2D
-static var _loops_meta: Dictionary = {}
-static var _loops_sheet: Texture2D
+## The loops' sheets loaded: [meta, sheet] each.
+static var _loop_sheets: Array = []
 
 ## Which way it was stood (about the vertical, in its parent's frame); set on its first frame.
 var rest_yaw := NAN
@@ -81,21 +84,26 @@ static func make(pose: String, mirror := false) -> MeshInstance3D:
 	return person
 
 
-## A moving shade playing `name` (its row on the loops' sheet), facing left (or `mirror`ed, right); null if none.
+## A moving shade playing `name` (its row on one of the loops' sheets: the lane's, or the city's walkers), facing left
+## (or `mirror`ed, right); null if none.
 static func make_loop(name: String, mirror := false) -> MeshInstance3D:
-	if _loops_meta.is_empty():
-		if not FileAccess.file_exists(LOOPS_META) or not ResourceLoader.exists(LOOPS_SHEET):
-			return null
-		_loops_meta = JSON.parse_string(FileAccess.get_file_as_string(LOOPS_META))
-		_loops_sheet = load(LOOPS_SHEET)
+	if _loop_sheets.is_empty():
+		for pair: Array in [[LOOPS_SHEET, LOOPS_META], [CITY_LOOPS_SHEET, CITY_LOOPS_META]]:
+			if FileAccess.file_exists(pair[1]) and ResourceLoader.exists(pair[0]):
+				_loop_sheets.append([JSON.parse_string(FileAccess.get_file_as_string(pair[1])), load(pair[0])])
 	var entry: Dictionary = {}
-	for l: Dictionary in _loops_meta["loops"]:
-		if l["name"] == name:
-			entry = l
+	var meta: Dictionary = {}
+	var sheet: Texture2D = null
+	for pair: Array in _loop_sheets:
+		for l: Dictionary in pair[0]["loops"]:
+			if l["name"] == name:
+				entry = l
+				meta = pair[0]
+				sheet = pair[1]
 	if entry.is_empty():
 		return null
-	var frames: int = _loops_meta["frames"]
-	var person := _built(name, entry, _loops_sheet, _loops_meta["cell_m"], frames, _loops_meta["loops"].size())
+	var frames: int = meta["frames"]
+	var person := _built(name, entry, sheet, meta["cell_m"], frames, meta["loops"].size())
 	person.loop = entry
 	person._row = entry["row"]
 	person._set_mirror(mirror)

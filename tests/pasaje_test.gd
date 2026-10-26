@@ -26,6 +26,7 @@ func _ready() -> void:
 	_wards()
 	_bills()
 	_happened()
+	_life()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -391,6 +392,115 @@ func _happened() -> void:
 				under.append("%s at %s not sooted" % [mark.name, there])
 	_check("P7h the giant hand lies over the paint and the bills under it", hand != null and under.is_empty(),
 		"%s" % [under])
+
+
+## Task 8: the Pasaje's life. Its crowd of shades walks the street both ways and in and out of the herb market, never
+## through a stall, drawn from the whole city (its trades, old and young, the church in hiding, the uncanny); a keeper
+## behind every counter in a pose that fits the trade; the people who stand, each where there is a cause; and a
+## walker with susto followed by the faint shade of their own lost soul.
+func _life() -> void:
+	var crowd: Node3D = pasaje.get("crowd_of_shades")
+	var routes: Array = pasaje.get("ROUTES") if pasaje.get("ROUTES") != null else []
+	var boxes := {}
+	for name in pasaje.stalls:
+		boxes[name] = _stall_box(pasaje.stalls[name])
+	var on_stall := []
+	var kinds := {}
+	if crowd != null:
+		for step in 60:
+			crowd._process(1.0)
+			for walker: Dictionary in crowd.walkers:
+				var shade: Node3D = walker["shade"]
+				kinds[String(shade.name)] = true
+				var at := pasaje.to_local(shade.global_position)
+				for name in boxes:
+					var box: AABB = boxes[name]
+					if at.x > box.position.x and at.x < box.end.x and at.z > box.position.z and at.z < box.end.z:
+						on_stall.append("%s on %s" % [shade.name, name])
+	var unstarted := []
+	for route: Array in routes:
+		if crowd == null or int(crowd.started.get(route[0], 0)) == 0:
+			unstarted.append(route[0])
+	_check("P8 the crowd walks the street and comes and goes, drawn from the whole city",
+		crowd != null and not routes.is_empty() and unstarted.is_empty() and on_stall.is_empty() and kinds.size() >= 10,
+		"routes %d, unstarted %s, on stalls %s, kinds %d" % [routes.size(), unstarted, on_stall.slice(0, 4), kinds.size()])
+
+	# A keeper behind every counter, in a pose fitting the trade.
+	var fits := {"tamales": "keeper_stir", "atole": "keeper_stir", "coffee": "keeper_stir", "tortas": "keeper_fan",
+		"herbs": "keeper_weigh", "chiles": "keeper_weigh", "fruit": "keeper_weigh"}
+	var keepers: Array = pasaje.get("keepers") if pasaje.get("keepers") != null else []
+	var kept := {}
+	var wrong := []
+	for keeper: Node3D in keepers:
+		var stall_name: String = keeper.get_meta("stall", "")
+		var pose: String = keeper.get_meta("pose", "")
+		if not pasaje.stalls.has(stall_name):
+			wrong.append("%s at no stall" % keeper.name)
+			continue
+		kept[stall_name] = true
+		var stall: Node3D = pasaje.stalls[stall_name]
+		var at := stall.to_local(keeper.global_position)
+		var width: float = pasaje.STALLS.filter(func(s): return s[0] == stall_name)[0][4]
+		if not pose.begins_with("keeper_") or (fits.has(stall_name) and pose != fits[stall_name]):
+			wrong.append("%s %s" % [stall_name, pose])
+		if at.z < 0.1 or at.z > 0.86 or absf(at.x) > width / 2.0:
+			wrong.append("%s keeper at %s" % [stall_name, at])
+	_check("P8b a keeper behind every stall's counter, each in a pose that fits its trade",
+		kept.size() == pasaje.stalls.size() and wrong.is_empty(), "%d of %d kept; %s" % [kept.size(), pasaje.stalls.size(), wrong])
+
+	# The people who stand, each where there is a cause, off the stalls and out of the crowd's way.
+	var circle: Node3D = pasaje.wards.get("north_circle")
+	var herbs: Array = pasaje.OPENINGS["herb_market"]
+	var copal: Node3D = pasaje.stalls.get("copal")
+	var sweets: Node3D = pasaje.stalls.get("sweets")
+	var near := func(a: Vector3, b: Vector3, reach: float) -> bool: return Vector2(a.x - b.x, a.z - b.z).length() < reach
+	var causes := {
+		"medium": func(at: Vector3) -> bool: return circle != null and near.call(at, _ward_middle(circle), 2.5),
+		"curandero": func(at: Vector3) -> bool: return copal != null and near.call(at, pasaje.to_local(copal.global_position), 3.0),
+		"gendarme": func(at: Vector3) -> bool: return near.call(at, Vector3(-pasaje.HALF_W, 0.0, 0.5 * (herbs[1] + herbs[2])), 3.5),
+		"organ_grinder": func(at: Vector3) -> bool: return at.z > 5.0,
+		"sereno": func(at: Vector3) -> bool: return at.z < -15.0,
+		"mother": func(at: Vector3) -> bool: return sweets != null and near.call(at, pasaje.to_local(sweets.global_position), 3.0),
+	}
+	var people: Array = pasaje.get("people") if pasaje.get("people") != null else []
+	var placed := {}
+	var astray := []
+	for person: Node3D in people:
+		var pose: String = person.get_meta("pose", "")
+		var at := pasaje.to_local(person.global_position)
+		placed[pose] = true
+		if causes.has(pose) and not causes[pose].call(at):
+			astray.append("%s at %s" % [pose, at])
+		for name in boxes:
+			var box: AABB = boxes[name]
+			if at.x > box.position.x and at.x < box.end.x and at.z > box.position.z and at.z < box.end.z:
+				astray.append("%s on %s" % [pose, name])
+		for route: Array in routes:
+			for i in route[1].size() - 1:
+				var a: Vector3 = route[1][i]
+				var b: Vector3 = route[1][i + 1]
+				var on := Geometry3D.get_closest_point_to_segment(Vector3(at.x, 0.0, at.z), a, b)
+				if on.distance_to(Vector3(at.x, 0.0, at.z)) < 0.5:
+					astray.append("%s in the way of %s" % [pose, route[0]])
+	var absent := causes.keys().filter(func(k): return not placed.has(k))
+	_check("P8c the people who stand stand where they have cause, off the stalls and out of the crowd's way",
+		absent.is_empty() and astray.is_empty(), "absent %s; %s" % [absent, astray])
+
+	# Susto: the soul a step behind, faint.
+	var echoed := false
+	var detail := "no crowd"
+	if crowd != null and not routes.is_empty():
+		var walker: Dictionary = crowd.start(routes[0][0], true, "city_susto")
+		for step in 6:
+			crowd._process(0.5)
+		var echo: Node3D = walker.get("echo")
+		if echo != null and is_instance_valid(echo):
+			var lag: float = float(walker["at"]) - float(walker.get("echo_at", walker["at"]))
+			echoed = echo.presence > 0.1 and echo.presence < 0.6 and lag > 0.4
+			detail = "presence %.2f, lag %.2f" % [echo.presence, lag]
+		else:
+			detail = "no echo on %s" % walker.get("shade")
+	_check("P8d a walker with susto is followed by the faint shade of their own soul", echoed, detail)
 
 
 ## A ward's middle in the set's frame (the mean of its candles).
