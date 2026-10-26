@@ -163,6 +163,7 @@ def main():
                 fail(f'Jingle {name}: cut runs past its source')
             ease = min(FADE_IN, len(pcm))
             pcm[:ease] *= np.linspace(0, 1, ease)[:, None]
+        pcm *= 10 ** (float(jingle.get('gain_db', 0.0)) / 20)
         fade = min(FADE_OUT, len(pcm))
         pcm[-fade:] *= np.linspace(1, 0, fade)[:, None]
         write_ogg(args.out / 'jingles' / f'{name}.ogg', pcm, f'{prefix}/jingles/{name}.ogg', False)

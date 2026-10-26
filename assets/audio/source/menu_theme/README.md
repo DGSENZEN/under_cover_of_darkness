@@ -51,3 +51,11 @@ Change the script and re-run it to revise a part.
 - swung 16th hats, kept quiet so the hits punch through
 - ghost snares and a rim
 - an open hat and a small fill at the end of each four bars
+
+## Jingles (piece 2)
+
+`parts/menu_jingles.mid`, written by `tools/compose_menu_parts.py`, holds each word's own motif in each of the loop's four chords, two variants each: glockenspiel for hover, piano for press. It has one jingle per 2-bar slot, listed in `parts/menu_jingles.json`.
+
+In the Logic project these are tracks 30 (Toy Glockenspiel) and 31 (Studio Grand). Both are muted in the song. They were exported dry (effect plug-ins bypassed, audio tail included) to `stems_jingles/jingle_glock.wav` and `stems_jingles/jingle_piano.wav`. `map.json` cuts each jingle from them by beat, with the piano at +6 dB.
+
+In the game they play through the `MenuJingles` bus: a dotted-eighth echo, then a reverb, sitting under the song.

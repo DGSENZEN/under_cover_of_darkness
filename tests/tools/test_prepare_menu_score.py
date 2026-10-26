@@ -158,6 +158,17 @@ class PrepareMenuScore(unittest.TestCase):
         body = slice(round(0.01 * RATE), len(got) - round(0.01 * RATE))
         self.assertLess(np.sqrt(np.mean((got[body] - source[body] * gain) ** 2)), 0.01)
 
+    def test_jingle_level_trim(self):
+        mapping = fixture_map()
+        mapping['jingles'][0]['gain_db'] = 6.0
+        work, result = self.build(mapping)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plain, result = self.build(fixture_map())
+        louder = decode(work / 'out/jingles/b0_hover_Dm_0.ogg')
+        base = decode(plain / 'out/jingles/b0_hover_Dm_0.ogg')
+        ratio = np.sqrt(np.mean(louder ** 2) / np.mean(base ** 2))
+        self.assertAlmostEqual(20 * np.log10(ratio), 6.0, delta=0.3)
+
     def test_jingle_file_missing_is_named(self):
         mapping = fixture_map()
         mapping['jingles'] = [{'button': 1, 'kind': 'hover', 'chord': 'Dm', 'variant': 0, 'file': None,
