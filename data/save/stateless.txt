@@ -1,0 +1,20 @@
+# Scripts in the playable maps that hold nothing a save needs: built once, or
+# showing only what is worked out each frame from saved things (the save and
+# load spec, section 7). A path, then "#" and why.
+res://maps/metro.gd  # builds the greybox, lamps and sets; nothing of its own changes
+res://maps/candle_lane.gd  # its state is the bay's (underground_lab.gd, saved); its sways and glows come from the bay's clock and the trains
+res://scripts/Level/GreyboxLoader.gd  # builds the greybox blocks
+res://scripts/PlayerUtils/ClimbVolume.gd  # membership comes back through body_entered when the player is placed
+res://scripts/Visual/DistrictGround.gd  # builds the ground
+res://scripts/Visual/Ground.gd  # a built ground tile
+res://scripts/Visual/Fumes.gd  # its draught is pushed each frame; built on its first frame
+res://scripts/Visual/Library/LibraryEffects.gd  # builds the shop's effects; its switches are debug
+res://scripts/Visual/Library/LibraryWords.gd  # the streams' presence comes from the projections; its chains save themselves (WordChain)
+res://scripts/Visual/Library/BookRadiance.gd  # set each frame from its projection's clock (saved)
+res://scripts/Visual/Library/Spell.gd  # set each frame from its projection's clock (saved)
+res://scripts/Visual/Library/Novel.gd  # set each frame from its projection's clock (saved)
+res://scripts/Visual/Library/Alchemy.gd  # set each frame from its projection's clock (saved)
+res://scripts/Visual/Library/Metaphysics.gd  # set each frame from its projection's clock (saved)
+res://scripts/Visual/Library/Necromancy.gd  # set each frame from its projection's clock (saved)
+res://scripts/Level/Ambient.gd  # day or night is set by the Zócalo's set_day (saved); it picks its effects again; their particles in flight are stage 2's
+res://scripts/Level/VfxFlicker.gd  # its clock only sets a flame's flicker going; made lazily near the player, so a load starts it fresh, which no one can see

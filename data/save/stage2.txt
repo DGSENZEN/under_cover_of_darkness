@@ -1,0 +1,8 @@
+# Live state not yet saved: the moment-to-moment layer that stage 2 of the
+# save and load spec adds (section 6). Until then a load brings these back
+# settled. A path, then "#" and what stage 2 adds.
+res://scripts/Visual/Humanoid.gd  # AnimationTree blends and clips in play, one-shots, ragdoll, severed parts
+res://scripts/Visual/Cloth.gd  # the spring-bone cloth simulation
+res://scripts/Visual/ClothReset.gd  # its pending reset (a load's teleport triggers one anyway)
+res://scripts/Visual/Posture.gd  # the eased head, pitch, hips, bow, chest, shoulders and shift
+res://scripts/Visual/Silhouette.gd  # each walking figure's presence, cycle, frame and heading; ShadeCrowd's walkers in flight are remade from them

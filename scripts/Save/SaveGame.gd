@@ -55,6 +55,10 @@ func register(node: Node) -> void:
 	node.tree_exiting.connect(_exiting.bind(node), CONNECT_ONE_SHOT)
 
 
+func is_registered(node: Node) -> bool:
+	return _registered.has(node)
+
+
 ## A holder of state outside the map (an autoload, a static's owner).
 func register_global(holder_name: String, holder: Object) -> void:
 	globals[holder_name] = holder
