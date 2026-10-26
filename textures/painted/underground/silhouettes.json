@@ -9,7 +9,7 @@
    ],
    "height_m": 1.755,
    "facing": "left",
-   "child": false,
+   "body": "woman",
    "head": [
     -0.12,
     1.587
@@ -27,7 +27,7 @@
    ],
    "height_m": 1.809,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     -0.066,
     1.658
@@ -45,7 +45,7 @@
    ],
    "height_m": 1.257,
    "facing": "left",
-   "child": false,
+   "body": "woman",
    "head": [
     -0.218,
     1.097
@@ -63,7 +63,7 @@
    ],
    "height_m": 1.232,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     -0.288,
     1.116
@@ -81,7 +81,7 @@
    ],
    "height_m": 1.828,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     -0.145,
     1.677
@@ -99,7 +99,7 @@
    ],
    "height_m": 1.755,
    "facing": "left",
-   "child": false,
+   "body": "woman",
    "head": [
     -0.243,
     1.587
@@ -117,7 +117,7 @@
    ],
    "height_m": 1.895,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     0.088,
     1.667
@@ -135,7 +135,7 @@
    ],
    "height_m": 1.65,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     -0.218,
     1.484
@@ -153,7 +153,7 @@
    ],
    "height_m": 1.694,
    "facing": "left",
-   "child": false,
+   "body": "woman",
    "head": [
     -0.095,
     1.535
@@ -171,7 +171,7 @@
    ],
    "height_m": 1.801,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     0.099,
     1.661
@@ -189,7 +189,7 @@
    ],
    "height_m": 1.743,
    "facing": "left",
-   "child": false,
+   "body": "woman",
    "head": [
     -0.009,
     1.587
@@ -207,7 +207,7 @@
    ],
    "height_m": 1.704,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     -0.1,
     1.578
@@ -225,7 +225,7 @@
    ],
    "height_m": 1.752,
    "facing": "left",
-   "child": false,
+   "body": "woman",
    "head": [
     -0.184,
     1.587
@@ -243,7 +243,7 @@
    ],
    "height_m": 1.817,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     -0.093,
     1.677
@@ -261,7 +261,7 @@
    ],
    "height_m": 1.787,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     -0.194,
     1.627
@@ -279,7 +279,7 @@
    ],
    "height_m": 1.851,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     -0.068,
     1.659
@@ -295,15 +295,15 @@
     0,
     4
    ],
-   "height_m": 1.422,
+   "height_m": 1.413,
    "facing": "left",
-   "child": true,
+   "body": "boy",
    "head": [
-    0.047,
+    0.024,
     1.288
    ],
    "shoulders": [
-    0.093,
+    0.07,
     1.147
    ]
   },
@@ -315,7 +315,7 @@
    ],
    "height_m": 1.765,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     -0.262,
     1.639
@@ -333,7 +333,7 @@
    ],
    "height_m": 1.741,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     -0.331,
     1.572
@@ -351,7 +351,7 @@
    ],
    "height_m": 1.849,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     0.044,
     1.661
@@ -369,7 +369,7 @@
    ],
    "height_m": 1.831,
    "facing": "left",
-   "child": false,
+   "body": "man",
    "head": [
     -0.056,
     1.652
@@ -377,6 +377,294 @@
    "shoulders": [
     0.003,
     1.47
+   ]
+  },
+  {
+   "name": "old_man",
+   "cell": [
+    1,
+    5
+   ],
+   "height_m": 1.76,
+   "facing": "left",
+   "body": "man",
+   "head": [
+    -0.248,
+    1.605
+   ],
+   "shoulders": [
+    -0.132,
+    1.455
+   ]
+  },
+  {
+   "name": "grandmother",
+   "cell": [
+    2,
+    5
+   ],
+   "height_m": 1.712,
+   "facing": "left",
+   "body": "woman",
+   "head": [
+    -0.208,
+    1.544
+   ],
+   "shoulders": [
+    -0.094,
+    1.389
+   ]
+  },
+  {
+   "name": "mother",
+   "cell": [
+    3,
+    5
+   ],
+   "height_m": 1.751,
+   "facing": "left",
+   "body": "woman",
+   "head": [
+    -0.06,
+    1.596
+   ],
+   "shoulders": [
+    -0.009,
+    1.411
+   ]
+  },
+  {
+   "name": "running_boy",
+   "cell": [
+    0,
+    6
+   ],
+   "height_m": 1.093,
+   "facing": "left",
+   "body": "child",
+   "head": [
+    -0.275,
+    0.979
+   ],
+   "shoulders": [
+    -0.206,
+    0.87
+   ]
+  },
+  {
+   "name": "running_girl",
+   "cell": [
+    1,
+    6
+   ],
+   "height_m": 1.112,
+   "facing": "left",
+   "body": "girl",
+   "head": [
+    -0.277,
+    0.998
+   ],
+   "shoulders": [
+    -0.205,
+    0.881
+   ]
+  },
+  {
+   "name": "priest",
+   "cell": [
+    2,
+    6
+   ],
+   "height_m": 1.802,
+   "facing": "left",
+   "body": "man",
+   "head": [
+    -0.047,
+    1.652
+   ],
+   "shoulders": [
+    0.006,
+    1.469
+   ]
+  },
+  {
+   "name": "nun",
+   "cell": [
+    3,
+    6
+   ],
+   "height_m": 1.766,
+   "facing": "left",
+   "body": "woman",
+   "head": [
+    -0.243,
+    1.587
+   ],
+   "shoulders": [
+    -0.186,
+    1.404
+   ]
+  },
+  {
+   "name": "devotee",
+   "cell": [
+    0,
+    7
+   ],
+   "height_m": 1.762,
+   "facing": "left",
+   "body": "woman",
+   "head": [
+    0.155,
+    1.606
+   ],
+   "shoulders": [
+    0.148,
+    1.414
+   ]
+  },
+  {
+   "name": "nahual_coyote",
+   "cell": [
+    1,
+    7
+   ],
+   "height_m": 1.892,
+   "facing": "left",
+   "body": "man",
+   "head": [
+    -0.147,
+    1.627
+   ],
+   "shoulders": [
+    -0.087,
+    1.447
+   ]
+  },
+  {
+   "name": "nahual_jaguar",
+   "cell": [
+    2,
+    7
+   ],
+   "height_m": 1.841,
+   "facing": "left",
+   "body": "woman",
+   "head": [
+    -0.156,
+    1.603
+   ],
+   "shoulders": [
+    -0.098,
+    1.42
+   ]
+  },
+  {
+   "name": "lechuza",
+   "cell": [
+    3,
+    7
+   ],
+   "height_m": 1.81,
+   "facing": "left",
+   "body": "woman",
+   "head": [
+    -0.218,
+    1.587
+   ],
+   "shoulders": [
+    -0.161,
+    1.404
+   ]
+  },
+  {
+   "name": "curandero",
+   "cell": [
+    0,
+    8
+   ],
+   "height_m": 1.779,
+   "facing": "left",
+   "body": "man",
+   "head": [
+    0.017,
+    1.652
+   ],
+   "shoulders": [
+    0.076,
+    1.47
+   ]
+  },
+  {
+   "name": "susto",
+   "cell": [
+    1,
+    8
+   ],
+   "height_m": 1.731,
+   "facing": "left",
+   "body": "woman",
+   "head": [
+    -0.187,
+    1.549
+   ],
+   "shoulders": [
+    -0.067,
+    1.409
+   ]
+  },
+  {
+   "name": "medium",
+   "cell": [
+    2,
+    8
+   ],
+   "height_m": 1.742,
+   "facing": "left",
+   "body": "woman",
+   "head": [
+    0.047,
+    1.596
+   ],
+   "shoulders": [
+    0.029,
+    1.411
+   ]
+  },
+  {
+   "name": "chaneque",
+   "cell": [
+    3,
+    8
+   ],
+   "height_m": 0.967,
+   "facing": "left",
+   "body": "small",
+   "head": [
+    -0.082,
+    0.779
+   ],
+   "shoulders": [
+    -0.026,
+    0.703
+   ]
+  },
+  {
+   "name": "tall_man",
+   "cell": [
+    0,
+    9
+   ],
+   "height_m": 1.981,
+   "facing": "left",
+   "body": "tall",
+   "head": [
+    -0.135,
+    1.828
+   ],
+   "shoulders": [
+    -0.086,
+    1.633
    ]
   }
  ]

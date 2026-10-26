@@ -34,7 +34,7 @@ sys.path.insert(0, HERE)
 
 import bpy  # noqa: E402
 import numpy as np  # noqa: E402
-from mathutils import Vector  # noqa: E402
+from mathutils import Matrix, Vector  # noqa: E402
 
 import common  # noqa: E402
 import dressing  # noqa: E402
@@ -42,6 +42,11 @@ import dressing_city  # noqa: E402
 
 BASE = common.ROOT / "assets" / "characters" / "base"
 BODIES = {"man": BASE / "Superhero_Male_FullBody.gltf", "woman": BASE / "Superhero_Female_FullBody.gltf"}
+# The other bodies: the base they are made from and how they are sized (x, y, z), posed and dressed full size first,
+# so their clothes fit: a newsboy of twelve or so, younger children, a girl; the chaneque, a spirit a child's height;
+# the man taller and thinner than anyone.
+SIZED = {"boy": ("man", (0.78, 0.78, 0.78)), "child": ("man", (0.7, 0.7, 0.7)),
+         "girl": ("woman", (0.72, 0.72, 0.72)), "small": ("man", (0.5, 0.5, 0.5)), "tall": ("man", (0.76, 0.76, 1.09))}
 LIBRARIES = common.ROOT / "assets" / "characters" / "animations"
 OUT = common.ROOT / "textures" / "painted" / "underground" / "silhouettes.png"
 # Each cell's size (px; drawn at twice and averaged) and how many metres its height is; how many cells across.
@@ -68,7 +73,17 @@ LADEN = {"spine_01": [("X", 8)], "spine_02": [("X", 6)], "spine_03": [("X", 4)],
          "Head": [("X", -10)]}
 # Holding up what she weighs nearer: the elbows bent a little more.
 NEARER = {"lowerarm_l": [("X", 30)], "lowerarm_r": [("X", 30)]}
-# The poses: [name, body (a man, a woman, or a boy: the man's at dressing_city.CHILD), library, action, how far through it, extra turns (bone: [(axis, degrees)]), dress].
+# Stooped with age: the back bent, the head lifted to see ahead.
+STOOPED = {"spine_01": [("X", 10)], "spine_02": [("X", 8)], "spine_03": [("X", 6)], "neck_01": [("X", -4)],
+           "Head": [("X", -6)]}
+# Dazed, the soul gone out of them (susto): the head hung, the shoulders in.
+DAZED = {"spine_03": [("X", 6)], "neck_01": [("X", 15)], "Head": [("X", 22)]}
+# Entranced, the medium: the head thrown back.
+ENTRANCED = {"neck_01": [("X", -18)], "Head": [("X", -28)]}
+# The tall man's arms, drawn out past his knees.
+LONG_ARMS = {"lowerarm_l": [("S", 1.5)], "lowerarm_r": [("S", 1.5)]}
+# The poses: [name, body (a man, a woman, or one of SIZED), library, action, how far through it, extra turns (bone:
+# [(axis, degrees)], or ("S", times) to draw a bone out along its length), dress].
 POSES = [
     ["bargaining", "woman", "UAL1_Standard.glb", "Idle_Talking_Loop", 0.35, {}, ["skirt", "rebozo", "basket"]],
     ["waiting", "man", "UAL2_Standard.glb", "Idle_FoldArms_Loop", 0.5, {},
@@ -108,6 +123,30 @@ POSES = [
      ["jacket", "trousers", "sleeves", "boots", "kepi", "organ"]],
     ["sereno", "man", "UAL2_Standard.glb", "Idle_Lantern_Loop", 0.4, {},
      ["greatcoat", "sleeves", "boots", "hood", "capelet", "lantern"]],
+    # Old and young.
+    ["old_man", "man", "UAL1_Standard.glb", "Walk_Loop", 0.25, STOOPED, ["coat", "sleeves", "boots", "fedora", "cane"]],
+    ["grandmother", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", 0.3, STOOPED,
+     ["narrow_skirt", "shawl", "headscarf", "basket"]],
+    ["mother", "woman", "UAL2_Standard.glb", "Idle_FoldArms_Loop", 0.5, {}, ["dress", "bun", "baby"]],
+    ["running_boy", "child", "UAL1_Standard.glb", "Jog_Fwd_Loop", 0.3, {}, ["shirt_sleeves", "vest", "trousers", "flat_cap"]],
+    ["running_girl", "girl", "UAL1_Standard.glb", "Jog_Fwd_Loop", 0.75, {}, ["dress", "bob"]],
+    # The church in hiding (the Calles Law: worship suspended from 1926, a cassock fined in the street).
+    ["priest", "man", "UAL1_Standard.glb", "Idle_Talking_Loop", 0.35, {},
+     ["frock_coat", "sleeves", "trousers", "boots", "fedora", "rosary"]],
+    ["nun", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", 0.6, {}, ["habit", "veil"]],
+    ["devotee", "woman", "UAL2_Standard.glb", "Walk_Carry_Loop", 0.3, {}, ["narrow_skirt", "shawl", "headscarf", "saint"]],
+    # The uncanny, each from the city's folklore.
+    ["nahual_coyote", "man", "UAL1_Standard.glb", "Walk_Loop", 0.6, {},
+     ["jacket", "trousers", "sleeves", "boots", "coyote_head", "claws"]],
+    ["nahual_jaguar", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", 0.3, {}, ["dress", "jaguar_head", "claws", "tail"]],
+    ["lechuza", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", 0.6, {}, ["narrow_skirt", "shawl", "wings", "owl_head"]],
+    ["curandero", "man", "UAL2_Standard.glb", "Idle_Lantern_Loop", 0.4, {},
+     ["shirt_sleeves", "vest", "trousers", "boots", "censer"]],
+    ["susto", "woman", "UAL2_Standard.glb", "Idle_FoldArms_Loop", 0.5, DAZED, ["narrow_skirt", "shawl", "bun"]],
+    ["medium", "woman", "UAL1_Standard.glb", "Idle_Loop", 0.0, ENTRANCED, ["evening_dress", "bob", "ectoplasm"]],
+    ["chaneque", "small", "UAL1_Standard.glb", "Walk_Loop", 0.6, STOOPED, ["big_hat"]],
+    ["tall_man", "tall", "UAL1_Standard.glb", "Walk_Loop", 0.25, LONG_ARMS,
+     ["greatcoat", "sleeves", "boots", "bowler", "long_fingers"]],
 ]
 # The moving shades (--loops): [name, body, library, action, dress], each a row of LOOP_FRAMES cells through its
 # action: four walkers for the crowd, the bargaining woman's talk and the waiting man's shifting weight.
@@ -126,10 +165,8 @@ LOOPS = [
 def _rigged(body, library, action_name):
     """A fresh scene with the body on its rig, the action on the rig: (rig, action)."""
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.gltf(filepath=str(BODIES["man" if body == "boy" else body]))
+    bpy.ops.import_scene.gltf(filepath=str(BODIES[SIZED[body][0] if body in SIZED else body]))
     rig = next(o for o in bpy.data.objects if o.type == "ARMATURE")
-    if body == "boy":
-        rig.scale = (dressing_city.CHILD,) * 3
     # (Only what hangs on its rig: the file brings a stray icosphere too.)
     for o in [o for o in bpy.data.objects if o.type == "MESH" and o.parent != rig]:
         bpy.data.objects.remove(o, do_unlink=True)
@@ -157,7 +194,11 @@ def _pose(body, library, action_name, through, turns):
         pb = rig.pose.bones[name]
         pb.rotation_mode = "XYZ"
         for axis, deg in axes:
-            pb.rotation_euler.rotate_axis(axis, math.radians(deg))
+            if axis == "S":
+                # (Drawn out along its own length by `deg` times: the tall man's arms.)
+                pb.scale = (1.0, deg, 1.0)
+            else:
+                pb.rotation_euler.rotate_axis(axis, math.radians(deg))
     bpy.context.view_layer.update()
     # (On the floor, whatever the pose does to its height.)
     low = min(p.z for p in _points())
@@ -165,6 +206,16 @@ def _pose(body, library, action_name, through, turns):
     bpy.context.view_layer.update()
     bones = {pb.name: (rig.matrix_world @ pb.head, rig.matrix_world @ pb.tail) for pb in rig.pose.bones}
     return rig, bones
+
+
+def _sized(rig, body):
+    """The dressed figure brought to its body's size, about its feet: its bones (world) after."""
+    if body in SIZED:
+        size = Matrix.Diagonal(SIZED[body][1]).to_4x4()
+        for o in [o for o in bpy.data.objects if o.parent is None and o.type in ("MESH", "ARMATURE")]:
+            o.matrix_world = size @ o.matrix_world
+        bpy.context.view_layer.update()
+    return {pb.name: (rig.matrix_world @ pb.head, rig.matrix_world @ pb.tail) for pb in rig.pose.bones}
 
 
 def _points():
@@ -361,6 +412,7 @@ def main():
             continue
         rig, bones = _pose(body, library, action, through, turns)
         _dress(bones, dress)
+        bones = _sized(rig, body)
         height = max(p.z for p in _points())
         points = _points()
         middle = (min(p.y for p in points) + max(p.y for p in points)) / 2.0
@@ -370,7 +422,7 @@ def main():
         # +), up from its foot; its smoke rises from them.)
         crown, shoulders = bones["Head"][1], bones["spine_03"][1]
         meta["poses"].append({"name": name, "cell": [col, row], "height_m": round(height, 3), "facing": _facing(bones),
-                              "child": body == "boy",
+                              "body": body,
                               "head": [round(crown.y - middle, 3), round(crown.z, 3)],
                               "shoulders": [round(shoulders.y - middle, 3), round(shoulders.z, 3)]})
         print("pose %s: %.2f m, facing %s" % (name, height, meta["poses"][-1]["facing"]))
