@@ -2576,15 +2576,14 @@ class PasajeOverhead(unittest.TestCase):
         edge = [v.z for v in _world(self.objects["canopy"]) if abs(v.x) >= 4.4]
         self.assertTrue(edge and min(edge) > 3.125 and max(edge) < 3.21, (min(edge), max(edge)))
 
-    def test_the_posters_are_paper_on_the_tiles_their_images_blank(self):
-        for n in pasaje_overhead.POSTERS:
-            (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
-            # (Pasted flat on the wall's tiles, y = 0, a few millimetres proud; their foot torn no deeper than their
-            # margin.)
-            self.assertAlmostEqual(y1, 0.0, delta=0.001, msg=n)
-            self.assertLess(-y0, 0.01, n)
-            self.assertTrue(-0.001 <= z0 < pasaje_overhead.MARGIN, (n, z0))
-            self.assertIn("sign", {s.material.name for s in self.objects[n].material_slots}, n)
+    def test_the_bills_curl_rolls_off_the_wall_from_its_root(self):
+        # (Its root on the wall's tiles, y = 0, at the bill's top edge, z = 0; rolled out a few centimetres, down and
+        # back up; as long as it was made.)
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("bill_curl")
+        self.assertAlmostEqual(y1, 0.0, delta=0.002)
+        self.assertTrue(0.04 < -y0 < 0.1, y0)
+        self.assertAlmostEqual(x1 - x0, pasaje_overhead.CURL[0], delta=0.002)
+        self.assertTrue(z0 < -0.02 and z1 < 0.06, (z0, z1))
 
 
 if __name__ == "__main__":

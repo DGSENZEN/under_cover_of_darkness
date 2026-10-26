@@ -125,13 +125,32 @@ const STRINGS := [-17.0, -9.8, -2.0, 5.9, 12.85]
 const GANTRY_Z := 18.3
 const GANTRY_HOOKS := [-2.0, 0.0, 2.0]
 const GANTRY_HOOK_Y := 2.86
-## The posters and graffiti: the sheet the graffiti are cut from (GRAFFITI_GRID x GRAFFITI_GRID), the posters (the
-## overhead kit's) and their widths; how far clear of the stalls and the openings they keep, the shortest alcove
-## that takes them.
+## The bills and graffiti: the sheets the graffiti are cut from (GRAFFITI_GRID x GRAFFITI_GRID, and the bigger
+## pieces'); the bills' sheet (tools/textures/pasaje_bills.py: BILL_COLS x BILL_ROWS, laid out as BILL_KINDS), a
+## bill's paper's top edge above its image's middle (a share of its size), a stack's width along the wall, the curl
+## (the overhead kit's bill_curl) its length; how far clear of the stalls and the openings they keep, the shortest
+## alcove that takes them.
 const GRAFFITI := "pasaje_graffiti.png"
 const GRAFFITI_B := "pasaje_graffiti_b.png"
 const GRAFFITI_GRID := 4
-const POSTERS := {"poster_a": 0.5, "poster_b": 0.42, "poster_c": 0.72}
+const BILLS := "pasaje_bills.png"
+const BILL_COLS := 4
+const BILL_ROWS := 3
+const BILL_KINDS := ["missing", "nahual_reward", "curandero", "exorcist", "cabaret", "lucha_night", "company_notice",
+	"loteria", "wanted_spirit", "fiesta", "tatters", "tatters"]
+const BILL_TOP := 0.42
+## Each kind's size on the wall (its image's side, m): the night's posters and the Company's notices big, handbills
+## less, the curandero's card small.
+const BILL_SIZES := {"missing": 0.85, "nahual_reward": 0.9, "curandero": 0.5, "exorcist": 0.85, "cabaret": 1.1,
+	"lucha_night": 1.1, "company_notice": 1.05, "loteria": 0.9, "wanted_spirit": 0.85, "fiesta": 1.05}
+## The rows of one poster pasted side by side in the south's long alcoves: how many at most, their height.
+const ROW_MOST := 5
+const ROW_HEIGHT := 1.55
+const STACK_WIDE := 1.0
+const CURL_LENGTH := 0.18
+## How far a bill's paper stands off the tiles, and each newer one off the one before (m).
+const PAPER_OFF := 0.004
+const PAPER_STEP := 0.002
 const MARK_CLEAR := 0.15
 const OPENING_CLEAR := 0.35
 const ALCOVE_LEAST := 0.6
@@ -185,6 +204,8 @@ var hanging: Array[Node3D] = []
 var _swing_clock := 0.0
 ## The posters and the graffiti decals on the walls.
 var marks: Array[Node3D] = []
+## The stacks of bills, each its generations.
+var bill_stacks: Array[Node3D] = []
 ## The wards by their spot: each a root holding its chalk and salt, its candles, their flames.
 var wards := {}
 
@@ -569,7 +590,7 @@ func _overhead() -> void:
 ## - by the lane's mouth and the herb market's, and at the south end the canopy guards, ward sigils, where the
 ##   uncanny comes close; calaveras by her trades (candles, saints), the eye against the evil eye by the copal and
 ##   the herbs, the moon by the herbs; at the north end, where the Company's notices go up, its roundel crossed out;
-## - bills in the middle band, a bill or two in the north, thicker toward the south end; newer pasted over older;
+## - bills in the middle band, a stack to an alcove pasted over the years (_bill_stack), deeper toward the south end;
 ## - throw-ups low across the long alcoves, burners in the south's; tags high, more toward the south, where the crowd
 ##   is thickest;
 ## - the sacred heart by her trades (milagros, saints, candles), the luchador's mask by the radio repairer and the
@@ -582,6 +603,10 @@ func _marks() -> void:
 	var kit := SetKit.kit(OVERHEAD_KIT)
 	var look := Painterly.material(SetKit.painted(["pasaje_overhead.png", "pasaje_overhead_base.png"]), &"bespoke")
 	var cells := _paints()
+	var bills := {}
+	var bill_cells := _sheet_cells(BILLS, BILL_COLS, BILL_ROWS)
+	for i in bill_cells.size():
+		bills.get_or_add(BILL_KINDS[i], []).append(bill_cells[i])
 	var root := Node3D.new()
 	root.name = "marks"
 	add_child(root)
@@ -606,8 +631,7 @@ func _marks() -> void:
 			var by_lane: bool = side > 0 and absf(middle - 0.45) < 10.5
 			var by_herbs: bool = side < 0 and absf(middle + 1.0) < 10.0
 			if by_lane or by_herbs or middle > 15.0:
-				bands["mid"] = maxf(bands["mid"], a - SPILL)
-				spray.call("sigil", "mid", 1.3, 1.55)
+				spray.call("sigil", "high", 1.2, 2.05)
 			if side > 0 and ((middle > -11.7 and middle < -6.0) or (middle > 6.3 and middle < 11.9)):
 				spray.call("calavera", "low", 0.75, 0.75)
 			if (side > 0 and middle > -7.5 and middle < -5.9) or (side < 0 and middle > -7.5 and middle < -6.7):
@@ -627,17 +651,21 @@ func _marks() -> void:
 			if side < 0 and middle > 12.8 and middle < 14.7:
 				spray.call("rollcall", "high", 1.2, 2.0)
 
-			# The bills.
-			for i in 1 + int(2.6 * south * south):
-				var kind: String = ["poster_a", "poster_b", "poster_c"][(k + i) % 3]
-				var width: float = POSTERS[kind]
-				var z: float = bands["mid"]
-				if z + width > b - 0.05:
-					break
-				var low := 1.05 + 0.35 * _hash(k * 3.7 + i) - 0.12 * i
-				var at := Vector3(side * (HALF_W - WALL - FACE - 0.004 * i), low, z + width / 2.0)
-				marks.append(SetKit.place(root, kit[kind], look, kind, at, -side * PI / 2.0, false))
-				bands["mid"] = z + width * (0.55 + 0.3 * _hash(k + i * 1.3))
+			# The bills, a stack of them pasted over the years.
+			if bands["mid"] + STACK_WIDE < b + SPILL * 0.5:
+				_bill_stack(root, kit, look, bills, side, bands["mid"] + STACK_WIDE / 2.0, middle, south, k)
+				bands["mid"] += STACK_WIDE
+			# In the south, where the nights are advertised, one poster pasted again and again along the wall.
+			if south > 0.5 and b - a >= 1.4:
+				var night: String = ["fiesta", "lucha_night", "cabaret"][k % 3]
+				var size: float = BILL_SIZES[night] * 0.85
+				for i in ROW_MOST:
+					var z: float = bands["mid"] + size * 0.48
+					if z + size * 0.48 > b + SPILL:
+						break
+					marks.append(_billed(root, bills[night][0], night, side, z, ROW_HEIGHT + 0.04 * sin(i * 1.9), size,
+						(_hash(k * 5.3 + i) - 0.5) * 0.06, 10 + i))
+					bands["mid"] = z + size * 0.48
 
 			# The throw-ups and the tags.
 			if south > 0.3 and b - a >= (1.0 if south > 0.5 else 1.4):
@@ -781,8 +809,9 @@ func _candles_at(root: Node3D, kit: Dictionary, look: Material, places: Array, p
 		lights.append(light)
 
 
-## A painted sheet cut into its cells (GRID x GRID), each its own texture (a decal draws a whole texture).
-func _sheet_cells(file: String, grid: int) -> Array[Texture2D]:
+## A painted sheet cut into its square cells (`cols` across, `rows` down, rows the same as cols if not given), each its
+## own texture (a decal draws a whole texture).
+func _sheet_cells(file: String, cols: int, rows := 0) -> Array[Texture2D]:
 	var cells: Array[Texture2D] = []
 	var sheet := SetKit.painted([file], SetKit.ATLAS_DIR, true)
 	if sheet == null:
@@ -790,11 +819,90 @@ func _sheet_cells(file: String, grid: int) -> Array[Texture2D]:
 	var image := sheet.get_image()
 	if image.is_compressed():
 		image.decompress()
-	var size := image.get_width() / grid
-	for j in grid:
-		for i in grid:
-			cells.append(ImageTexture.create_from_image(image.get_region(Rect2i(i * size, j * size, size, size))))
+	var size := image.get_width() / cols
+	for j in (rows if rows > 0 else cols):
+		for i in cols:
+			# (Its mipmaps made: a material sampling it through mipmaps (the retro look's) reads black without them.)
+			var cell := image.get_region(Rect2i(i * size, j * size, size, size))
+			cell.generate_mipmaps()
+			cells.append(ImageTexture.create_from_image(cell))
 	return cells
+
+
+## A stack of bills pasted over the years at `z` on the `side` wall: the tatters of older bills torn back, two and
+## more newer bills over them, each over the one before and a little askew, the newest perhaps peeling at its top;
+## which bills by where the stack is (`middle`, `south` its share toward the south end) and what goes on there.
+func _bill_stack(root: Node3D, kit: Dictionary, look: Material, bills: Dictionary, side: int, z: float, middle: float,
+		south: float, k: int) -> void:
+	var stack := Node3D.new()
+	stack.name = "bills"
+	root.add_child(stack, true)
+	bill_stacks.append(stack)
+	var height := 1.4 + 0.15 * _hash(k * 2.9)
+	var under := _billed(stack, bills["tatters"][k % 2], "tatters", side, z, height, 1.15, (_hash(k) - 0.5) * 0.1, 0)
+	marks.append(under)
+	var wants := _bills_wanted(side, middle)
+	var top: MeshInstance3D = null
+	var top_kind := ""
+	for i in 2 + int(2.2 * south):
+		var kind: String = wants[(k + i) % wants.size()]
+		var shift := Vector2((_hash(k * 1.7 + i) - 0.5) * 0.36, (_hash(k * 2.3 + i) - 0.5) * 0.24)
+		var size: float = BILL_SIZES[kind] + 0.1 * _hash(k + i * 0.7)
+		top = _billed(stack, bills[kind][0], kind, side, z + shift.x, height + shift.y, size,
+			(_hash(k * 3.1 + i) - 0.5) * 0.14, i + 1)
+		top_kind = kind
+		marks.append(top)
+	# (The newest, if it is newsprint, come away from the wall in the damp at its top edge.)
+	if top != null and top_kind in ["missing", "exorcist", "company_notice", "wanted_spirit"] and _hash(k * 4.1) > 0.35:
+		# (Its paper's top edge, BILL_TOP of its image under its middle; the curl run along the wall from there, its
+		# middle over the bill's.)
+		var edge := top.position + Vector3(0.0, (top.mesh as QuadMesh).size.y * BILL_TOP, 0.0)
+		var at := Vector3(top.position.x, edge.y, edge.z - side * CURL_LENGTH / 2.0)
+		SetKit.place(stack, kit["bill_curl"], look, "bill_curl", at, -side * PI / 2.0, false)
+
+
+## The bills a stack on the `side` wall at `middle` is pasted with, by what goes on there: the missing and the wanted
+## spirit by the dark north and her lane; the reward for a lost nahual by the herb market and the lane (the nahual's
+## ways); the curandero's card by the herbs and the copal; the exorcist's by the north end; the Company's notice at
+## the north end; the lotería by the lottery seller; the cabaret, the lucha and the fiesta in the south, the night's.
+func _bills_wanted(side: int, middle: float) -> Array:
+	var wants := []
+	if middle < -12.0:
+		wants += ["company_notice", "missing", "exorcist", "wanted_spirit"]
+	elif middle < 9.0:
+		wants += ["nahual_reward", "wanted_spirit", "curandero"] if side > 0 else ["curandero", "nahual_reward", "missing"]
+	if side < 0 and middle > -11.0 and middle < -8.0:
+		wants += ["loteria"]
+	if middle > 6.0:
+		wants += ["cabaret", "lucha_night", "fiesta", "loteria"]
+	return wants
+
+
+## A bill pasted on the `side` wall's tiles, its middle at (z, height), `size` across, rolled `roll` (radians) in the
+## wall's plane, `order` its place in its stack: a sheet of paper (its image cut out by its alpha, its torn edge) a
+## few millimetres proud of the tiles, each newer one over the one before (paper hides the tiles' joints, as paint
+## laid on them does not).
+func _billed(root: Node3D, cell: Texture2D, kind: String, side: int, z: float, height: float, size: float, roll: float,
+		order: int) -> MeshInstance3D:
+	var sheet := MeshInstance3D.new()
+	sheet.name = kind
+	var quad := QuadMesh.new()
+	quad.size = Vector2(size, size)
+	sheet.mesh = quad
+	var paper := StandardMaterial3D.new()
+	paper.albedo_texture = cell
+	paper.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	paper.alpha_scissor_threshold = 0.5
+	paper.roughness = 0.92
+	sheet.material_override = paper
+	sheet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sheet.set_meta("kind", "bill")
+	sheet.set_meta("bill_kind", kind)
+	sheet.set_meta("order", order)
+	root.add_child(sheet)
+	sheet.position = Vector3(side * (HALF_W - WALL - FACE - PAPER_OFF - PAPER_STEP * order), height, z)
+	sheet.rotation = Vector3(0.0, -side * PI / 2.0, roll)
+	return sheet
 
 
 ## Whether `z` on the `side` wall lies within `margin` of one of its openings.

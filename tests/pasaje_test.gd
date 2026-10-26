@@ -23,6 +23,7 @@ func _ready() -> void:
 	await _overhead()
 	_marks()
 	_wards()
+	_bills()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -317,8 +318,10 @@ func _marks() -> void:
 		var kind: String = mark.get_meta("kind", "bill")
 		kinds[kind] = kinds.get(kind, 0) + 1
 		if kind == "sigil":
+			# (By the mouth on its own wall: the lane's on the east, the herb market's on the west; or under the canopy.)
 			var at := pasaje.to_local(mark.global_position)
-			var near := absf(at.z - 0.45) < 10.5 or at.z > 15.0
+			var mouth: Array = pasaje.OPENINGS["candle_lane" if at.x > 0.0 else "herb_market"]
+			var near := absf(at.z - 0.5 * (mouth[1] + mouth[2])) < 11.0 or at.z > 13.0
 			if not near:
 				stray.append("sigil at %.1f" % at.z)
 	var stencils: int = kinds.get("calavera", 0) + kinds.get("eye", 0) + kinds.get("moon", 0) + kinds.get("roundel", 0)
@@ -331,6 +334,36 @@ func _marks() -> void:
 	_check("P7c the walls carry every kind of mark, the sigils where the uncanny comes close",
 		kinds.get("sigil", 0) >= 3 and kinds.get("tag", 0) >= 6 and kinds.get("throwup", 0) >= 3 and stencils >= 3
 		and stray.is_empty(), "%s; %s" % [kinds, stray])
+
+
+## The bills pasted in generations: each stack its tatters of older bills, two and more newer over them (each over
+## the one before), all of the city's kinds of bill somewhere.
+func _bills() -> void:
+	var stacks: Array = pasaje.get("bill_stacks") if pasaje.get("bill_stacks") != null else []
+	var wrong := []
+	var seen := {}
+	for stack: Node3D in stacks:
+		var layers: Array = stack.get_children().filter(func(n): return n.has_meta("bill_kind"))
+		var tatters := layers.filter(func(d): return d.get_meta("bill_kind") == "tatters")
+		var bills := layers.filter(func(d): return d.get_meta("bill_kind") != "tatters")
+		if tatters.is_empty() or bills.size() < 2:
+			wrong.append("%s: %d tatters, %d bills" % [stack.name, tatters.size(), bills.size()])
+			continue
+		var under: MeshInstance3D = tatters[0]
+		for bill: MeshInstance3D in bills:
+			seen[bill.get_meta("bill_kind")] = true
+			# (Over its tatters: pasted after them and nearer the street.)
+			if bill.get_meta("order") <= under.get_meta("order") or absf(bill.position.x) >= absf(under.position.x):
+				wrong.append("%s: a bill under its tatters" % stack.name)
+			var reach: float = ((bill.mesh as QuadMesh).size.x + (under.mesh as QuadMesh).size.x) / 2.0
+			if absf(bill.position.z - under.position.z) > reach:
+				wrong.append("%s: a bill off its stack" % stack.name)
+	var kinds := ["missing", "nahual_reward", "curandero", "exorcist", "cabaret", "lucha_night", "company_notice",
+		"loteria", "wanted_spirit", "fiesta"]
+	var unseen := kinds.filter(func(k): return not seen.has(k))
+	_check("P7f the bills are pasted in generations, every kind of the city's bills among them",
+		not stacks.is_empty() and wrong.is_empty() and unseen.is_empty(),
+		"%d stacks; %s; unseen %s" % [stacks.size(), wrong.slice(0, 3), unseen])
 
 
 ## The wards where the uncanny comes close: each spot its chalk or salt, its candles stood and lit from among their
