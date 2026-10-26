@@ -155,9 +155,9 @@ static func visible_design_rect(viewport: Vector2) -> Rect2:
 	var offset := (viewport - DESIGN * factor) * 0.5
 	return Rect2(-offset / factor, viewport / factor)
 
-## How many words' paintings are showing (one, or two mid-change).
+## How many words' paintings are drawn (one, or two mid-change).
 func washes_showing() -> int:
-	return words.filter(func(w): return w.wash != null and w.wash.level > 0.02).size()
+	return words.filter(func(w): return w.wash != null and w.wash.visible).size()
 
 ## The city's brightness: dimmed a little while a painting is showing.
 func city_dim() -> float:
@@ -300,8 +300,13 @@ func _build_confirm() -> void:
 		confirm_yes.set(edge, confirm_yes.get_path())
 		confirm_no.set(edge, confirm_no.get_path())
 	confirm_yes.pressed.connect(func():
+		if not confirming:
+			return
 		confirm_yes.press_in()
 		await get_tree().create_timer(MenuMotion.PRESS).timeout
+		if not confirming:
+			return
+		confirming = false
 		quit_game.call())
 	confirm_no.pressed.connect(close_quit_confirm)
 	_confirm.hide()
@@ -310,6 +315,7 @@ func open_quit_confirm() -> void:
 	confirming = true
 	for word in words:
 		word.focus_mode = Control.FOCUS_NONE
+		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if word.index != 4:
 			word.set_page_dim(true)
 	_confirm.show()
@@ -324,12 +330,13 @@ func close_quit_confirm() -> void:
 	_confirm.hide()
 	for word in words:
 		word.focus_mode = Control.FOCUS_ALL
+		word.mouse_filter = Control.MOUSE_FILTER_STOP
 		word.set_selected(word.index == selected)
 	words[4].grab_focus()
 
 ## The one path for mouse, keyboard and controller: lights one word.
 func select(index: int) -> void:
-	if index == selected or index < 0 or index >= words.size():
+	if index == selected or index < 0 or index >= words.size() or confirming or page_open >= 0:
 		return
 	var previous := selected
 	selected = index

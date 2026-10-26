@@ -42,8 +42,8 @@ full colour in a 440×170 design-px wash, framed on the painting's face
 - **Layer:** all washes sit on one layer behind all the words, and never
   travel.
 - **Changing word:** the old wash fades while the new one blooms (from 0.94
-  scale and 10 px left). A third never stacks under two others; the oldest
-  clears in 0.03 s.
+  scale and 10 px left). A third never stacks under two others: the oldest
+  is cleared at once.
 - **City:** it dims to 0.72 while a painting shows.
 
 **Pages.** Continue, Settings and Lore open as book pages.

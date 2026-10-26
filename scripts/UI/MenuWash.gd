@@ -63,14 +63,11 @@ func bloom() -> void:
 func fade() -> void:
 	_go(0.0, MenuMotion.FADE)
 
-## Gone at once, almost: a third painting never stacks under two others.
+## Gone at once: a third painting never stacks under two others.
 func clear() -> void:
-	if level <= 0.0:
-		return
 	if _tween:
 		_tween.kill()
-	_tween = create_tween()
-	_tween.tween_property(self, "level", 0.0, 0.03)
+	level = 0.0
 
 func _go(to: float, seconds: float) -> void:
 	if _tween:

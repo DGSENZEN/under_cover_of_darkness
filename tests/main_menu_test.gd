@@ -17,6 +17,15 @@ func key(code: Key) -> void:
 		get_viewport().push_input(event, true)
 		await get_tree().process_frame
 
+## One key press and release, delivered within a single frame.
+func tap(code: Key) -> void:
+	for down in [true, false]:
+		var event := InputEventKey.new()
+		event.keycode = code
+		event.physical_keycode = code
+		event.pressed = down
+		get_viewport().push_input(event, true)
+
 func _ready() -> void:
 	var original_path := Settings.path
 	var original_volume := AudioServer.get_bus_volume_db(0)
@@ -96,9 +105,13 @@ func _ready() -> void:
 	await get_tree().create_timer(0.7).timeout
 	var most := 0
 	for k in range(3):
-		await key(KEY_DOWN)
+		tap(KEY_DOWN)
+		await get_tree().process_frame
 		most = maxi(most, menu.washes_showing())
-	check(most <= 2, "fast keys: never more than two paintings at once (saw %d)" % most)
+	for k in range(10):
+		await get_tree().process_frame
+		most = maxi(most, menu.washes_showing())
+	check(most <= 2, "fast keys, a press every frame: never more than two paintings drawn (saw %d)" % most)
 	await get_tree().create_timer(0.7).timeout
 	check(menu.washes_showing() == 1, "and it settles on one")
 	menu.words[menu.selected].mouse_exited.emit()
@@ -114,7 +127,8 @@ func _ready() -> void:
 	# Piece 1: a press-in, then the action.
 	menu.words[2].pressed.emit()
 	await get_tree().create_timer(0.05).timeout
-	check(menu.words[2].scale.x < 0.99 and menu.page_open == -1, "pressing a word presses it in first")
+	var letters: float = menu.words[2].get_theme_font("font").get_string_size(menu.words[2].text, HORIZONTAL_ALIGNMENT_LEFT, -1, MenuWord.SIZE).x
+	check(menu.words[2].scale.x < 0.99 and menu.page_open == -1 and absf(menu.words[2].pivot_offset.x - (menu.words[2].step_x + letters * 0.5)) < 0.5, "pressing a word presses it in first, around its letters")
 	await get_tree().create_timer(0.25).timeout
 	check(is_equal_approx(menu.words[2].scale.x, 1.0) and menu.page_open == 2, "then it springs back and its page opens")
 	menu.close_page()
@@ -126,9 +140,20 @@ func _ready() -> void:
 	menu.words[4].pressed.emit()
 	await get_tree().create_timer(MenuMotion.PRESS + 0.1).timeout
 	check(menu.confirming and menu.confirm_no.has_focus() and menu.confirm_yes.visible, "Quit asks first, with No ready")
+	var asked_from: int = menu.selected
+	var drawn: int = menu.washes_showing()
+	menu.words[0].mouse_entered.emit()
+	await get_tree().process_frame
+	check(menu.selected == asked_from and menu.washes_showing() == drawn, "the mouse can't change the selection behind the question")
 	await key(KEY_ESCAPE)
 	await get_tree().create_timer(0.3).timeout
 	check(not menu.confirming and quits[0] == 0 and menu.words[4].has_focus(), "Escape says no; nothing quits")
+	menu.words[4].pressed.emit()
+	await get_tree().create_timer(MenuMotion.PRESS + 0.1).timeout
+	menu.confirm_yes.pressed.emit()
+	menu.close_quit_confirm()
+	await get_tree().create_timer(MenuMotion.PRESS + 0.1).timeout
+	check(quits[0] == 0, "backing out right after Yes doesn't quit")
 	menu.words[4].pressed.emit()
 	await get_tree().create_timer(MenuMotion.PRESS + 0.1).timeout
 	menu.confirm_yes.pressed.emit()

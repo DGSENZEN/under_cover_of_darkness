@@ -82,7 +82,8 @@ func set_page_dim(on: bool) -> void:
 
 ## Pressed: the word dips in and springs back, before its action.
 func press_in() -> void:
-	pivot_offset = Vector2(STEP + 0.5 * (size.x - STEP), size.y * 0.5)
+	var letters := get_theme_font("font").get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, SIZE).x
+	pivot_offset = Vector2(step_x + letters * 0.5, size.y * 0.5)
 	var press := create_tween().set_trans(Tween.TRANS_QUINT).set_ease(Tween.EASE_OUT)
 	press.tween_property(self, "scale", Vector2.ONE * 0.97, MenuMotion.PRESS * 0.5)
 	press.tween_property(self, "scale", Vector2.ONE, MenuMotion.PRESS * 0.5)
