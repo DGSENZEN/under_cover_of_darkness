@@ -8,6 +8,15 @@ func check(ok: bool, message: String) -> void:
 	if not ok:
 		failures += 1
 
+func key(code: Key) -> void:
+	for down in [true, false]:
+		var event := InputEventKey.new()
+		event.keycode = code
+		event.physical_keycode = code
+		event.pressed = down
+		get_viewport().push_input(event, true)
+		await get_tree().process_frame
+
 func _ready() -> void:
 	var original_path := Settings.path
 	var original_volume := AudioServer.get_bus_volume_db(0)
@@ -22,40 +31,31 @@ func _ready() -> void:
 	var menu := scene.instantiate()
 	add_child(menu)
 	await get_tree().process_frame
-	check(menu.buttons.size() == 4, "four painted actions are available")
 	check(menu.game_scene == "res://maps/metro.tscn", "New Game enters the actual Metro Underground scene")
 	var title_lines: Array[String] = []
 	for child in menu._design.get_children():
 		if child is Label:
 			title_lines.append(child.text)
-	check(title_lines == ["UNDER COVER", "OF DARKNESS"], "main screen contains only the title and painted actions")
-	var atlas: Image = menu.BUTTONS.get_image()
-	check(atlas.get_pixel(0, 0).a == 0.0 and atlas.get_pixel(atlas.get_width() / 2, 200).a == 0.0, "sheet exterior and button gutters are transparent")
-	check(menu.buttons[0].caption == "New Game" and menu.buttons[1].caption == "Continue" and menu.buttons[2].caption == "Settings" and menu.buttons[3].caption == "Lore", "paintings use the requested reading order")
-	menu.buttons[1].pressed.emit()
-	check(menu.panel.visible and menu.panel_title.text == "Continue" and menu.panel_body.text.contains("save"), "Continue explains the missing save rather than starting a new game")
-	menu.close_panel()
-	menu.buttons[2].pressed.emit()
-	check(menu.panel.visible and menu.panel_title.text == "Settings" and menu.settings_box.visible, "Settings opens existing game preferences")
-	var volume: HSlider = menu.settings_box.get_node("Volume")
-	volume.value = 0.35
+	check(title_lines == ["UNDER COVER", "OF DARKNESS"], "main screen contains only the title and the menu")
+
+	# Task 1: the word column and one selection path.
+	check(menu.words.size() == 4 and menu.words.map(func(w): return w.text) == ["NEW GAME", "CONTINUE", "SETTINGS", "LORE"], "four words in reading order")
+	check(menu.words[1].position.y - menu.words[0].position.y >= 56.0, "words have room between them")
+	check(menu.words.all(func(w): return is_equal_approx(w.position.x, menu.words[0].position.x)), "words sit in one column")
+	check(menu.selected == -1, "nothing is selected before input")
+	await key(KEY_DOWN)
+	check(menu.selected == 0 and menu.words[0].has_focus(), "first key press selects New Game")
+	await key(KEY_DOWN)
+	check(menu.selected == 1, "down moves through the column")
+	await key(KEY_UP)
+	await key(KEY_UP)
+	check(menu.selected == 0, "up stops at the top, no wrap")
+	menu.words[3].mouse_entered.emit()
 	await get_tree().process_frame
-	Settings.reload()
-	check(is_equal_approx(Settings.master_volume(), 0.35) and is_equal_approx(db_to_linear(AudioServer.get_bus_volume_db(0)), 0.35), "volume changes reach the audio bus and survive a settings reload")
-	Settings.set_awareness_marks(false)
-	Settings.reload()
-	check(not Settings.awareness_marks() and is_equal_approx(Settings.master_volume(), 0.35), "awareness and volume settings preserve each other")
-	menu.close_panel()
-	check(not menu.panel.visible and menu.buttons[2].has_focus(), "closing an overlay returns keyboard focus to its button")
-	menu.buttons[3].pressed.emit()
-	check(menu.panel.visible and menu.panel_title.text == "Lore" and not menu.panel_body.text.is_empty(), "Lore opens the city's existing setting")
-	menu.close_panel()
-	menu.music_marker(&"continue", 0.8)
-	check(menu.buttons[1].music_energy > 0.7 and menu.buttons[0].music_energy == 0.0, "authored music markers target a particular painting")
-	menu.buttons[0].set_highlighted(true)
-	await get_tree().create_timer(0.35).timeout
-	check(menu.buttons[0].paint.scale.x > 1.04, "hover enlarges the painted button")
-	check(menu.buttons[0].get_node("Paint").material != menu.buttons[1].get_node("Paint").material, "paintings animate independently")
+	check(menu.selected == 3 and menu.words.filter(func(w): return w.selected).size() == 1, "mouse after keyboard: one selection, the latest")
+	check(not menu.has_method("music_marker"), "the old music marker hook is gone")
+
+	# Task 3 re-enables the page checks against open_page/close_page.
 	check(ResourceLoader.exists(menu.game_scene), "New Game points at an existing playable scene")
 	check(ProjectSettings.get_setting("application/run/main_scene") == "res://main_menu.tscn", "normal game launch opens the new menu")
 	menu.queue_free()

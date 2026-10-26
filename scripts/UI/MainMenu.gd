@@ -1,7 +1,5 @@
 extends CanvasLayer
-## The menu is silent until its own score is authored. Music can call
-## music_marker(&"new_game" / &"continue" / &"settings" / &"lore", strength).
-const PaintedButton := preload("res://scripts/UI/PaintedMenuButton.gd")
+## The title menu: four words in a column; the chosen one is lit.
 const Settings := preload("res://scripts/UI/Settings.gd")
 const ArtLoading := preload("res://scripts/UI/ArtLoadingScreen.gd")
 const CITY := preload("res://assets/ui/main_menu/city.png")
@@ -14,7 +12,15 @@ const LORE := "THE ECLIPSE OF 1923\nMexico City was changed by the Eclipse and t
 
 ## The actual underground station and built candle lane from metro-standard.
 @export_file("*.tscn") var game_scene := "res://maps/metro.tscn"
-var buttons: Array[Button] = []
+signal selection_changed(index: int)
+
+const NAMES := ["New Game", "Continue", "Settings", "Lore"]
+const COLOURS := [Color("ef774c"), Color("67c9ed"), Color("929fdb"), Color("efa25e")]
+const WORD_X := 72.0
+const WORD_TOP := 360.0
+const WORD_GAP := 64.0
+var words: Array[MenuWord] = []
+var selected := -1
 var panel: Control
 var panel_title: Label
 var panel_body: Label
@@ -67,23 +73,20 @@ func _ready() -> void:
 	_root.add_child(_design)
 	_text("UNDER COVER", Vector2(72, 115), 52)
 	_text("OF DARKNESS", Vector2(72, 175), 58)
-	var names := ["New Game", "Continue", "Settings", "Lore"]
-	var colours := [Color("ef774c"), Color("67c9ed"), Color("929fdb"), Color("efa25e")]
-	# Normalized atlas regions include transparent gutters for growing rims.
-	var regions := [Rect2(0, 0, 0.5, 0.387), Rect2(0.5, 0, 0.5, 0.387), Rect2(0, 0.387, 0.5, 0.613), Rect2(0.5, 0.387, 0.5, 0.613)]
-	for i in range(4):
-		var button := PaintedButton.new()
-		button.configure(BUTTONS, regions[i], names[i], i, colours[i], _font)
-		button.position = Vector2(64 + (i % 2) * 334, 326 if i < 2 else 526)
-		button.size = Vector2(314, 184 if i < 2 else 292)
-		button.pressed.connect(_activate.bind(i))
-		_design.add_child(button)
-		buttons.append(button)
-	for i in range(4):
-		buttons[i].focus_neighbor_left = buttons[(i / 2) * 2].get_path()
-		buttons[i].focus_neighbor_right = buttons[(i / 2) * 2 + 1].get_path()
-		buttons[i].focus_neighbor_top = buttons[i % 2].get_path()
-		buttons[i].focus_neighbor_bottom = buttons[2 + i % 2].get_path()
+	for i in range(NAMES.size()):
+		var word := MenuWord.new()
+		word.configure(NAMES[i], i, COLOURS[i], _font)
+		word.position = Vector2(WORD_X, WORD_TOP + i * WORD_GAP - 26)
+		word.size = Vector2(420, 52)
+		word.chosen.connect(select)
+		word.pressed.connect(_activate.bind(i))
+		_design.add_child(word)
+		words.append(word)
+	for i in range(words.size()):
+		words[i].focus_neighbor_top = words[maxi(i - 1, 0)].get_path()
+		words[i].focus_neighbor_bottom = words[mini(i + 1, words.size() - 1)].get_path()
+		words[i].focus_neighbor_left = words[i].get_path()
+		words[i].focus_neighbor_right = words[i].get_path()
 	_build_panel()
 	get_viewport().size_changed.connect(_layout)
 	_layout()
@@ -196,28 +199,33 @@ func _show_panel(title: String, body: String) -> void:
 	panel_body.text = body
 	settings_box.hide()
 	panel.show()
-	for button in buttons:
-		button.focus_mode = Control.FOCUS_NONE
-		button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for word in words:
+		word.focus_mode = Control.FOCUS_NONE
+		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_close.grab_focus()
 
 func close_panel() -> void:
 	panel.hide()
-	for button in buttons:
-		button.focus_mode = Control.FOCUS_ALL
-		button.mouse_filter = Control.MOUSE_FILTER_STOP
-	buttons[_return_focus].grab_focus()
+	for word in words:
+		word.focus_mode = Control.FOCUS_ALL
+		word.mouse_filter = Control.MOUSE_FILTER_STOP
+	words[_return_focus].grab_focus()
 
-## Called by the future menu score's authored part markers, never a fake BPM.
-func music_marker(marker: StringName, strength := 1.0) -> void:
-	var index := [&"new_game", &"continue", &"settings", &"lore"].find(marker)
-	if index >= 0:
-		buttons[index].music_energy = clampf(strength, 0.0, 1.0)
+## The one path for mouse, keyboard and controller: lights one word.
+func select(index: int) -> void:
+	if index == selected or index < 0 or index >= words.size():
+		return
+	selected = index
+	for word in words:
+		word.set_selected(word.index == index)
+	if not words[index].has_focus() and words[index].focus_mode != Control.FOCUS_NONE:
+		words[index].grab_focus()
+	selection_changed.emit(index)
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel") and panel.visible:
 		close_panel()
 		get_viewport().set_input_as_handled()
 	elif not panel.visible and get_viewport().gui_get_focus_owner() == null and (event.is_action_pressed("ui_down") or event.is_action_pressed("ui_up") or event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right") or event.is_action_pressed("ui_accept")):
-		buttons[0].grab_focus()
+		words[0].grab_focus()
 		get_viewport().set_input_as_handled()
