@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Under Cover of Darkness"
-run/main_scene="uid://bog87j6w44anw"
+run/main_scene="res://main_menu.tscn"
 config/features=PackedStringArray("4.5", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 Retro="*res://scripts/Visual/Retro.gd"
 CityState="*res://scripts/Level/CityState.gd"
+SaveGame="*res://scripts/Save/SaveGame.gd"
 
 [debug_draw_3d]
 

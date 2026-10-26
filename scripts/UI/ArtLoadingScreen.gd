@@ -125,6 +125,17 @@ func change_to(path: String) -> Error:
 				queue_free()
 				return ERR_CANT_CREATE
 			await tree.process_frame
+	# A save waiting for this map (SaveGame.load_slot): set back now, while
+	# the game is still paused under the cover, before a frame is played.
+	var save := tree.root.get_node_or_null("SaveGame")
+	if save != null and not save.pending.is_empty():
+		if save.apply_pending(destination) != OK:
+			if previous_scene != "":
+				tree.change_scene_to_file(previous_scene)
+				await tree.scene_changed
+			tree.paused = was_paused
+			queue_free()
+			return ERR_CANT_CREATE
 	advance(1.0)
 	while bar.value < 0.999:
 		await tree.process_frame

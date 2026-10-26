@@ -5,6 +5,8 @@ extends Node
 ## the watchmen following him through one. Written when he leaves a
 ## district, applied after it is built when he comes back. Saving (the
 ## program's step 5) writes the same to disk: this is the save contract.
+## A save (SaveGame) keeps all of it (save_state), with the run it belongs to
+## and the time played in it.
 
 const DistrictStateScript := preload("res://scripts/Level/DistrictState.gd")
 
@@ -38,6 +40,12 @@ var people: RefCounted = PeopleStateScript.new()
 ## Who the player chose to be on the archetype screen (&"derive",
 ## &"thaumaturge" or &"factotum"; empty before a choice): kept for the game.
 var archetype: StringName = &""
+## The run (playthrough, SaveFiles) this game is: "" before New Game.
+var run_id := ""
+## Seconds played in the run, counted while the game is not paused.
+var played := 0.0
+## {map scene path: SaveGame.leave_map's state}: the maps the player has left.
+var maps := {}
 
 
 func _init() -> void:
@@ -48,6 +56,41 @@ func _init() -> void:
 func _exit_tree() -> void:
 	job.people = null
 	people.job = null
+
+
+func _process(delta: float) -> void:
+	if run_id != "":
+		played += delta
+
+
+## A new game: nothing of any earlier one remembered, people included.
+func new_game() -> void:
+	people = PeopleStateScript.new()
+	maps.clear()
+	played = 0.0
+	run_id = ""
+	archetype = &""
+	begin()
+
+
+## Everything the city remembers, for a save.
+func save_state() -> Dictionary:
+	return {"run": run_id, "played": played, "archetype": archetype, "districts": districts.duplicate(true), "carried": carried.duplicate(true),
+		"followers": followers.duplicate(true), "job": job.save_state(), "people": people.save_state(), "maps": maps.duplicate(true)}
+
+
+## Back as a save had it.
+func load_state(state: Dictionary) -> void:
+	run_id = String(state.get("run", ""))
+	played = float(state.get("played", 0.0))
+	archetype = StringName(state.get("archetype", &""))
+	districts = (state.get("districts", {}) as Dictionary).duplicate(true)
+	carried = (state.get("carried", {}) as Dictionary).duplicate(true)
+	followers = (state.get("followers", []) as Array).duplicate(true)
+	maps = (state.get("maps", {}) as Dictionary).duplicate(true)
+	job.load_state(state.get("job", {}))
+	people.load_state(state.get("people", {}))
+	_link()
 
 
 ## A new mission: nothing remembered of the districts, nothing carried; the
