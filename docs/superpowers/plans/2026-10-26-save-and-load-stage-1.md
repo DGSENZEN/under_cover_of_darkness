@@ -107,9 +107,10 @@
   - `F10`: a truncated `.save` is listed with `readable == false`, and `continue_target()` skips it.
   - `F11`: a header with `version: CURRENT + 1` is unreadable, and `read` returns `{error}`.
   - `F12`: two runs' quick slots never rotate into each other.
+  - `F13`: a version-1 fixture, `tests/fixtures/save/v1.save`, written once by this task and committed, still reads. Every later bump keeps this check passing through its migration.
 - [ ] **Step 2: Run them and see them fail.** Run `Godot --headless --fixed-fps 60 --path . res://tests/save_files_test.tscn`. Expected: FAIL, because the scripts are missing.
 - [ ] **Step 3: Implement SaveFiles and SaveMigrations** to the interfaces above. A `.tmp` left from a crash is ignored by `saves()` and overwritten by the next write.
-- [ ] **Step 4: Run the tests.** Expected: `F1`–`F12` PASS.
+- [ ] **Step 4: Run the tests.** Expected: `F1`–`F13` PASS.
 - [ ] **Step 5: Commit.** Message: `feat(save): runs, slots and save files on disk`.
 
 ### Task 2: SaveGame core and CityState's state
@@ -145,6 +146,8 @@
     - `player.frob.talking() != null`
     - there's no player in group `&"player"`
   - `func begin_run(archetype: StringName) -> String`: sets `CityState.run_id` and `played = 0`
+  - `func leave_map(scene: Node) -> void`: stores the gathered stable saveables and `gone` (no player, no spawns) in `CityState.maps[scene.scene_file_path]`
+  - `func enter_map(scene: Node) -> void`: applies the stored entry if there is one. Nothing calls these yet: the map gates will. The spec's section 3, "Maps you have left".
 - Produces, in `CityState`: `save_state() -> Dictionary` holding `run`, `played`, `archetype`, `districts`, `carried`, `followers`, `job` (`job.save_state()`), `people` (`people.save_state()`) and `maps`, and `load_state(state)`, its inverse, which relinks job and people. `played` counts up in `_process` while the tree isn't paused and a run is set.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -154,10 +157,11 @@
   - `G4`: `CityState` round-trips: run, played, archetype, a job goal done, a people flag, a mood. After `CityState.begin()` the people state and the run survive, and the job resets.
   - `G5`: `can_save()` is false while held, while `loading`, and while the player is dead, and true after `release`.
   - `G6`: a body with an id the scene doesn't have returns one problem line and applies everything else.
+  - `G17`: the per-map store. Leave fixture map A with a stub changed, enter fixture map B, come back to a fresh A, and `enter_map` restores the stub. Saving while in B and loading keeps A's entry in `CityState.maps`.
   - `G7`: `ArtLoadingScreen.change_to` with `pending` set applies it before the cover lifts. The first unpaused physics frame already sees the stub's saved `pos`.
 - [ ] **Step 2: Run them and see them fail.** Run `Godot --headless --fixed-fps 60 --path . res://tests/save_test.tscn`. Expected: FAIL.
 - [ ] **Step 3: Implement SaveGame, the CityState state and the change_to hook.**
-- [ ] **Step 4: Run the tests.** Expected: `G1`–`G7` PASS. Also run `job_test`, `dialogue_test`, `city_test` and the menu suites: all as at the baseline.
+- [ ] **Step 4: Run the tests.** Expected: `G1`–`G7` and `G17` PASS. Also run `job_test`, `dialogue_test`, `city_test` and the menu suites: all as at the baseline.
 - [ ] **Step 5: Commit.** Message: `feat(save): the save manager, the city's state, loading through the cover`.
 
 ### Task 3: The player and the things that already save themselves
@@ -256,6 +260,7 @@
     - If `can_save()` is false, the request is kept, `save_held` is emitted, and it's retried each frame until it's allowed.
     - Otherwise the body is gathered now.
     - Next frame: the HUD layer is hidden, the code waits for `RenderingServer.frame_post_draw`, grabs the viewport image, then shows the HUD again.
+    - While the tree is paused (a save from the pause menu), the picture is `SaveGame.paused_frame` (Task 9) instead.
     - The body and the picture go to `WorkerThreadPool.add_task(SaveFiles.write...)`, and `saved` is emitted when done.
   - `func quickload() -> Error`: loads `SaveFiles.saves(run)`'s newest quick save. It's ignored while `loading`. If no quicksave exists, the HUD says so.
   - `func load_slot(run_id: String, slot: String) -> Error`:
@@ -279,7 +284,7 @@
   - `K5`: `quick_load` pressed twice in one frame, and again during the cover, starts exactly one load.
   - `K6`: when `SaveFiles.write` fails (root made unwritable), the HUD shows the failure note, `saved` carries the error, and the earlier save is intact.
   - `K7`: a load into the metro writes no autosave, and a `request_save` made before `apply_pending` returns happens only after it.
-  - `K8`: gathering takes under 16 ms in the metro (measured; prints the number), and the frame time on the save frame stays under 33 ms.
+  - `K8`: `gather()` in the metro takes under 16 ms (measured with `Time.get_ticks_usec`; prints the number), and the disk write runs off the main thread (asserted inside `SaveFiles.write` in a test build: `OS.get_thread_caller_id() != OS.get_main_thread_id()`).
 - [ ] **Step 2: Run them and see them fail.**
 - [ ] **Step 3: Implement it.**
 - [ ] **Step 4: Run the tests.** Expected: `K1`–`K8` PASS, and `settings_test` (or the settings suite on the branch) still green with the two new actions.
