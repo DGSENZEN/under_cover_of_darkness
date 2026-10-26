@@ -16,6 +16,7 @@ func _ready() -> void:
 	await _frames(5)
 	await _shell()
 	_dressed()
+	await _stalls()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -33,7 +34,8 @@ func _shell() -> void:
 		for z in [-19.5, 0.0, 19.5]:
 			floored = floored and absf(_ray(Vector3(x, 1.0, z), Vector3(x, -1.0, z)).y) < 0.02
 	var walled := true
-	for z in [-15.0, -8.0, 10.0, 16.0]:
+	# (In the alcoves between the stalls, where the walls stand bare.)
+	for z in [-14.0, -7.0, 7.5, 19.0]:
 		walled = walled and absf(absf(_ray(Vector3(0.0, 1.5, z), Vector3(-9.0, 1.5, z)).x) - half_w) < 0.35
 		walled = walled and absf(absf(_ray(Vector3(0.0, 1.5, z), Vector3(9.0, 1.5, z)).x) - half_w) < 0.35
 	var roofed := absf(_ray(Vector3(0.0, 2.0, 0.0), Vector3(0.0, 9.0, 0.0)).y - height) < 0.35
@@ -102,6 +104,114 @@ func _dressed() -> void:
 			broken.append("%s across the mouth" % main)
 	_check("P3b the mains run both walls, the east's turning into the wall either side of the lane's mouth",
 		not services.is_empty() and broken.is_empty(), "%d pieces; broken %s" % [services.size(), broken.slice(0, 6)])
+
+
+## Task 4: the stalls by trade, against their walls clear of the walk and the openings, each front reached by the
+## player, each under its own neon, every face for words blank, the floor open under every counter.
+func _stalls() -> void:
+	var stalls: Dictionary = pasaje.get("stalls") if pasaje.get("stalls") != null else {}
+	var specs := {}
+	for spec in (pasaje.get("STALLS") if pasaje.get("STALLS") != null else []):
+		specs[spec[0]] = spec
+	var wrong := []
+	var walls := {}
+	for name in stalls:
+		var box := _stall_box(stalls[name])
+		var side := 1 if box.get_center().x > 0.0 else -1
+		walls[side] = true
+		var near := box.position.x if side > 0 else -box.end.x
+		var far := box.end.x if side > 0 else -box.position.x
+		if near < 3.0 or far > 5.0:
+			wrong.append("%s spans |x| %.2f-%.2f" % [name, near, far])
+		for opening in pasaje.OPENINGS:
+			var o: Array = pasaje.OPENINGS[opening]
+			if o[0] == side and box.position.z < o[2] + 0.5 and box.end.z > o[1] - 0.5:
+				wrong.append("%s by the %s" % [name, opening])
+	_check("P4 the stalls stand against their walls, clear of the walk and the openings",
+		stalls.size() >= 12 and stalls.size() <= 16 and walls.size() == 2 and wrong.is_empty(),
+		"%d stalls on %d walls; %s" % [stalls.size(), walls.size(), wrong.slice(0, 4)])
+
+	var unreached := []
+	for name in stalls:
+		var box := _stall_box(stalls[name])
+		var side := 1 if box.get_center().x > 0.0 else -1
+		var near := box.position.x if side > 0 else -box.end.x
+		var middle := box.get_center().z
+		var front: Array[Vector3] = [Vector3(side * (near - 0.6), 1.05, middle)]
+		var walk := await _walk_path(Vector3(0.0, 1.05, middle), front, 300)
+		if not walk["ok"]:
+			unreached.append("%s %s" % [name, walk["end"]])
+	_check("P4b the player reaches every stall's front", not stalls.is_empty() and unreached.is_empty(),
+		"unreached %s" % [unreached.slice(0, 4)])
+
+	var hues := {-1: [], 1: []}
+	var off := []
+	for name in stalls:
+		var signs: Array = stalls[name].find_children("*", "NeonSign", true, false)
+		if signs.is_empty():
+			off.append("%s has no neon" % name)
+			continue
+		var hue: float = (signs[0].colour as Color).h * 360.0
+		var box := _stall_box(stalls[name])
+		var side := 1 if box.get_center().x > 0.0 else -1
+		hues[side].append([box.get_center().z, hue, name])
+		var mouth: bool = side > 0 and box.get_center().z > -6.5 and box.end.z < pasaje.OPENINGS["candle_lane"][1]
+		for kept in [328.0, 2.0, 186.0]:
+			var apart := _hue_apart(hue, kept)
+			if mouth and kept == 186.0:
+				if apart > 10.0:
+					off.append("%s (the mouth's) %.0f off the teal" % [name, apart])
+			elif apart < 15.0:
+				off.append("%s at %.0f near %.0f" % [name, hue, kept])
+	for side in hues:
+		var row: Array = hues[side]
+		row.sort_custom(func(a, b): return a[0] < b[0])
+		for k in range(1, row.size()):
+			if _hue_apart(row[k][1], row[k - 1][1]) < 25.0:
+				off.append("%s beside %s" % [row[k][2], row[k - 1][2]])
+	_check("P4c each stall under its own neon", not stalls.is_empty() and off.is_empty(), "%s" % [off.slice(0, 4)])
+
+	var marked := []
+	for name in stalls:
+		if not stalls[name].find_children("*", "Label3D", true, false).is_empty() \
+				or not stalls[name].find_children("*", "Decal", true, false).is_empty():
+			marked.append(name)
+	_check("P4d every face for words blank", not stalls.is_empty() and marked.is_empty(), "%s" % [marked])
+
+	var shut := []
+	var counters := 0
+	for name in stalls:
+		for counter: MeshInstance3D in stalls[name].find_children("counter*", "MeshInstance3D", true, false):
+			counters += 1
+			var box := _local_box(counter)
+			var side := 1 if box.get_center().x > 0.0 else -1
+			var near := box.position.x if side > 0 else -box.end.x
+			var from := Vector3(side * (near - 0.05), 0.15, box.get_center().z)
+			var hit := _ray(from, from + Vector3(side * 0.45, 0.0, 0.0))
+			if hit.distance_to(from) < 0.449:
+				shut.append("%s %.2f" % [name, hit.distance_to(from)])
+		if specs.has(name) and not String(specs[name][5]) in ["cart", "barrow"] \
+				and stalls[name].find_children("counter*", "MeshInstance3D", true, false).is_empty():
+			shut.append("%s has no counter" % name)
+	_check("P4e the floor under each counter is open, room for what will live there",
+		counters > 0 and shut.is_empty(), "%d counters; %s" % [counters, shut.slice(0, 4)])
+
+
+## The bounds of a stall's meshes in the set's frame.
+func _stall_box(root: Node3D) -> AABB:
+	var box := AABB()
+	var first := true
+	for mesh: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
+		var part := _local_box(mesh)
+		box = part if first else box.merge(part)
+		first = false
+	return box
+
+
+## How far apart two hues are round the wheel (degrees).
+func _hue_apart(a: float, b: float) -> float:
+	var d := fmod(absf(a - b), 360.0)
+	return minf(d, 360.0 - d)
 
 
 ## Whether a panel on the `side` wall covers its face at `z` from `low` to `high`.

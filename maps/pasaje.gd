@@ -52,6 +52,36 @@ const TURN_IN := 0.67
 const TURN_OUT := 3.76
 const TURN_OUT_AT := 4.23
 
+const STALLS_KIT := "res://assets/eclipse/kit/pasaje_stalls.glb"
+const FURNITURE_KIT := "res://assets/eclipse/kit/underground_furniture.glb"
+## The stalls by trade (the design's middle stretch): [name, trade, wall side (-1 west, 1 east), its middle's z, its
+## width, its frame (pipe/booth/lean_to and its cover; cart: the tamale cart under a lean-to's tarp; barrow: the fruit
+## barrow under a pipe frame's canvas; tortas: the card's stall), its neon]. Round the lane's mouth on the east the
+## trades her trade draws (candles, copal, milagros, saints), the copal stall beside the mouth under the mouth's teal;
+## round the herb market's mouth on the west what spills out of it (herbs and roots, chiles, flowers); food between;
+## a radio repairer on the Company's power, a lottery seller in the crowd, a tinsmith for the milagros and lanterns.
+const STALLS := [
+	["tamales", "tamales", 1, -16.2, 1.6, "cart", Color(1.0, 0.76, 0.28)],
+	["radios", "radio repairs", 1, -12.6, 1.6, "pipe_tin", Color(0.64, 0.28, 1.0)],
+	["candles", "candles", 1, -8.9, 2.8, "booth_canvas", Color(0.28, 1.0, 0.28)],
+	["copal", "copal and incense", 1, -4.75, 2.2, "pipe_tarp", Color(0.25, 0.85, 0.9)],
+	["milagros", "milagros", 1, 5.4, 1.6, "pipe_canvas", Color(0.88, 0.28, 1.0)],
+	["saints", "saints and prints", 1, 8.9, 2.2, "booth_tin", Color(1.0, 0.94, 0.28)],
+	["atole", "atole and coffee", 1, 13.1, 2.2, "lean_to_tarp", Color(1.0, 0.58, 0.28)],
+	["sweets", "sweets", 1, 17.4, 1.6, "pipe_canvas", Color(1.0, 0.28, 1.0)],
+	["tortas", "tortas", -1, -15.6, 2.2, "tortas", Color(0.28, 0.58, 1.0)],
+	["fruit", "fruit", -1, -11.6, 1.6, "barrow", Color(0.58, 1.0, 0.28)],
+	["lottery", "lottery tickets", -1, -8.4, 1.6, "lean_to_tin", Color(0.46, 0.28, 1.0)],
+	["herbs", "herbs and roots", -1, -5.25, 2.8, "lean_to_tarp", Color(0.28, 1.0, 0.52)],
+	["chiles", "dried chiles", -1, 2.9, 2.2, "pipe_canvas", Color(1.0, 0.52, 0.28)],
+	["flowers", "flowers", -1, 6.5, 1.6, "booth_tin", Color(0.76, 0.28, 1.0)],
+	["coffee", "coffee", -1, 11.6, 2.2, "lean_to_tin", Color(1.0, 0.88, 0.28)],
+	["tinsmith", "tin and lanterns", -1, 16.2, 2.8, "booth_canvas", Color(0.28, 0.4, 1.0)],
+]
+## The neon box's face in the stall's frame (out from the tiles, its middle's height), and its light's reach.
+const NEON_AT := Vector3(0.0, 2.57, 1.42)
+const NEON_RANGE := 3.0
+
 @export var standalone := true
 ## Set into a larger map: its player is the map's.
 var host_player: Node3D
@@ -73,11 +103,15 @@ var ceiling: Array[MeshInstance3D] = []
 var floor_tiles: Array[MeshInstance3D] = []
 ## The kits not found (the shell stays plain where they are missing).
 var missing: Array[String] = []
+## The stalls by name: each a root on its wall at its place, its pieces in the stall's frame (x along the wall, the
+## tiles at z 0, the street toward +z).
+var stalls := {}
 
 
 func _ready() -> void:
 	_shell()
 	_shell_dressing()
+	_stalls()
 	if standalone:
 		_environment()
 		_stubs()
@@ -282,6 +316,69 @@ func _main(kit: Dictionary, look: Material, kind: String, main: String, side: in
 	piece.set_meta("main", main)
 	services.append(piece)
 	return piece
+
+
+## The stalls: each put together from the stalls kit in its frame against its wall, solid where it stands (its frame,
+## counter and cart; the floor left open under the counters), under its own neon.
+func _stalls() -> void:
+	if not ResourceLoader.exists(STALLS_KIT):
+		missing.append(STALLS_KIT)
+		return
+	var kit := SetKit.kit(STALLS_KIT)
+	var look := Painterly.material(SetKit.painted(["pasaje_stalls.png", "pasaje_stalls_base.png"]), &"bespoke")
+	var furniture := SetKit.kit(FURNITURE_KIT) if ResourceLoader.exists(FURNITURE_KIT) else {}
+	var cart_look := Painterly.material(SetKit.painted(["underground_furniture.png", "underground_furniture_base.png"]), &"bespoke")
+	for k in STALLS.size():
+		var spec: Array = STALLS[k]
+		var side: int = spec[2]
+		var root := Node3D.new()
+		root.name = spec[0]
+		root.set_meta("trade", spec[1])
+		add_child(root)
+		root.position = Vector3(side * (HALF_W - WALL - FACE), 0.0, spec[3])
+		root.rotation.y = -side * PI / 2.0
+		var width: float = spec[4]
+		var tenths := roundi(width * 10.0)
+		var frame: String = spec[5]
+		var pieces := []
+		match frame:
+			"cart":
+				pieces = [["lean_to_%d" % tenths, true], ["awning_tarp_%d" % tenths, false]]
+				if furniture.has("tamale_cart"):
+					SetKit.place(root, furniture["tamale_cart"], cart_look, "tamale_cart", Vector3(0.0, 0.0, 0.8), 0.0, true)
+			"barrow":
+				pieces = [["pipe_frame_%d" % tenths, true], ["awning_canvas_%d" % tenths, false], ["barrow", true]]
+			"tortas":
+				pieces = [["pipe_frame_%d" % tenths, true], ["awning_canvas_%d" % tenths, false],
+					["counter_%d" % tenths, true], ["vitrina", false], ["plancha", false]]
+			_:
+				var cover := frame.get_slice("_", frame.get_slice_count("_") - 1)
+				var family := frame.trim_suffix("_" + cover)
+				family = "pipe_frame" if family == "pipe" else family
+				pieces = [[family + "_%d" % tenths, true], ["awning_%s_%d" % [cover, tenths], false],
+					["counter_%d" % tenths, true]]
+		for piece in pieces:
+			SetKit.place(root, kit[piece[0]], look, piece[0], Vector3.ZERO, 0.0, piece[1], true)
+		_neon(root, kit, look, width, spec[6], k)
+		stalls[spec[0]] = root
+
+
+## A stall's neon over its cover: the box (its face blank) and its tube, lit by a NeonSign of the stall's colour.
+func _neon(root: Node3D, kit: Dictionary, look: Material, width: float, colour: Color, k: int) -> void:
+	var size := 9 if width < 2.0 else 13
+	SetKit.place(root, kit["neon_box_%d" % size], look, "neon_box", Vector3.ZERO, 0.0, false)
+	var neon := NeonSign.new()
+	neon.name = "neon"
+	neon.colour = colour
+	neon.seed = 31 + k
+	neon.light_energy = 0.5
+	neon.light_range = NEON_RANGE
+	SetKit.place(neon, kit["neon_tube_%d" % size], look, "neon_tube", Vector3.ZERO, 0.0, false)
+	var glow := OmniLight3D.new()
+	glow.name = "light"
+	neon.add_child(glow)
+	glow.position = NEON_AT + Vector3(0.0, 0.0, 0.35)
+	root.add_child(neon)
 
 
 ## A steady hash in [0, 1) of `v`.

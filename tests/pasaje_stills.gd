@@ -14,14 +14,16 @@ const VIEWS := [
 	[Vector3(1.5, 1.65, -6.0), Vector3(-4.7, 1.8, -1.0), "4_the_herb_markets_mouth"],
 	[Vector3(-2.0, 1.65, -7.0), Vector3(4.7, 2.6, 0.5), "5_the_lanes_mouth_from_the_street"],
 	[Vector3(0.0, 1.65, 2.0), Vector3(0.0, 4.4, 6.5), "6_the_ceiling_and_girders"],
+	[Vector3(1.2, 1.65, -11.0), Vector3(-4.0, 1.4, -16.0), "7_the_tortas_stall"],
+	[Vector3(0.5, 1.65, -1.0), Vector3(4.0, 1.5, -5.0), "8_the_copal_stall_by_the_mouth"],
 ]
 ## The close views lit: [eye, looks at, name].
 const CLOSE := [
-	[Vector3(-2.6, 1.4, -4.4), Vector3(-4.7, 1.2, -3.0), "7_lit_herb_reveal_jamb"],
-	[Vector3(3.0, 3.2, -4.6), Vector3(4.7, 3.6, -3.3), "8_lit_mains_turning_in"],
-	[Vector3(-3.4, 3.6, 1.0), Vector3(-4.7, 4.3, 0.0), "9_lit_girder_bearing"],
-	[Vector3(-3.0, 1.3, -3.6), Vector3(-4.9, 0.0, -1.0), "10_lit_herb_sill"],
-	[Vector3(0.0, 1.2, -17.6), Vector3(1.0, 0.0, -20.0), "11_lit_north_joint"],
+	[Vector3(1.0, 1.65, -13.0), Vector3(-4.0, 1.2, -15.6), "9_lit_tortas_stall"],
+	[Vector3(0.6, 1.65, -6.5), Vector3(4.0, 1.4, -8.9), "10_lit_candles_booth"],
+	[Vector3(-1.0, 1.65, -9.5), Vector3(-4.0, 0.7, -11.6), "11_lit_fruit_barrow"],
+	[Vector3(-1.2, 1.65, 9.6), Vector3(-4.0, 1.4, 11.6), "12_lit_coffee_lean_to"],
+	[Vector3(1.6, 0.5, -4.75), Vector3(4.2, 0.15, -4.75), "13_lit_under_the_copal_counter"],
 ]
 
 var eye: Camera3D

@@ -35,6 +35,7 @@ import library_hangings  # noqa: E402
 import candle_lane  # noqa: E402
 import lane_landmarks  # noqa: E402
 import pasaje_shell  # noqa: E402
+import pasaje_stalls  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -2429,6 +2430,62 @@ class PasajeShell(unittest.TestCase):
             (x0, x1), (y0, y1), _ = self._extent(n)
             self.assertAlmostEqual(y1, 0.0, delta=0.002, msg=n)
             self.assertAlmostEqual(x1 - x0, length, delta=0.12, msg=n)
+
+
+class PasajeStalls(unittest.TestCase):
+    """The Pasaje's stalls (tools/eclipse/pasaje_stalls.py; docs/superpowers/plans/2026-10-26-pasaje-market.md Task 4),
+    each built from the wall's tiles (y = 0) out toward the street (-y), x along the wall, z up: the frames in their
+    widths, counters, awnings, neon boxes and their tubes, the fruit barrow, the tortas stall's case and griddle.
+    Closed, in budget, through the gate; each within a stall's depth and under the mains; every counter leaving the
+    floor open under it."""
+
+    @classmethod
+    def setUpClass(cls):
+        pasaje_stalls.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        self.assertEqual(sorted(self.objects), sorted(pasaje_stalls.BUDGET))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=pasaje_stalls.BUDGET[n],
+                                        sliver=pasaje_stalls.SLIVER[n])[:3], [], n)
+
+    def test_every_piece_stands_in_a_stalls_depth_under_the_mains(self):
+        for n in self.objects:
+            (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            self.assertGreaterEqual(y0, -pasaje_stalls.REACH - 0.001, n)
+            self.assertLessEqual(y1, 0.0005, n)
+            self.assertGreaterEqual(z0, -0.0005, n)
+            self.assertLessEqual(z1, pasaje_stalls.TOP, n)
+
+    def test_each_family_comes_in_its_widths(self):
+        for family in pasaje_stalls.FRAMES + pasaje_stalls.AWNINGS:
+            for w in pasaje_stalls.WIDTHS:
+                (x0, x1), _, _ = self._extent(pasaje_stalls.piece_name(family, w))
+                self.assertTrue(w - 0.2 <= x1 - x0 <= w + 0.25, (family, w, x1 - x0))
+        # (The counter short of the frame's right end: the keeper's way in.)
+        for w in pasaje_stalls.WIDTHS:
+            (x0, x1), _, _ = self._extent(pasaje_stalls.piece_name("counter", w))
+            self.assertAlmostEqual(x1 - x0, w - 0.1 - pasaje_stalls.KEEPER_WAY, delta=0.01)
+
+    def test_every_counter_leaves_the_floor_open_under_it(self):
+        for w in pasaje_stalls.WIDTHS:
+            o = self.objects[pasaje_stalls.piece_name("counter", w)]
+            (x0, x1), (y0, y1), _ = self._extent(o.name)
+            self.assertIsNone(_hit(o, ((x0 + x1) / 2, y0 - 0.05, 0.15), (0.0, 1.0, 0.0), 0.45), w)
+
+    def test_neon_faces_are_blank_for_the_users_words(self):
+        for w in pasaje_stalls.NEON_WIDTHS:
+            names = {s.material.name for s in self.objects["neon_box_%d" % round(w * 10)].material_slots}
+            self.assertIn("sign", names, w)
+            slots = {s.material.name for s in self.objects["neon_tube_%d" % round(w * 10)].material_slots}
+            self.assertEqual(slots, {"neon"}, w)
 
 
 if __name__ == "__main__":

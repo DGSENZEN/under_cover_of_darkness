@@ -15,10 +15,10 @@ static func kit(path: String) -> Dictionary:
 	return meshes
 
 
-## A kit piece set under `parent` at `at`, turned `yaw` about the vertical, solid if asked (its convex hull); its
-## glazed slots clear glass, the rest `material`.
+## A kit piece set under `parent` at `at`, turned `yaw` about the vertical, solid if asked (its convex hull, or its
+## own faces if `concave`: what stands open under it stays open); its glazed slots clear glass, the rest `material`.
 static func place(parent: Node3D, mesh: Mesh, material: Material, kind: String, at: Vector3, yaw: float,
-		solid: bool) -> MeshInstance3D:
+		solid: bool, concave := false) -> MeshInstance3D:
 	var piece := MeshInstance3D.new()
 	piece.name = kind
 	piece.mesh = mesh
@@ -33,7 +33,7 @@ static func place(parent: Node3D, mesh: Mesh, material: Material, kind: String, 
 	if solid:
 		var body := StaticBody3D.new()
 		var shape := CollisionShape3D.new()
-		shape.shape = mesh.create_convex_shape()
+		shape.shape = mesh.create_trimesh_shape() if concave else mesh.create_convex_shape()
 		body.add_child(shape)
 		piece.add_child(body)
 	return piece
