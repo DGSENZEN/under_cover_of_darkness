@@ -10,6 +10,7 @@ extends Node3D
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const PLAYER := preload("res://Player.tscn")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 
 const PLAN_ORIGIN := Vector3(-9.0, -11.0, 75.0)
 const HALF_W := 5.0
@@ -133,6 +134,8 @@ const POSTERS := {"poster_a": 0.5, "poster_b": 0.42, "poster_c": 0.72}
 const MARK_CLEAR := 0.15
 const OPENING_CLEAR := 0.35
 const ALCOVE_LEAST := 0.6
+## How far a piece of wall paint may run past its alcove behind the stalls either side.
+const SPILL := 0.5
 ## How far a sign swings at most (radians) and at what draught it does (m/s).
 const SWING := deg_to_rad(4.0)
 const SWING_FULL := 1.0
@@ -291,7 +294,10 @@ func _wall_runs(side: int) -> Array:
 func _wall_piece(meshes: Dictionary, look: Material, kind: String, side: int, low: float, width: float) -> MeshInstance3D:
 	var x := side * (HALF_W - WALL)
 	var at := Vector3(x, 0.0, low + width if side < 0 else low)
-	return SetKit.place(dressing, meshes[kind], look, kind, at, -side * PI / 2.0, false)
+	var piece := SetKit.place(dressing, meshes[kind], look, kind, at, -side * PI / 2.0, false)
+	# (The wall paint lands on it.)
+	piece.layers = Layers.WORLD | Layers.PAINTED_WALL
+	return piece
 
 
 ## The ceiling: its plaster in spans, each turned one way or the other against repetition, its underside under the
@@ -542,9 +548,13 @@ func _overhead() -> void:
 		_hung_sign(root, kit, look, "sign_board_b", Vector3(x, GANTRY_HOOK_Y, GANTRY_Z))
 
 
-## Bills pasted and marks painted in the alcoves the stalls leave on the walls, where people stop and nobody keeps the
-## wall clean: a bill or two in the north, thicker toward the south end, where the market's crowd is thickest under
-## the canopy and the graffiti start; newer bills pasted over older.
+## Bills pasted and paint sprayed in the alcoves the stalls leave on the walls, where people stop and nobody keeps the
+## wall clean, each by its cause, in three bands up the wall (so they layer, not collide):
+## - by the lane's mouth and the herb market's, and at the south end the canopy guards, ward sigils, where the
+##   uncanny comes close; calaveras by her trades (candles, saints), the eye against the evil eye by the copal and
+##   the herbs, the moon by the herbs; at the north end, where the Company's notices go up, its roundel crossed out;
+## - bills in the middle band, a bill or two in the north, thicker toward the south end; newer pasted over older;
+## - throw-ups low across the long alcoves; tags high, more toward the south, where the crowd is thickest.
 func _marks() -> void:
 	if not ResourceLoader.exists(OVERHEAD_KIT):
 		return
@@ -559,30 +569,90 @@ func _marks() -> void:
 		for alcove in _alcoves(side):
 			var a: float = alcove[0]
 			var b: float = alcove[1]
-			var south := (0.5 * (a + b) + HALF_L) / (2.0 * HALF_L)
-			var bills := 1 + int(2.6 * south * south)
-			var z := a + 0.05
-			for i in bills:
+			var middle := 0.5 * (a + b)
+			var south := (middle + HALF_L) / (2.0 * HALF_L)
+			# Each band's free run along the alcove: [where its next piece may start]. The paint runs on past the
+			# alcove behind the stalls either side (it lands on the wall only).
+			var bands := {"low": a - SPILL, "mid": a + 0.05, "high": a - SPILL}
+			var spray := func(kind: String, band: String, size: float, height: float) -> void:
+				if cells.is_empty() or bands[band] + size > b + SPILL:
+					return
+				var z: float = bands[band] + size / 2.0
+				bands[band] += size * 0.85
+				marks.append(_graffito(root, _cell_of(cells, kind, k), kind, side, z, height, size))
+
+			# What the place calls for.
+			var by_lane: bool = side > 0 and absf(middle - 0.45) < 10.5
+			var by_herbs: bool = side < 0 and absf(middle + 1.0) < 10.0
+			if by_lane or by_herbs or middle > 15.0:
+				bands["mid"] = maxf(bands["mid"], a - SPILL)
+				spray.call("sigil", "mid", 1.3, 1.55)
+			if side > 0 and ((middle > -11.7 and middle < -6.0) or (middle > 6.3 and middle < 11.9)):
+				spray.call("calavera", "low", 0.75, 0.75)
+			if (side > 0 and middle > -7.5 and middle < -5.9) or (side < 0 and middle > -7.5 and middle < -6.7):
+				spray.call("eye", "high", 0.7, 2.1)
+			if side < 0 and middle > 4.0 and middle < 5.6:
+				spray.call("moon", "high", 0.75, 2.05)
+			if middle < -16.0:
+				spray.call("roundel", "high", 0.9, 2.0)
+
+			# The bills.
+			for i in 1 + int(2.6 * south * south):
 				var kind: String = ["poster_a", "poster_b", "poster_c"][(k + i) % 3]
 				var width: float = POSTERS[kind]
+				var z: float = bands["mid"]
 				if z + width > b - 0.05:
 					break
 				var low := 1.05 + 0.35 * _hash(k * 3.7 + i) - 0.12 * i
 				var at := Vector3(side * (HALF_W - WALL - FACE - 0.004 * i), low, z + width / 2.0)
-				var bill := SetKit.place(root, kit[kind], look, kind, at, -side * PI / 2.0, false)
-				marks.append(bill)
-				z += width * (0.55 + 0.3 * _hash(k + i * 1.3))
-			# The graffiti: under the bills from the middle of the stretch on, and across the wall at the south end.
-			var sprays := (1 if south > 0.45 else 0) + (1 if south > 0.75 and b - a > 1.2 else 0)
-			for i in sprays:
-				if cells.is_empty():
-					break
-				var size := 0.8 + 0.4 * _hash(k * 1.9 + i)
-				var middle := lerpf(a + size / 2.0, b - size / 2.0, (i + 0.5) / sprays)
-				if b - a < size + 0.1:
-					break
-				marks.append(_graffito(root, cells[(k * 5 + i * 7) % cells.size()], side, middle, 0.7 + 0.25 * i, size))
+				marks.append(SetKit.place(root, kit[kind], look, kind, at, -side * PI / 2.0, false))
+				bands["mid"] = z + width * (0.55 + 0.3 * _hash(k + i * 1.3))
+
+			# The throw-ups and the tags.
+			if b - a >= (1.0 if south > 0.5 else 1.4):
+				spray.call("throwup", "low", 1.6 + 0.4 * _hash(k * 2.3), 0.95)
+			for i in 1 + int(3.2 * south * south):
+				spray.call("tag", "high", 1.1 + 0.4 * _hash(k * 1.7 + i), 2.15 - 0.08 * i)
+			if south > 0.55:
+				spray.call("tag", "low", 1.1, 0.55)
 			k += 1
+
+	# Along the top of the wall over the stalls, out of a hand's reach but not a ladder's: tags and throw-ups the
+	# length of the stretch, closer together toward the south.
+	for side: int in [-1, 1]:
+		var z := -HALF_L + 0.6
+		while z < HALF_L - 0.6:
+			var south := (z + HALF_L) / (2.0 * HALF_L)
+			var size := 1.0 + 0.5 * _hash(z * 2.1 + side) + 0.3 * south
+			var kind := "throwup" if _hash(z * 1.3 - side) > 0.7 else "tag"
+			var middle := z + size / 2.0
+			if middle + size / 2.0 < HALF_L and not _by_opening_z(side, middle, 0.3 + size / 2.0):
+				marks.append(_graffito(root, _cell_of(cells, kind, k), kind, side, middle, 2.72, size))
+				k += 1
+			z += size + lerpf(2.4, 0.3, south) * (0.6 + 0.8 * _hash(z * 0.7 + side * 3.0))
+
+
+## Whether `z` on the `side` wall lies within `margin` of one of its openings.
+func _by_opening_z(side: int, z: float, margin: float) -> bool:
+	for name in OPENINGS:
+		var o: Array = OPENINGS[name]
+		if o[0] == side and z > o[1] - margin and z < o[2] + margin:
+			return true
+	return false
+
+
+## The kind of mark each cell of the graffiti sheet holds (tools/textures/pasaje_graffiti.py's KINDS).
+const GRAFFITI_KINDS := ["tag", "tag", "tag", "tag", "throwup", "throwup", "throwup", "throwup", "sigil", "sigil",
+	"sigil", "calavera", "eye", "moon", "roundel", "tag"]
+
+
+## A cell of the sheet holding `kind`, the `n`th of them round.
+func _cell_of(cells: Array[Texture2D], kind: String, n: int) -> Texture2D:
+	var of := []
+	for i in GRAFFITI_KINDS.size():
+		if GRAFFITI_KINDS[i] == kind:
+			of.append(i)
+	return cells[of[n % of.size()]]
 
 
 ## The free runs of the `side` wall: [z from, z to], clear of its stalls and openings, ALCOVE_LEAST long or longer.
@@ -628,13 +698,16 @@ func _graffiti_cells() -> Array[Texture2D]:
 	return cells
 
 
-## A graffito sprayed on the `side` wall's tiles, its middle at (z, height), `size` across.
-func _graffito(root: Node3D, cell: Texture2D, side: int, z: float, height: float, size: float) -> Decal:
+## A graffito of `kind` sprayed on the `side` wall's tiles, its middle at (z, height), `size` across.
+func _graffito(root: Node3D, cell: Texture2D, kind: String, side: int, z: float, height: float, size: float) -> Decal:
 	var mark := Decal.new()
-	mark.name = "graffito"
+	mark.name = kind
+	mark.set_meta("kind", kind)
 	mark.texture_albedo = cell
 	mark.size = Vector3(size, 0.3, size)
 	mark.normal_fade = 0.6
+	# (On the wall's own tiles and plaster only: not the stalls, pipes or bills in front of it.)
+	mark.cull_mask = Layers.PAINTED_WALL
 	# (Projected into the wall along its -Y, its image upright: its Z down the wall.)
 	var into := Vector3(-side, 0.0, 0.0)
 	var down := Vector3(0.0, -1.0, 0.0)

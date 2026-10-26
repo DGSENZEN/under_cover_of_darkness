@@ -36,6 +36,9 @@ const SHADED_ABOVE := 1 << 4
 ## What a colour spill close under it leaves unlit (layer 6): the candle lane's blank station sign, which the Pasaje's
 ## teal neon a metre below washed into the brightest thing seen from the mouth.
 const SPILL_SHY := 1 << 5
+## A wall's own tiles and plaster (layer 7), the only thing the wall paint sprayed on it lands on (the Pasaje's
+## graffiti decals): not the stalls, pipes or bills in front of it.
+const PAINTED_WALL := 1 << 6
 ## A fixture's glowing parts (a pitch head, coals, horn panes): they shine by
 ## their own glow, and a burner's light (a hand's breadth away) would blow
 ## them out, so burners leave this layer unlit.

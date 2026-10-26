@@ -25,6 +25,8 @@ const VIEWS := [
 	[Vector3(1.8, 1.4, 9.0), Vector3(-4.7, 1.2, 9.0), "8g_wall_west_alcove"],
 	[Vector3(-1.8, 1.4, 15.3), Vector3(4.7, 1.2, 15.3), "8h_wall_east_by_the_canopy"],
 	[Vector3(0.0, 1.65, 6.0), Vector3(0.0, 1.5, 20.0), "8i_the_south_end"],
+	[Vector3(-1.6, 1.4, -6.7), Vector3(4.7, 1.4, -6.7), "8j_wall_east_by_the_lanes_mouth"],
+	[Vector3(1.6, 1.4, -18.4), Vector3(-4.7, 1.4, -18.4), "8k_wall_west_at_the_north_end"],
 ]
 ## The close views lit: [eye, looks at, name].
 const CLOSE := [

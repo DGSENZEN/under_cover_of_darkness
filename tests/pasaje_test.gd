@@ -306,6 +306,23 @@ func _marks() -> void:
 	_check("P7b none of them on an opening or a stall's neon face", not marks.is_empty() and wrong.is_empty(),
 		"%s" % [wrong.slice(0, 4)])
 
+	# The graffiti by kind; the sigils where the uncanny comes close: by the lane's mouth and the herb market's, and
+	# at the south end the canopy guards.
+	var kinds := {}
+	var stray := []
+	for mark: Node3D in marks:
+		var kind: String = mark.get_meta("kind", "bill")
+		kinds[kind] = kinds.get(kind, 0) + 1
+		if kind == "sigil":
+			var at := pasaje.to_local(mark.global_position)
+			var near := absf(at.z - 0.45) < 10.5 or at.z > 15.0
+			if not near:
+				stray.append("sigil at %.1f" % at.z)
+	var stencils: int = kinds.get("calavera", 0) + kinds.get("eye", 0) + kinds.get("moon", 0) + kinds.get("roundel", 0)
+	_check("P7c the walls carry every kind of mark, the sigils where the uncanny comes close",
+		kinds.get("sigil", 0) >= 3 and kinds.get("tag", 0) >= 6 and kinds.get("throwup", 0) >= 3 and stencils >= 3
+		and stray.is_empty(), "%s; %s" % [kinds, stray])
+
 
 ## Whether a Vfx system's fumes are breathing.
 func _steaming(system: Node3D) -> bool:
