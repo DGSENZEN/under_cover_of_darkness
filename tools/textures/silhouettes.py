@@ -9,6 +9,13 @@ side as one black shape on clear (Mignola's black), all at one scale, for the la
 - walking_a, walking_b, walking_c: a man in his coat and fedora, a woman in her rebozo, a man under a straw sombrero
   carrying a load: the crowd thickening at the mouth.
 
+And the Pasaje's stallkeepers, behind their counters:
+- keeper_counter: a man in his jacket and fedora leaning on his counter on both hands;
+- keeper_stir: a woman in her rebozo stirring her pot with a long ladle;
+- keeper_fan: a man in his jacket and bowler fanning the coals with a pleated fan;
+- keeper_weigh: a man under his sombrero holding up a hand scale;
+- keeper_wrap: a man bareheaded wrapping a paper parcel.
+
     Blender -b --factory-startup --python tools/textures/silhouettes.py [-- --out=PATH] [-- --only=name,name]
 
 Writes textures/painted/underground/silhouettes.png (cells of 256 x 512, COLS across, black, its alpha the shape) and
@@ -31,6 +38,7 @@ from mathutils import Vector  # noqa: E402
 
 import common  # noqa: E402
 import dressing  # noqa: E402
+import dressing_city  # noqa: E402
 
 BASE = common.ROOT / "assets" / "characters" / "base"
 BODIES = {"man": BASE / "Superhero_Male_FullBody.gltf", "woman": BASE / "Superhero_Female_FullBody.gltf"}
@@ -51,7 +59,16 @@ PRAYING = {"upperarm_l": [("X", 30)], "upperarm_r": [("X", 30)], "lowerarm_l": [
 BOWED = {"spine_01": [("X", 5)], "spine_02": [("X", 5)], "spine_03": [("X", 4)], "neck_01": [("X", 10)],
          "Head": [("X", 12)], "upperarm_l": [("X", 15)], "upperarm_r": [("X", 15)], "lowerarm_l": [("X", 70)],
          "lowerarm_r": [("X", 70)]}
-# The poses: [name, body, library, action, how far through it, extra turns (bone: [(axis, degrees)]), dress].
+# Wrapping, from leaning on a rail: the back straightened up off it, the hands raised a little over the counter, the
+# head bowed over the work.
+WRAPPING = {"spine_01": [("X", -9)], "spine_02": [("X", -9)], "spine_03": [("X", -6)], "neck_01": [("X", 8)],
+            "Head": [("X", 12)]}
+# Laden, walking under a load on the back: bent forward from the hips, the head lifted to see ahead.
+LADEN = {"spine_01": [("X", 8)], "spine_02": [("X", 6)], "spine_03": [("X", 4)], "neck_01": [("X", -8)],
+         "Head": [("X", -10)]}
+# Holding up what she weighs nearer: the elbows bent a little more.
+NEARER = {"lowerarm_l": [("X", 30)], "lowerarm_r": [("X", 30)]}
+# The poses: [name, body (a man, a woman, or a boy: the man's at dressing_city.CHILD), library, action, how far through it, extra turns (bone: [(axis, degrees)]), dress].
 POSES = [
     ["bargaining", "woman", "UAL1_Standard.glb", "Idle_Talking_Loop", 0.35, {}, ["skirt", "rebozo", "basket"]],
     ["waiting", "man", "UAL2_Standard.glb", "Idle_FoldArms_Loop", 0.5, {},
@@ -62,6 +79,35 @@ POSES = [
     ["walking_b", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", 0.6, {}, ["skirt", "rebozo"]],
     ["walking_c", "man", "UAL2_Standard.glb", "Walk_Carry_Loop", 0.3, {},
      ["jacket", "trousers", "sleeves", "boots", "sombrero", "crate"]],
+    # The Pasaje's stallkeepers (docs/superpowers/specs/2026-10-26-pasaje-market-design.md), behind their counters.
+    ["keeper_counter", "man", "UAL2_Standard.glb", "Idle_Rail_Loop", 0.4, {},
+     ["shirt_sleeves", "vest", "trousers", "boots", "flat_cap"]],
+    ["keeper_stir", "woman", "UAL2_Standard.glb", "Farm_Watering", 0.4, {}, ["dress", "bob", "ladle"]],
+    ["keeper_fan", "man", "UAL1_Standard.glb", "Interact", 0.65, {},
+     ["jacket", "trousers", "sleeves", "boots", "bowler", "fan"]],
+    ["keeper_weigh", "woman", "UAL2_Standard.glb", "Idle_Lantern_Loop", 0.4, NEARER,
+     ["narrow_skirt", "shawl", "bun", "scale"]],
+    ["keeper_wrap", "man", "UAL2_Standard.glb", "Idle_Rail_Loop", 0.4, WRAPPING,
+     ["shirt_sleeves", "vest", "apron", "trousers", "boots", "parcel"]],
+    # The city's modern people (dressing_city.py).
+    ["pelona", "woman", "UAL1_Standard.glb", "Walk_Formal_Loop", 0.6, {}, ["dress", "bob", "cloche"]],
+    ["clerk", "man", "UAL1_Standard.glb", "Walk_Loop", 0.25, {},
+     ["jacket", "trousers", "sleeves", "boots", "bowler", "umbrella"]],
+    ["lineman", "man", "UAL1_Standard.glb", "Walk_Loop", 0.6, {},
+     ["vest", "overalls", "shirt_sleeves", "boots", "flat_cap", "cable_coil"]],
+    ["gendarme", "man", "UAL1_Standard.glb", "Idle_Loop", 0.0, {},
+     ["jacket", "belt", "trousers", "sleeves", "boots", "kepi", "baton"]],
+    # The street trades.
+    ["newsboy", "boy", "UAL2_Standard.glb", "Idle_Lantern_Loop", 0.4, {},
+     ["jacket", "trousers", "sleeves", "boots", "flat_cap", "papers"]],
+    ["water_carrier", "man", "UAL1_Standard.glb", "Walk_Loop", 0.25, LADEN,
+     ["shirt_sleeves", "vest", "trousers", "chochocol"]],
+    ["porter", "man", "UAL1_Standard.glb", "Walk_Loop", 0.6, LADEN | {"spine_01": [("X", 12)]},
+     ["shirt_sleeves", "vest", "trousers", "boots", "load"]],
+    ["organ_grinder", "man", "UAL1_Standard.glb", "Interact", 0.65, {},
+     ["jacket", "trousers", "sleeves", "boots", "kepi", "organ"]],
+    ["sereno", "man", "UAL2_Standard.glb", "Idle_Lantern_Loop", 0.4, {},
+     ["greatcoat", "sleeves", "boots", "hood", "capelet", "lantern"]],
 ]
 # The moving shades (--loops): [name, body, library, action, dress], each a row of LOOP_FRAMES cells through its
 # action: four walkers for the crowd, the bargaining woman's talk and the waiting man's shifting weight.
@@ -80,8 +126,10 @@ LOOPS = [
 def _rigged(body, library, action_name):
     """A fresh scene with the body on its rig, the action on the rig: (rig, action)."""
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.gltf(filepath=str(BODIES[body]))
+    bpy.ops.import_scene.gltf(filepath=str(BODIES["man" if body == "boy" else body]))
     rig = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+    if body == "boy":
+        rig.scale = (dressing_city.CHILD,) * 3
     # (Only what hangs on its rig: the file brings a stray icosphere too.)
     for o in [o for o in bpy.data.objects if o.type == "MESH" and o.parent != rig]:
         bpy.data.objects.remove(o, do_unlink=True)
@@ -138,14 +186,14 @@ def _dress(bones, dress):
     for piece in dress:
         if piece == "fedora":
             brim, tip, size = dressing.FEDORA
-            dressing.hat(bones, crown, brim, tip, size)
+            dressing.hat(bones, crown, brim, tip, size, seat=True, lift=dressing.FEDORA_LIFT)
         elif piece == "sombrero":
             brim, tip, size = dressing.SOMBRERO
-            dressing.hat(bones, crown, brim, tip, size)
+            dressing.hat(bones, crown, brim, tip, size, seat=True, lift=dressing.SOMBRERO_LIFT)
         elif piece == "rebozo":
             dressing.rebozo(bones, crown)
         else:
-            getattr(dressing, piece)(bones)
+            (getattr(dressing_city, piece, None) or getattr(dressing, piece))(bones)
 
 
 def _render(px_file, middle=None):
@@ -262,6 +310,33 @@ def loops(out):
     print("wrote", out)
 
 
+def check_hats():
+    """Prints `HATS {name: {"skull_in_crown", "tilt_deg", "off_m"}}` for every hatted pose (still and looped): whether
+    the top of its skull lies inside its hat's crown, how far the crown leans off the head's own up, and how far its
+    band's middle is off the line up the head through the skull's top."""
+    hats = {}
+    worn = [(p[0], p[1], p[2], p[3], p[4], p[5], p[6]) for p in POSES] + \
+        [("%s@%.1f" % (l[0], t), l[1], l[2], l[3], t, {}, l[4]) for l in LOOPS for t in (0.0, 0.5)]
+    for name, body, library, action, through, turns, dress in worn:
+        if not any(piece in dressing.HATS for piece in dress):
+            continue
+        rig, bones = _pose(body, library, action, through, turns)
+        _dress(bones, dress)
+        skull = dressing.skull_top(bones)
+        up, _ = dressing.head_frame()
+        crown = bpy.data.objects["crown"].data
+        inside = all((skull - f.center).dot(f.normal) < 0.0 for f in crown.polygons)
+        # (The crown's rings lofted from its band up: its first ring the band, its last the top.)
+        ring = len(crown.vertices) // 4
+        band = sum((v.co for v in crown.vertices[:ring]), Vector()) / ring
+        top = sum((v.co for v in crown.vertices[-ring:]), Vector()) / ring
+        tilt = math.degrees((top - band).angle(up))
+        # (How far the band's middle is off the line up the head through its skull's top.)
+        off = ((band - skull) - up * (band - skull).dot(up)).length
+        hats[name] = {"skull_in_crown": inside, "tilt_deg": round(tilt, 1), "off_m": round(off, 3)}
+    print("HATS " + json.dumps(hats))
+
+
 def main():
     out = OUT
     only = None
@@ -273,6 +348,9 @@ def main():
             only = arg[len("--only="):].split(",")
     if "--loops" in args:
         loops(out if out != OUT else LOOPS_OUT)
+        return
+    if "--check-hats" in args:
+        check_hats()
         return
     rows = (len(POSES) + COLS - 1) // COLS
     sheet = np.zeros((rows * CELL[1], COLS * CELL[0], 4), np.float32)
@@ -292,6 +370,7 @@ def main():
         # +), up from its foot; its smoke rises from them.)
         crown, shoulders = bones["Head"][1], bones["spine_03"][1]
         meta["poses"].append({"name": name, "cell": [col, row], "height_m": round(height, 3), "facing": _facing(bones),
+                              "child": body == "boy",
                               "head": [round(crown.y - middle, 3), round(crown.z, 3)],
                               "shoulders": [round(shoulders.y - middle, 3), round(shoulders.z, 3)]})
         print("pose %s: %.2f m, facing %s" % (name, height, meta["poses"][-1]["facing"]))

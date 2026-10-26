@@ -27,7 +27,11 @@ BRIM = 0.215
 BRIM_TIP = 8.0
 CROWN = (0.096, 0.105)
 # Other hats: a fedora's (brim, tip, crown), a straw sombrero's.
-FEDORA = (0.165, 5.0, (0.09, 0.11))
+FEDORA = (0.165, 5.0, (0.092, 0.095))
+# How their brims' rims rise over the band (m: front, back, sides): the fedora's snapped down at the front and up at
+# the back, the sombrero's curled up all round.
+FEDORA_LIFT = (-0.022, 0.02, 0.008)
+SOMBRERO_LIFT = (0.045, 0.05, 0.06)
 SOMBRERO = (0.3, 3.0, (0.095, 0.17))
 # A woman's long skirt: its hem (m), how far it stands off the legs front and back, its flare, how wide it hangs.
 SKIRT_HEM = 0.05
@@ -186,19 +190,84 @@ def boots(bones):
                                _ring(toe - along * 0.02 + Vector((0, 0, 0.011)), 0.026, 0.017, 24, along)])
 
 
-def hat(bones, crown, brim=BRIM, tip_deg=BRIM_TIP, crown_size=CROWN):
+# The pieces that are hats (silhouettes.py dresses them on the head).
+HATS = ("fedora", "sombrero")
+
+
+def _body_points():
+    """Every vertex of the body itself (the meshes on its rig, not its clothes), in the world."""
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    points = []
+    for o in bpy.data.objects:
+        if o.type != "MESH" or o.parent is None or o.parent.type != "ARMATURE":
+            continue
+        evaluated = o.evaluated_get(depsgraph)
+        mesh = evaluated.to_mesh()
+        points += [evaluated.matrix_world @ v.co for v in mesh.vertices]
+        evaluated.to_mesh_clear()
+    return points
+
+
+def head_frame():
+    """The head's own up and the way its face looks, in the world: the world's up and -y (how the bodies stand at
+    rest, upright, facing -y) turned as the head is turned from its rest."""
+    rig = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+    pb = rig.pose.bones["Head"]
+    turn = (rig.matrix_world @ pb.matrix).to_3x3() @ (rig.matrix_world @ pb.bone.matrix_local).to_3x3().inverted()
+    return (turn @ Vector((0, 0, 1))).normalized(), (turn @ Vector((0, -1, 0))).normalized()
+
+
+def skull_top(bones):
+    """The top of the skull: the head's furthest point up its own up (however bowed or turned)."""
+    up, _ = head_frame()
+    tail = bones["Head"][1]
+    near = [p for p in _body_points() if (p - tail).length < 0.25]
+    return max(near, key=lambda p: p.dot(up))
+
+
+def hat(bones, crown, brim=BRIM, tip_deg=BRIM_TIP, crown_size=CROWN, seat=False, lift=None):
     """A brimmed hat tipped a little forward, set on the top of the head (`crown`): the brim dipping at its front and
-    back, the crown pinched toward its top. (By default the librarian's wide felt.)"""
-    head = bones["Head"][1]
-    at = Vector((head.x, head.y + 0.01, crown - 0.075))
+    back, the crown pinched toward its top. (By default the librarian's wide felt, upright over the head's bone.)
+    Seated (`seat`), it sits on the head however it is bowed or turned: its band round the head on the line up
+    through the skull's top, leaning with the head, tipped toward the face. With `lift` (front, back, sides: how far
+    its rim rises over its band, m) its brim is shaped: a ring out from the crown, its rim snapped down or curled up."""
     tip = math.radians(tip_deg)
-    up = Vector((0, -math.sin(tip), math.cos(tip)))
+    if seat:
+        skull = skull_top(bones)
+        head_up, face = head_frame()
+        at = skull - head_up * 0.075
+    else:
+        head = bones["Head"][1]
+        at = Vector((head.x, head.y + 0.01, crown - 0.075))
+        head_up, face = Vector((0, 0, 1)), Vector((0, -1, 0))
+    side = face.cross(head_up)
+    up = head_up * math.cos(tip) + face * math.sin(tip)
+    ahead = face * math.cos(tip) - head_up * math.sin(tip)
 
     def tipped(p):
-        # (Tipped forward about the hat's band: its front down.)
+        # (Laid out about the band as if upright and facing -y, then set on the head: tipped forward, its front down.)
         d = p - at
-        return at + Vector((d.x, d.y * math.cos(tip) - d.z * math.sin(tip), d.y * math.sin(tip) + d.z * math.cos(tip)))
+        return at + side * -d.x + ahead * -d.y + up * d.z
 
+    if lift is not None:
+        front, back, sides = lift
+        inner = crown_size[0] * 0.95
+
+        def rim(a):
+            # (Front where sin a < 0, the face's way laid out; between front, back and the sides by the angle.)
+            along = math.sin(a)
+            return (front if along < 0 else back) * along * along + sides * math.cos(a) ** 2
+
+        profile = [(inner, -0.006, 0.0), (brim, -0.006, 1.0), (brim, 0.006, 1.0), (inner, 0.006, 0.0)]
+        rings = [[tipped(at + Vector((r * math.cos(a), r * math.sin(a), z + rim(a) * w)))
+                  for a in [2 * math.pi * j / 32 for j in range(32)]] for r, z, w in profile]
+        _loft("brim", rings)
+        rx, h = crown_size
+        _loft("crown", [[tipped(p) for p in _ring(at + Vector((0, 0, -0.005)), rx, rx * 0.92, 24)],
+                        [tipped(p) for p in _ring(at + Vector((0, 0, h * 0.6)), rx * 0.97, rx * 0.86, 24)],
+                        [tipped(p) for p in _ring(at + Vector((0, 0, h * 0.92)), rx * 0.82, rx * 0.66, 24)],
+                        [tipped(p) for p in _ring(at + Vector((0, 0, h)), rx * 0.55, rx * 0.4, 24)]])
+        return up
     rings = []
     for k, (r, z) in enumerate([(brim, -0.012), (brim, 0.0)]):
         ring = []
@@ -260,3 +329,93 @@ def basket(bones, side="l"):
     handle = [_ring(at + Vector((0, 0, 0.06)) + Vector((0, 0.1 * math.cos(a), 0.02 + 0.13 * math.sin(a))), 0.012, 0.012, 8,
                     Vector((0, -math.sin(a), math.cos(a)))) for a in [math.pi * k / 8 for k in range(9)]]
     _loft("basket_handle", handle)
+
+
+# --- the Pasaje's stallkeepers' tools ---------------------------------------------------------------------------
+
+def _reaching(bones):
+    """The hand reaching furthest out from the chest (along the body's side, y): 'l' or 'r'."""
+    chest = bones["spine_03"][0]
+    return max("lr", key=lambda s: abs(bones["hand_" + s][0].y - chest.y))
+
+
+def _grip(bones, side):
+    """Where the hand on `side` closes (a little past its wrist) and the way its forearm runs."""
+    elbow, wrist = bones["lowerarm_" + side]
+    way = (wrist - elbow).normalized()
+    return wrist + way * 0.07, way
+
+
+def _rod(name, a, b, r, n=8):
+    """A round rod from `a` to `b`."""
+    axis = b - a
+    return _loft(name, [_ring(a, r, r, n, axis), _ring(b, r, r, n, axis)])
+
+
+def ladle(bones):
+    """A long wooden ladle in the reaching hand, its bowl down in the pot before it."""
+    side = _reaching(bones)
+    at, way = _grip(bones, side)
+    down = (way * 0.15 + Vector((0, 0, -1.0))).normalized()
+    end = at + down * 0.34
+    _rod("ladle", at - down * 0.12, end, 0.011)
+    _loft("ladle_bowl", [_ring(end + Vector((0, 0, -0.05)), 0.03, 0.03, 16), _ring(end + Vector((0, 0, -0.025)), 0.055, 0.055, 16),
+                         _ring(end + Vector((0, 0, 0.01)), 0.06, 0.06, 16)])
+
+
+def fan(bones):
+    """A pleated fan in the reaching hand, fanning the coals: spread out from the fist, its rim scalloped by its pleats,
+    seen flat from the side."""
+    side = _reaching(bones)
+    at, way = _grip(bones, side)
+    out = (way * 0.6 + Vector((0, 0, -1.0))).normalized()
+    # (Its spread in the side's plane, y-z: a sector SPREAD either side of `out`, its rim dipping between pleats.)
+    up = Vector((0, -out.z, out.y)).normalized()
+    reach, pleats, spread = 0.2, 9, math.radians(55)
+    rim = []
+    for k in range(pleats * 2 + 1):
+        a = -spread + 2 * spread * k / (pleats * 2)
+        r = reach * (1.0 if k % 2 == 0 else 0.93)
+        rim.append(at + (out * math.cos(a) + up * math.sin(a)) * r)
+    across = Vector((0.006, 0, 0))
+    bm = bmesh.new()
+    front = [bm.verts.new(p - across) for p in [at] + rim]
+    back = [bm.verts.new(p + across) for p in [at] + rim]
+    bm.faces.new(front[::-1])
+    bm.faces.new(back)
+    n = len(front)
+    for k in range(n):
+        bm.faces.new([front[k], front[(k + 1) % n], back[(k + 1) % n], back[k]])
+    mesh = bpy.data.meshes.new("fan")
+    bm.to_mesh(mesh)
+    bm.free()
+    bpy.context.scene.collection.objects.link(bpy.data.objects.new("fan", mesh))
+
+
+def scale(bones):
+    """A hand scale held up in the reaching hand: its cord, its beam across, a pan hung from each end."""
+    side = _reaching(bones)
+    at, way = _grip(bones, side)
+    beam = at + Vector((0, 0, -0.12))
+    _rod("scale_cord", at, beam, 0.004, 6)
+    half = 0.12
+    _rod("scale_beam", beam + Vector((0, -half, 0)), beam + Vector((0, half, 0)), 0.008)
+    for s in (-1, 1):
+        end = beam + Vector((0, s * half, 0))
+        pan = end + Vector((0, 0, -0.18))
+        _rod("scale_chain", end, pan + Vector((0, 0, 0.02)), 0.003, 6)
+        _loft("scale_pan", [_ring(pan + Vector((0, 0, -0.022)), 0.035, 0.035, 16), _ring(pan, 0.062, 0.062, 16),
+                            _ring(pan + Vector((0, 0, 0.01)), 0.066, 0.066, 16)])
+
+
+def parcel(bones):
+    """A paper parcel being wrapped between both hands before the body, string round it."""
+    hands = (bones["hand_l"][0] + bones["hand_r"][0]) / 2
+    at = hands + Vector((0, 0, 0.04))
+
+    def square(z, w=0.13, d=0.1):
+        return [at + Vector((x, y, z)) for x, y in ((-d, -w), (d, -w), (d, w), (-d, w))]
+
+    _loft("parcel", [square(-0.05), square(0.07)])
+    # Its paper's loose end, lifted where it is being folded over.
+    _loft("parcel_flap", [square(0.07, 0.12, 0.09), [p + Vector((0, 0.05, 0.06)) for p in square(0.075, 0.1, 0.08)]])

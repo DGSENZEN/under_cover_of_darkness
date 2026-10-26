@@ -9,6 +9,7 @@
    ],
    "height_m": 1.755,
    "facing": "left",
+   "child": false,
    "head": [
     -0.12,
     1.587
@@ -24,8 +25,9 @@
     1,
     0
    ],
-   "height_m": 1.824,
+   "height_m": 1.809,
    "facing": "left",
+   "child": false,
    "head": [
     -0.066,
     1.658
@@ -43,6 +45,7 @@
    ],
    "height_m": 1.257,
    "facing": "left",
+   "child": false,
    "head": [
     -0.218,
     1.097
@@ -60,6 +63,7 @@
    ],
    "height_m": 1.232,
    "facing": "left",
+   "child": false,
    "head": [
     -0.288,
     1.116
@@ -75,8 +79,9 @@
     0,
     1
    ],
-   "height_m": 1.842,
+   "height_m": 1.828,
    "facing": "left",
+   "child": false,
    "head": [
     -0.145,
     1.677
@@ -94,6 +99,7 @@
    ],
    "height_m": 1.755,
    "facing": "left",
+   "child": false,
    "head": [
     -0.243,
     1.587
@@ -109,15 +115,268 @@
     2,
     1
    ],
-   "height_m": 1.894,
+   "height_m": 1.895,
    "facing": "left",
+   "child": false,
    "head": [
-    0.087,
+    0.088,
     1.667
    ],
    "shoulders": [
-    0.069,
+    0.07,
     1.479
+   ]
+  },
+  {
+   "name": "keeper_counter",
+   "cell": [
+    3,
+    1
+   ],
+   "height_m": 1.65,
+   "facing": "left",
+   "child": false,
+   "head": [
+    -0.218,
+    1.484
+   ],
+   "shoulders": [
+    -0.094,
+    1.347
+   ]
+  },
+  {
+   "name": "keeper_stir",
+   "cell": [
+    0,
+    2
+   ],
+   "height_m": 1.694,
+   "facing": "left",
+   "child": false,
+   "head": [
+    -0.095,
+    1.535
+   ],
+   "shoulders": [
+    0.012,
+    1.374
+   ]
+  },
+  {
+   "name": "keeper_fan",
+   "cell": [
+    1,
+    2
+   ],
+   "height_m": 1.801,
+   "facing": "left",
+   "child": false,
+   "head": [
+    0.099,
+    1.661
+   ],
+   "shoulders": [
+    0.146,
+    1.477
+   ]
+  },
+  {
+   "name": "keeper_weigh",
+   "cell": [
+    2,
+    2
+   ],
+   "height_m": 1.743,
+   "facing": "left",
+   "child": false,
+   "head": [
+    -0.009,
+    1.587
+   ],
+   "shoulders": [
+    0.054,
+    1.405
+   ]
+  },
+  {
+   "name": "keeper_wrap",
+   "cell": [
+    3,
+    2
+   ],
+   "height_m": 1.704,
+   "facing": "left",
+   "child": false,
+   "head": [
+    -0.1,
+    1.578
+   ],
+   "shoulders": [
+    -0.005,
+    1.416
+   ]
+  },
+  {
+   "name": "pelona",
+   "cell": [
+    0,
+    3
+   ],
+   "height_m": 1.752,
+   "facing": "left",
+   "child": false,
+   "head": [
+    -0.184,
+    1.587
+   ],
+   "shoulders": [
+    -0.127,
+    1.404
+   ]
+  },
+  {
+   "name": "clerk",
+   "cell": [
+    1,
+    3
+   ],
+   "height_m": 1.817,
+   "facing": "left",
+   "child": false,
+   "head": [
+    -0.093,
+    1.677
+   ],
+   "shoulders": [
+    -0.029,
+    1.498
+   ]
+  },
+  {
+   "name": "lineman",
+   "cell": [
+    2,
+    3
+   ],
+   "height_m": 1.787,
+   "facing": "left",
+   "child": false,
+   "head": [
+    -0.194,
+    1.627
+   ],
+   "shoulders": [
+    -0.134,
+    1.447
+   ]
+  },
+  {
+   "name": "gendarme",
+   "cell": [
+    3,
+    3
+   ],
+   "height_m": 1.851,
+   "facing": "left",
+   "child": false,
+   "head": [
+    -0.068,
+    1.659
+   ],
+   "shoulders": [
+    -0.014,
+    1.477
+   ]
+  },
+  {
+   "name": "newsboy",
+   "cell": [
+    0,
+    4
+   ],
+   "height_m": 1.422,
+   "facing": "left",
+   "child": true,
+   "head": [
+    0.047,
+    1.288
+   ],
+   "shoulders": [
+    0.093,
+    1.147
+   ]
+  },
+  {
+   "name": "water_carrier",
+   "cell": [
+    1,
+    4
+   ],
+   "height_m": 1.765,
+   "facing": "left",
+   "child": false,
+   "head": [
+    -0.262,
+    1.639
+   ],
+   "shoulders": [
+    -0.177,
+    1.469
+   ]
+  },
+  {
+   "name": "porter",
+   "cell": [
+    2,
+    4
+   ],
+   "height_m": 1.741,
+   "facing": "left",
+   "child": false,
+   "head": [
+    -0.331,
+    1.572
+   ],
+   "shoulders": [
+    -0.238,
+    1.408
+   ]
+  },
+  {
+   "name": "organ_grinder",
+   "cell": [
+    3,
+    4
+   ],
+   "height_m": 1.849,
+   "facing": "left",
+   "child": false,
+   "head": [
+    0.044,
+    1.661
+   ],
+   "shoulders": [
+    0.092,
+    1.477
+   ]
+  },
+  {
+   "name": "sereno",
+   "cell": [
+    0,
+    5
+   ],
+   "height_m": 1.831,
+   "facing": "left",
+   "child": false,
+   "head": [
+    -0.056,
+    1.652
+   ],
+   "shoulders": [
+    0.003,
+    1.47
    ]
   }
  ]
