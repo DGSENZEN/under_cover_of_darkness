@@ -1,3 +1,4 @@
+class_name MainMenu
 extends CanvasLayer
 ## The title menu: four words in a column; the chosen one is lit.
 const Settings := preload("res://scripts/UI/Settings.gd")
@@ -108,7 +109,13 @@ func _layout() -> void:
 	_design.scale = Vector2.ONE * factor
 	_design.position = (viewport - DESIGN * factor) * 0.5
 	if band:
-		band.set_screen_left(-_design.position.x / factor)
+		band.set_screen(visible_design_rect(viewport))
+
+## The window's visible area in the 1600x900 design space.
+static func visible_design_rect(viewport: Vector2) -> Rect2:
+	var factor := minf(viewport.x / DESIGN.x, viewport.y / DESIGN.y)
+	var offset := (viewport - DESIGN * factor) * 0.5
+	return Rect2(-offset / factor, viewport / factor)
 
 ## The city's brightness: dimmed a little while a band is showing.
 func city_dim() -> float:

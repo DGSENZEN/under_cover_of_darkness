@@ -73,7 +73,7 @@ func _ready() -> void:
 	check(absf(r.get_center().y - wc) < 2.0 and is_equal_approx(r.size.y, 360.0), "band is centred on the selected word")
 	check(absf(menu.band.position.y + menu.band.size.y * 0.5 - wc) < 2.0, "band has glided to the word")
 	var mat: ShaderMaterial = menu.band.material
-	check((mat.get_shader_parameter("glaze") as Color).is_equal_approx(Color("929fdb")) and is_equal_approx(mat.get_shader_parameter("glaze_amount"), 0.28), "band is glazed in its choice's colour")
+	check((mat.get_shader_parameter("glaze_b") as Color).is_equal_approx(Color("929fdb")) and is_equal_approx(mat.get_shader_parameter("glaze_amount"), 0.28), "band is glazed in its choice's colour")
 	check(MenuBand.boil_step(0.0) == MenuBand.boil_step(0.1) and MenuBand.boil_step(0.0) != MenuBand.boil_step(0.12), "edges boil in steps at ~9 fps")
 	for i in range(4):
 		check(menu.band.art_scale(i) <= MenuBand.ART_MAX_SCALE, "painting %d is never enlarged past 1.5x design" % i)
@@ -99,6 +99,26 @@ func _ready() -> void:
 	get_window().size = home
 	await get_tree().process_frame
 
+	# Review fixes: the cross-fade never pops.
+	menu.select(0)
+	await get_tree().create_timer(0.8).timeout
+	menu.select(1)
+	await get_tree().process_frame
+	check((mat.get_shader_parameter("glaze_a") as Color).is_equal_approx(Color("ef774c")) and (mat.get_shader_parameter("glaze_b") as Color).is_equal_approx(Color("67c9ed")), "each picture keeps its own glaze through the fade")
+	await get_tree().create_timer(0.45).timeout
+	menu.select(2)
+	await get_tree().process_frame
+	check(menu.band.art_a == 1 and menu.band.art_b == 2 and float(mat.get_shader_parameter("mix_ab")) < 0.1, "interrupted late: the picture mostly showing fades out")
+	menu.select(3)
+	await get_tree().process_frame
+	check(menu.band.art_a == 1 and menu.band.art_b == 3, "interrupted early: the picture still showing stays")
+	await get_tree().create_timer(0.8).timeout
+
+	# Review fixes: pages reach the screen's edges on any window shape.
+	var tall: Rect2 = MainMenu.visible_design_rect(Vector2(2560, 1600))
+	var ultra: Rect2 = MainMenu.visible_design_rect(Vector2(2560, 1080))
+	check(tall.is_equal_approx(Rect2(0, -50, 1600, 1000)) and absf(ultra.position.x + 266.667) < 0.01 and absf(ultra.end.x - 1866.667) < 0.01, "the visible screen in design space")
+
 	# Task 3: pages open inside the band.
 	menu.open_page(1)
 	await get_tree().create_timer(0.7).timeout
@@ -120,14 +140,27 @@ func _ready() -> void:
 	menu.close_page()
 	await get_tree().create_timer(0.7).timeout
 	check(menu.page_open == -1 and menu.words[2].has_focus(), "closing a page returns keyboard focus to its word")
+	await get_tree().process_frame
+	var art_last: float = menu.band.art_left()
+	var widest := 0.0
 	menu.open_page(3)
-	await get_tree().create_timer(0.7).timeout
+	for i in range(45):
+		await get_tree().process_frame
+		widest = maxf(widest, absf(menu.band.art_left() - art_last))
+		art_last = menu.band.art_left()
+	check(widest < 40.0, "the picture glides when a page opens, it does not jump (largest step %.0f px)" % widest)
 	check(menu.pages.title_label.text == "Lore" and not menu.pages.body_label.text.is_empty(), "Lore opens the city's existing setting")
 	check(menu.music.state == MenuMusic.State.LORE, "the music knows Lore is open")
 	await get_tree().create_timer(0.6).timeout
 	check(float((menu.background.material as ShaderMaterial).get_shader_parameter("fx")) > 0.5, "the occult layer stirs the city while Lore is open")
-	check(menu.band.page and menu.band.band_rect() == Rect2(530, 0, 1070, 900), "Lore spreads its band over the right two-thirds")
+	var shown: Rect2 = MainMenu.visible_design_rect(get_viewport().get_visible_rect().size)
+	check(menu.band.page and menu.band.band_rect().is_equal_approx(Rect2(530, shown.position.y, shown.end.x - 530, shown.size.y)), "Lore spreads its band over the right of the screen (%s on %s)" % [menu.band.band_rect(), get_viewport().get_visible_rect().size])
 	check(is_equal_approx(menu.band.material.get_shader_parameter("page"), 1.0), "the band's edges turn into a page's")
+	for screen in [tall, ultra, MainMenu.visible_design_rect(Vector2(1024, 768))]:
+		menu.band.set_screen(screen)
+		var page_rect: Rect2 = menu.band.band_rect()
+		check(is_equal_approx(page_rect.position.y, screen.position.y) and is_equal_approx(page_rect.end.y, screen.end.y) and is_equal_approx(page_rect.end.x, screen.end.x) and is_equal_approx(page_rect.position.x, 530.0), "the page reaches the screen's top, bottom and right at %s" % screen.size)
+	menu.band.set_screen(MainMenu.visible_design_rect(get_viewport().get_visible_rect().size))
 	check(menu.words[0].modulate.a < 0.4 and menu.words[0].visible, "other words dim but stay")
 	check(menu.find_children("*", "PanelContainer", true, false).is_empty(), "the grey panel is gone")
 	await key(KEY_ESCAPE)

@@ -17,16 +17,19 @@ const ART_REGIONS: Array[Rect2i] = [Rect2i(74, 93, 575, 248), Rect2i(790, 92, 57
 const ART_FOCUS := [0.28, 0.42, 0.38, 0.30]
 const COLOURS := [Color("ef774c"), Color("67c9ed"), Color("929fdb"), Color("efa25e")]
 const HEIGHT := 360.0
-const PAGE_RECT := Rect2(530, 0, 1070, 900)
+## A page's left edge; its other edges are the screen's.
+const PAGE_LEFT := 530.0
 const GLIDE := 0.5
 const FADE := 0.6
 
 var showing := false
 var page := false
-## Left edge of the visible screen in design px (negative on wide screens).
-var screen_left := 0.0
+## The visible screen in design px (wider or taller than 1600x900 off 16:9).
+var screen := Rect2(0, 0, 1600, 900)
+## The two pictures being cross-faded: "a" fading out, "b" fading in.
+var art_a := -1
+var art_b := -1
 var _choice := -1
-var _shown := -1
 var _word_y := 0.0
 var _target := Rect2()
 var _move: Tween
@@ -53,6 +56,8 @@ func _ready() -> void:
 	paint.set_shader_parameter("page", 0.0)
 	paint.set_shader_parameter("pulse", 0.0)
 	paint.set_shader_parameter("mix_ab", 1.0)
+	paint.set_shader_parameter("glaze_a", COLOURS[0])
+	paint.set_shader_parameter("glaze_b", COLOURS[0])
 	material = paint
 	modulate.a = 0.0
 
@@ -78,21 +83,25 @@ func show_choice(index: int, word_centre_y: float) -> void:
 	if index != _choice:
 		_choice = index
 		var paint := material as ShaderMaterial
+		var mix_now := float(paint.get_shader_parameter("mix_ab"))
 		if first:
 			_set_art("a", index)
 			_set_art("b", index)
-			paint.set_shader_parameter("mix_ab", 1.0)
-		else:
-			# What is on screen becomes "a"; the new picture fades in as "b".
-			_set_art("a", _shown)
+			mix_now = 1.0
+		elif mix_now >= 0.5:
+			# The incoming picture is mostly showing: it becomes the one fading out.
+			_set_art("a", art_b)
 			_set_art("b", index)
-			paint.set_shader_parameter("mix_ab", 0.0)
-			if _fade:
-				_fade.kill()
+			mix_now = 0.0
+		else:
+			# The outgoing picture is still mostly showing: keep it, swap the incoming one.
+			_set_art("b", index)
+		paint.set_shader_parameter("mix_ab", mix_now)
+		if _fade:
+			_fade.kill()
+		if mix_now < 1.0:
 			_fade = create_tween()
-			_fade.tween_property(paint, "shader_parameter/mix_ab", 1.0, FADE)
-		_shown = index
-		paint.set_shader_parameter("glaze", COLOURS[index])
+			_fade.tween_property(paint, "shader_parameter/mix_ab", 1.0, FADE * (1.0 - mix_now))
 	if not page:
 		_go(_choice_rect(), first)
 	if first:
@@ -105,7 +114,7 @@ func hide_band() -> void:
 
 func set_page(on: bool) -> void:
 	page = on
-	_go(PAGE_RECT if on else _choice_rect(), false)
+	_go(_page_rect() if on else _choice_rect(), false)
 	create_tween().tween_property(material, "shader_parameter/page", 1.0 if on else 0.0, GLIDE)
 
 func pulse() -> void:
@@ -115,14 +124,19 @@ func pulse() -> void:
 	_pulse = create_tween()
 	_pulse.tween_property(material, "shader_parameter/pulse", 0.0, 0.35)
 
-## Keeps the band reaching the screen's left edge when the window is wider than 16:9.
-func set_screen_left(left: float) -> void:
-	screen_left = minf(left, 0.0)
-	if showing and not page:
-		_go(_choice_rect(), true)
+## The visible screen in design px: a choice band reaches its left edge, a
+## page its top, right and bottom, whatever the window's shape.
+func set_screen(visible: Rect2) -> void:
+	screen = visible
+	if showing:
+		_go(_page_rect() if page else _choice_rect(), true)
 
 func _choice_rect() -> Rect2:
-	return Rect2(screen_left, _word_y - HEIGHT * 0.5, 1440.0 - screen_left, HEIGHT)
+	var left := minf(screen.position.x, 0.0)
+	return Rect2(left, _word_y - HEIGHT * 0.5, 1440.0 - left, HEIGHT)
+
+func _page_rect() -> Rect2:
+	return Rect2(PAGE_LEFT, screen.position.y, screen.end.x - PAGE_LEFT, screen.size.y)
 
 func _go(rect: Rect2, at_once: bool) -> void:
 	_target = rect
@@ -146,6 +160,15 @@ func _set_art(slot: String, index: int) -> void:
 	var start := Vector2(region.position) + Vector2(region.size) * (Vector2.ONE - keep) * Vector2(0.5, float(ART_FOCUS[index]))
 	var window := Vector2(region.size) * keep
 	paint.set_shader_parameter("rect_" + slot, Vector4(start.x / atlas_size.x, start.y / atlas_size.y, window.x / atlas_size.x, window.y / atlas_size.y))
+	paint.set_shader_parameter("glaze_" + slot, COLOURS[index])
+	if slot == "a":
+		art_a = index
+	else:
+		art_b = index
+
+## Where the picture's left edge is now, in design px.
+func art_left() -> float:
+	return position.x + _art_box().x * size.x
 
 func _process(_delta: float) -> void:
 	if size.x <= 0.0 or size.y <= 0.0:
@@ -154,10 +177,15 @@ func _process(_delta: float) -> void:
 	paint.set_shader_parameter("band_px", size)
 	# The picture keeps its size while the band glides or spreads; it sits in
 	# the right half of a choice band and high in the middle of a page.
-	var art := Vector2(ART_WIDTH, HEIGHT)
-	# On a page the picture moves to the right, clear of most of the text.
-	var right := size.x * 0.86 if not page else size.x - 30.0
-	var top := (size.y - art.y) * 0.5 if not page else (size.y - art.y) * 0.5 - 70.0
-	var box := Vector4((right - art.x) / size.x, top / size.y, art.x / size.x, art.y / size.y)
+	var box := _art_box()
 	paint.set_shader_parameter("box_a", box)
 	paint.set_shader_parameter("box_b", box)
+
+## The picture's box in band UV. On a page it sits to the right, clear of most
+## of the text; it travels there with the page's own spread, never jumping.
+func _art_box() -> Vector4:
+	var art := Vector2(ART_WIDTH, HEIGHT)
+	var t := float(material.get_shader_parameter("page"))
+	var right := lerpf(size.x * 0.86, size.x - 30.0, t)
+	var top := (size.y - art.y) * 0.5 - 70.0 * t
+	return Vector4((right - art.x) / size.x, top / size.y, art.x / size.x, art.y / size.y)

@@ -11,7 +11,8 @@ uniform vec4 rect_b = vec4(0.0, 0.0, 1.0, 1.0);
 uniform vec4 box_a = vec4(0.4, 0.0, 0.42, 1.0);
 uniform vec4 box_b = vec4(0.4, 0.0, 0.42, 1.0);
 uniform float mix_ab = 1.0;
-uniform vec4 glaze : source_color = vec4(1.0);
+uniform vec4 glaze_a : source_color = vec4(1.0);
+uniform vec4 glaze_b : source_color = vec4(1.0);
 uniform float glaze_amount = 0.28;
 uniform float page = 0.0;
 uniform float pulse = 0.0;
@@ -73,7 +74,9 @@ void fragment() {
 
 	// What is behind: the city, softened and darkened, glazed in the choice's colour.
 	vec3 behind = textureLod(screen_tex, SCREEN_UV, 2.5).rgb * 0.62;
-	vec3 tint = glaze.rgb / max(lum(glaze.rgb), 0.05);
+	// Each picture keeps its own glaze; the city behind blends between them.
+	vec3 glaze = mix(glaze_a.rgb, glaze_b.rgb, mix_ab);
+	vec3 tint = glaze / max(lum(glaze), 0.05);
 	behind = mix(behind, lum(behind) * tint, glaze_amount * 1.4);
 
 	vec4 a = art(uv, rect_a, box_a, boil, TIME, page);
