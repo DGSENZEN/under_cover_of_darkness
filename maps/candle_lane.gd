@@ -36,6 +36,11 @@ const LANDMARKS_KIT := "res://assets/eclipse/kit/lane_landmarks.glb"
 const GARLAND_TIE := Vector3(1.57, 3.32, -0.04)
 const GARLAND_HOOK := Vector3(1.95, 3.42, 4.45)
 const GARLAND_SWAY := deg_to_rad(3.0)
+## Her tin heart's hook, at the end of its bracket off her stall's west front post; how far it turns on it either way;
+## the wick of her votive under it, in its tin cup on the same post (lane_landmarks.py's CANDLE_WICK), which lights it.
+const MILAGRO_HOOK := Vector3(-1.35, 3.0, 0.45)
+const MILAGRO_TURN := deg_to_rad(25.0)
+const MILAGRO_WICK := Vector3(-1.55, 2.515, 0.12)
 const LANE_WICKS := "res://assets/eclipse/source/candle_lane_wicks.json"
 ## How far the end wall's opening reaches inside the doorway's frame (m, each side and over it): the wall's cut faces
 ## buried in the stone, the way through still the frame's 3 m.
@@ -191,8 +196,11 @@ var people: Array[MeshInstance3D] = []
 var crowd_of_shades: Node3D
 ## The walk's pockets (POCKETS): {name, loud, x (plan x range), emitters (silent, named for their sound), lights}.
 var pockets: Array[Dictionary] = []
-## The landmarks placed, by piece (garland, ...).
+## The landmarks placed, by piece (garland, milagro_heart, milagro_bracket, ...).
 var landmarks := {}
+## What her tin heart turns on: the bracket's hook. Her votive's flame under it (Vfx "candles").
+var milagro_pivot: Node3D
+var milagro_flame: Node3D
 ## The shades one talks to: "librarian", "curandera", "market_curandera".
 var shades := {}
 
@@ -281,6 +289,9 @@ func set_decals(on: bool) -> void:
 func _process(delta: float) -> void:
 	super._process(delta)
 	_sway(landmarks.get("garland"), GARLAND_TIE, GARLAND_HOOK, GARLAND_SWAY)
+	# (Her heart turns slowly on its hook, two slow swings over each other.)
+	if milagro_pivot != null:
+		milagro_pivot.rotation.y = MILAGRO_TURN * (0.6 * sin(_clock * 0.31) + 0.4 * sin(_clock * 0.73 + 2.0))
 	for souls in vent_souls:
 		souls.hush = animas.hush if animas != null else 0.0
 		souls.gather = animas.gather if animas != null else null
@@ -502,14 +513,31 @@ func _fit_into_plan() -> void:
 				* mesh.transform
 
 
-## The landmarks (LANDMARKS_KIT), each where its kit built it: her garland across the walk (not solid: over every head).
+## The landmarks (LANDMARKS_KIT), each where its kit built it (none solid: over every head): her garland across the
+## walk; her tin heart's bracket, and the heart hung on its hook (built about its ring, it turns there).
 func _landmarks() -> void:
 	if not ResourceLoader.exists(LANDMARKS_KIT):
 		missing.append(LANDMARKS_KIT)
 		return
 	var meshes := _kit(LANDMARKS_KIT)
 	var look := Painterly.material(_painted(["lane_landmarks.png", "lane_landmarks_base.png"]), &"bespoke")
-	landmarks["garland"] = _place(meshes["garland"], look, "garland", Vector3.ZERO, 0.0, false)
+	for kind in ["garland", "milagro_bracket"]:
+		landmarks[kind] = _place(meshes[kind], look, kind, Vector3.ZERO, 0.0, false)
+	milagro_pivot = Node3D.new()
+	milagro_pivot.name = "milagro_pivot"
+	add_child(milagro_pivot)
+	milagro_pivot.position = MILAGRO_HOOK
+	var heart := _place(meshes["milagro_heart"], look, "milagro_heart", Vector3.ZERO, 0.0, false)
+	heart.reparent(milagro_pivot, false)
+	heart.transform = Transform3D.IDENTITY
+	landmarks["milagro_heart"] = heart
+	# Her votive for those she healed, burning under it: its light is what the tin catches.
+	var wick := to_global(MILAGRO_WICK)
+	milagro_flame = Vfx.system("candles")
+	milagro_flame.name = "milagro_flame"
+	add_child(milagro_flame)
+	Vfx.place(milagro_flame, wick, {"wicks": [[wick.x, wick.y, wick.z]]})
+	Vfx.emit(milagro_flame, true)
 
 
 ## A hung piece swaying about the line from `from` to `to` (the lane's frame), at most `most` radians, as far as the

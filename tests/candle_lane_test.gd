@@ -678,6 +678,35 @@ func _landmarks() -> void:
 	_check("L5b F2 greys the landmarks and gives back their materials", greyed and restored,
 		"%d marks, greyed %s, restored %s" % [marks.size(), greyed, restored])
 
+	# Her tin heart: over every head where it hangs over the walk, clear of her customers, turning on its hook.
+	var heart: MeshInstance3D = marks.get("milagro_heart")
+	var pivot: Node3D = lane.get("milagro_pivot")
+	var heart_low := INF
+	var near_customer := INF
+	if heart != null:
+		var box: AABB = lane.global_transform.affine_inverse() * heart.global_transform * heart.get_aabb()
+		if box.end.z >= 0.2:
+			heart_low = box.position.y
+		for customer in [Vector2(0.65, 0.6), Vector2(1.85, 0.6)]:
+			var nearest := Vector2(clampf(customer.x, box.position.x, box.end.x), clampf(customer.y, box.position.z, box.end.z))
+			near_customer = minf(near_customer, nearest.distance_to(customer))
+	_check("L6 the tin heart hangs over her pitch, above every head over the walk and clear of her customers",
+		heart != null and marks.has("milagro_bracket") and heart_low >= 2.1 and near_customer >= 0.4,
+		"heart %s, lowest %.2f m, %.2f m from a customer" % [heart != null, heart_low, near_customer])
+	var turned := 0.0
+	if pivot != null:
+		var was := pivot.rotation.y
+		await _frames(120)
+		turned = absf(pivot.rotation.y - was)
+	_check("L6b it turns on its hook", turned > 0.05, "turned %.3f rad in 2 s" % turned)
+	var votive: Node3D = lane.get("milagro_flame")
+	var lit := false
+	if votive != null and heart != null:
+		var light: OmniLight3D = votive.find_children("*", "OmniLight3D", true, false).front() if not votive.find_children("*", "OmniLight3D", true, false).is_empty() else null
+		lit = light != null and light.global_position.distance_to(heart.global_position) <= light.omni_range * 0.5
+	_check("L6c her votive burns under the heart and lights it", votive != null and lit,
+		"votive %s, lights the heart %s" % [votive != null, lit])
+
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:
 	var space := lane.get_world_3d().direct_space_state

@@ -2320,6 +2320,13 @@ class LaneLandmarks(unittest.TestCase):
         self.assertLessEqual(min(ys), -4.4)
         self.assertGreaterEqual(max(ys), -0.05)
 
+    def test_the_heart_hangs_from_its_hook(self):
+        # (Built with its hook at its own origin, so the lane can turn it there.)
+        o = self.objects["milagro_heart"]
+        zs = [v.co.z for v in o.data.vertices]
+        self.assertLessEqual(abs(max(zs)), 0.05)
+        self.assertTrue(0.55 <= max(zs) - min(zs) <= 0.8, max(zs) - min(zs))
+
 
 if __name__ == "__main__":
     # (`-- Class` or `-- Class.test_name` after Blender's own arguments runs just those.)

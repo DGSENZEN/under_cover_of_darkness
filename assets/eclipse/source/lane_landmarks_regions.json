@@ -4,8 +4,11 @@
   "herb",
   "picado",
   "picado_b",
-  "iron"
+  "iron",
+  "tin",
+  "brass",
+  "wax_red"
  ],
  "atlas_px": 2048,
- "px_per_m": 392.21
+ "px_per_m": 352.09
 }
