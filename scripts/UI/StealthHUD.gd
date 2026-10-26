@@ -69,6 +69,8 @@ const EDGE := 12.0
 ## screen (and SUBTITLE_MOST px), wrapped if not; the bottom of their band
 ## this far over the bottom of the screen, growing upwards.
 const SUBTITLE_SIZE := 21
+## The subtitle sizes the player can choose (small, medium, large), px.
+const SUBTITLE_SIZES := [17, 21, 27]
 const SUBTITLE_WIDTH := 0.72
 const SUBTITLE_MOST := 860.0
 const SUBTITLE_BOTTOM := 130.0
@@ -691,7 +693,8 @@ func setup(p_player: CharacterBody3D) -> void:
 	_subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_subtitle.scroll_active = false
 	_subtitle.add_theme_font_override("normal_font", _font)
-	_subtitle.add_theme_font_size_override("normal_font_size", SUBTITLE_SIZE)
+	_subtitle.add_theme_font_size_override("normal_font_size", subtitle_px(int(GameSettings.value("hud/subtitle_size"))))
+	GameSettings.events().changed.connect(_on_setting_changed)
 	_subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_subtitle_panel.add_child(_subtitle)
 
@@ -881,7 +884,7 @@ func _process(delta: float) -> void:
 	# A page held up to read: nothing is aimed at, and the prompts go above
 	# it (READING_PROMPTS of the height down) rather than over its words.
 	var reading: bool = player.hand != null and player.hand.has_method("is_page_up") and player.hand.is_page_up()
-	_crosshair.visible = not reading
+	_crosshair.visible = not reading and bool(GameSettings.value("hud/crosshair"))
 	_crosshair.queue_redraw()
 	# Centred under it however many there are, and kept on the screen.
 	var row := _prompts.get_combined_minimum_size()
@@ -1145,11 +1148,27 @@ func _on_bark(text: String, guard: Node3D) -> void:
 	if not Earshot.heard(guard, player):
 		return
 
+	# Subtitles off: nothing written (the voice is still heard).
+	if not GameSettings.value("hud/subtitles"):
+		return
+
 	var who := speaker_of(guard)
 	_subtitle.text = "[color=#%s]%s[/color]   %s" % [DIM.to_html(false), who, text]
 	# Its width on one line (wrapped past a share of the screen: _process).
-	_subtitle_width = _font.get_string_size("%s   %s" % [who, text], HORIZONTAL_ALIGNMENT_LEFT, -1, SUBTITLE_SIZE).x + 6.0
+	_subtitle_width = _font.get_string_size("%s   %s" % [who, text], HORIZONTAL_ALIGNMENT_LEFT, -1, subtitle_px(int(GameSettings.value("hud/subtitle_size")))).x + 6.0
 	_subtitle_timer = 3.2
+
+
+## The subtitles' size for the player's choice (0 small, 1 medium, 2 large).
+static func subtitle_px(choice: int) -> int:
+	return SUBTITLE_SIZES[clampi(choice, 0, SUBTITLE_SIZES.size() - 1)]
+
+
+func _on_setting_changed(key: String) -> void:
+	if key == "hud/subtitle_size":
+		_subtitle.add_theme_font_size_override("normal_font_size", subtitle_px(int(GameSettings.value(key))))
+	elif key == "hud/awareness_marks" and _marks_toggle != null:
+		_show_settings()
 
 
 ## A guard's alert rose: a swell of unease when one grows suspicious, a stab

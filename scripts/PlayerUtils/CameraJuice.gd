@@ -11,6 +11,8 @@ var base_fov := 75.0
 
 ## Master dial. 0 switches all of it off.
 var intensity := 1.0
+## The player's camera motion setting (0..1), on top of intensity.
+var comfort := 1.0
 
 # Head bob
 var bob_cycle_distance := 3.2
@@ -137,7 +139,18 @@ var _fov_kick_velocity := 0.0
 ## Stores the camera and its current FOV; requires a nonnull Camera3D.
 func setup(p_camera: Camera3D) -> void:
 	camera = p_camera
-	base_fov = camera.fov
+	# The player's field of view and camera motion, followed as they change.
+	base_fov = float(GameSettings.value("video/fov"))
+	comfort = float(GameSettings.value("comfort/camera_motion"))
+	if not GameSettings.events().changed.is_connected(_on_setting_changed):
+		GameSettings.events().changed.connect(_on_setting_changed)
+
+
+func _on_setting_changed(key: String) -> void:
+	if key == "video/fov":
+		base_fov = float(GameSettings.value(key))
+	elif key == "comfort/camera_motion":
+		comfort = float(GameSettings.value(key))
 
 
 ## Where the walk is in its stride (radians) and how strongly it bobs (0..1+),
@@ -469,7 +482,7 @@ func update(
 	_move_pitch = lerpf(_move_pitch, move_pitch, look_follow)
 	_move_roll = lerpf(_move_roll, move_roll, follow)
 
-	var k := intensity
+	var k := intensity * comfort
 	var shake_move := Vector3(shake_yaw, shake_pitch, 0.0) * (shake_offset / deg_to_rad(shake_degrees))
 	view_position = (Vector3(bob_x + _side, bob_y + _dip + _move_dip, _push) + shake_move) * k + Vector3(lean_offset, 0.0, 0.0)
 	# A landing roll: over forward and back up (the body's own roll).

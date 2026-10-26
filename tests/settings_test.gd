@@ -135,4 +135,36 @@ func shim_checks() -> void:
 	GameSettings.set_value("hud/awareness_marks", true)
 
 func hook_checks() -> void:
-	pass
+	fresh()
+	# The camera: its field of view and how much it moves.
+	var juice: RefCounted = load("res://scripts/PlayerUtils/CameraJuice.gd").new()
+	var camera := Camera3D.new()
+	add_child(camera)
+	juice.setup(camera)
+	check(juice.base_fov == 75.0 and juice.comfort == 1.0, "the camera starts at the settings' field of view and motion")
+	GameSettings.set_value("video/fov", 90.0)
+	GameSettings.set_value("comfort/camera_motion", 0.4)
+	check(juice.base_fov == 90.0 and is_equal_approx(juice.comfort, 0.4), "and follows them")
+	# Turning.
+	var player_script: Script = load("res://scripts/PlayerController.gd")
+	var turn: Vector2 = player_script.look_turn(Vector2(10, 10), 0.002)
+	check(turn.is_equal_approx(Vector2(0.02, 0.02)), "turning at the defaults (%s)" % turn)
+	GameSettings.set_value("controls/sensitivity", 2.0)
+	GameSettings.set_value("controls/invert", true)
+	turn = player_script.look_turn(Vector2(10, 10), 0.002)
+	check(turn.is_equal_approx(Vector2(0.04, -0.04)), "sensitivity scales it and invert flips the pitch (%s)" % turn)
+	# The screen.
+	var retro := get_node_or_null(^"/root/Retro")
+	GameSettings.set_value("video/grid", 360)
+	check(retro != null and retro.virtual_height == 360, "the pixel grid follows the setting")
+	GameSettings.set_value("video/brightness", 1.3)
+	check(retro.brightness_pass.visible and is_equal_approx(float(retro.brightness_pass.material.get_shader_parameter("brightness")), 1.3), "brightness lifts the picture")
+	GameSettings.set_value("video/brightness", 1.0)
+	check(not retro.brightness_pass.visible, "and at 100% the pass is off")
+	# The HUD's subtitles.
+	var hud_script: Script = load("res://scripts/UI/StealthHUD.gd")
+	check(hud_script.subtitle_px(0) < 21 and hud_script.subtitle_px(1) == 21 and hud_script.subtitle_px(2) > 21, "three subtitle sizes around today's")
+	for key in ["video/fov", "comfort/camera_motion", "controls/sensitivity", "controls/invert", "video/grid"]:
+		GameSettings.set_value(key, GameSettings.SPECS[key].default)
+	camera.queue_free()
+	await get_tree().process_frame

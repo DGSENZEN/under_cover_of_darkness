@@ -661,13 +661,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mouse_event := event as InputEventMouseMotion
 		# In screen pixels: the same turn for the same hand movement whatever
 		# size the window is (relative shrinks as the HUD is scaled up).
-		var turn := mouse_event.screen_relative
+		var turn := look_turn(mouse_event.screen_relative, mouse_sensitivity)
 
 		# The body handles horizontal rotation.
-		rotate_y(-turn.x * mouse_sensitivity)
+		rotate_y(-turn.x)
 
 		# The neck handles vertical rotation.
-		neck.rotate_x(-turn.y * mouse_sensitivity)
+		neck.rotate_x(-turn.y)
 		neck.rotation.x = clamp(
 			neck.rotation.x,
 			-deg_to_rad(max_pitch_degrees),
@@ -704,6 +704,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Esc let the mouse go; a click in the window takes it back.
 		_recapture_mouse()
 		get_viewport().set_input_as_handled()
+
+
+## A mouse movement's turn (yaw, pitch; radians) at `base` sensitivity, as
+## the player has set it: their sensitivity, and pitch inverted if asked.
+static func look_turn(screen_relative: Vector2, base: float) -> Vector2:
+	var turn := screen_relative * base * GameSettings.look_scale()
+	if GameSettings.value("controls/invert"):
+		turn.y = -turn.y
+	return turn
 
 
 ## The click that takes the mouse back is only that. Mouse-button actions

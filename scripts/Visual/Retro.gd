@@ -5,6 +5,7 @@ extends CanvasLayer
 ## enabled restores converted resources when disabled; shared shader materials are not converted.
 
 const SCREEN_SHADER := preload("res://scripts/Visual/retro_screen.gdshader")
+const BRIGHTNESS_SHADER := preload("res://scripts/Visual/brightness.gdshader")
 const CrispTextScript := preload("res://scripts/Visual/CrispText.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 
@@ -58,6 +59,9 @@ var enabled := true:
 				_restore_all()
 
 var _rect: ColorRect
+## The player's brightness over the finished picture (shown only when it
+## isn't 100%).
+var brightness_pass: ColorRect
 var _material: ShaderMaterial
 ## The words over men's heads, sharp over the grid while it is on.
 var _crisp: Control
@@ -71,8 +75,9 @@ var _levels := [24.0, 32.0, 0.0]
 func _ready() -> void:
 	# The player's settings, read and applied at start-up; sound buses made
 	# later (by levels, the menu) get their volumes as they appear.
-	GameSettings.value("video/grid")
+	virtual_height = int(GameSettings.value("video/grid"))
 	AudioServer.bus_layout_changed.connect(_on_buses_changed)
+	GameSettings.events().changed.connect(_on_setting_changed)
 	# Under the HUD (layer 5), over the world.
 	layer = 4
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -90,6 +95,19 @@ func _ready() -> void:
 	_crisp = CrispTextScript.new()
 	_crisp.name = "CrispText"
 	add_child(_crisp)
+	# Then the brightness, over all of it (a fresh copy of the screen first).
+	var copy := BackBufferCopy.new()
+	copy.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
+	add_child(copy)
+	brightness_pass = ColorRect.new()
+	brightness_pass.name = "Brightness"
+	brightness_pass.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	brightness_pass.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var lift := ShaderMaterial.new()
+	lift.shader = BRIGHTNESS_SHADER
+	brightness_pass.material = lift
+	add_child(brightness_pass)
+	_apply_brightness()
 
 	get_tree().node_added.connect(_on_node_added)
 	get_viewport().size_changed.connect(_fit)
@@ -97,10 +115,24 @@ func _ready() -> void:
 	_convert_tree.call_deferred(get_tree().root)
 
 
-## Development keys for comparing looks.
 func _on_buses_changed() -> void:
 	GameSettings.apply_buses()
 
+
+func _on_setting_changed(key: String) -> void:
+	if key == "video/grid" and virtual_height != int(GameSettings.value(key)):
+		virtual_height = int(GameSettings.value(key))
+	elif key == "video/brightness":
+		_apply_brightness()
+
+
+func _apply_brightness() -> void:
+	var amount := float(GameSettings.value("video/brightness"))
+	brightness_pass.material.set_shader_parameter("brightness", amount)
+	brightness_pass.visible = not is_equal_approx(amount, 1.0)
+
+
+## Development keys for comparing looks.
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not OS.is_debug_build():
@@ -115,8 +147,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_F3:
 			_toggle_debug()
 		KEY_F6:
+			# The pixel grid's next step, kept as the player's setting.
 			var i := _grids.find(virtual_height)
 			virtual_height = _grids[(i + 1) % _grids.size()]
+			GameSettings.set_value("video/grid", virtual_height)
 		KEY_F7:
 			var i := _levels.find(color_levels)
 			color_levels = _levels[(i + 1) % _levels.size()]

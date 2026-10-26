@@ -287,7 +287,7 @@ func step(delta: float, frame: Frame) -> void:
 	var shoulder_turn := Vector3(torso_pitch * (1.0 - KEEP), 0.0, torso_roll * (1.0 - KEEP) + roll * 2.0)
 
 	# Scaled by the dial, then held inside the caps.
-	var k := maxf(intensity, 0.0)
+	var k := maxf(intensity, 0.0) * float(GameSettings.value("comfort/camera_motion"))
 	var head_now := Transform3D.IDENTITY
 	var shoulder_now := Transform3D.IDENTITY
 
