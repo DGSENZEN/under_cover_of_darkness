@@ -111,6 +111,15 @@ func _ready() -> void:
 	await get_tree().create_timer(0.7).timeout
 	check(menu.selected == 3 and menu.words[3].wash.level > 0.99 and menu.washes_showing() == 1, "hover spam ends on the last word's painting")
 
+	# Piece 1: a press-in, then the action.
+	menu.words[2].pressed.emit()
+	await get_tree().create_timer(0.05).timeout
+	check(menu.words[2].scale.x < 0.99 and menu.page_open == -1, "pressing a word presses it in first")
+	await get_tree().create_timer(0.25).timeout
+	check(is_equal_approx(menu.words[2].scale.x, 1.0) and menu.page_open == 2, "then it springs back and its page opens")
+	menu.close_page()
+	await get_tree().create_timer(0.6).timeout
+
 	# Review fixes: pages reach the screen's edges on any window shape.
 	var tall: Rect2 = MainMenu.visible_design_rect(Vector2(2560, 1600))
 	var ultra: Rect2 = MainMenu.visible_design_rect(Vector2(2560, 1080))
@@ -168,10 +177,15 @@ func _ready() -> void:
 	var starts := [0]
 	menu.music.started.connect(func(): starts[0] += 1)
 	menu.game_scene = "res://tests/fixtures/no_such_game.tscn"
+	var covers := [0]
+	var count_covers := func(n: Node): if n.name.begins_with("ArtLoading"): covers[0] += 1
+	get_tree().root.child_entered_tree.connect(count_covers)
 	menu.words[0].pressed.emit()
 	await get_tree().process_frame
 	menu.words[0].pressed.emit()
-	check(starts[0] == 1 and get_tree().root.get_children().filter(func(n): return n.name.begins_with("ArtLoading")).size() <= 1, "pressing New Game twice starts one game")
+	await get_tree().create_timer(MenuMotion.PRESS + 0.05).timeout
+	get_tree().root.child_entered_tree.disconnect(count_covers)
+	check(starts[0] == 1 and covers[0] == 1, "pressing New Game twice starts one game (one cover)")
 	await get_tree().create_timer(0.3).timeout
 	check(menu.page_open == 0 and menu.music != null and is_instance_valid(menu.music) and menu.music.state != MenuMusic.State.STARTING, "a game that will not open: the menu says so and its music returns")
 	menu.close_page()

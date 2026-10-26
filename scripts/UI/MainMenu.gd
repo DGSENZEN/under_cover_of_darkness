@@ -32,6 +32,7 @@ var _design: Control
 var _font: SystemFont
 var _page_turn := 0
 var _transitioning := false
+var _pressing := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -177,7 +178,14 @@ func _exit_tree() -> void:
 		music.queue_free()
 
 func _activate(index: int) -> void:
-	if _transitioning or page_open >= 0 or index >= 4:
+	if _transitioning or page_open >= 0 or index >= 4 or _pressing:
+		return
+	# The word dips in first; the action follows it.
+	_pressing = true
+	words[index].press_in()
+	await get_tree().create_timer(MenuMotion.PRESS).timeout
+	_pressing = false
+	if _transitioning or page_open >= 0:
 		return
 	if is_instance_valid(music):
 		music.press(index)
