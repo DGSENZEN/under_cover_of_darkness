@@ -13,14 +13,18 @@ const LIFE := Vector2(4.0, 7.0)
 const WALK := Vector2(0.5, 3.0)
 ## The line down the walk's middle they make for (z), where the cart and the nahual do not hide them from the mouth.
 const PATH := Vector2(0.8, 1.6)
-const CARRY := 2.8
+const CARRY := 3.6
 const MOST := 6
 ## A page's size (m), how fast it lifts out (up, out into the walk), how fast it falls, how it slows on the floor.
 const SIZE := Vector2(0.24, 0.32)
 const LIFT := Vector2(1.3, 1.9)
 const OUT := Vector2(0.9, 1.5)
-const FALL := 1.6
-const SKID := 1.2
+const FALL := 0.6
+const SKID := 3.0
+## How much of the wind the floor holds a lying page against (m/s: in the corridor's own draught it lies still, a
+## train's gust moves it), and how far before the lane's end it fades out (m).
+const GRIP := 1.0
+const FADE_OUT := 1.5
 const PAPER := Color(0.93, 0.9, 0.82)
 
 ## Where they lift (the arch's foot), how often, where the lane ends.
@@ -95,7 +99,7 @@ func _process(delta: float) -> void:
 		if not s["down"]:
 			# Aloft: carried on the draught, out into the walk to its own line across it, falling, tumbling.
 			var carry := Vector3(blow.x * CARRY, 0.0, (s["lane"] - at.z) * 0.9)
-			vel.x = lerpf(vel.x, carry.x, 1.0 - exp(-1.5 * delta))
+			vel.x = lerpf(vel.x, carry.x, 1.0 - exp(-2.5 * delta))
 			vel.z = lerpf(vel.z, carry.z, 1.0 - exp(-1.2 * delta))
 			vel.y = maxf(vel.y - 4.0 * delta, -FALL)
 			page.rotation += (s["spin"] as Vector3) * delta
@@ -106,18 +110,18 @@ func _process(delta: float) -> void:
 				s["down"] = true
 				page.rotation = Vector3(0.0, page.rotation.y, 0.0)
 		else:
-			# Lying: it skates on with the draught, slowing, and lies still.
+			# Lying: it skates on, slowing, and lies still; the floor holds it but in a gust.
 			vel.y = 0.0
 			vel.z = 0.0
-			vel.x = lerpf(vel.x, blow.x * CARRY * 0.6, 1.0 - exp(-SKID * delta))
+			vel.x = lerpf(vel.x, maxf(blow.x * CARRY * 0.6 - GRIP, 0.0), 1.0 - exp(-SKID * delta))
 			at += vel * delta
 		at.z = clampf(at.z, WALK.x, from.z) if s["age"] > 0.5 else at.z
 		page.position = at
 		s["vel"] = vel
-		# Its last second it fades.
+		# Its last second it fades, and over its last FADE_OUT m before the lane's end (never gone whole in a doorway).
 		var left: float = s["life"] - s["age"]
-		(s["look"] as StandardMaterial3D).albedo_color.a = clampf(left, 0.0, 1.0)
-		if left <= 0.0 or at.x > end_x:
+		(s["look"] as StandardMaterial3D).albedo_color.a = clampf(minf(left, (end_x - at.x) / FADE_OUT), 0.0, 1.0)
+		if left <= 0.0 or at.x >= end_x:
 			_retire(page)
 
 

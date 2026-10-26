@@ -26,6 +26,7 @@ func _ready() -> void:
 	await _pockets()
 	await _crowd_of_shades()
 	await _landmarks()
+	await _landmarks_review()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -860,6 +861,86 @@ func _landmarks() -> void:
 	_check("L10c a gust carries them farther, never past the lane's end, never piling up",
 		farther > 0.0 and farther < INF and past_end == 0 and most <= 6,
 		"gust over calm %.2f m, past the end %d, most at once %d" % [farther, past_end, most])
+
+
+## The landmarks' final review (docs/superpowers/plans/2026-10-25-lane-landmarks.md): what a player or an F2 pass would
+## have seen go wrong.
+func _landmarks_review() -> void:
+	var marks: Dictionary = lane.get("landmarks") if lane.get("landmarks") != null else {}
+	var pages: Node3D = lane.get("pages")
+	pages.wind = func(): return lane.DRAUGHT
+
+	# A page in flight keeps its own look through F2 (the form light greyed it, then left it a white box).
+	pages.release_now()
+	var page: MeshInstance3D = pages.pages.back()
+	var look: Material = page.material_override
+	lane.set_form(true)
+	var kept_on: bool = page.material_override == look
+	lane.set_form(false)
+	var kept_off: bool = page.material_override == look
+	_check("L5c F2 leaves a page in flight as it was", kept_on and kept_off, "on %s off %s" % [kept_on, kept_off])
+
+	# Her garland's iron (the riser lashed to her post, the wall's hook-plate) stays put while its cord sways.
+	var garland: MeshInstance3D = marks.get("garland")
+	var fixings: MeshInstance3D = marks.get("garland_fixings")
+	var fixed_at: Transform3D = fixings.global_transform if fixings != null else Transform3D()
+	var cord_at: Transform3D = garland.global_transform
+	await _frames(90)
+	_check("L5d her garland's iron stays put while its cord sways",
+		fixings != null and fixings.global_transform.is_equal_approx(fixed_at) and not garland.global_transform.is_equal_approx(cord_at),
+		"fixings %s, cord swayed %s" % [fixings != null, not garland.global_transform.is_equal_approx(cord_at)])
+
+	# His lantern's light stops at the wall (no red cast through it on the shop's floor and shelves).
+	var lantern_light: OmniLight3D = lane.get("lantern_light")
+	_check("L7c his lantern's light stops at the wall", lantern_light != null and lantern_light.shadow_enabled,
+		"shadows %s" % [lantern_light.shadow_enabled if lantern_light else null])
+
+	# The copal's glow and the red glass's dim with the lights (the dark train's sink above all).
+	var haze_fog: FogMaterial = (lane.copal_haze.find_children("*", "FogVolume", true, false)[0] as FogVolume).material
+	var glass: StandardMaterial3D = lane.get("red_glass")
+	var haze_full := haze_fog.emission.get_luminance()
+	var glass_full: float = glass.emission_energy_multiplier if glass != null else 0.0
+	lane.dark_train.start_pass()
+	var haze_low := haze_full
+	var glass_low := glass_full
+	for i in 1800:
+		await _frames(1)
+		if lane.dark_train.strength() > 0.6:
+			await _frames(5)
+			haze_low = haze_fog.emission.get_luminance()
+			glass_low = glass.emission_energy_multiplier if glass != null else glass_full
+			break
+	_check("L9b the copal's glow and the red glass dim with the lights",
+		glass != null and haze_low < haze_full * 0.8 and glass_low < glass_full * 0.8,
+		"haze %.3f -> %.3f, glass %.2f -> %.2f" % [haze_full, haze_low, glass_full, glass_low])
+	for i in 1800:
+		if not lane.dark_train.passing() and lane.dark_train.strength() < 0.001:
+			break
+		await _frames(1)
+
+	# A page lying in still air comes to rest before it fades.
+	pages.wind = func(): return lane.DRAUGHT
+	pages.release_now()
+	page = pages.pages.back()
+	for i in 240:
+		await _frames(1)
+		if not is_instance_valid(page) or page.position.y <= 0.0045:
+			break
+	await _frames(90)
+	var x1 := page.position.x if is_instance_valid(page) else INF
+	await _frames(30)
+	var x2 := page.position.x if is_instance_valid(page) else -INF
+	_check("L10d a page lying in still air comes to rest before it fades", absf(x2 - x1) < 0.02,
+		"moved %.3f m in half a second, lying" % (x2 - x1))
+
+	# A page near the lane's end fades out, not vanishing whole in the chapel's doorway.
+	pages.release_now()
+	page = pages.pages.back()
+	page.position = Vector3(pages.end_x - 0.3, 0.004, 1.2)
+	await _frames(1)
+	var alpha: float = (page.material_override as StandardMaterial3D).albedo_color.a if is_instance_valid(page) else 0.0
+	_check("L10e a page near the lane's end fades out", is_instance_valid(page) and alpha <= 0.3, "alpha %.2f 0.3 m short" % alpha)
+	pages.wind = Callable(lane, "draught_now")
 
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:

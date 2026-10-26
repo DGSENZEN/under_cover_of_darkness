@@ -29,8 +29,9 @@ ATLAS = 2048
 SLOTS = ["marigold", "herb", "picado", "picado_b", "iron", "tin", "brass", "wax_red", "glass_red", "wood", "page_edge",
          "leather_brown", "leather_red", "cloth"]
 # (The garland is a rope of heads ~15 cm thick, three round the cord at each step, so it reads from the Pasaje.)
-BUDGET = {"garland": 6000, "milagro_heart": 2000, "milagro_bracket": 1200, "red_lantern": 2500, "lectern": 2000,
-          "lectern_book_block": 300, "lectern_book_cover": 600, "lectern_book_chain": 800, "book_barrow": 4000}
+BUDGET = {"garland": 6000, "garland_fixings": 800, "milagro_heart": 2000, "milagro_bracket": 1200, "red_lantern": 2500,
+          "lectern": 2000, "lectern_book_block": 300, "lectern_book_cover": 600, "lectern_book_chain": 800,
+          "book_barrow": 4000}
 # Cords, flags and lashings are millimetres across by nature: a face there is a sliver under 4 mm.
 SLIVER = {name: 0.004 for name in BUDGET}
 # (A chain's links close their loops with a 3 mm join.)
@@ -102,11 +103,11 @@ def _rope(a, b, sag, n=24):
     return [a.lerp(b, k / n) - Vector((0, 0, sag * 4 * (k / n) * (1 - k / n))) for k in range(n + 1)]
 
 
-def garland(m):
-    """Her cempasúchil garland across the lane, from her riser to the south wall's hook, its flags under it."""
+def garland_fixings(m):
+    """What holds her garland up, which stays put as the garland sways: the riser lashed to her post above the rail,
+    its top bent into an eye; the hook-plate on the south wall, its ring."""
     tie = _lane(*TIE)
     hook = _lane(*HOOK)
-    # The riser: an iron rod lashed to her post above the rail, its top bent into an eye.
     foot = _lane(TIE[0], TIE[1], FRONT_H - 0.12)
     pipe(m, [foot, tie + Vector((0, 0, 0.04))], 0.016, 6, "iron")
     for h in (FRONT_H - 0.05, FRONT_H + 0.25):
@@ -114,10 +115,16 @@ def garland(m):
         ring = [_lane(TIE[0] - 0.035 + 0.05 * math.cos(a), TIE[1] + 0.05 * math.sin(a), h)
                 for a in (2 * math.pi * k / 6 for k in range(6))]
         pipe(m, ring, 0.009, 4, "herb", closed=True)
-    # The hook-plate on the wall, its ring.
     box(m, _lane(HOOK[0] - 0.07, FAR_WALL - 0.018, HOOK[2] - 0.09), _lane(HOOK[0] + 0.07, FAR_WALL, HOOK[2] + 0.09),
         "iron", r=0.006)
     pipe(m, [_lane(HOOK[0], FAR_WALL - 0.018, HOOK[2]), hook], 0.01, 6, "iron")
+
+
+def garland(m):
+    """Her cempasúchil garland across the lane, from her riser to the south wall's hook (garland_fixings), its flags
+    under it: the cord, its heads and its flags alone, which sway."""
+    tie = _lane(*TIE)
+    hook = _lane(*HOOK)
     # The cord and its heads, crowded along it.
     cord = _rope(tie, hook, SAG)
     pipe(m, cord, 0.008, 4, "herb")
@@ -452,8 +459,8 @@ def build():
     common.reset()
     underground_shapes.rng = rng
     rng.seed(2410)
-    for f in (garland, milagro_heart, milagro_bracket, red_lantern, lectern, lectern_book_block, lectern_book_cover,
-              lectern_book_chain, book_barrow):
+    for f in (garland, garland_fixings, milagro_heart, milagro_bracket, red_lantern, lectern, lectern_book_block,
+              lectern_book_cover, lectern_book_chain, book_barrow):
         smooth_object(f.__name__, f)
 
 

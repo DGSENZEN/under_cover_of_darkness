@@ -229,6 +229,9 @@ var threshold_book: ChainedBook
 ## Loose pages lifted out of his arch on the draught; her copal pooled under the vault (Vfx "copal_pool").
 var pages: Node3D
 var copal_haze: Node3D
+## His lantern's red glass; the glows that dim with the lights as they sag (her copal's, the glass's), at their full.
+var red_glass: StandardMaterial3D
+var _glows := {}
 ## The shades one talks to: "librarian", "curandera", "market_curandera".
 var shades := {}
 
@@ -317,6 +320,14 @@ func set_decals(on: bool) -> void:
 func _process(delta: float) -> void:
 	super._process(delta)
 	_sway(landmarks.get("garland"), GARLAND_TIE, GARLAND_HOOK, GARLAND_SWAY)
+	# (Her copal's and his glass's glows follow the lights' sag, as her bulb's.)
+	if bulb != null and _full.get(bulb, 0.0) > 0.0:
+		var sag: float = bulb.light_energy / _full[bulb]
+		for glow in _glows:
+			if glow is FogMaterial:
+				glow.emission = _glows[glow] * sag
+			else:
+				glow.emission_energy_multiplier = _glows[glow] * sag
 	# (Her heart turns slowly on its hook, two slow swings over each other.)
 	if milagro_pivot != null:
 		milagro_pivot.rotation.y = MILAGRO_TURN * (0.6 * sin(_clock * 0.31) + 0.4 * sin(_clock * 0.73 + 2.0))
@@ -557,20 +568,22 @@ func _landmarks() -> void:
 		return
 	var meshes := _kit(LANDMARKS_KIT)
 	var look := Painterly.material(_painted(["lane_landmarks.png", "lane_landmarks_base.png"]), &"bespoke")
-	for kind in ["garland", "milagro_bracket", "red_lantern"]:
+	for kind in ["garland", "garland_fixings", "milagro_bracket", "red_lantern"]:
 		landmarks[kind] = _place(meshes[kind], look, kind, Vector3.ZERO, 0.0, false)
 	# His lantern's glass, red and lit from within, and its light.
 	var lantern: MeshInstance3D = landmarks["red_lantern"]
 	for i in lantern.mesh.get_surface_count():
 		var slot: Material = lantern.mesh.surface_get_material(i)
 		if slot != null and slot.resource_name == "glass_red":
-			lantern.set_surface_override_material(i, _red_glass())
+			red_glass = _red_glass()
+			lantern.set_surface_override_material(i, red_glass)
 	lantern_light = OmniLight3D.new()
 	lantern_light.name = "lantern_light"
 	lantern_light.light_color = LANTERN_RED
 	lantern_light.light_energy = LANTERN_LIGHT.x
 	lantern_light.omni_range = LANTERN_LIGHT.y
-	lantern_light.shadow_enabled = false
+	# (It stops at the wall: no red cast through it on the shop's floor and shelves.)
+	lantern_light.shadow_enabled = true
 	add_child(lantern_light)
 	lantern_light.position = LANTERN_AT
 	_full[lantern_light] = LANTERN_LIGHT.x
@@ -597,11 +610,18 @@ func _landmarks() -> void:
 	pages.end_x = half_run
 	pages.wind = draught_now
 	add_child(pages)
+	# (The form light leaves them as they are: an effect, its own look.)
+	inspection_sections.append(pages)
 	copal_haze = Vfx.system("copal_pool")
 	copal_haze.name = "copal_haze"
 	add_child(copal_haze)
 	Vfx.place(copal_haze, to_global(COPAL_POOL))
 	Vfx.emit(copal_haze, true)
+	# (Her copal's glow is her bulb's light in it, and his glass's the lamp behind it: they sag as the lights do.)
+	for fog: FogVolume in copal_haze.find_children("*", "FogVolume", true, false):
+		_glows[fog.material] = (fog.material as FogMaterial).emission
+	if red_glass != null:
+		_glows[red_glass] = red_glass.emission_energy_multiplier
 	milagro_pivot = Node3D.new()
 	milagro_pivot.name = "milagro_pivot"
 	add_child(milagro_pivot)
