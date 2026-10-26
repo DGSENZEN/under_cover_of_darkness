@@ -2341,6 +2341,13 @@ class LaneLandmarks(unittest.TestCase):
         # (Out from the wall over the threshold, its foot over every head.)
         self.assertGreaterEqual(min(v.z for v in vs), 2.3)
 
+    def test_the_threshold_stands_against_the_shopfront_clear_of_the_doorway(self):
+        # (Lane z 3.4-4.55, Blender y -4.55..-3.4; none of it in the arch's opening, x 4.7-7.7.)
+        for name in ("lectern", "lectern_book_block", "lectern_book_cover", "lectern_book_chain", "book_barrow"):
+            vs = _world(self.objects[name])
+            self.assertTrue(-4.55 <= min(v.y for v in vs) and max(v.y for v in vs) <= -3.4, name)
+            self.assertTrue(max(v.x for v in vs) < 4.7 or min(v.x for v in vs) > 7.7, name)
+
 
 if __name__ == "__main__":
     # (`-- Class` or `-- Class.test_name` after Blender's own arguments runs just those.)

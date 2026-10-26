@@ -26,11 +26,15 @@ from underground_shapes import box, pipe, smooth_object, turned  # noqa: E402
 
 NAME = "lane_landmarks"
 ATLAS = 2048
-SLOTS = ["marigold", "herb", "picado", "picado_b", "iron", "tin", "brass", "wax_red", "glass_red"]
+SLOTS = ["marigold", "herb", "picado", "picado_b", "iron", "tin", "brass", "wax_red", "glass_red", "wood", "page_edge",
+         "leather_brown", "leather_red", "cloth"]
 # (The garland is a rope of heads ~15 cm thick, three round the cord at each step, so it reads from the Pasaje.)
-BUDGET = {"garland": 6000, "milagro_heart": 2000, "milagro_bracket": 1200, "red_lantern": 2500}
+BUDGET = {"garland": 6000, "milagro_heart": 2000, "milagro_bracket": 1200, "red_lantern": 2500, "lectern": 2000,
+          "lectern_book_block": 300, "lectern_book_cover": 600, "lectern_book_chain": 800, "book_barrow": 4000}
 # Cords, flags and lashings are millimetres across by nature: a face there is a sliver under 4 mm.
 SLIVER = {name: 0.004 for name in BUDGET}
+# (A chain's links close their loops with a 3 mm join.)
+SLIVER["lectern_book_chain"] = 0.003
 
 rng = random.Random(2410)
 
@@ -73,6 +77,19 @@ GLASS = (2.95, 3.22)
 CAP_H = 0.1
 # (Base and cap rim 4.5 cm deep: at 3 cm the glass's top and bottom lay over theirs, layered.)
 PLATE_T = 0.045
+# His threshold, against the shopfront clear of the arch (x 4.7-7.7): the lectern beside the west jamb, its rest's top
+# middle (lane x, height, z: Godot's way, as maps/candle_lane.gd's LECTERN_REST), how far it tips toward the walk,
+# its size (across, deep, thick); the book on it (across, deep, the block's thickness, the cover's); where its chain
+# is fixed and where it is stapled to the cover (on the rest: across, deep, up off its top). The barrow beside the east
+# jamb (its bed's x, z, the bed's height).
+LECTERN_REST = (3.9, 1.095, 3.98)
+LECTERN_TILT = math.radians(20.0)
+REST = (0.46, 0.34, 0.045)
+BOOK = (0.3, 0.22, 0.06, 0.012)
+CHAIN_ANCHOR = (0.25, -0.05, -0.05)
+CHAIN_STAPLE = (0.155, -0.06, 0.066)
+HINGE = ((-0.15, -0.11, 0.066), (-0.15, 0.11, 0.066))
+BARROW = ((8.0, 9.2), (3.75, 4.4), 0.5)
 
 
 def _lane(x, z, y):
@@ -317,11 +334,126 @@ def red_lantern(m):
     turned(m, [(0.03, -0.06), (0.012, -0.005), (0.02, 0.0)], 8, "iron", at=tuple(_lane(x, z, GLASS[0] - PLATE_T)))
 
 
+def _on_rest(u, v, w):
+    """A point on the lectern's rest (u across, v back up its slope, w up off its top) in Blender's axes."""
+    x, h, z = LECTERN_REST
+    a = LECTERN_TILT
+    return _lane(x + u, z + v * math.cos(a) - w * math.sin(a), h + v * math.sin(a) + w * math.cos(a))
+
+
+def _rest_box(m, lo, hi, slot, r=0.004):
+    """A box on the rest, its corners `lo` and `hi` in the rest's (u, v, w), tipped with it."""
+    centre = _on_rest(*((Vector(lo) + Vector(hi)) / 2))
+    size = Vector(hi) - Vector(lo)
+    box(m, centre - size / 2, centre + size / 2, slot, r=r, turn=(-LECTERN_TILT, 0.0, 0.0))
+
+
+def lectern(m):
+    """His lectern beside the arch: crossed feet, a post, the rest tipped toward the walk with a lip at its foot, the
+    ring its book's chain is fixed to."""
+    x, h, z = LECTERN_REST
+    box(m, _lane(x - 0.25, z - 0.06, 0.0), _lane(x + 0.25, z + 0.06, 0.06), "wood", r=0.01)
+    # (The cross-foot in two halves either side of it: run through it, their undersides lay one on the other.)
+    for z_lo, z_hi in ((z - 0.22, z - 0.06), (z + 0.06, z + 0.22)):
+        box(m, _lane(x - 0.06, z_lo, 0.0), _lane(x + 0.06, z_hi, 0.09), "wood", r=0.01)
+    box(m, _lane(x - 0.035, z - 0.035, 0.09), _lane(x + 0.035, z + 0.035, h - 0.08), "wood", r=0.008)
+    w, d, t = REST
+    _rest_box(m, (-w / 2, -d / 2, -t), (w / 2, d / 2, 0.0), "wood", r=0.006)
+    _rest_box(m, (-w / 2, -d / 2 - 0.03, -t), (w / 2, -d / 2, 0.025), "wood", r=0.004)
+    m.shell()
+    ax, ay, az = CHAIN_ANCHOR
+    eye = [_on_rest(ax, ay + 0.014 * math.cos(a), az + 0.014 * math.sin(a)) for a in (2 * math.pi * k / 8 for k in range(8))]
+    pipe(m, eye, 0.005, 4, "iron", closed=True)
+
+
+def lectern_book_block(m):
+    """The chained book's pages (its cover is its own: it lifts)."""
+    w, d, t, _ = BOOK
+    _rest_box(m, (-w / 2, -d / 2, 0.0), (w / 2, d / 2, t), "page_edge", r=0.004)
+
+
+def lectern_book_cover(m):
+    """The chained book's red leather cover, nailed shut at its corners, its staple at the fore-edge."""
+    w, d, t, c = BOOK
+    _rest_box(m, (-w / 2 - 0.005, -d / 2 - 0.005, t), (w / 2 + 0.005, d / 2 + 0.005, t + c), "leather_red", r=0.003)
+    for su in (-1, 1):
+        for sv in (-1, 1):
+            m.shell()
+            m.sphere(tuple(_on_rest(su * (w / 2 - 0.025), sv * (d / 2 - 0.025), t + c)), 0.012, 3, 5, "iron")
+    sx, sy, sz = CHAIN_STAPLE
+    m.shell()
+    pipe(m, [_on_rest(sx - 0.01, sy - 0.012, sz), _on_rest(sx + 0.012, sy - 0.012, sz),
+             _on_rest(sx + 0.012, sy + 0.012, sz), _on_rest(sx - 0.01, sy + 0.012, sz)], 0.0065, 4, "iron")
+
+
+def lectern_book_chain(m):
+    """The chain from the lectern's ring to the cover's staple: links turned each way, sagging a little."""
+    a = Vector(_on_rest(*CHAIN_ANCHOR))
+    b = Vector(_on_rest(*CHAIN_STAPLE))
+    links = 6
+    for k in range(links):
+        t = (k + 0.5) / links
+        at = a.lerp(b, t) - Vector((0, 0, 0.03 * 4 * t * (1 - t)))
+        along = (b - a).normalized()
+        side = along.cross(Vector((0, 0, 1))).normalized() if k % 2 else Vector((0, 0, 1))
+        m.shell()
+        loop = [at + along * 0.022 * math.cos(q) + side * 0.016 * math.sin(q) for q in (2 * math.pi * j / 8 for j in range(8))]
+        pipe(m, loop, 0.0055, 4, "iron", closed=True)
+
+
+def book_barrow(m):
+    """A low wooden handcart beside the arch, heaped with books, its handles toward the mouth, two wheels at its far
+    end. (The books' spines bear nothing: no titles.)"""
+    (x0, x1), (z0, z1), h = BARROW
+    box(m, _lane(x0, z0, h - 0.05), _lane(x1, z1, h), "wood", r=0.008)
+    # (Boards 3.2 cm: thinner, an end board's end lay over a side board's face, layered.)
+    t = 0.032
+    for zz in (z0, z1 - t):
+        box(m, _lane(x0, zz, h), _lane(x1, zz + t, h + 0.14), "wood", r=0.006)
+    for xx in (x0, x1 - t):
+        box(m, _lane(xx, z0 + t, h), _lane(xx + t, z1 - t, h + 0.12), "wood", r=0.006)
+    # The handles, out toward the mouth, and the legs under them.
+    for zz in (z0 + 0.08, z1 - 0.08):
+        m.shell()
+        pipe(m, [_lane(x0 + 0.3, zz, h - 0.06), _lane(x0 - 0.22, zz, h - 0.02), _lane(x0 - 0.24, zz, h + 0.02)], 0.022, 6,
+             "wood")
+        box(m, _lane(x0 + 0.05, zz - 0.025, 0.0), _lane(x0 + 0.1, zz + 0.025, h - 0.05), "wood", r=0.008)
+    # The wheels, either side at the far end, on their axle.
+    for zz, face in ((z0 - 0.085, -1), (z1 + 0.045, 1)):
+        turned(m, [(0.06, 0.0), (0.26, 0.004), (0.27, 0.02), (0.26, 0.036), (0.06, 0.04)], 14, "wood",
+               at=tuple(_lane(x1 - 0.3, zz, 0.27)), lean=math.pi / 2)
+    m.shell()
+    pipe(m, [_lane(x1 - 0.3, z0 - 0.06, 0.27), _lane(x1 - 0.3, z1 + 0.06, 0.27)], 0.018, 6, "iron")
+    # The books, heaped: rows on the bed, a second layer, a few leaning.
+    slots = ["leather_brown", "leather_red", "cloth", "leather_brown"]
+    n = 0
+    for row in range(2):
+        layer_h = h + row * 0.05
+        x = x0 + 0.05 + row * 0.08
+        while x < x1 - 0.2 - row * 0.1:
+            w = rng.uniform(0.14, 0.2)
+            dz = rng.uniform(0.2, 0.28)
+            zc = (z0 + z1) / 2 + rng.uniform(-0.12, 0.12)
+            spin = rng.uniform(-0.25, 0.25)
+            centre = _lane(x + w / 2, zc, layer_h + 0.022)
+            size = Vector((w, dz, 0.044))
+            box(m, centre - size / 2, centre + size / 2, slots[n % len(slots)], r=0.004, turn=(0.0, 0.0, spin))
+            x += w + 0.03
+            n += 1
+    for k in range(3):
+        x = x0 + 0.25 + k * 0.32
+        centre = _lane(x, z1 - 0.12, h + 0.2)
+        size = Vector((0.04, 0.2, 0.26))
+        box(m, centre - size / 2, centre + size / 2, slots[(n + k) % len(slots)], r=0.004,
+            turn=(rng.uniform(-0.25, 0.25), 0.0, rng.uniform(-0.3, 0.3)))
+
+
 def build():
     common.reset()
     underground_shapes.rng = rng
     rng.seed(2410)
-    for f in (garland, milagro_heart, milagro_bracket, red_lantern):
+    for f in (garland, milagro_heart, milagro_bracket, red_lantern, lectern, lectern_book_block, lectern_book_cover,
+              lectern_book_chain, book_barrow):
         smooth_object(f.__name__, f)
 
 

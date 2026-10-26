@@ -731,6 +731,42 @@ func _landmarks() -> void:
 				break
 	_check("L7b it sags with the train", sagged, "sagged %s" % sagged)
 
+	# His threshold: the lectern and its chained book, the book barrow, against the shopfront clear of the doorway;
+	# nothing on them for words.
+	var placed := []
+	var stray := []
+	for kind in ["lectern", "lectern_book_block", "lectern_book_cover", "lectern_book_chain", "book_barrow"]:
+		var piece: MeshInstance3D = marks.get(kind)
+		if piece == null:
+			continue
+		placed.append(kind)
+		var box: AABB = lane.global_transform.affine_inverse() * piece.global_transform * piece.get_aabb()
+		if box.position.z < 3.4 or box.end.z > 4.56 or (box.end.x > 4.7 and box.position.x < 7.7):
+			stray.append("%s %s" % [kind, box])
+	var book: Node3D = lane.get("threshold_book")
+	var on_rest: bool = book != null and book is ChainedBook and book.cover == marks.get("lectern_book_cover")
+	var words := 0
+	for piece in marks.values():
+		words += piece.find_children("*", "Label3D", true, false).size() + piece.find_children("*", "Decal", true, false).size()
+	_check("L8 the threshold is dressed and the doorway clear: lectern, chained book, book barrow, nothing written",
+		placed.size() == 5 and stray.is_empty() and on_rest and words == 0,
+		"placed %s, astray %s, chained %s, words %d" % [placed, stray, on_rest, words])
+	var strained := false
+	if on_rest:
+		var rest: Transform3D = book.cover.global_transform
+		book.strain_now()
+		for i in 120:
+			await _frames(1)
+			strained = strained or not book.cover.global_transform.is_equal_approx(rest)
+	_check("L8a its cover strains against the chain", strained and on_rest and book.staple_gap() < 0.01,
+		"strained %s, staple gap %.3f" % [strained, book.staple_gap() if on_rest else -1.0])
+
+	# Walked: from the lane's mouth through the arch to his desk, past them (C4's way).
+	var spawn := Vector3(-15.0, 1.05, 1.1)
+	var to_desk: Array[Vector3] = [Vector3(5.0, 1.05, 0.5), Vector3(6.2, 1.05, 1.0), Vector3(6.2, 1.05, 4.0), Vector3(6.2, 1.05, 7.0), Vector3(6.2, 1.05, 8.4)]
+	var desk := await _walk_path(spawn, to_desk, 2400)
+	_check("L8b the player still walks through the arch to his desk", desk["ok"], "desk %s" % [desk])
+
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:
 	var space := lane.get_world_3d().direct_space_state

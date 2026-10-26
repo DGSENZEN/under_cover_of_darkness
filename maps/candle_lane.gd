@@ -46,6 +46,14 @@ const MILAGRO_WICK := Vector3(-1.55, 2.515, 0.12)
 const LANTERN_AT := Vector3(6.2, 3.085, 3.9)
 const LANTERN_RED := Color("e63833")
 const LANTERN_LIGHT := Vector2(1.2, 6.0)
+## His threshold's lectern (lane_landmarks.py's LECTERN_REST, LECTERN_TILT): its rest's top middle and its tip toward the
+## walk; on it the chained book's hinge along its spine, its chain's fixed ring and the staple on its cover (each on
+## the rest: across, back up its slope, up off its top).
+const LECTERN_REST := Vector3(3.9, 1.095, 3.98)
+const LECTERN_TILT := deg_to_rad(20.0)
+const BOOK_HINGE := [Vector3(-0.15, -0.11, 0.066), Vector3(-0.15, 0.11, 0.066)]
+const BOOK_CHAIN_ANCHOR := Vector3(0.25, -0.05, -0.05)
+const BOOK_STAPLE := Vector3(0.155, -0.06, 0.066)
 const LANE_WICKS := "res://assets/eclipse/source/candle_lane_wicks.json"
 ## How far the end wall's opening reaches inside the doorway's frame (m, each side and over it): the wall's cut faces
 ## buried in the stone, the way through still the frame's 3 m.
@@ -210,6 +218,8 @@ var milagro_pivot: Node3D
 var milagro_flame: Node3D
 ## His lantern's light (LANTERN_RED), sagging with the lane's lights when a train draws on the line.
 var lantern_light: OmniLight3D
+## The book chained to the lectern at his threshold (its own, not his desk's).
+var threshold_book: ChainedBook
 ## The shades one talks to: "librarian", "curandera", "market_curandera".
 var shades := {}
 
@@ -547,6 +557,22 @@ func _landmarks() -> void:
 	add_child(lantern_light)
 	lantern_light.position = LANTERN_AT
 	_full[lantern_light] = LANTERN_LIGHT.x
+	# His threshold: the lectern and the barrow stand (solid), the book on the lectern, its cover straining at its chain.
+	for kind in ["lectern", "book_barrow"]:
+		landmarks[kind] = _place(meshes[kind], look, kind, Vector3.ZERO, 0.0, true)
+	for kind in ["lectern_book_block", "lectern_book_cover", "lectern_book_chain"]:
+		landmarks[kind] = _place(meshes[kind], look, kind, Vector3.ZERO, 0.0, false)
+	threshold_book = ChainedBook.new()
+	threshold_book.name = "threshold_book"
+	threshold_book.seed = 77
+	threshold_book.cover = landmarks["lectern_book_cover"]
+	threshold_book.block = landmarks["lectern_book_block"]
+	threshold_book.hinge_a = to_global(_on_rest(BOOK_HINGE[0]))
+	threshold_book.hinge_b = to_global(_on_rest(BOOK_HINGE[1]))
+	threshold_book.chain = landmarks["lectern_book_chain"]
+	threshold_book.chain_anchor = to_global(_on_rest(BOOK_CHAIN_ANCHOR))
+	threshold_book.staple = to_global(_on_rest(BOOK_STAPLE))
+	add_child(threshold_book)
 	milagro_pivot = Node3D.new()
 	milagro_pivot.name = "milagro_pivot"
 	add_child(milagro_pivot)
@@ -562,6 +588,12 @@ func _landmarks() -> void:
 	add_child(milagro_flame)
 	Vfx.place(milagro_flame, wick, {"wicks": [[wick.x, wick.y, wick.z]]})
 	Vfx.emit(milagro_flame, true)
+
+
+## A point on his lectern's rest (across, back up its slope, up off its top), in the lane's frame.
+func _on_rest(p: Vector3) -> Vector3:
+	return LECTERN_REST + Vector3(p.x, p.y * sin(LECTERN_TILT) + p.z * cos(LECTERN_TILT),
+		p.y * cos(LECTERN_TILT) - p.z * sin(LECTERN_TILT))
 
 
 ## His lantern's old darkroom glass: red, half see-through, lit from within.

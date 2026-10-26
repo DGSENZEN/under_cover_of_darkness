@@ -8,8 +8,13 @@
   "tin",
   "brass",
   "wax_red",
-  "glass_red"
+  "glass_red",
+  "wood",
+  "page_edge",
+  "leather_brown",
+  "leather_red",
+  "cloth"
  ],
  "atlas_px": 2048,
- "px_per_m": 329.88
+ "px_per_m": 241.28
 }
