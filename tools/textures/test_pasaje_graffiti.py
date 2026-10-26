@@ -74,6 +74,57 @@ class Graffiti(unittest.TestCase):
                 self.assertGreater(q.mean(), 0.01, k)
 
 
+class Pieces(unittest.TestCase):
+    """The second sheet (pasaje_graffiti.make_pieces): the market's bigger, richer pieces."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        brushes = Path(cls.tmp.name)
+        rng = np.random.default_rng(7)
+        for i in range(5):
+            grey = (rng.random((64, 64)) * 255).astype(np.uint8)
+            Image.fromarray(np.dstack([grey, np.full_like(grey, 255)]), "LA").save(brushes / ("brush_%02d.png" % i))
+        cls.sheet = np.asarray(pasaje_graffiti.make_pieces(brushes))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def _cell(self, k):
+        n, size = pasaje_graffiti.PIECE_GRID, pasaje_graffiti.CELL
+        j, i = divmod(k, n)
+        return self.sheet[j * size:(j + 1) * size, i * size:(i + 1) * size]
+
+    def test_nine_pieces_each_painted_with_a_clear_border(self):
+        n = pasaje_graffiti.PIECE_GRID
+        self.assertEqual(self.sheet.shape, (n * pasaje_graffiti.CELL, n * pasaje_graffiti.CELL, 4))
+        self.assertEqual(pasaje_graffiti.PIECES, ["burner", "burner", "heart", "serpent", "alebrije", "lucha",
+                                                  "sugar_skull", "buff", "rollcall"])
+        b = pasaje_graffiti.BORDER
+        for k in range(n * n):
+            cell = self._cell(k)
+            self.assertGreater((cell[..., 3] > 128).mean(), 0.05, k)
+            self.assertEqual(int(max(cell[:b, :, 3].max(), cell[-b:, :, 3].max(), cell[:, :b, 3].max(),
+                                     cell[:, -b:, 3].max())), 0, k)
+
+    def test_the_pieces_are_many_coloured(self):
+        # (Richer than a one-can tag: three paints and more over a share of each piece, the buff's greys aside.)
+        for k, kind in enumerate(pasaje_graffiti.PIECES):
+            if kind == "buff":
+                continue
+            cell = self._cell(k)
+            paint = cell[cell[..., 3] > 160][:, :3] // 48
+            keys, counts = np.unique(paint[:, 0] * 64 + paint[:, 1] * 8 + paint[:, 2], return_counts=True)
+            self.assertGreaterEqual(int((counts > 0.03 * len(paint)).sum()), 3, (k, kind))
+
+    def test_their_lettering_is_the_invented_script(self):
+        script = library_glyphs.script_glyphs(seed=pasaje_graffiti.SCRIPT_SEED)
+        for k, glyphs in pasaje_graffiti.piece_spelling().items():
+            self.assertIn(pasaje_graffiti.PIECES[k], ("burner", "buff", "rollcall"), k)
+            self.assertTrue(glyphs and all(0 <= g < len(script) for word in glyphs for g in word), k)
+
+
 class Wards(unittest.TestCase):
     """The wards' sheet (pasaje_graffiti.make_wards): the chalk ritual circle, the threshold's arc, the salt line, the
     wall's ward sigil, each painted in its cell, a clear border, written in the invented script."""

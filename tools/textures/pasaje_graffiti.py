@@ -341,6 +341,311 @@ def make(brushes_dir=brush_sheets.BRUSHES):
     return Image.fromarray(sheet, "RGBA")
 
 
+# --- the pieces -----------------------------------------------------------------------------------------
+
+# The second sheet (3 x 3): what the market's painters spent a night on, not a minute. Burners (fat letters filled
+# in a fade, blocked out in 3-D, arrows thrown off them, a cloud behind), the sacred heart in flames and thorns, the
+# feathered serpent's coils, an alebrije, the luchador's mask, a sugar skull in flowers; the Company's buff, its grey
+# rollered over old tags and a new tag already on it; a crew's roll-call.
+PIECE_GRID = 3
+PIECES = ["burner", "burner", "heart", "serpent", "alebrije", "lucha", "sugar_skull", "buff", "rollcall"]
+
+
+def piece_spelling(seed=SCRIPT_SEED):
+    """Which of the invented script's glyphs each lettered piece spells: {cell: [[glyph indices] a word]}."""
+    rng = random.Random(seed + 11)
+    count = len(library_glyphs.script_glyphs(seed=SCRIPT_SEED))
+    out = {}
+    for k, kind in enumerate(PIECES):
+        if kind == "burner":
+            out[k] = [[rng.randrange(count) for _ in range(rng.randint(3, 4))]]
+        elif kind == "buff":
+            out[k] = [[rng.randrange(count) for _ in range(5)], [rng.randrange(count) for _ in range(4)]]
+        elif kind == "rollcall":
+            out[k] = [[rng.randrange(count) for _ in range(rng.randint(3, 5))] for _ in range(4)]
+    return out
+
+
+def _fade(top, bottom):
+    """A colour fading down the cell from `top` to `bottom`."""
+    t = np.linspace(0.0, 1.0, CELL)[:, None, None]
+    return np.broadcast_to(np.array(top, np.float64) * (1 - t) + np.array(bottom, np.float64) * t, (CELL, CELL, 3))
+
+
+def _darker(colour, by=0.45):
+    return tuple(int(c * by) for c in colour)
+
+
+def _blobs(rng, xs, ys, count, rmin, rmax):
+    cloud = _canvas()
+    d = ImageDraw.Draw(cloud)
+    for _ in range(count):
+        cx, cy, r = rng.uniform(xs[0], xs[1]), rng.uniform(ys[0], ys[1]), rng.uniform(rmin, rmax)
+        d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=255)
+    return np.asarray(cloud) > 128
+
+
+def _burner(words, script, rng):
+    size = BIG * 0.29
+    word, _ = _word(words[0], script, rng, size, BIG * 0.07, 0.5, rng.uniform(0.1, 0.2), BIG * 0.5, 0.05)
+    fill = np.asarray(word) > 128
+    ys, xs = np.nonzero(fill)
+    arrows = _canvas()
+    d = ImageDraw.Draw(arrows)
+    for x, y, way in ((xs.min(), int(ys[np.argmin(xs)]), -1), (xs.max(), int(ys[np.argmax(xs)]), 1)):
+        tip = (x + way * BIG * 0.08, y - BIG * 0.07)
+        d.line([(x - way * BIG * 0.02, y), tip], fill=255, width=int(BIG * 0.03))
+        d.polygon([(tip[0] + way * BIG * 0.045, tip[1] - BIG * 0.03), (tip[0] - way * BIG * 0.03, tip[1] - BIG * 0.03),
+                   (tip[0] + way * BIG * 0.01, tip[1] + BIG * 0.04)], fill=255)
+    fill |= np.asarray(arrows) > 128
+    outline = _grow(fill, BIG * 0.016)
+    block = np.zeros_like(fill)
+    for k in range(1, 16):
+        block |= np.roll(outline, (k, k), axis=(0, 1))
+    cloud = _blobs(rng, (xs.min() - BIG * 0.05, xs.max() + BIG * 0.05), (ys.min(), ys.max()), 16, BIG * 0.08, BIG * 0.15)
+    cloud_line = _grow(cloud, BIG * 0.012)
+    shine = fill & ~np.roll(fill, (BIG // 70, BIG // 70), axis=(0, 1))
+    top, bottom, back, deep = [((YELLOW, RED, TEAL, VIOLET)), ((TEAL, BLUE, PINK, BLACK)), ((PINK, VIOLET, YELLOW, BLUE)),
+                               ((ORANGE, RED, BLUE, BLACK)), ((CHROME, BLUE, ORANGE, BLACK))][rng.randrange(5)]
+    sparkle = _canvas()
+    s = ImageDraw.Draw(sparkle)
+    for _ in range(rng.randint(3, 5)):
+        x, y = rng.uniform(0.15, 0.85) * BIG, rng.uniform(0.25, 0.7) * BIG
+        r = BIG * rng.uniform(0.02, 0.035)
+        s.polygon([(x, y - r), (x + r * 0.2, y - r * 0.2), (x + r, y), (x + r * 0.2, y + r * 0.2), (x, y + r),
+                   (x - r * 0.2, y + r * 0.2), (x - r, y), (x - r * 0.2, y - r * 0.2)], fill=255)
+    return [(_f(_img(cloud_line)), BLACK, "spray"), (_f(_img(cloud)), back, "spray"), (_f(_img(block)), _darker(deep, 0.6), "spray"),
+            (_f(_img(outline)), BLACK, "spray"), (_f(_img(fill)), _fade(top, bottom), "spray"), (_f(_img(shine)), WHITE, "spray"),
+            (_f(_drips(_img(fill), rng, rng.randint(3, 6), BIG * 0.012, BIG * 0.14)), bottom, "spray"),
+            (_f(sparkle), WHITE, "spray")]
+
+
+def _heart(rng):
+    s = BIG
+    heart = _canvas()
+    d = ImageDraw.Draw(heart)
+    for cx in (0.38, 0.62):
+        d.ellipse((s * (cx - 0.14), s * 0.33, s * (cx + 0.14), s * 0.61), fill=255)
+    d.polygon([(s * 0.25, s * 0.5), (s * 0.75, s * 0.5), (s * 0.5, s * 0.84)], fill=255)
+    body = np.asarray(heart) > 128
+    y, x = np.mgrid[0:BIG, 0:BIG]
+    shadow = body & (x + y > s * 1.12)
+    shine = body & (np.hypot(x - s * 0.34, y - s * 0.42) < s * 0.05)
+    flames = _canvas()
+    f = ImageDraw.Draw(flames)
+    for cx, h in ((0.5, 0.2), (0.42, 0.13), (0.58, 0.13)):
+        f.polygon([(s * (cx - 0.05), s * 0.36), (s * (cx + 0.05), s * 0.36), (s * (cx + 0.02), s * (0.36 - h * 0.6)),
+                   (s * cx, s * (0.36 - h)), (s * (cx - 0.03), s * (0.36 - h * 0.5))], fill=255)
+    cross = _canvas()
+    c = ImageDraw.Draw(cross)
+    c.rectangle((s * 0.49, s * 0.06, s * 0.51, s * 0.19), fill=255)
+    c.rectangle((s * 0.455, s * 0.1, s * 0.545, s * 0.12), fill=255)
+    thorns = _canvas()
+    t = ImageDraw.Draw(thorns)
+    band = [(s * (0.24 + 0.52 * k / 20), s * (0.56 + 0.025 * math.sin(k * 1.6))) for k in range(21)]
+    t.line(band, fill=255, width=int(s * 0.03))
+    for k in range(0, 21, 2):
+        bx, by = band[k]
+        t.polygon([(bx - s * 0.01, by), (bx + s * 0.01, by), (bx, by - s * 0.045 * (1 if k % 4 else -1))], fill=255)
+    thorns_m = (np.asarray(thorns) > 128) & _grow(body, s * 0.02)
+    rays = _canvas()
+    r = ImageDraw.Draw(rays)
+    for k in range(18):
+        a = 2 * math.pi * k / 18
+        r.line([(s * 0.5 + s * 0.3 * math.cos(a), s * 0.52 + s * 0.3 * math.sin(a)),
+                (s * 0.5 + s * 0.44 * math.cos(a), s * 0.52 + s * 0.44 * math.sin(a))], fill=255, width=int(s * 0.018))
+    outline = _grow(body, s * 0.012)
+    return [(_f(rays), YELLOW, "spray"), (_f(_img(outline)), BLACK, "spray"), (_f(heart), RED, "spray"),
+            (_f(_img(shadow)), BLOOD, "spray"), (_f(_img(shine)), WHITE, "spray"), (_f(_img(thorns_m)), GREEN, "spray"),
+            (_f(flames), ORANGE, "spray"), (_f(cross), YELLOW, "spray"),
+            (_f(_drips(heart, rng, 4, BIG * 0.012, BIG * 0.1)), RED, "spray")]
+
+
+def _serpent(rng):
+    s = BIG
+    path = [(s * (0.86 - 0.72 * t), s * (0.55 + 0.15 * math.sin(2 * math.pi * 1.25 * t + 0.4))) for t in np.linspace(0, 1, 90)]
+    body = _canvas()
+    d = ImageDraw.Draw(body)
+    for i, (x, y) in enumerate(path):
+        w = s * (0.075 - 0.055 * i / len(path))
+        d.ellipse((x - w, y - w, x + w, y + w), fill=255)
+    mask = np.asarray(body) > 128
+    yy, xx = np.mgrid[0:BIG, 0:BIG]
+    scales = mask & (np.sin(xx * 0.09) * np.sin(yy * 0.09) > 0.55)
+    feathers = _canvas()
+    fd = ImageDraw.Draw(feathers)
+    hx, hy = path[0]
+    for k in range(9):
+        a = -math.pi * (0.15 + 0.7 * k / 8)
+        fx, fy = hx - s * 0.06 + s * 0.13 * math.cos(a), hy + s * 0.13 * math.sin(a)
+        fd.polygon([(hx - s * 0.05, hy), (fx - s * 0.02, fy), (fx + s * 0.02, fy + s * 0.01)], fill=255)
+    jaw = _canvas()
+    j = ImageDraw.Draw(jaw)
+    j.polygon([(hx + s * 0.02, hy - s * 0.03), (hx + s * 0.12, hy - s * 0.07), (hx + s * 0.09, hy)], fill=255)
+    j.polygon([(hx + s * 0.02, hy + s * 0.03), (hx + s * 0.12, hy + s * 0.07), (hx + s * 0.09, hy + s * 0.005)], fill=255)
+    tongue = _canvas()
+    ImageDraw.Draw(tongue).line([(hx + s * 0.08, hy + s * 0.005), (hx + s * 0.15, hy), (hx + s * 0.17, hy - s * 0.02)],
+                                fill=255, width=int(s * 0.008))
+    eye = _canvas()
+    ImageDraw.Draw(eye).ellipse((hx - s * 0.02, hy - s * 0.045, hx + s * 0.02, hy - s * 0.01), fill=255)
+    pupil = _canvas()
+    ImageDraw.Draw(pupil).ellipse((hx - s * 0.008, hy - s * 0.035, hx + s * 0.008, hy - s * 0.018), fill=255)
+    solid = mask | (np.asarray(jaw) > 128)
+    outline = _grow(solid | (np.asarray(feathers) > 128), s * 0.011)
+    return [(_f(_img(outline)), BLACK, "spray"), (_f(feathers), _fade(RED, YELLOW), "spray"), (_f(_img(solid)), TEAL, "spray"),
+            (_f(_img(scales)), GREEN, "spray"), (_f(tongue), RED, "spray"), (_f(eye), YELLOW, "spray"),
+            (_f(pupil), BLACK, "spray")]
+
+
+def _alebrije(rng):
+    s = BIG
+    body = _canvas()
+    d = ImageDraw.Draw(body)
+    d.ellipse((s * 0.24, s * 0.42, s * 0.72, s * 0.68), fill=255)
+    d.ellipse((s * 0.64, s * 0.26, s * 0.86, s * 0.48), fill=255)
+    d.polygon([(s * 0.68, s * 0.3), (s * 0.7, s * 0.16), (s * 0.75, s * 0.28)], fill=255)
+    d.polygon([(s * 0.78, s * 0.28), (s * 0.84, s * 0.15), (s * 0.84, s * 0.31)], fill=255)
+    for lx in (0.3, 0.4, 0.56, 0.65):
+        d.rectangle((s * lx, s * 0.62, s * (lx + 0.045), s * 0.82), fill=255)
+    for k in range(30):
+        t = k / 29
+        a = 2.6 * math.pi * t
+        r = s * (0.1 - 0.07 * t)
+        x, y = s * 0.24 - s * 0.06 + r * math.cos(a), s * 0.46 + r * math.sin(a)
+        w = s * (0.03 - 0.018 * t)
+        d.ellipse((x - w, y - w, x + w, y + w), fill=255)
+    d.polygon([(s * 0.42, s * 0.45), (s * 0.3, s * 0.14), (s * 0.56, s * 0.42)], fill=255)
+    mask = np.asarray(body) > 128
+    yy, xx = np.mgrid[0:BIG, 0:BIG]
+    stripes = mask & (np.sin((xx + yy) * 0.05) > 0.45)
+    dots = mask & (np.sin(xx * 0.12) * np.sin(yy * 0.12) > 0.8)
+    eye = _canvas()
+    ImageDraw.Draw(eye).ellipse((s * 0.75, s * 0.33, s * 0.81, s * 0.39), fill=255)
+    pupil = _canvas()
+    ImageDraw.Draw(pupil).ellipse((s * 0.77, s * 0.35, s * 0.8, s * 0.38), fill=255)
+    base, stripe, dot = [(PINK, TEAL, YELLOW), (ORANGE, VIOLET, GREEN), (BLUE, YELLOW, RED), (GREEN, PINK, ORANGE)][rng.randrange(4)]
+    return [(_f(_img(_grow(mask, s * 0.012))), BLACK, "spray"), (_f(_img(mask)), base, "spray"),
+            (_f(_img(stripes)), stripe, "spray"), (_f(_img(dots)), dot, "spray"), (_f(eye), WHITE, "spray"),
+            (_f(pupil), BLACK, "spray")]
+
+
+def _lucha(rng):
+    s = BIG
+    mask_i = _canvas()
+    d = ImageDraw.Draw(mask_i)
+    d.ellipse((s * 0.24, s * 0.12, s * 0.76, s * 0.86), fill=255)
+    flames = _canvas()
+    f = ImageDraw.Draw(flames)
+    for ex, way in ((0.39, -1), (0.61, 1)):
+        f.polygon([(s * ex, s * 0.34), (s * (ex + way * 0.2), s * 0.24), (s * (ex + way * 0.12), s * 0.36),
+                   (s * (ex + way * 0.22), s * 0.4), (s * (ex + way * 0.1), s * 0.46), (s * ex, s * 0.5)], fill=255)
+    cut = _canvas()
+    c = ImageDraw.Draw(cut)
+    for ex in (0.39, 0.61):
+        _eye_mask(c, s * ex, s * 0.42, s * 0.17, s * 0.06, 0.0, 0.0)
+    c.ellipse((s * 0.42, s * 0.62, s * 0.58, s * 0.72), fill=255)
+    c.polygon([(s * 0.5, s * 0.47), (s * 0.47, s * 0.56), (s * 0.53, s * 0.56)], fill=255)
+    holes = np.asarray(cut) > 128
+    head = (np.asarray(mask_i) > 128) & ~holes
+    trim = head & (np.asarray(flames) > 128)
+    line = _grow(np.asarray(mask_i) > 128, s * 0.016) & ~holes
+    paint, second = [(RED, YELLOW), (BLUE, WHITE), (BLACK, ORANGE), (GREEN, RED)][rng.randrange(4)]
+    return [(_f(_img(line)), BLACK if paint != BLACK else WHITE, "stencil"), (_f(_img(head)), paint, "stencil"),
+            (_f(_img(trim)), second, "stencil")]
+
+
+def _sugar_skull(rng):
+    s = BIG
+    skull = _canvas()
+    d = ImageDraw.Draw(skull)
+    d.ellipse((s * 0.22, s * 0.1, s * 0.78, s * 0.64), fill=255)
+    d.rounded_rectangle((s * 0.32, s * 0.5, s * 0.68, s * 0.82), radius=s * 0.06, fill=255)
+    petals, centres = _canvas(), _canvas()
+    p, c = ImageDraw.Draw(petals), ImageDraw.Draw(centres)
+    for ex, ey, r in ((0.38, 0.44, 0.1), (0.62, 0.44, 0.1), (0.5, 0.24, 0.07)):
+        for k in range(8):
+            a = 2 * math.pi * k / 8
+            px, py = s * ex + s * r * 0.75 * math.cos(a), s * ey + s * r * 0.75 * math.sin(a)
+            p.ellipse((px - s * r * 0.35, py - s * r * 0.35, px + s * r * 0.35, py + s * r * 0.35), fill=255)
+        c.ellipse((s * (ex - r * 0.4), s * (ey - r * 0.4), s * (ex + r * 0.4), s * (ey + r * 0.4)), fill=255)
+    nose = _canvas()
+    n = ImageDraw.Draw(nose)
+    for cx in (0.485, 0.515):
+        n.ellipse((s * (cx - 0.02), s * 0.55, s * (cx + 0.02), s * 0.59), fill=255)
+    n.polygon([(s * 0.465, s * 0.575), (s * 0.535, s * 0.575), (s * 0.5, s * 0.62)], fill=255)
+    stitches = _canvas()
+    t = ImageDraw.Draw(stitches)
+    t.line([(s * 0.36, s * 0.71), (s * 0.64, s * 0.71)], fill=255, width=int(s * 0.012))
+    for k in range(7):
+        x = s * (0.38 + 0.04 * k)
+        t.line([(x, s * 0.67), (x, s * 0.75)], fill=255, width=int(s * 0.01))
+    swirls = _canvas()
+    w = ImageDraw.Draw(swirls)
+    for cx in (0.29, 0.71):
+        for k in range(5):
+            a = 2 * math.pi * k / 5
+            x, y = s * cx + s * 0.035 * math.cos(a), s * 0.6 + s * 0.035 * math.sin(a)
+            w.ellipse((x - s * 0.012, y - s * 0.012, x + s * 0.012, y + s * 0.012), fill=255)
+    return [(_f(_img(_grow(np.asarray(skull) > 128, s * 0.012))), BLACK, "spray"), (_f(skull), WHITE, "spray"),
+            (_f(petals), [PINK, TEAL, ORANGE][rng.randrange(3)], "spray"), (_f(centres), BLACK, "spray"),
+            (_f(nose), RED, "spray"), (_f(stitches), BLACK, "spray"), (_f(swirls), BLUE, "spray")]
+
+
+def _buff(words, script, rng):
+    """The Company's buff: its grey rollered in patches over old tags (their ghost through it), a new tag on it."""
+    ghost, _ = _word(words[0], script, rng, BIG * 0.22, BIG * 0.02, 0.56, 0.3, BIG * 0.4, 0.05)
+    patches = _canvas()
+    d = ImageDraw.Draw(patches)
+    for _ in range(4):
+        x0, y0 = rng.uniform(0.08, 0.3) * BIG, rng.uniform(0.15, 0.35) * BIG
+        d.rectangle((x0, y0, x0 + rng.uniform(0.45, 0.6) * BIG, y0 + rng.uniform(0.3, 0.45) * BIG), fill=255)
+    fresh, _ = _word(words[1], script, rng, BIG * 0.2, BIG * 0.022, 0.56, 0.32, BIG * 0.68, 0.05)
+    return [(_f(ghost) * 0.6, BLACK, "spray"), (_f(patches) * 0.88, (150, 148, 140), "brush"),
+            (_f(ghost) * 0.18, BLACK, "spray"), (_f(fresh), RED, "spray"),
+            (_f(_drips(fresh, rng, 2, BIG * 0.008, BIG * 0.1)), RED, "spray")]
+
+
+def _rollcall(words, script, rng):
+    """A crew's roll-call: their names in a column, each in their own can, a crown over them, a bracket down the side."""
+    layers = []
+    paints = [WHITE, YELLOW, TEAL, PINK, ORANGE, CHROME]
+    rng.shuffle(paints)
+    for i, w in enumerate(words):
+        ink, _ = _word(w, script, rng, BIG * 0.14, BIG * 0.018, 0.56, 0.3, BIG * (0.3 + 0.16 * i), 0.04)
+        layers.append((_f(ink), paints[i], "spray"))
+    crown = _canvas()
+    d = ImageDraw.Draw(crown)
+    d.line([(BIG * 0.38, BIG * 0.18), (BIG * 0.42, BIG * 0.1), (BIG * 0.46, BIG * 0.16), (BIG * 0.5, BIG * 0.08),
+            (BIG * 0.54, BIG * 0.16), (BIG * 0.58, BIG * 0.1), (BIG * 0.62, BIG * 0.18), (BIG * 0.38, BIG * 0.18)],
+           fill=255, width=int(BIG * 0.014))
+    d.line([(BIG * 0.16, BIG * 0.24), (BIG * 0.12, BIG * 0.24), (BIG * 0.12, BIG * 0.86), (BIG * 0.16, BIG * 0.86)],
+           fill=255, width=int(BIG * 0.014))
+    layers.append((_f(crown), YELLOW, "spray"))
+    return layers
+
+
+def make_pieces(brushes_dir=brush_sheets.BRUSHES):
+    """The second sheet: PIECE_GRID x PIECE_GRID, laid out as PIECES."""
+    rng = random.Random(1936)
+    script = library_glyphs.script_glyphs(seed=SCRIPT_SEED)
+    spelt = piece_spelling()
+    grains = [_grain("brush_%02d" % i, brushes_dir) for i in range(5)]
+    sheet = np.zeros((PIECE_GRID * CELL, PIECE_GRID * CELL, 4), np.uint8)
+    for k, kind in enumerate(PIECES):
+        if kind == "burner":
+            layers = _burner(spelt[k], script, rng)
+        elif kind == "buff":
+            layers = _buff(spelt[k], script, rng)
+        elif kind == "rollcall":
+            layers = _rollcall(spelt[k], script, rng)
+        else:
+            layers = {"heart": _heart, "serpent": _serpent, "alebrije": _alebrije, "lucha": _lucha,
+                      "sugar_skull": _sugar_skull}[kind](rng)
+        j, i = divmod(k, PIECE_GRID)
+        sheet[j * CELL:(j + 1) * CELL, i * CELL:(i + 1) * CELL] = _cell(layers, grains[(k + 1) % len(grains)])
+    return Image.fromarray(sheet, "RGBA")
+
+
 # --- the wards ------------------------------------------------------------------------------------------
 
 # The wards' sheet (2 x 2): the circle drawn round a rite on the floor in charcoal (chalk and ochre are lost on the
@@ -449,7 +754,7 @@ def make_wards(brushes_dir=brush_sheets.BRUSHES):
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    for name, made in (("pasaje_graffiti.png", make), ("pasaje_wards.png", make_wards)):
+    for name, made in (("pasaje_graffiti.png", make), ("pasaje_graffiti_b.png", make_pieces), ("pasaje_wards.png", make_wards)):
         path = OUT / name
         made().save(path)
         print("wrote", path.relative_to(ROOT))

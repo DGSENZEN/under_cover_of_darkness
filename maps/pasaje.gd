@@ -129,6 +129,7 @@ const GANTRY_HOOK_Y := 2.86
 ## overhead kit's) and their widths; how far clear of the stalls and the openings they keep, the shortest alcove
 ## that takes them.
 const GRAFFITI := "pasaje_graffiti.png"
+const GRAFFITI_B := "pasaje_graffiti_b.png"
 const GRAFFITI_GRID := 4
 const POSTERS := {"poster_a": 0.5, "poster_b": 0.42, "poster_c": 0.72}
 const MARK_CLEAR := 0.15
@@ -569,13 +570,18 @@ func _overhead() -> void:
 ##   uncanny comes close; calaveras by her trades (candles, saints), the eye against the evil eye by the copal and
 ##   the herbs, the moon by the herbs; at the north end, where the Company's notices go up, its roundel crossed out;
 ## - bills in the middle band, a bill or two in the north, thicker toward the south end; newer pasted over older;
-## - throw-ups low across the long alcoves; tags high, more toward the south, where the crowd is thickest.
+## - throw-ups low across the long alcoves, burners in the south's; tags high, more toward the south, where the crowd
+##   is thickest;
+## - the sacred heart by her trades (milagros, saints, candles), the luchador's mask by the radio repairer and the
+##   lottery seller, a sugar skull by the flowers and the sweets; at the north end the Company's buff over old tags; a
+##   crew's roll-call in the south;
+## - along the top of the walls, two murals: the feathered serpent's coils on the west wall, an alebrije on the east.
 func _marks() -> void:
 	if not ResourceLoader.exists(OVERHEAD_KIT):
 		return
 	var kit := SetKit.kit(OVERHEAD_KIT)
 	var look := Painterly.material(SetKit.painted(["pasaje_overhead.png", "pasaje_overhead_base.png"]), &"bespoke")
-	var cells := _graffiti_cells()
+	var cells := _paints()
 	var root := Node3D.new()
 	root.name = "marks"
 	add_child(root)
@@ -594,7 +600,7 @@ func _marks() -> void:
 					return
 				var z: float = bands[band] + size / 2.0
 				bands[band] += size * 0.85
-				marks.append(_graffito(root, _cell_of(cells, kind, k), kind, side, z, height, size))
+				marks.append(_graffito(root, _paint_of(cells, kind, k), kind, side, z, height, size))
 
 			# What the place calls for.
 			var by_lane: bool = side > 0 and absf(middle - 0.45) < 10.5
@@ -610,6 +616,16 @@ func _marks() -> void:
 				spray.call("moon", "high", 0.75, 2.05)
 			if middle < -16.0:
 				spray.call("roundel", "high", 0.9, 2.0)
+			if side > 0 and ((middle > 4.4 and middle < 7.7) or (middle > -11.7 and middle < -10.4)):
+				spray.call("heart", "high", 1.0, 2.1)
+			if (side > 0 and middle > -15.4 and middle < -13.5) or (side < 0 and middle > -10.6 and middle < -9.3):
+				spray.call("lucha", "high", 0.8, 2.05)
+			if (side < 0 and middle > 7.4 and middle < 10.4) or (side > 0 and middle > 18.8):
+				spray.call("sugar_skull", "mid", 0.95, 1.6)
+			if middle < -15.0:
+				spray.call("buff", "low", 1.5, 1.0)
+			if side < 0 and middle > 12.8 and middle < 14.7:
+				spray.call("rollcall", "high", 1.2, 2.0)
 
 			# The bills.
 			for i in 1 + int(2.6 * south * south):
@@ -624,16 +640,20 @@ func _marks() -> void:
 				bands["mid"] = z + width * (0.55 + 0.3 * _hash(k + i * 1.3))
 
 			# The throw-ups and the tags.
-			if b - a >= (1.0 if south > 0.5 else 1.4):
-				spray.call("throwup", "low", 1.6 + 0.4 * _hash(k * 2.3), 0.95)
-			for i in 1 + int(3.2 * south * south):
+			if south > 0.3 and b - a >= (1.0 if south > 0.5 else 1.4):
+				spray.call("burner" if south > 0.55 else "throwup", "low", 1.6 + 0.4 * _hash(k * 2.3), 0.95)
+			for i in int(0.5 + 3.2 * south * south):
 				spray.call("tag", "high", 1.1 + 0.4 * _hash(k * 1.7 + i), 2.15 - 0.08 * i)
+			if south > 0.7:
+				spray.call("tag", "mid", 1.0, 1.85)
 			if south > 0.55:
 				spray.call("tag", "low", 1.1, 0.55)
 			k += 1
 
-	# Along the top of the wall over the stalls, out of a hand's reach but not a ladder's: tags and throw-ups the
-	# length of the stretch, closer together toward the south.
+	# Along the top of the wall over the stalls, out of a hand's reach but not a ladder's: the two murals, and tags and
+	# throw-ups the length of the stretch round them, closer together toward the south.
+	for mural in MURALS:
+		marks.append(_graffito(root, _paint_of(cells, mural[0], 0), mural[0], mural[1], mural[2], 2.72, mural[3]))
 	for side: int in [-1, 1]:
 		var z := -HALF_L + 0.6
 		while z < HALF_L - 0.6:
@@ -641,10 +661,11 @@ func _marks() -> void:
 			var size := 1.0 + 0.5 * _hash(z * 2.1 + side) + 0.3 * south
 			var kind := "throwup" if _hash(z * 1.3 - side) > 0.7 else "tag"
 			var middle := z + size / 2.0
-			if middle + size / 2.0 < HALF_L and not _by_opening_z(side, middle, 0.3 + size / 2.0):
-				marks.append(_graffito(root, _cell_of(cells, kind, k), kind, side, middle, 2.72, size))
+			var on_mural := MURALS.any(func(m): return m[1] == side and absf(m[2] - middle) < (m[3] + size) / 2.0)
+			if middle + size / 2.0 < HALF_L and not on_mural and not _by_opening_z(side, middle, 0.3 + size / 2.0):
+				marks.append(_graffito(root, _paint_of(cells, kind, k), kind, side, middle, 2.72, size))
 				k += 1
-			z += size + lerpf(2.4, 0.3, south) * (0.6 + 0.8 * _hash(z * 0.7 + side * 3.0))
+			z += size + lerpf(3.6, 0.3, south) * (0.6 + 0.8 * _hash(z * 0.7 + side * 3.0))
 
 
 ## The wards, where the uncanny comes close and the market keeps it out:
@@ -790,13 +811,26 @@ const GRAFFITI_KINDS := ["tag", "tag", "tag", "tag", "throwup", "throwup", "thro
 	"sigil", "calavera", "eye", "moon", "roundel", "tag"]
 
 
-## A cell of the sheet holding `kind`, the `n`th of them round.
-func _cell_of(cells: Array[Texture2D], kind: String, n: int) -> Texture2D:
-	var of := []
-	for i in GRAFFITI_KINDS.size():
-		if GRAFFITI_KINDS[i] == kind:
-			of.append(i)
-	return cells[of[n % of.size()]]
+## The kind of piece each cell of the second sheet holds (pasaje_graffiti.py's PIECES).
+const PIECE_KINDS := ["burner", "burner", "heart", "serpent", "alebrije", "lucha", "sugar_skull", "buff", "rollcall"]
+## The murals along the top of the walls: [kind, wall side, its middle's z, its size].
+const MURALS := [["serpent", -1, 9.4, 2.4], ["alebrije", 1, 14.4, 2.0]]
+
+
+## Both graffiti sheets cut into their cells: {kind: [its cells]}.
+func _paints() -> Dictionary:
+	var paints := {}
+	for sheet in [[GRAFFITI, GRAFFITI_GRID, GRAFFITI_KINDS], [GRAFFITI_B, 3, PIECE_KINDS]]:
+		var cells := _sheet_cells(sheet[0], sheet[1])
+		for i in cells.size():
+			paints.get_or_add(sheet[2][i], []).append(cells[i])
+	return paints
+
+
+## A cell holding `kind`, the `n`th of them round.
+func _paint_of(paints: Dictionary, kind: String, n: int) -> Texture2D:
+	var of: Array = paints[kind]
+	return of[n % of.size()]
 
 
 ## The free runs of the `side` wall: [z from, z to], clear of its stalls and openings, ALCOVE_LEAST long or longer.
@@ -824,11 +858,6 @@ func _alcoves(side: int) -> Array:
 	if HALF_L - 0.2 - z >= ALCOVE_LEAST:
 		free.append([z, HALF_L - 0.2])
 	return free
-
-
-## The graffiti sheet cut into its cells.
-func _graffiti_cells() -> Array[Texture2D]:
-	return _sheet_cells(GRAFFITI, GRAFFITI_GRID)
 
 
 ## A graffito of `kind` sprayed on the `side` wall's tiles, its middle at (z, height), `size` across.

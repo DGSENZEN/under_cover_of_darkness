@@ -322,6 +322,12 @@ func _marks() -> void:
 			if not near:
 				stray.append("sigil at %.1f" % at.z)
 	var stencils: int = kinds.get("calavera", 0) + kinds.get("eye", 0) + kinds.get("moon", 0) + kinds.get("roundel", 0)
+	var rich := []
+	for kind in ["burner", "heart", "serpent", "alebrije", "lucha", "sugar_skull", "buff", "rollcall"]:
+		if kinds.get(kind, 0) < (2 if kind == "burner" else 1):
+			rich.append(kind)
+	_check("P7e the walls carry the market's bigger pieces: burners, murals, the heart, the mask, the skull, the buff, a roll-call",
+		rich.is_empty(), "missing %s" % [rich])
 	_check("P7c the walls carry every kind of mark, the sigils where the uncanny comes close",
 		kinds.get("sigil", 0) >= 3 and kinds.get("tag", 0) >= 6 and kinds.get("throwup", 0) >= 3 and stencils >= 3
 		and stray.is_empty(), "%s; %s" % [kinds, stray])
