@@ -206,13 +206,30 @@ Thaumaturge and Factotum, each with the user's own line. There is no heading.
   `&"factotum"`, the confirm sound is queued, `start_game()` begins, and
   [ArchetypeTransition](../../scripts/UI/ArchetypeTransition.gd) plays its
   1.3 s full-screen transition from the card. It ends in the dark, and the
-  loading cover fades in over 0.35 s.
-  - Derivé: the screen cracks, then shockwaves, sparks, a red radial blast,
-    and soot closing in with an ember front.
-  - Thaumaturge: smoke closes like eyelids onto his card, with a gold rayed
-    lid line, drifting glyphs and gold dust, and ends on a gold slit.
-  - Factotum: a drafting grid, rules, compass circles and a protractor, then
-    watercolour ink with spatter, then a page turning into the dark.
+  loading cover fades in over 0.35 s. `archetype_transition.gdshader` acts on
+  the painting itself (the screen texture) in muted oils with a canvas grain.
+  - Derivé, instinct (smooth time): three heartbeats, each sooner, as tunnel
+    vision narrows onto his card. The edges blur toward him, drain and redden,
+    and bloodshot veins creep in from the borders, throbbing with the beats.
+    Then one blow: the painting smears and caves, dark cracks spider out along
+    the hook, a few drops of blood follow, and the pieces fall turning into the dark.
+  - Thaumaturge, the glamour: the city twists around his card and drains to
+    violet while smoke lids close. The ritual runs in smooth time with
+    anti-aliased lines: a great circle (heptagram, star-point medallions,
+    sigils waking in turn, a counter-turning rune band, crawling script, studs,
+    a seal at the heart), five orbiting lesser circles with turning glyphs,
+    spokes, a dotted orbit, ticks, sparks and motes. Sixteen inky eyes open in
+    the smoke (almond lids, fibrous bone-lilac irises, slit, bar, twin or ringed
+    pupils, a window highlight), blink at their own pace and look at him. It
+    ends on a gold slit.
+  - Factotum, the study (held steps): the painting prints as a cyanotype, a
+    few rules and a compass go in, and notes and diagrams write in and wipe out
+    ([ArchetypeTransition](../../scripts/UI/ArchetypeTransition.gd)'s lists:
+    sums, rites in rubric red, creature notes, signs;
+    [FactotumSketch](../../scripts/UI/FactotumSketch.gd): an eye in section, a
+    skull, a hand's bones, a heart, ribs, a seal, a spirit's sigil, the
+    planets). Indigo watercolour then floods it into the dark. The rites and
+    creature notes are stand-ins for the user to rewrite.
 - **Sounds.** Buttons 5, 6 and 7 in the score (`MainMenu.ARCHETYPE_JINGLES`).
   Each archetype has a hover and a confirm motif, in every chord with two
   variants, played on the `MenuJingles` bus.
@@ -224,8 +241,10 @@ Thaumaturge and Factotum, each with the user's own line. There is no heading.
     Mellotron Choir, Factotum on Deluxe Classic and Sugar Hill. They are
     tracks 32, 33 and 50–53, muted in the song, exported as
     `stems_jingles/<patch>_archetype.wav`.
-  - Derivé is trimmed 6 dB in the map: his drums made him 8 dB louder than
-    the others.
+  - Levels in the map (`gain_db`): Derivé +6, Thaumaturge +15.8, Factotum
+    +16.3, which brings every onset to about −19 dB before the bus.
+  - Each archetype sound dips the song by `MenuMusic.DUCK_DB` (5 dB), which
+    comes back at 5 dB/s, so they cut through the high layer.
 
 ## Loading
 

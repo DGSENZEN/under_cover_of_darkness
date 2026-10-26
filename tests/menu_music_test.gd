@@ -240,3 +240,23 @@ func bus_checks() -> void:
 		most = maxi(most, music.hover_voices_playing())
 	check(most <= MenuMusic.HOVER_VOICES and MenuMusic.HOVER_VOICES == 3, "up to three hovers ring together (saw %d)" % most)
 	music.queue_free()
+	duck_checks()
+
+## The archetypes' sounds (buttons 5 and up) dip the song for a moment.
+func duck_checks() -> void:
+	pos = 0.5
+	var music := make_music()
+	music.set_state(MenuMusic.State.ARCHETYPE)
+	run_for(music, 3.0)
+	var stem := int(music.score.stems[0].index)
+	var steady: float = music._stream.get_sync_stream_volume(stem)
+	music.hover(1)
+	run_for(music, 1.0 / 60.0)
+	check(near(music._stream.get_sync_stream_volume(stem), steady, 0.5), "a menu word's jingle doesn't dip the song")
+	music.hover(5)
+	run_for(music, 1.0 / 60.0)
+	var dipped: float = music._stream.get_sync_stream_volume(stem)
+	check(dipped <= steady - MenuMusic.DUCK_DB + 0.5, "an archetype's sound dips the song %.0f dB (%.1f -> %.1f)" % [MenuMusic.DUCK_DB, steady, dipped])
+	run_for(music, 1.5)
+	check(near(music._stream.get_sync_stream_volume(stem), steady, 0.1), "and it comes back within a second and a half")
+	music.queue_free()

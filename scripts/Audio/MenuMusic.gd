@@ -40,6 +40,12 @@ const ENTRY := -40.0
 ## Jingles at once: hovers overall, presses per word; the oldest gives way.
 const HOVER_VOICES := 3
 const PRESS_VOICES := 1
+## The archetypes' sounds (buttons from DUCKING_FROM up) dip the song by
+## DUCK_DB for a moment, so they cut through its high layer; it comes back
+## at DUCK_RECOVER dB/s.
+const DUCKING_FROM := 5
+const DUCK_DB := 5.0
+const DUCK_RECOVER := 5.0
 const GIVE_WAY := 0.03
 ## New Game: each layer is gone at this fraction of the way to the phrase's end.
 const LEAVES := {&"high": 0.4, &"low": 0.75, &"fx": 0.75, &"base": 1.0}
@@ -48,6 +54,8 @@ const LAST_FADE := 0.15
 
 @export var score_json_path := SCORE_JSON
 var available := false
+## How far the song is dipped under an archetype's sound now (dB).
+var _duck := 0.0
 var state := State.ARRIVAL
 var score: Dictionary = {}
 ## Loop position in seconds; by default what the player is heard to be at.
@@ -153,6 +161,7 @@ func _process(delta: float) -> void:
 func step(delta: float) -> void:
 	if not available:
 		return
+	_duck = move_toward(_duck, 0.0, DUCK_RECOVER * delta)
 	if _loop_in > 0.0:
 		_loop_in -= delta
 		if _loop_in <= 0.0:
@@ -254,6 +263,8 @@ func _play(button: int, kind: String, chord: String, pos: float) -> void:
 	voice.play()
 	voice.finished.connect(voice.queue_free)
 	_voices.append({"player": voice, "kind": kind, "button": button, "fading": false})
+	if button >= DUCKING_FROM:
+		_duck = DUCK_DB
 	last_jingle = {"button": button, "kind": kind, "chord": chord, "variant": variant, "started_at_pos": pos}
 
 func _give_way(voice: Dictionary) -> void:
@@ -378,7 +389,7 @@ func _stem(stem_id: StringName) -> Dictionary:
 
 func _mix() -> void:
 	for stem in score.stems:
-		_stream.set_sync_stream_volume(int(stem.index), float(_gains[StringName(stem.id)]))
+		_stream.set_sync_stream_volume(int(stem.index), float(_gains[StringName(stem.id)]) - _duck)
 
 func _heard_position() -> float:
 	if player == null or not player.playing:

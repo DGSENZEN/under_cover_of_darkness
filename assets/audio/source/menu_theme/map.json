@@ -948,7 +948,7 @@
     "start_beat": 0.0,
     "beats": 3.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -964,7 +964,7 @@
     "start_beat": 8.0,
     "beats": 3.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -980,7 +980,7 @@
     "start_beat": 16.0,
     "beats": 3.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -996,7 +996,7 @@
     "start_beat": 24.0,
     "beats": 3.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1012,7 +1012,7 @@
     "start_beat": 32.0,
     "beats": 3.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1028,7 +1028,7 @@
     "start_beat": 40.0,
     "beats": 3.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1044,7 +1044,7 @@
     "start_beat": 48.0,
     "beats": 3.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1060,7 +1060,7 @@
     "start_beat": 56.0,
     "beats": 3.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1076,7 +1076,7 @@
     "start_beat": 64.0,
     "beats": 6.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1092,7 +1092,7 @@
     "start_beat": 72.0,
     "beats": 6.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1108,7 +1108,7 @@
     "start_beat": 80.0,
     "beats": 6.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1124,7 +1124,7 @@
     "start_beat": 88.0,
     "beats": 6.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1140,7 +1140,7 @@
     "start_beat": 96.0,
     "beats": 6.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1156,7 +1156,7 @@
     "start_beat": 104.0,
     "beats": 6.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1172,7 +1172,7 @@
     "start_beat": 112.0,
     "beats": 6.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 5,
@@ -1188,7 +1188,7 @@
     "start_beat": 120.0,
     "beats": 6.0
    },
-   "gain_db": -6.0
+   "gain_db": 6.0
   },
   {
    "button": 6,
@@ -1203,7 +1203,8 @@
     ],
     "start_beat": 128.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1218,7 +1219,8 @@
     ],
     "start_beat": 136.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1233,7 +1235,8 @@
     ],
     "start_beat": 144.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1248,7 +1251,8 @@
     ],
     "start_beat": 152.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1263,7 +1267,8 @@
     ],
     "start_beat": 160.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1278,7 +1283,8 @@
     ],
     "start_beat": 168.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1293,7 +1299,8 @@
     ],
     "start_beat": 176.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1308,7 +1315,8 @@
     ],
     "start_beat": 184.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1323,7 +1331,8 @@
     ],
     "start_beat": 192.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1338,7 +1347,8 @@
     ],
     "start_beat": 200.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1353,7 +1363,8 @@
     ],
     "start_beat": 208.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1368,7 +1379,8 @@
     ],
     "start_beat": 216.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1383,7 +1395,8 @@
     ],
     "start_beat": 224.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1398,7 +1411,8 @@
     ],
     "start_beat": 232.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1413,7 +1427,8 @@
     ],
     "start_beat": 240.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 6,
@@ -1428,7 +1443,8 @@
     ],
     "start_beat": 248.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 15.8
   },
   {
    "button": 7,
@@ -1443,7 +1459,8 @@
     ],
     "start_beat": 256.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1458,7 +1475,8 @@
     ],
     "start_beat": 264.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1473,7 +1491,8 @@
     ],
     "start_beat": 272.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1488,7 +1507,8 @@
     ],
     "start_beat": 280.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1503,7 +1523,8 @@
     ],
     "start_beat": 288.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1518,7 +1539,8 @@
     ],
     "start_beat": 296.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1533,7 +1555,8 @@
     ],
     "start_beat": 304.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1548,7 +1571,8 @@
     ],
     "start_beat": 312.0,
     "beats": 3.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1563,7 +1587,8 @@
     ],
     "start_beat": 320.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1578,7 +1603,8 @@
     ],
     "start_beat": 328.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1593,7 +1619,8 @@
     ],
     "start_beat": 336.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1608,7 +1635,8 @@
     ],
     "start_beat": 344.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1623,7 +1651,8 @@
     ],
     "start_beat": 352.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1638,7 +1667,8 @@
     ],
     "start_beat": 360.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1653,7 +1683,8 @@
     ],
     "start_beat": 368.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 16.3
   },
   {
    "button": 7,
@@ -1668,7 +1699,8 @@
     ],
     "start_beat": 376.0,
     "beats": 6.0
-   }
+   },
+   "gain_db": 16.3
   }
  ]
 }
