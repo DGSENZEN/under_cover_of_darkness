@@ -3,7 +3,7 @@
 
 Numpy tones (test data only, never game audio) run through the real
 tools/prepare_menu_score.py into tests/fixtures/menu_score/: 78 bpm, 16 bars,
-8-bar phrases, Dm then Gm every 4 bars, one stem per layer plus a stem for
+8-bar phrases, Dm then Gm every 4 bars, a one-bar arrival cue, one stem per layer plus a stem for
 each button, and hover/press jingles (2 variants) per button per chord.
 """
 import json
@@ -35,6 +35,13 @@ def main():
             out.setsampwidth(2)
             out.setframerate(RATE)
             out.writeframes((np.column_stack([tone, tone]) * 32767).astype('<i2').tobytes())
+    # A one-bar arrival cue that lands on the loop's first downbeat.
+    cue = 0.2 * np.sin(2 * np.pi * 330 * t[:round(4 * 60 / BPM * RATE)])
+    with wave.open(str(work / 'arrival.wav'), 'wb') as out:
+        out.setnchannels(2)
+        out.setsampwidth(2)
+        out.setframerate(RATE)
+        out.writeframes((np.column_stack([cue, cue]) * 32767).astype('<i2').tobytes())
     jingles = []
     for button, stem in enumerate(['trumpet', 'guitar', 'rhodes', 'bells']):
         for chord, bar in (('Dm', 0), ('Gm', 4)):
@@ -46,7 +53,7 @@ def main():
     mapping = dict(bpm=BPM, beats_per_bar=4, bars=BARS, phrase_bars=8,
                    chords=[dict(bar=b, name='Dm' if (b // 4) % 2 == 0 else 'Gm') for b in range(0, BARS, 4)],
                    stems=[dict(id=n, file=f'stems/{n}.wav', layer=l, button=b, trim_db=0) for n, l, b in STEMS],
-                   arrival=None, jingles=jingles)
+                   arrival='arrival.wav', jingles=jingles)
     (work / 'map.json').write_text(json.dumps(mapping))
     subprocess.run([sys.executable, str(ROOT / 'tools/prepare_menu_score.py'), '--source', str(work), '--out', str(OUT),
                     '--res-prefix', 'res://tests/fixtures/menu_score'], check=True)

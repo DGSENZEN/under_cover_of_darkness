@@ -37,6 +37,8 @@ const PRESS_VOICES := 1
 const GIVE_WAY := 0.03
 ## New Game: each layer is gone at this fraction of the way to the phrase's end.
 const LEAVES := {&"high": 0.4, &"low": 0.75, &"fx": 0.75, &"base": 1.0}
+## After the phrase's bar line, whatever is still sounding fades this fast.
+const LAST_FADE := 0.15
 
 @export var score_json_path := SCORE_JSON
 var available := false
@@ -48,6 +50,10 @@ var position_source: Callable
 var activity := 0.0
 var selected := -1
 var player: AudioStreamPlayer
+## The arrival cue (when the score has one): it plays first, and the loop
+## starts as it lands on the downbeat.
+var arrival_player: AudioStreamPlayer
+var _loop_in := 0.0
 var _stream: AudioStreamSynchronized
 var _gains: Dictionary = {}
 var _idle := 0.0
@@ -77,8 +83,18 @@ func _ready() -> void:
 	for stem in score.stems:
 		_gains[StringName(stem.id)] = OUT
 	_mix()
-	player.play()
 	available = true
+	var cue := String(score.get("arrival", "")) if score.get("arrival") != null else ""
+	if not cue.is_empty() and ResourceLoader.exists(cue):
+		arrival_player = AudioStreamPlayer.new()
+		arrival_player.name = "Arrival"
+		arrival_player.bus = player.bus
+		arrival_player.stream = load(cue)
+		add_child(arrival_player)
+		arrival_player.play()
+		_loop_in = float(score.get("arrival_seconds", 0.0))
+	else:
+		player.play()
 
 func _load_score() -> bool:
 	if not FileAccess.file_exists(score_json_path):
@@ -103,6 +119,10 @@ func _process(delta: float) -> void:
 func step(delta: float) -> void:
 	if not available:
 		return
+	if _loop_in > 0.0:
+		_loop_in -= delta
+		if _loop_in <= 0.0:
+			player.play()
 	var pos := loop_position()
 	if state == State.STARTING:
 		_end_step(pos)
@@ -131,7 +151,7 @@ func _play_due(pos: float) -> void:
 		if due:
 			_pending.erase(press_at)
 			_play(int(press_at.button), "press", String(press_at.chord), pos)
-	_voices = _voices.filter(func(v): return is_instance_valid(v.player) and v.player.playing)
+	_live_voices()
 
 ## A word was hovered or focused: its instrument answers at once, in the chord now.
 func hover(button: int) -> void:
@@ -154,10 +174,15 @@ func press(button: int) -> void:
 	_pending.append({"button": button, "at": at, "wraps": wraps, "from": pos, "chord": _chord_at(at)})
 
 func hover_voices_playing() -> int:
-	return _voices.filter(func(v): return v.kind == "hover" and not v.fading and v.player.playing).size()
+	return _live_voices().filter(func(v): return v.kind == "hover" and not v.fading).size()
 
 func press_voices_playing(button: int) -> int:
-	return _voices.filter(func(v): return v.kind == "press" and v.button == button and not v.fading and v.player.playing).size()
+	return _live_voices().filter(func(v): return v.kind == "press" and v.button == button and not v.fading).size()
+
+## Voices still sounding (a voice can be freed between frames when it finishes).
+func _live_voices() -> Array[Dictionary]:
+	_voices = _voices.filter(func(v): return is_instance_valid(v.player) and v.player.playing)
+	return _voices
 
 func _chord_at(pos: float) -> String:
 	return MenuClock.chord_at(score.chords, MenuClock.bar_at(pos, float(score.bpm), int(score.beats_per_bar)), int(score.bars))
@@ -179,7 +204,7 @@ func _play(button: int, kind: String, chord: String, pos: float) -> void:
 	if not _streams.has(path):
 		_streams[path] = load(path)
 	# Make room: hovers share HOVER_VOICES, each word has PRESS_VOICES presses.
-	var same := _voices.filter(func(v): return not v.fading and v.player.playing and v.kind == kind and (kind == "hover" or v.button == button))
+	var same := _live_voices().filter(func(v): return not v.fading and v.kind == kind and (kind == "hover" or v.button == button))
 	var limit := HOVER_VOICES if kind == "hover" else PRESS_VOICES
 	while same.size() >= limit:
 		_give_way(same.pop_front())
@@ -223,10 +248,20 @@ func start_game() -> void:
 func ending_at() -> float:
 	return float(_ending.get("end", -1.0))
 
+## 0..1 of the way through the ending (0 when not ending).
+func ending_progress() -> float:
+	return float(_ending.get("elapsed", 0.0)) / float(_ending.span) if _ending.has("span") else 0.0
+
 func _end_step(pos: float) -> void:
+	if _ending.get("done", false):
+		return
 	var moved := pos - float(_ending.last)
-	if moved < 0.0:
+	# A real wrap jumps back most of the loop; a hair back is the heard
+	# position's jitter (mix timing), not time passing.
+	if moved < -float(score.loop_seconds) * 0.5:
 		moved += float(score.loop_seconds)
+	elif moved < 0.0:
+		moved = 0.0
 	_ending.elapsed = float(_ending.elapsed) + moved
 	_ending.last = pos
 	var f := float(_ending.elapsed) / float(_ending.span)
@@ -237,9 +272,14 @@ func _end_step(pos: float) -> void:
 	_mix()
 	_play_due(pos)
 	if f >= 1.0:
-		player.stop()
+		# The phrase is over. Anything still sounding (a stall can carry the
+		# song past its bar line at its last gain) fades, never cuts.
+		_ending.done = true
 		ended.emit()
-		queue_free()
+		var tail := create_tween()
+		tail.tween_property(player, "volume_db", OUT, LAST_FADE)
+		tail.tween_callback(player.stop)
+		tail.tween_callback(queue_free)
 
 func set_state(next: State) -> void:
 	if not available or state == State.STARTING:

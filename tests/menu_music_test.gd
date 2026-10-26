@@ -36,6 +36,7 @@ func _ready() -> void:
 	layer_checks()
 	jingle_checks()
 	await ending_checks()
+	await review_checks()
 	await get_tree().process_frame
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failures else 0)
@@ -173,7 +174,7 @@ func ending_checks() -> void:
 	check(ended[0] and absf(pos - end) <= 1.0 / 60.0 + 0.0001, "the song ends on its phrase's last bar line (at %.3f, bar line %.3f)" % [pos, end])
 	check(high_out_at > 0.0 and absf(high_out_at - (end - span * 0.6)) < 0.1, "the high layer leaves first")
 	check(base_at_end < -20.0, "the base is all but gone by then")
-	await get_tree().process_frame
+	await get_tree().create_timer(0.3).timeout
 	check(not is_instance_valid(music) or music.is_queued_for_deletion(), "it frees itself when done")
 	pos = 7.5 * BAR
 	var late := make_music()
@@ -182,3 +183,35 @@ func ending_checks() -> void:
 	var phrase := 8.0 * BAR
 	check(absf(late.ending_at() - 2.0 * phrase) < 0.001, "less than a bar left: it finishes the next phrase instead")
 	late.queue_free()
+
+func review_checks() -> void:
+	# The arrival cue plays first; the loop starts as it lands.
+	pos = 0.0
+	var music := make_music()
+	check(music.arrival_player != null and music.arrival_player.playing and not music.player.playing, "the arrival cue plays before the loop")
+	music.step(float(music.score.arrival_seconds) + 0.02)
+	check(music.player.playing, "the loop starts as the arrival lands")
+	# A heard position that steps back a hair is jitter, not a loop wrap.
+	pos = 2.0 * BAR
+	music.state = MenuMusic.State.BROWSING
+	music.start_game()
+	pos += 0.3
+	music.step(0.3)
+	pos -= 0.004
+	music.step(0.0)
+	check(music.state == MenuMusic.State.STARTING and music.ending_progress() < 0.5, "jitter does not end the song early (progress %.2f)" % music.ending_progress())
+	# A stall past the bar line still fades rather than cutting.
+	pos = 8.0 * BAR + 0.5
+	music.step(0.016)
+	check(is_instance_valid(music.player) and music.player.playing and music.player.volume_db > -79.0, "a stall past the bar line fades out instead of cutting")
+	await get_tree().create_timer(0.3).timeout
+	check(not is_instance_valid(music) or music.is_queued_for_deletion(), "and then it is gone")
+	# A voice freed between frames is skipped, not an error.
+	pos = 0.5
+	var again := make_music()
+	again.hover(0)
+	(again._voices[0].player as Node).free()
+	again.hover(1)
+	again.press(2)
+	check(again.last_jingle.get("button") == 1, "a freed voice is skipped")
+	again.queue_free()

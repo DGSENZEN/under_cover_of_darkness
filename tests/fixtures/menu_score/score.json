@@ -172,6 +172,6 @@
       }
     }
   },
-  "arrival": null,
-  "arrival_seconds": 0.0
+  "arrival": "res://tests/fixtures/menu_score/arrival.ogg",
+  "arrival_seconds": 3.0769166666666665
 }
