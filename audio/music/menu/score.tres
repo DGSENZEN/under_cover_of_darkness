@@ -1,14 +1,38 @@
-[gd_resource type="AudioStreamSynchronized" load_steps=4 format=3]
+[gd_resource type="AudioStreamSynchronized" load_steps=12 format=3]
 
 [ext_resource type="AudioStream" path="res://audio/music/menu/piano.ogg" id="piano"]
 [ext_resource type="AudioStream" path="res://audio/music/menu/bass.ogg" id="bass"]
+[ext_resource type="AudioStream" path="res://audio/music/menu/montuno.ogg" id="montuno"]
 [ext_resource type="AudioStream" path="res://audio/music/menu/drums.ogg" id="drums"]
+[ext_resource type="AudioStream" path="res://audio/music/menu/percussion.ogg" id="percussion"]
+[ext_resource type="AudioStream" path="res://audio/music/menu/trumpet.ogg" id="trumpet"]
+[ext_resource type="AudioStream" path="res://audio/music/menu/guitar.ogg" id="guitar"]
+[ext_resource type="AudioStream" path="res://audio/music/menu/rhodes.ogg" id="rhodes"]
+[ext_resource type="AudioStream" path="res://audio/music/menu/bells.ogg" id="bells"]
+[ext_resource type="AudioStream" path="res://audio/music/menu/choir.ogg" id="choir"]
+[ext_resource type="AudioStream" path="res://audio/music/menu/drone.ogg" id="drone"]
 
 [resource]
-stream_count = 3
+stream_count = 11
 stream_0/stream = ExtResource("piano")
 stream_0/volume = -80.0
 stream_1/stream = ExtResource("bass")
 stream_1/volume = -80.0
-stream_2/stream = ExtResource("drums")
+stream_2/stream = ExtResource("montuno")
 stream_2/volume = -80.0
+stream_3/stream = ExtResource("drums")
+stream_3/volume = -80.0
+stream_4/stream = ExtResource("percussion")
+stream_4/volume = -80.0
+stream_5/stream = ExtResource("trumpet")
+stream_5/volume = -80.0
+stream_6/stream = ExtResource("guitar")
+stream_6/volume = -80.0
+stream_7/stream = ExtResource("rhodes")
+stream_7/volume = -80.0
+stream_8/stream = ExtResource("bells")
+stream_8/volume = -80.0
+stream_9/stream = ExtResource("choir")
+stream_9/volume = -80.0
+stream_10/stream = ExtResource("drone")
+stream_10/volume = -80.0

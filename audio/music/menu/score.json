@@ -30,24 +30,88 @@
       "layer": "base",
       "button": -1,
       "index": 0,
-      "peak_db": -19.377512893729012,
-      "sha256": "65e9b6ec6123b886bccc85edf3eb8d22e4f56ac0db9c3b9f28083d769ddd1343"
+      "peak_db": -19.361798630463227,
+      "sha256": "afc4a7684a7e190b1fd8ff95f16654716b16f81ca27996cfc214aaab4e9fb672"
     },
     {
       "id": "bass",
       "layer": "base",
       "button": -1,
       "index": 1,
-      "peak_db": -17.16847860074941,
-      "sha256": "588b47be0cbcc3e4624e7006dd7da301d17199916beebfa41be34d073583c3e2"
+      "peak_db": -17.23541535437447,
+      "sha256": "437000e6cc6b9286a0cdd1884652249201d3f10cc37f486d7a0b7490b631101e"
+    },
+    {
+      "id": "montuno",
+      "layer": "base",
+      "button": -1,
+      "index": 2,
+      "peak_db": -28.19123157462538,
+      "sha256": "c7b4dedcb32d1fc787ba6d76e486345a6e91e4549c9e9b8ac989141f09d180b5"
     },
     {
       "id": "drums",
       "layer": "low",
       "button": -1,
-      "index": 2,
-      "peak_db": -11.406625319964846,
-      "sha256": "0ced607dbde256f2edd13fce66566f2b7f9bdbb273fff509c378960564b8bea7"
+      "index": 3,
+      "peak_db": -5.953142774561286,
+      "sha256": "7e2a0b39cea3c4a479c1bfc2384b471be7f3d8ce0e3fb697e9a4448b9df323a0"
+    },
+    {
+      "id": "percussion",
+      "layer": "low",
+      "button": -1,
+      "index": 4,
+      "peak_db": -37.90902792200791,
+      "sha256": "fa619e1253829401c82c836c9f1de4bbcd2a3e4a7c9ff4cbb214669425ecf100"
+    },
+    {
+      "id": "trumpet",
+      "layer": "high",
+      "button": 0,
+      "index": 5,
+      "peak_db": -17.985715461272424,
+      "sha256": "a807ca14af3c05e55a363bd104fa33bacd9bb581fa83ca2dacbe8f4bd86716b2"
+    },
+    {
+      "id": "guitar",
+      "layer": "high",
+      "button": 1,
+      "index": 6,
+      "peak_db": -23.65555858005977,
+      "sha256": "dd708568eabf8a5526cbe9474800794ccfba83f640926e505108388f4e9eb2c0"
+    },
+    {
+      "id": "rhodes",
+      "layer": "high",
+      "button": 2,
+      "index": 7,
+      "peak_db": -16.227550858014936,
+      "sha256": "e049f9da669987bc4d0fbefcb7fb4f1696be7b48148d9e86dde080377c5f77d7"
+    },
+    {
+      "id": "bells",
+      "layer": "high",
+      "button": 3,
+      "index": 8,
+      "peak_db": -26.3924888319151,
+      "sha256": "16f3ced4bd690d244cdf0b1773096770a953788b384d5e86e8b963a67286c662"
+    },
+    {
+      "id": "choir",
+      "layer": "fx",
+      "button": -1,
+      "index": 9,
+      "peak_db": -25.51383131213511,
+      "sha256": "bdbd59ff53b89c78a5a5f248208fba0a9073072c636a24af761a40afb0b6d000"
+    },
+    {
+      "id": "drone",
+      "layer": "fx",
+      "button": -1,
+      "index": 10,
+      "peak_db": -25.40486826125203,
+      "sha256": "cd3e3ba321578055e3c14e262092cfb2a2474348458c19b5ecd3c6e580db49dd"
     }
   ],
   "jingles": {

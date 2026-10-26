@@ -1,14 +1,24 @@
 # Menu theme source
 
-Placeholder stems exported from the user's Logic project `~/Music/Logic/hasta_los_huesos_overworld.logicx` on 2026-10-25. They were exported with File > Export > All Tracks as Audio Files: WAVE, 24-bit, 48 kHz, normalisation off, trimmed at the file end, starting at bar 1. The project was not edited.
+These are the menu theme's stems, exported on 2026-10-25 from the user's Logic project `~/Music/Logic/hasta_los_huesos_overworld.logicx`, after the user's own changes. They are 48 kHz WAVs from File > Export > All Tracks as Audio Files, with normalisation off, the user's fader balance, and starting at bar 1.
 
-| Stem | Logic track | Layer |
-|---|---|---|
-| `stems/piano.wav` | Deluxe Classic (Studio Grand) | base |
-| `stems/bass.wav` | Big Stadium Bass ("Simple Foundation") | base |
-| `stems/drums.wav` | Back in the Day Beat (mono audio loop) | low |
+| Stem | Logic track | Layer | Word |
+|---|---|---|---|
+| `stems/piano.wav` | Deluxe Classic (the sketch's Studio Grand) | base | |
+| `stems/bass.wav` | Big Stadium Bass | base | |
+| `stems/montuno.wav` | Studio Grand (Montuno Piano) | base | |
+| `stems/drums.wav` | Vintage Cinema (Trip-Hop Drums) | low | |
+| `stems/percussion.wav` | SoCal (Latin Percussion) | low | |
+| `stems/trumpet.wav` | Sugar Hill (Trumpet) | high | New Game |
+| `stems/guitar.wav` | Classical Acoustic Guitar | high | Continue |
+| `stems/rhodes.wav` | Deluxe Classic (Rhodes) | high | Settings |
+| `stems/bells.wav` | Toy Celesta (Bells) | high | Lore |
+| `stems/choir.wav` | Mellotron Choir | fx | |
+| `stems/drone.wav` | Classic Pad (Drone) | fx | |
 
-`map.json` loops the first 8 bars at 78 bpm in 4-bar phrases. That is where all three parts play. The piano part runs to about bar 11.
+The sketch's muted Back in the Day Beat loop is not used. The first placeholder stems (piano, bass and that loop) are kept in `stems_sketch/`.
+
+`map.json` loops the first 8 bars at 78 bpm in 4-bar phrases. Each word's hover and press jingles are cut from that word's own instrument stem. Each one starts on a real note onset of its part (from `parts/menu_parts.mid`), with two variants per chord, and every cut was checked for sound.
 
 The chords, read from the sketch's MIDI (`overworld_sketch.mid`, exported 2026-10-25), last two bars each. The piano rolls every chord up slowly and lets it ring:
 
@@ -18,8 +28,6 @@ The chords, read from the sketch's MIDI (`overworld_sketch.mid`, exported 2026-1
 | 3–4 | Bbmaj7#11 over C# |
 | 5–6 | Gm9 |
 | 7–8 | Ebmaj7#11 |
-
-The placeholder jingles are slices of the piano on each chord. Each word gets its own moment, with two variants per chord. The real jingles replace them in Part C of `docs/superpowers/plans/2026-10-25-main-menu-overhaul.md`.
 
 The WAVs are working masters and are not committed, as with `../hasta_los_huesos`. To regenerate the game files:
 
