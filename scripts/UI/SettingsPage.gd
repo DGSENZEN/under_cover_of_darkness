@@ -205,6 +205,8 @@ class Row extends Control:
 var tab := 0
 ## The key row waiting for a key, if any.
 var capturing: Row = null
+## When the wait began (ms): the click that began it is not the key.
+var _capture_from := 0
 var colour := GOLD
 var _tabs: Array[Button] = []
 var _scroll: ScrollContainer
@@ -319,6 +321,7 @@ func refresh_all() -> void:
 
 func begin_capture(row: Row) -> void:
 	capturing = row
+	_capture_from = Time.get_ticks_msec()
 	row.refresh()
 
 func end_capture() -> void:
@@ -345,7 +348,11 @@ func _input(event: InputEvent) -> void:
 			end_capture()
 			refresh_all()
 		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_XBUTTON1, MOUSE_BUTTON_XBUTTON2]:
+	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_XBUTTON1, MOUSE_BUTTON_XBUTTON2, MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		# A quick second click on the row is not the key it waits for.
+		if Time.get_ticks_msec() - _capture_from < 250:
+			get_viewport().set_input_as_handled()
+			return
 		var button := InputEventMouseButton.new()
 		button.button_index = (event as InputEventMouseButton).button_index
 		GameSettings.bind(StringName(capturing.key.trim_prefix("keys/")), button)

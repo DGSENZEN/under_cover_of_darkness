@@ -779,7 +779,10 @@ func _process(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
 		return
 
-	_pause.set_open(get_tree().paused)
+	# Closed when the game goes on (opened only by pause_game: a pause by
+	# anything else, a loading hold, opens nothing).
+	if _pause.visible and not get_tree().paused:
+		_pause.set_open(false)
 	_play.visible = not get_tree().paused
 
 	if get_tree().paused:
@@ -1711,9 +1714,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+## The player paused (Esc): the tree stops and the pause menu opens.
+func pause_game() -> void:
+	get_tree().paused = true
+	_pause.set_open(true)
+
+
 ## Unpauses the SceneTree and asks a compatible player to recapture the mouse.
 func resume() -> void:
 	get_tree().paused = false
+	_pause.set_open(false)
 
 	if player != null and player.has_method("_recapture_mouse"):
 		player._recapture_mouse()

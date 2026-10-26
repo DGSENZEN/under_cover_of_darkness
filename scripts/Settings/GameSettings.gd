@@ -10,7 +10,25 @@ extends RefCounted
 ## so a run never changes the player's own. Set through use_path: a static
 ## var assigned from another script did not reach these functions (4.5.1),
 ## and the tests wrote the player's file.
-static var _path := "user://settings.cfg"
+static var _path := _default_path()
+
+
+## The player's file; none at all on a test run (a scene or script under
+## res://tests/), so a suite starts on defaults and never reads or writes it.
+static func _default_path() -> String:
+	for arg in OS.get_cmdline_args():
+		if arg.begins_with("res://tests/") or arg.begins_with("tests/"):
+			return ""
+	return "user://settings.cfg"
+
+
+## Command-line flags that set the video themselves (tools, recordings):
+## then the start-up leaves window, VSync and frame limit to them.
+static func flags_override_video() -> bool:
+	for arg in OS.get_cmdline_args():
+		if arg in ["--disable-vsync", "--max-fps", "--fixed-fps", "--write-movie", "--fullscreen", "--windowed", "--maximized"]:
+			return true
+	return false
 
 
 static func use_path(where: String) -> void:
@@ -119,7 +137,7 @@ static func _load() -> void:
 			if InputMap.has_action(action):
 				_default_keys[action] = InputMap.action_get_events(action).map(_event_text)
 	var file := ConfigFile.new()
-	var read := file.load(_path) == OK
+	var read := not _path.is_empty() and file.load(_path) == OK
 	for key in SPECS:
 		var parts: PackedStringArray = key.split("/")
 		var kept: Variant = _checked(key, file.get_value(parts[0], parts[1])) if read and file.has_section_key(parts[0], parts[1]) else null
@@ -131,7 +149,7 @@ static func _load() -> void:
 			if event != null:
 				_set_events(action, [event])
 	for key in SPECS:
-		_apply(key)
+		_apply(key, true)
 
 
 static func _checked(key: String, wanted: Variant) -> Variant:
@@ -166,6 +184,8 @@ static func _as_bool(wanted: Variant) -> Variant:
 
 
 static func _save() -> void:
+	if _path.is_empty():
+		return
 	var file := ConfigFile.new()
 	file.load(_path)
 	for key in SPECS:
@@ -176,10 +196,14 @@ static func _save() -> void:
 
 # Applying
 
-static func _apply(key: String) -> void:
+## At start-up the window, VSync and frame limit are set only if the player
+## changed them, and never against command-line flags that set them.
+static func _apply(key: String, at_start := false) -> void:
 	if BUSES.has(key):
 		apply_buses()
 	elif key.begins_with("video/"):
+		if at_start and key in ["video/window", "video/vsync", "video/fps"] and (_values[key] == SPECS[key].default or flags_override_video()):
+			return
 		_apply_video(key)
 
 
@@ -234,12 +258,13 @@ static func bind(action: StringName, event: InputEvent) -> StringName:
 			_set_events(other, old.slice(0, 1) if not old.is_empty() else [])
 			break
 	_set_events(action, [event])
-	var file := ConfigFile.new()
-	file.load(_path)
-	file.set_value("keys", String(action), _event_text(event))
-	if swapped != &"" and not old.is_empty():
-		file.set_value("keys", String(swapped), _event_text(old[0]))
-	file.save(_path)
+	if not _path.is_empty():
+		var file := ConfigFile.new()
+		file.load(_path)
+		file.set_value("keys", String(action), _event_text(event))
+		if swapped != &"" and not old.is_empty():
+			file.set_value("keys", String(swapped), _event_text(old[0]))
+		file.save(_path)
 	_events.changed.emit("keys/%s" % action)
 	return swapped
 
@@ -248,11 +273,12 @@ static func bind(action: StringName, event: InputEvent) -> StringName:
 static func reset_keys() -> void:
 	_load()
 	_restore_default_keys()
-	var file := ConfigFile.new()
-	file.load(_path)
-	if file.has_section("keys"):
-		file.erase_section("keys")
-	file.save(_path)
+	if not _path.is_empty():
+		var file := ConfigFile.new()
+		file.load(_path)
+		if file.has_section("keys"):
+			file.erase_section("keys")
+		file.save(_path)
 	_events.changed.emit("keys")
 
 
@@ -271,7 +297,12 @@ static func event_name(event: InputEvent) -> String:
 		var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
 		return OS.get_keycode_string(code)
 	if event is InputEventMouseButton:
-		return "Mouse %d" % (event as InputEventMouseButton).button_index
+		var button := (event as InputEventMouseButton).button_index
+		if button == MOUSE_BUTTON_WHEEL_UP:
+			return "Wheel up"
+		if button == MOUSE_BUTTON_WHEEL_DOWN:
+			return "Wheel down"
+		return "Mouse %d" % button
 	return "?"
 
 

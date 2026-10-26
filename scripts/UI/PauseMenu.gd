@@ -7,7 +7,7 @@ extends Control
 ## it while the player has paused the game (StealthHUD).
 const DESIGN := Vector2(1600, 900)
 ## The painting behind the paused game; the frozen frame dimmed until it exists.
-const BACKDROP := "res://assets/ui/main_menu/pause.png"
+const BACKDROP := "res://assets/ui/main_menu/pause.webp"
 const NAMES := ["Resume", "Settings", "Main menu", "Quit"]
 const QUESTIONS := {2: "Main menu?", 3: "Quit?"}
 const MAIN_MENU := "res://main_menu.tscn"

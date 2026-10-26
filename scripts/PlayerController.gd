@@ -691,7 +691,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 		if hud != null:
-			get_tree().paused = true
+			# The pause menu, as the player asked (a HUD without one just pauses).
+			if hud.has_method("pause_game"):
+				hud.pause_game()
+			else:
+				get_tree().paused = true
 
 		get_viewport().set_input_as_handled()
 

@@ -490,6 +490,21 @@ func _ui_checks() -> void:
 	_check("U10 health shows only when hurt", hidden_full and hud._shields.modulate.a > 0.9 and hud._vignette.modulate.a > 0.1,
 		"hidden at full %s shields %.2f vignette %.2f" % [hidden_full, hud._shields.modulate.a, hud._vignette.modulate.a])
 
+	# U15 a pause that isn't the player's (a loading hold) neither opens the
+	# pause menu nor answers Escape
+	get_tree().paused = true
+	await _frames(3)
+	var stayed_shut: bool = not hud._pause.visible
+	var esc_hold := InputEventAction.new()
+	esc_hold.action = &"ui_cancel"
+	esc_hold.pressed = true
+	hud._unhandled_input(esc_hold)
+	var still_held: bool = get_tree().paused
+	get_tree().paused = false
+	await _frames(2)
+	_check("U15 a pause that isn't the player's opens no menu and ignores Escape", stayed_shut and still_held,
+		"menu shut %s still paused after Esc %s" % [stayed_shut, still_held])
+
 	# U7 Esc pauses and shows the pause menu (its words on the left, like
 	# the main menu's); a click on the painting does not resume, Resume does.
 	# Esc's handler is called directly (injected input can arrive twice in a
@@ -507,6 +522,7 @@ func _ui_checks() -> void:
 
 	# U13 the pause menu's settings: a setting changed there is kept, and
 	# the game stays paused
+	var settings_before: String = SettingsScript.path
 	SettingsScript.path = "user://settings_interaction_test.cfg"
 	SettingsScript.reread()
 	hud._pause.open_settings()
@@ -521,7 +537,7 @@ func _ui_checks() -> void:
 	var turned_back: bool = SettingsScript.awareness_marks() and marks_row.value_text() == "On"
 	hud._pause.close_settings()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsScript.path))
-	SettingsScript.path = "user://settings.cfg"
+	SettingsScript.path = settings_before
 	SettingsScript.reread()
 	_check("U13 the pause menu's settings change there, are kept, and do not resume", turned and written and turned_back,
 		"off and still paused %s written %s on again %s" % [turned, written, turned_back])

@@ -19,11 +19,14 @@ func fresh(contents := "") -> void:
 	GameSettings.reread()
 
 func _ready() -> void:
+	# A test run starts on no file at all: defaults, nothing read or written.
+	check(GameSettings.current_path() == "", "a test run reads and writes no settings file (%s)" % GameSettings.current_path())
 	var real := ProjectSettings.globalize_path("user://settings.cfg")
 	var real_before := FileAccess.get_modified_time(real) if FileAccess.file_exists(real) else -1
 	var original := GameSettings.current_path()
 	var default_jump := InputMap.action_get_events(&"jump").duplicate()
 	store_checks()
+	startup_checks()
 	bus_checks()
 	key_checks()
 	shim_checks()
@@ -72,6 +75,19 @@ func store_checks() -> void:
 	check(GameSettings.value("video/fov") == 75.0 and GameSettings.value("video/grid") == 480 and GameSettings.value("audio/music") == 1.0 and InputMap.action_get_events(&"jump").size() > 0, "a hand-spoilt file falls back to defaults, key by key")
 	check(GameSettings.look_scale() == 1.0, "the look scale is 1 at the default sensitivity")
 
+func startup_checks() -> void:
+	# Read at start-up, only what the player changed is applied, so command
+	# line flags (--disable-vsync, --max-fps) and tools keep theirs.
+	fresh()
+	Engine.max_fps = 77
+	GameSettings.reread()
+	GameSettings.value("video/fps")
+	check(Engine.max_fps == 77, "a default frame limit read at start-up leaves the engine's own")
+	fresh("[video]\nfps=30\n")
+	GameSettings.value("video/fps")
+	check(Engine.max_fps == (77 if GameSettings.flags_override_video() else 30), "a frame limit the player set is applied at start-up")
+	Engine.max_fps = 0
+
 func bus_checks() -> void:
 	fresh()
 	var music := AudioServer.get_bus_index(&"Music")
@@ -89,12 +105,11 @@ func bus_checks() -> void:
 	GameSettings.set_value("audio/effects", 0.25)
 	var late := AudioServer.get_bus_index(&"World")
 	if late < 0:
+		# As Sfx makes them: added (still "New Bus"), then named.
 		AudioServer.add_bus()
 		late = AudioServer.bus_count - 1
 		AudioServer.set_bus_name(late, &"World")
-		AudioServer.set_bus_volume_db(late, -3.0)
-		GameSettings.apply_buses()
-		check(is_equal_approx(AudioServer.get_bus_volume_db(late), -3.0 + linear_to_db(0.25)), "a bus made later (World) is set when it appears")
+		check(is_equal_approx(AudioServer.get_bus_volume_db(late), linear_to_db(0.25)), "a bus made later (World) gets its volume when it is named")
 	else:
 		check(is_equal_approx(AudioServer.get_bus_volume_db(late), GameSettings.bus_base(&"World") + linear_to_db(0.25)), "the effects slider sets World")
 	GameSettings.set_value("audio/master_volume", 1.0)

@@ -62,6 +62,7 @@ var _rect: ColorRect
 ## The player's brightness over the finished picture (shown only when it
 ## isn't 100%).
 var brightness_pass: ColorRect
+var _brightness_copy: BackBufferCopy
 var _material: ShaderMaterial
 ## The words over men's heads, sharp over the grid while it is on.
 var _crisp: Control
@@ -77,6 +78,8 @@ func _ready() -> void:
 	# later (by levels, the menu) get their volumes as they appear.
 	virtual_height = int(GameSettings.value("video/grid"))
 	AudioServer.bus_layout_changed.connect(_on_buses_changed)
+	# A bus is added before it is named (Sfx): its volume comes when named.
+	AudioServer.bus_renamed.connect(_on_bus_renamed)
 	GameSettings.events().changed.connect(_on_setting_changed)
 	# Under the HUD (layer 5), over the world.
 	layer = 4
@@ -96,9 +99,9 @@ func _ready() -> void:
 	_crisp.name = "CrispText"
 	add_child(_crisp)
 	# Then the brightness, over all of it (a fresh copy of the screen first).
-	var copy := BackBufferCopy.new()
-	copy.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
-	add_child(copy)
+	_brightness_copy = BackBufferCopy.new()
+	_brightness_copy.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
+	add_child(_brightness_copy)
 	brightness_pass = ColorRect.new()
 	brightness_pass.name = "Brightness"
 	brightness_pass.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -119,6 +122,10 @@ func _on_buses_changed() -> void:
 	GameSettings.apply_buses()
 
 
+func _on_bus_renamed(_index: int, _old_name: StringName, _new_name: StringName) -> void:
+	GameSettings.apply_buses()
+
+
 func _on_setting_changed(key: String) -> void:
 	if key == "video/grid" and virtual_height != int(GameSettings.value(key)):
 		virtual_height = int(GameSettings.value(key))
@@ -130,6 +137,8 @@ func _apply_brightness() -> void:
 	var amount := float(GameSettings.value("video/brightness"))
 	brightness_pass.material.set_shader_parameter("brightness", amount)
 	brightness_pass.visible = not is_equal_approx(amount, 1.0)
+	# No screen copy every frame while it is off.
+	_brightness_copy.visible = brightness_pass.visible
 
 
 ## Development keys for comparing looks.
