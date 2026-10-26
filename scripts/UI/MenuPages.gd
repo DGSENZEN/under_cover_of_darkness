@@ -1,7 +1,8 @@
 class_name MenuPages
 extends Control
 ## What a page says once its band has spread over the right two-thirds:
-## Lore's text, the Settings controls painted like the band, Continue's line.
+## Lore's text, the settings book (SettingsPage) painted like the band,
+## Continue's line.
 const Settings := preload("res://scripts/UI/Settings.gd")
 const INK := Color("f4e6cc")
 const GOLD := Color("d9b46a")
@@ -10,11 +11,16 @@ const CONTINUE_LINE := "No saved game yet. Choose New Game to begin."
 
 var title_label: Label
 var body_label: Label
+## The settings book, and its master volume slider (the first row).
+var settings: SettingsPage
 var volume: HSlider
-var marks: CheckButton
 var back: MenuWord
-var _settings: VBoxContainer
 var _scrim: TextureRect
+## Under the settings book: a deeper, wider wash, so its rows read over the painting.
+var _book_scrim: TextureRect
+var _column: VBoxContainer
+## The settings book starts higher than the other pages: it is taller.
+const SETTINGS_TOP := 150.0
 var _fade: Tween
 
 func build(font: Font, lore: String) -> void:
@@ -37,7 +43,24 @@ func build(font: Font, lore: String) -> void:
 	_scrim.size = AREA.size + Vector2(160, 120)
 	_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_scrim)
+	var deep := Gradient.new()
+	deep.colors = PackedColorArray([Color(0.01, 0.02, 0.03, 0.86), Color(0.01, 0.02, 0.03, 0.7), Color(0.01, 0.02, 0.03, 0.0)])
+	deep.offsets = PackedFloat32Array([0.0, 0.55, 1.0])
+	var round_wash := GradientTexture2D.new()
+	round_wash.gradient = deep
+	round_wash.fill = GradientTexture2D.FILL_RADIAL
+	round_wash.fill_from = Vector2(0.5, 0.5)
+	round_wash.fill_to = Vector2(1.0, 0.5)
+	_book_scrim = TextureRect.new()
+	_book_scrim.texture = round_wash
+	_book_scrim.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_book_scrim.position = Vector2(560, 20)
+	_book_scrim.size = Vector2(1000, 860)
+	_book_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_book_scrim.visible = false
+	add_child(_book_scrim)
 	var column := VBoxContainer.new()
+	_column = column
 	column.position = AREA.position
 	column.size = AREA.size
 	column.add_theme_constant_override("separation", 22)
@@ -64,31 +87,10 @@ func build(font: Font, lore: String) -> void:
 	body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	body_label.custom_minimum_size.x = AREA.size.x
 	column.add_child(body_label)
-	_settings = VBoxContainer.new()
-	_settings.add_theme_constant_override("separation", 18)
-	column.add_child(_settings)
-	_settings.add_child(_label(MenuType.body(), 26, INK, "Master volume"))
-	volume = HSlider.new()
-	volume.name = "Volume"
-	volume.max_value = 1.0
-	volume.step = 0.01
-	volume.value = Settings.master_volume()
-	volume.custom_minimum_size = Vector2(520, 40)
-	volume.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	volume.value_changed.connect(Settings.set_master_volume)
-	_settings.add_child(volume)
-	marks = CheckButton.new()
-	marks.text = "Awareness marks above guards"
-	marks.button_pressed = Settings.awareness_marks()
-	marks.add_theme_font_override("font", MenuType.body())
-	marks.add_theme_font_size_override("font_size", 26)
-	for state in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color", "font_hover_pressed_color"]:
-		marks.add_theme_color_override(state, INK)
-	for state in ["normal", "hover", "pressed", "focus", "hover_pressed"]:
-		marks.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	marks.toggled.connect(Settings.set_awareness_marks)
-	marks.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	_settings.add_child(marks)
+	settings = SettingsPage.new()
+	column.add_child(settings)
+	settings.build()
+	volume = settings.row_for("audio/master_volume").slider
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -114,11 +116,13 @@ func show_page(index: int, title: String, colour: Color, message := "") -> void:
 	else:
 		body_label.text = ""
 	body_label.visible = not body_label.text.is_empty()
-	_settings.visible = index == 2
+	settings.visible = index == 2
+	_column.position.y = SETTINGS_TOP if index == 2 else AREA.position.y
+	_scrim.visible = index != 2
+	_book_scrim.visible = index == 2
 	if index == 2:
-		volume.set_value_no_signal(Settings.master_volume())
-		marks.set_pressed_no_signal(Settings.awareness_marks())
-		_paint_controls(colour)
+		settings.refresh_all()
+		settings.paint(colour)
 	back.colour = colour
 	show()
 	modulate.a = 0.0
@@ -127,7 +131,7 @@ func show_page(index: int, title: String, colour: Color, message := "") -> void:
 	_fade = create_tween()
 	_fade.tween_property(self, "modulate:a", 1.0, 0.25)
 	if index == 2:
-		volume.grab_focus()
+		settings.focus_first()
 	else:
 		back.grab_focus()
 
@@ -147,29 +151,22 @@ func _label(font: Font, point_size: int, colour: Color, words := "") -> Label:
 	label.add_theme_constant_override("shadow_offset_y", 2)
 	return label
 
-## The slider's track is a dry brush stroke; the filled part and the handle
-## are pigment in the page's colour; the switch is a dab, filled when on.
-func _paint_controls(colour: Color) -> void:
-	var stroke := _stroke_texture(INK * Color(1, 1, 1, 0.45))
-	var filled := _stroke_texture(colour)
+## A slider's track is a dry brush stroke; the filled part and the handle
+## are pigment in the page's colour.
+static func paint_slider(slider: HSlider, colour: Color) -> void:
 	var track := StyleBoxTexture.new()
-	track.texture = stroke
+	track.texture = _stroke_texture(INK * Color(1, 1, 1, 0.45))
 	track.content_margin_top = 8
 	track.content_margin_bottom = 8
 	var lit := StyleBoxTexture.new()
-	lit.texture = filled
+	lit.texture = _stroke_texture(colour)
 	lit.content_margin_top = 8
 	lit.content_margin_bottom = 8
-	volume.add_theme_stylebox_override("slider", track)
-	volume.add_theme_stylebox_override("grabber_area", lit)
-	volume.add_theme_stylebox_override("grabber_area_highlight", lit)
-	var dab := _dab_texture(colour, true)
-	volume.add_theme_icon_override("grabber", dab)
-	volume.add_theme_icon_override("grabber_highlight", _dab_texture(colour.lightened(0.25), true))
-	marks.add_theme_icon_override("checked", _dab_texture(colour, true))
-	marks.add_theme_icon_override("unchecked", _dab_texture(INK, false))
-	marks.add_theme_icon_override("checked_disabled", _dab_texture(colour, true))
-	marks.add_theme_icon_override("unchecked_disabled", _dab_texture(INK, false))
+	slider.add_theme_stylebox_override("slider", track)
+	slider.add_theme_stylebox_override("grabber_area", lit)
+	slider.add_theme_stylebox_override("grabber_area_highlight", lit)
+	slider.add_theme_icon_override("grabber", _dab_texture(colour, true))
+	slider.add_theme_icon_override("grabber_highlight", _dab_texture(colour.lightened(0.25), true))
 
 static func _stroke_texture(colour: Color) -> ImageTexture:
 	var grain := FastNoiseLite.new()
