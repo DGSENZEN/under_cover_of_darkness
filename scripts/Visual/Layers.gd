@@ -42,6 +42,9 @@ const PAINTED_WALL := 1 << 6
 ## A floor's own tiles and sills (layer 8), the only thing chalk and salt laid on it land on (the Pasaje's wards):
 ## not the candles standing in them.
 const PAINTED_FLOOR := 1 << 7
+## Paper pasted on a wall (layer 9): the Pasaje's bills, which soot laid on the wall after them lands on too (the
+## giant hand's), and the paint sprayed before them does not.
+const PASTED := 1 << 8
 ## A fixture's glowing parts (a pitch head, coals, horn panes): they shine by
 ## their own glow, and a burner's light (a hand's breadth away) would blow
 ## them out, so burners leave this layer unlit.

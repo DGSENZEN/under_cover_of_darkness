@@ -34,6 +34,11 @@ const VIEWS := [
 	[Vector3(1.6, 1.6, 0.45), Vector3(4.8, 0.3, 0.45), "9e_ward_the_lanes_threshold"],
 	[Vector3(-2.4, 1.6, 13.8), Vector3(-4.7, 1.4, 13.8), "9f_bills_close_south_west"],
 	[Vector3(2.4, 1.6, -14.4), Vector3(4.7, 1.4, -14.4), "9g_bills_close_north_east"],
+	[Vector3(1.6, 1.65, -14.6), Vector3(-3.2, 0.9, -18.4), "10a_happened_the_north_rite"],
+	[Vector3(0.6, 1.65, -16.0), Vector3(-1.05, 0.0, -17.55), "10b_happened_the_spiral_cracks"],
+	[Vector3(0.6, 1.65, 2.2), Vector3(3.3, 0.0, 1.3), "10c_happened_the_claws_from_the_lane"],
+	[Vector3(-1.0, 1.65, 4.4), Vector3(3.6, 0.3, 1.2), "10d_happened_the_claws_from_the_street"],
+	[Vector3(0.3, 1.65, 18.9), Vector3(-4.7, 2.0, 18.6), "10e_happened_the_hand"],
 ]
 ## The close views lit: [eye, looks at, name].
 const CLOSE := [
@@ -45,6 +50,9 @@ const CLOSE := [
 	[Vector3(-3.0, 1.3, -3.4), Vector3(-4.85, 0.0, -1.0), "14_lit_herb_sill_salt"],
 	[Vector3(-3.0, 1.5, 9.0), Vector3(-4.7, 1.4, 9.0), "15_lit_bills_west"],
 	[Vector3(3.0, 1.5, -18.4), Vector3(4.7, 1.4, -18.4), "16_lit_bills_north_end"],
+	[Vector3(-2.0, 1.4, -17.0), Vector3(-4.7, 1.0, -18.4), "17_lit_the_scorch"],
+	[Vector3(1.6, 1.3, 1.0), Vector3(3.4, 0.0, 1.4), "18_lit_the_claws"],
+	[Vector3(-2.4, 1.7, 17.6), Vector3(-4.7, 2.2, 18.6), "19_lit_the_hand"],
 ]
 
 var eye: Camera3D

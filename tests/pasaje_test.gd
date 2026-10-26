@@ -3,6 +3,7 @@ extends Node3D
 ## --fixed-fps 60.
 
 const PASAJE := preload("res://maps/pasaje.tscn")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 ## The set's shadowless lights at most: the stalls' sixteen neons and eight bulbs, and one to each ward's candles.
 const LIGHT_BUDGET := 30
 
@@ -24,6 +25,7 @@ func _ready() -> void:
 	_marks()
 	_wards()
 	_bills()
+	_happened()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -334,6 +336,70 @@ func _marks() -> void:
 	_check("P7c the walls carry every kind of mark, the sigils where the uncanny comes close",
 		kinds.get("sigil", 0) >= 3 and kinds.get("tag", 0) >= 6 and kinds.get("throwup", 0) >= 3 and stencils >= 3
 		and stray.is_empty(), "%s; %s" % [kinds, stray])
+
+
+## The marks of what happened, each where it happened: at the north end, where the rite went wrong, the wall scorched
+## behind its circle and the floor cracked in a spiral beside it; claws dragged out of the candle lane's mouth across
+## the street's tiles; under the canopy at the south end, a hand too big to be a person's on the wall. The gouges and
+## cracks cut into the tile (their normal maps).
+func _happened() -> void:
+	var happened: Dictionary = pasaje.get("happened") if pasaje.get("happened") != null else {}
+	var wrong := []
+	var lane: Array = pasaje.OPENINGS["candle_lane"]
+	var circle: Node3D = pasaje.wards.get("north_circle") if pasaje.get("wards") != null else null
+	var near := func(a: Vector3, b: Vector3, reach: float) -> bool: return Vector2(a.x - b.x, a.z - b.z).length() < reach
+	var spots := {
+		"scorch": func(at: Vector3) -> bool: return circle != null and at.x < -4.0 and near.call(at, _ward_middle(circle), 3.0),
+		"spiral": func(at: Vector3) -> bool: return circle != null and absf(at.y) < 0.2 and near.call(at, _ward_middle(circle), 3.5),
+		"gouges": func(at: Vector3) -> bool: return absf(at.y) < 0.2 and at.x > 1.5 and at.z > lane[1] and at.z < lane[2],
+		"hand": func(at: Vector3) -> bool: return at.z > 13.0 and absf(at.x) > 4.0 and at.y > 1.2,
+	}
+	for kind in spots:
+		var mark: Decal = happened.get(kind)
+		if mark == null:
+			wrong.append("%s missing" % kind)
+			continue
+		var at := pasaje.to_local(mark.global_position)
+		if not spots[kind].call(at):
+			wrong.append("%s at %s" % [kind, at])
+		if kind in ["gouges", "spiral"] and mark.texture_normal == null:
+			wrong.append("%s not cut in" % kind)
+	_check("P7g the marks of what happened stand where it happened, the claws and cracks cut into the tile",
+		wrong.is_empty(), "%s" % [wrong])
+
+	# The hand is the newest thing on its wall: its soot lies over the paint and the bills under it. (Its print 0.3 of
+	# its cell either side along the wall and 0.45 up and down; a piece's own 0.4 of its size.)
+	var hand: Decal = happened.get("hand")
+	var under := []
+	if hand != null:
+		var at := pasaje.to_local(hand.global_position)
+		if not hand.cull_mask & Layers.PAINTED_WALL:
+			under.append("the wall")
+		for mark: Node3D in pasaje.marks:
+			var size := 0.0
+			if mark is Decal:
+				size = (mark as Decal).size.x
+			elif mark is MeshInstance3D and (mark as MeshInstance3D).mesh is QuadMesh:
+				size = ((mark as MeshInstance3D).mesh as QuadMesh).size.x
+			var there := pasaje.to_local(mark.global_position)
+			if signf(there.x) != signf(at.x) or absf(there.z - at.z) >= 0.3 * hand.size.x + 0.4 * size \
+					or absf(there.y - at.y) >= 0.45 * hand.size.x + 0.4 * size:
+				continue
+			if mark is Decal and (mark as Decal).sorting_offset >= hand.sorting_offset:
+				under.append("%s drawn over it" % mark.name)
+			elif mark is MeshInstance3D and not (mark as MeshInstance3D).layers & hand.cull_mask:
+				under.append("%s at %s not sooted" % [mark.name, there])
+	_check("P7h the giant hand lies over the paint and the bills under it", hand != null and under.is_empty(),
+		"%s" % [under])
+
+
+## A ward's middle in the set's frame (the mean of its candles).
+func _ward_middle(root: Node3D) -> Vector3:
+	var stubs: Array = root.find_children("candle_stub*", "MeshInstance3D", true, false)
+	var sum := Vector3.ZERO
+	for stub: MeshInstance3D in stubs:
+		sum += pasaje.to_local(stub.global_position)
+	return sum / maxf(stubs.size(), 1)
 
 
 ## The bills pasted in generations: each stack its tatters of older bills, two and more newer over them (each over

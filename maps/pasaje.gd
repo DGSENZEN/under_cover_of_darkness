@@ -163,6 +163,23 @@ const WARD_CELLS := ["circle", "arc", "salt", "ward"]
 const STUBS := ["candle_stub_a", "candle_stub_b", "candle_stub_c"]
 ## How far a ward circle's candles stand out on its ring (its image's ring at this share of its size).
 const RING := 0.47
+## The marks of what happened: the sheet and its normal map (its cells: the scorch, the gouges, the hand, the spiral
+## cracks); where each lies and how big. The scorch on the west wall behind the north circle; the spiral on the
+## floor beside it; the gouges at the lane's mouth, this share along it, `GOUGE_SIZE` across and along the drag; the
+## hand under the canopy at (z, height), tilted.
+const MARKS_SHEET := "pasaje_marks.png"
+const MARKS_NORMAL := "pasaje_marks_n.png"
+const MARK_CELLS := ["scorch", "gouges", "hand", "spiral"]
+const SCORCH_Z := -18.1
+const SCORCH_SIZE := 2.6
+const SPIRAL_AT := Vector3(-1.05, 0.0, -17.55)
+const SPIRAL_SIZE := 1.7
+const GOUGE_ALONG := 0.62
+const GOUGE_SIZE := Vector2(1.3, 2.0)
+const HAND_SIDE := -1
+const HAND_AT := Vector2(18.6, 2.3)
+const HAND_SIZE := 1.3
+const HAND_TILT := 0.14
 ## How far a sign swings at most (radians) and at what draught it does (m/s).
 const SWING := deg_to_rad(4.0)
 const SWING_FULL := 1.0
@@ -208,6 +225,8 @@ var marks: Array[Node3D] = []
 var bill_stacks: Array[Node3D] = []
 ## The wards by their spot: each a root holding its chalk and salt, its candles, their flames.
 var wards := {}
+## The marks of what happened, by their kind (the scorch, the spiral, the gouges, the hand): each its decal.
+var happened := {}
 
 
 func _ready() -> void:
@@ -218,6 +237,7 @@ func _ready() -> void:
 	_overhead()
 	_marks()
 	_wards()
+	_happened()
 	if standalone:
 		_environment()
 		_stubs()
@@ -753,6 +773,51 @@ func _wards() -> void:
 	SetKit.place(alcove, kit["flowers_bunches"], look, "marigolds", Vector3(face - 0.3 * size, 0.0, z_mid), PI / 2.0, false)
 
 
+## The marks of what happened, each where it happened. At the north end, where the rite went wrong: the wall behind
+## its circle scorched by the fire that stood at its foot, and the floor beside the circle cracked in a spiral out
+## from where something struck. At the candle lane's mouth: four claws dug into the floor and dragged out into the
+## street. Under the canopy at the south end: a soot hand too big to be a person's pressed on the west wall, a little
+## askew. The gouges and cracks cut into the tile (their normal maps).
+func _happened() -> void:
+	var cells := _sheet_cells(MARKS_SHEET, 2)
+	var normals := _sheet_cells(MARKS_NORMAL, 2)
+	if cells.is_empty():
+		return
+	var root := Node3D.new()
+	root.name = "happened"
+	add_child(root)
+	var lane: Array = OPENINGS["candle_lane"]
+
+	# (The scorch's fire stood at its image's source, 0.86 down it: at the wall's foot.)
+	var scorch := _graffito(root, cells[0], "scorch", -1, SCORCH_Z, 0.1 + SCORCH_SIZE * (0.86 - 0.5), SCORCH_SIZE)
+	happened["scorch"] = scorch
+
+	var spiral := _laid(root, cells[3], SPIRAL_AT, Vector2(SPIRAL_SIZE, SPIRAL_SIZE), 0.6)
+	spiral.name = "spiral"
+	happened["spiral"] = spiral
+
+	# (Its image's top, where the claws bit, toward the lane: dragged west out of it.)
+	var gouges := _laid(root, cells[1], Vector3(HALF_W - WALL - FACE - GOUGE_SIZE.y / 2.0 - 0.05, 0.0,
+		lane[1] + GOUGE_ALONG * (lane[2] - lane[1])), GOUGE_SIZE, 0.0, Vector3(1.0, 0.0, -0.18))
+	gouges.name = "gouges"
+	happened["gouges"] = gouges
+
+	var hand := _graffito(root, cells[2], "hand", HAND_SIDE, HAND_AT.x, HAND_AT.y, HAND_SIZE)
+	hand.basis = hand.basis * Basis(Vector3.UP, HAND_TILT)
+	happened["hand"] = hand
+	# (The scorch and the hand drawn over the older paint they lie on; the hand, the newest thing on its wall, over the
+	# bills pasted there too.)
+	scorch.sorting_offset = 1.0
+	hand.sorting_offset = 1.0
+	hand.cull_mask = Layers.PAINTED_WALL | Layers.PASTED
+
+	for kind in ["gouges", "spiral"]:
+		var mark: Decal = happened[kind]
+		mark.texture_normal = normals[MARK_CELLS.find(kind)] if normals.size() == MARK_CELLS.size() else null
+	for kind in happened:
+		happened[kind].set_meta("kind", kind)
+
+
 ## A ward's root, kept by its spot's name.
 func _ward_root(spot: String) -> Node3D:
 	var root := Node3D.new()
@@ -897,6 +962,8 @@ func _billed(root: Node3D, cell: Texture2D, kind: String, side: int, z: float, h
 	paper.roughness = 0.92
 	sheet.material_override = paper
 	sheet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# (Paper on the wall: what soot that came after lies on, the giant hand's.)
+	sheet.layers = Layers.WORLD | Layers.PASTED
 	sheet.set_meta("kind", "bill")
 	sheet.set_meta("bill_kind", kind)
 	sheet.set_meta("order", order)
