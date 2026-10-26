@@ -861,7 +861,8 @@ func _bill_stack(root: Node3D, kit: Dictionary, look: Material, bills: Dictionar
 		SetKit.place(stack, kit["bill_curl"], look, "bill_curl", at, -side * PI / 2.0, false)
 
 
-## The bills a stack on the `side` wall at `middle` is pasted with, by what goes on there: the missing and the wanted
+## The bills a stack on the `side` wall at `middle` is pasted with (each kind its paper, left empty for the user's bill
+## of that kind), by what goes on there: the missing and the wanted
 ## spirit by the dark north and her lane; the reward for a lost nahual by the herb market and the lane (the nahual's
 ## ways); the curandero's card by the herbs and the copal; the exorcist's by the north end; the Company's notice at
 ## the north end; the lotería by the lottery seller; the cabaret, the lucha and the fiesta in the south, the night's.

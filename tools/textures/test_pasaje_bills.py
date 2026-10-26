@@ -62,6 +62,19 @@ class Bills(unittest.TestCase):
             middle = rows[len(rows) // 4: 3 * len(rows) // 4]
             self.assertGreater(float(np.std(middle)), 1.5, (k, kind))
 
+    def test_they_are_left_empty_for_the_users_bills(self):
+        # (Paper only, its years on it, no ink: inside the sheet, away from its torn rim, no more than a speck of it
+        # (its staples) stands far off the paper's own tone. Ageing and damp move it 65 of 255 at most; every ink sat
+        # 110 and more off its paper.)
+        for k, kind in enumerate(pasaje_bills.BILLS):
+            cell = self._cell(k)
+            inner = ndimage.binary_erosion(cell[..., 3] > 160, iterations=12)
+            tone = cell[..., :3].astype(np.float64) @ np.array([0.299, 0.587, 0.114])
+            if not inner.any():
+                continue
+            off = np.abs(tone[inner] - np.median(tone[inner])) > 80
+            self.assertLess(float(off.mean()), 0.005, (k, kind, float(off.mean())))
+
     def test_the_tatters_are_scraps_of_many_bills(self):
         for k, kind in enumerate(pasaje_bills.BILLS):
             if kind != "tatters":
