@@ -10,6 +10,10 @@ extends Node3D
 ## on and fade, staying written near the player; close under a ward lamp
 ## the air round its lenses bends.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): its clock.
+const SAVED := ["_time"]
+
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const SIGIL := preload("res://scripts/Visual/vfx_sigil.gdshader")
 const SIGIL_STROKES := preload("res://assets/vfx/sigil_strokes.png")
@@ -355,3 +359,21 @@ func _sigils(dressing: Dictionary) -> void:
 		sigil.set_meta("phase", rng.randf() * CYCLE)
 		add_child(sigil)
 		sigils.append(sigil)
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## Its clock, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

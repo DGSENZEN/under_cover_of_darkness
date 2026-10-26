@@ -5,6 +5,10 @@ extends Node
 ## the lamps round its ring, the smoke and petals it pulls in, the fog round
 ## its cage, its chains) reads it; nothing else times itself to the god.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): its clock.
+const SAVED := ["time"]
+
 const PERIOD := 7.0
 const DEEP_EVERY := 4
 ## A breath that is not deep goes this far in and out.
@@ -49,3 +53,21 @@ func step(delta: float) -> void:
 
 	if same and before < 0.5 and after >= 0.5 and deep():
 		deep_exhale.emit()
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## Its clock, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

@@ -5,6 +5,10 @@ extends Node3D
 ## its object's name, each kit's painterly material from its painted atlas
 ## (the user's overpaint first), its vertex paint turned on.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): the lamps' clock (day or night is the Zócalo's).
+const SAVED := ["_clock"]
+
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const KITS := "res://assets/eclipse/kit/"
 const ATLASES := "res://textures/painted/eclipse/"
@@ -378,3 +382,21 @@ static func atlas(kit: String, suffix: String) -> Texture2D:
 
 	push_warning("KitLoader: none of %s in %s" % [names, ATLASES])
 	return null
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## The lamps' clock (day or night is the Zócalo's), for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

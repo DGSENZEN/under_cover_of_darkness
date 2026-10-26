@@ -9,6 +9,7 @@ const FIXTURE_B := preload("res://tests/fixtures/save/fixture_map_b.tscn")
 const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const TorchScript := preload("res://scripts/Visual/Torch.gd")
+const Ticker := preload("res://tests/fixtures/save/Ticker.gd")
 
 var results: Array[String] = []
 @onready var save: Node = get_node("/root/SaveGame")
@@ -28,6 +29,11 @@ func _ready() -> void:
 	await _g9_world_things()
 	await _g11_camera_settles()
 	await _g12_taken_stays_gone()
+	_g18_fields()
+	await _g13_metro_round_trip()
+	await _g14_schedules_carry_on()
+	await _g15_shade()
+	await _g16_zocalo_round_trip()
 	# (G10, the gates still carrying what he has, is city_test's, run beside this.)
 	# Last: it changes the scene (this suite stays, under the root).
 	await _g7_through_the_cover()
@@ -274,6 +280,161 @@ func _g12_taken_stays_gone() -> void:
 	save.apply(body)
 	await get_tree().process_frame
 	_check("G12 taken stays gone", body["gone"].has("Things/key_cellar") and fresh.get_node_or_null("key_cellar") == null, str(body["gone"]))
+	_drop(fresh)
+
+
+func _g18_fields() -> void:
+	var a: Node3D = Ticker.new()
+	add_child(a)
+	a.tick(9.5)
+	var state: Dictionary = a.save_state()
+	var b: Node3D = Ticker.new()
+	add_child(b)
+	b.load_state(state)
+	var same: bool = b.clock == a.clock and b.next == a.next and b.seen == a.seen and b.seen is Array[int]
+	var rolls_a := [a.roll(), a.roll(), a.roll()]
+	var rolls_b := [b.roll(), b.roll(), b.roll()]
+	_check("G18 a schedule's fields and dice", same and rolls_a == rolls_b and not a.seen.is_empty(), "%s %s %s" % [state, rolls_a, rolls_b])
+	_drop(a)
+	_drop(b)
+
+
+## The differences between two gathered bodies: "path: a != b", floats
+## within `tolerance`.
+func _diff(a: Variant, b: Variant, path := "", tolerance := 1e-4) -> Array[String]:
+	var found: Array[String] = []
+
+	if a is Dictionary and b is Dictionary:
+		for key in a:
+			if not b.has(key):
+				found.append("%s/%s: missing after" % [path, key])
+			else:
+				found.append_array(_diff(a[key], b[key], "%s/%s" % [path, key], tolerance))
+
+		for key in b:
+			if not a.has(key):
+				found.append("%s/%s: new after" % [path, key])
+	elif a is Array and b is Array:
+		if a.size() != b.size():
+			found.append("%s: %d items != %d" % [path, a.size(), b.size()])
+		else:
+			for i in a.size():
+				found.append_array(_diff(a[i], b[i], "%s[%d]" % [path, i], tolerance))
+	elif (a is float or a is int) and (b is float or b is int):
+		if absf(float(a) - float(b)) > tolerance:
+			found.append("%s: %s != %s" % [path, a, b])
+	elif a is Vector3 and b is Vector3:
+		if not (a as Vector3).is_equal_approx(b) and (a as Vector3).distance_to(b) > tolerance:
+			found.append("%s: %s != %s" % [path, a, b])
+	elif a is Transform3D and b is Transform3D:
+		if (a as Transform3D).origin.distance_to((b as Transform3D).origin) > tolerance or not (a as Transform3D).basis.is_equal_approx((b as Transform3D).basis):
+			found.append("%s: %s != %s" % [path, a, b])
+	elif (a is Quaternion and b is Quaternion) or (a is Vector2 and b is Vector2) or (a is Color and b is Color) or (a is Basis and b is Basis) or (a is AABB and b is AABB):
+		if not a.is_equal_approx(b):
+			found.append("%s: %s != %s" % [path, a, b])
+	elif a != b:
+		found.append("%s: %s != %s" % [path, a, b])
+
+	return found
+
+
+## A map built as this suite's child, named `Map`, played `frames` frames.
+func _map(path: String, frames: int) -> Node:
+	save.gone.clear()
+	var map: Node = (load(path) as PackedScene).instantiate()
+	map.name = "Map"
+	add_child(map)
+
+	for i in frames:
+		await get_tree().physics_frame
+
+	return map
+
+
+func _g13_metro_round_trip() -> void:
+	var map: Node = await _map("res://maps/metro.tscn", 600)
+	var before: Dictionary = save.gather()
+	var file := SaveFiles.new_run(&"derive")
+	SaveFiles.write(file, "named_1", {"version": 1, "run": file, "slot": "named_1", "kind": &"named", "date": 1}, before, null)
+	var read: Dictionary = SaveFiles.read(SaveFiles.root().path_join(file).path_join("named_1.save"))
+	_drop(map)
+	var fresh: Node = await _map("res://maps/metro.tscn", 1)
+	var problems: Array = save.apply(read["body"])
+	var after: Dictionary = save.gather()
+	var differences := _diff(before["saveables"], after["saveables"], "saveables")
+	differences.append_array(_diff(before["player"], after["player"], "player", 1e-3))
+	var misspelt: Array = load("res://scripts/Save/SaveFields.gd").missing
+	_check("G13 the Metro comes back as it was", problems.is_empty() and differences.is_empty() and before["saveables"].size() > 10 and misspelt.is_empty(),
+		"%d saved, problems %s, differences %s, no such fields %s" % [before["saveables"].size(), problems.slice(0, 5), differences.slice(0, 8), misspelt])
+	_drop(fresh)
+
+
+## The schedules' states after `frames` more frames of `map`.
+func _schedules_after(map: Node, frames: int) -> Dictionary:
+	for i in frames:
+		await get_tree().physics_frame
+
+	var lane := map.get_node("candle_lane")
+	return {"train": lane.get_node("train").save_state(), "dark": lane.get_node("dark_train").save_state(),
+		"procession": lane.get_node("procession").save_state(), "bay": lane.save_state()}
+
+
+func _g14_schedules_carry_on() -> void:
+	var map: Node = await _map("res://maps/metro.tscn", 600)
+	# Played on past where a fresh build would be: a train due in 3 s, the
+	# dark train's dice rolled on, the procession's next walk soon.
+	var lane := map.get_node("candle_lane")
+	lane.get_node("train").next = 3.0
+	for i in 5:
+		lane.get_node("dark_train")._rng.randf()
+	lane.get_node("procession")._next = 2.0
+	var body: Dictionary = save.gather()
+	var went_on: Dictionary = await _schedules_after(map, 300)
+	_drop(map)
+	var fresh: Node = await _map("res://maps/metro.tscn", 1)
+	save.apply(body)
+	var goes_on: Dictionary = await _schedules_after(fresh, 300)
+	var differences := _diff(went_on, goes_on, "", 1e-3)
+	_check("G14 the trains and the procession carry on as if never saved", differences.is_empty(), str(differences.slice(0, 6)))
+	_drop(fresh)
+
+
+func _g15_shade() -> void:
+	var map: Node = await _map("res://maps/metro.tscn", 30)
+	var shade := map.get_node("candle_lane/shade_curandera")
+	shade.set_resting(&"dim")
+	shade.face(shade.global_position + Vector3(3, 0, 1))
+	for i in 60:
+		await get_tree().physics_frame
+	var yaw: float = shade.man.rotation.y
+	var body: Dictionary = save.gather()
+	_drop(map)
+	var fresh: Node = await _map("res://maps/metro.tscn", 1)
+	save.apply(body)
+	var back := fresh.get_node("candle_lane/shade_curandera")
+	_check("G15 a dimmed shade comes back dim, facing the same way", back._resting == &"dim" and absf(back.man.rotation.y - yaw) < 0.001,
+		"%s yaw %.3f / %.3f" % [back._resting, back.man.rotation.y, yaw])
+	_drop(fresh)
+
+
+func _g16_zocalo_round_trip() -> void:
+	var map: Node = await _map("res://maps/zocalo.tscn", 300)
+	# A flock up in the air, the night come.
+	var pigeons := map.get_node("pigeons")
+	pigeons._flocks[0]["flying"] = true
+	pigeons._flocks[0]["quiet"] = 0.0
+	map.set_day(false)
+	for i in 30:
+		await get_tree().physics_frame
+	var before: Dictionary = save.gather()
+	_drop(map)
+	var fresh: Node = await _map("res://maps/zocalo.tscn", 1)
+	var problems: Array = save.apply(before)
+	var after: Dictionary = save.gather()
+	var differences := _diff(before["saveables"], after["saveables"], "saveables")
+	var up: bool = fresh.get_node("pigeons")._flocks[0]["flying"] == true and not fresh.sun.visible
+	_check("G16 the Zócalo comes back as it was, a flock in the air at night", problems.is_empty() and differences.is_empty() and up,
+		"%d saved, problems %s, differences %s, flying+night %s" % [before["saveables"].size(), problems.slice(0, 4), differences.slice(0, 6), up])
 	_drop(fresh)
 
 

@@ -10,6 +10,8 @@ extends Node3D
 ##   --fps-report=<s>  flies a camera through the plan's cameras for s
 ##                     seconds, prints "fps: average <a> worst <w>", quits.
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+
 const PLAYER := preload("res://Player.tscn")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const PLAN := "res://assets/eclipse/zocalo/plan.json"
@@ -46,6 +48,11 @@ var _night: Environment
 
 
 func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
 	reset_physics_interpolation.call_deferred()
 	var started := Time.get_ticks_msec()
 	plan = JSON.parse_string(FileAccess.get_file_as_string(PLAN))
@@ -62,6 +69,7 @@ func _ready() -> void:
 		kit = KitLoader.build(dressing)
 		add_child(kit)
 		gusts = Gusts.new()
+		gusts.name = "gusts"
 		add_child(gusts)
 		ambient = Ambient.build(dressing.get("emitters", []))
 		ambient.gusts = gusts
@@ -250,3 +258,15 @@ func _fps_report(seconds: float) -> void:
 	print("fps: average %.1f worst %.1f over %d frames (the worst at %s); after the first 2 s the worst %.1f" % [
 		frames / maxf(elapsed, 1e-6), worst, frames, worst_at, flying])
 	get_tree().quit()
+
+
+## Day or night, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := {}
+	state["day"] = sun.visible if sun != null else true
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	if state.has("day") and sun != null:
+		set_day(bool(state["day"]))

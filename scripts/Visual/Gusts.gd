@@ -5,6 +5,10 @@ extends Node
 ## away every so often, the way never quite the same; for a district
 ## without the night's weather (scripts/Night/Night.gd's wind).
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): its clock.
+const SAVED := ["_time"]
+
 const Materials := preload("res://scripts/Visual/Materials.gd")
 
 ## Where the wind blows toward (flat), its breeze and its strongest gusts (m/s).
@@ -35,3 +39,21 @@ func wind() -> Vector3:
 func _process(delta: float) -> void:
 	_time += delta
 	Materials.blow(at(_time))
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## Its clock, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)

@@ -9,6 +9,10 @@ extends Node3D
 ## metres. One MultiMesh; each bird's custom (its phase, flap, spread) moves
 ## its wings (scripts/Visual/pigeon.gdshader).
 
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+## What a save keeps of it (SaveFields): the flocks in the air or down, and each bird.
+const SAVED := ["_time"]
+
 const PIGEON := preload("res://scripts/Visual/pigeon.gdshader")
 const STARTLE := 4.0
 const AWAY := 8.0
@@ -191,3 +195,31 @@ func _land(b: Dictionary, delta: float) -> float:
 		b["pos"].y = b["home"].y
 
 	return (b["home"] - b["pos"]).length()
+
+
+func _ready() -> void:
+	# Saves itself (SaveGame); absent when a tool runs the script alone.
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null:
+		save.register(self)
+
+
+## The flocks in the air or down, and each bird, for a save (SaveGame).
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	state["flocks"] = _flocks.map(func(f): return [f["flying"], f["quiet"]])
+	state["birds"] = _birds.map(func(b): return {"pos": b.get("pos"), "vel": b.get("vel"), "yaw": b.get("yaw"), "aloft": b.get("aloft"), "custom": b.get("custom")})
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	for i in mini(_flocks.size(), (state.get("flocks", []) as Array).size()):
+		_flocks[i]["flying"] = state["flocks"][i][0]
+		_flocks[i]["quiet"] = state["flocks"][i][1]
+
+	for i in mini(_birds.size(), (state.get("birds", []) as Array).size()):
+		for key in state["birds"][i]:
+			if state["birds"][i][key] != null:
+				_birds[i][key] = state["birds"][i][key]
