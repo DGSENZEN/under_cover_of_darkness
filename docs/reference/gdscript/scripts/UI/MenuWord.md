@@ -6,8 +6,9 @@
 
 Declarations come from source. Unannotated types are explicit; see the [system guides](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/docs/systems/README.md) for runtime schemas, nullability, ownership, units and side effects.
 
-One menu choice as a word: dim until chosen, then white, nudged forward,
-with a thin tick in its colour. Mouse and focus both choose it.
+One menu choice as a word in book small capitals: dim until chosen, then
+white and a step forward, with a soft shadow so it reads over any painting.
+Mouse and focus both choose it.
 
 Base: `Button`. Registered class: `MenuWord`.
 
@@ -17,12 +18,13 @@ Long initializers are shortened; follow the source link for their full value.
 
 | Property | Type in source | Initializer | Exported | Source |
 | --- | --- | --- | --- | --- |
-| `index` | `inferred from default` | `-1` | no | [Source:11](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L11) |
-| `colour` | `inferred from default` | `Color.WHITE` | no | [Source:12](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L12) |
-| `selected` | `inferred from default` | `false` | no | [Source:13](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L13) |
-| `_tick` | `ColorRect` | none declared | no | [Source:14](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L14) |
-| `_glow` | `ColorRect` | none declared | no | [Source:15](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L15) |
-| `_style` | `StyleBoxEmpty` | none declared | no | [Source:16](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L16) |
+| `index` | `inferred from default` | `-1` | no | [Source:15](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L15) |
+| `colour` | `inferred from default` | `Color.WHITE` | no | [Source:16](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L16) |
+| `selected` | `inferred from default` | `false` | no | [Source:17](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L17) |
+| `step_x` | `inferred from default` | `0.0` | no | [Source:19](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L19) |
+| `wash` | `MenuWash` | none declared | no | [Source:25](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L25) |
+| `_style` | `StyleBoxEmpty` | none declared | no | [Source:26](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L26) |
+| `_motion` | `Tween` | none declared | no | [Source:27](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L27) |
 
 ## Signals
 
@@ -32,10 +34,11 @@ Long initializers are shortened; follow the source link for their full value.
 signal chosen(index: int)
 ```
 
-[Source:5](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L5)
+[Source:6](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L6)
 
-One menu choice as a word: dim until chosen, then white, nudged forward,
-with a thin tick in its colour. Mouse and focus both choose it.
+One menu choice as a word in book small capitals: dim until chosen, then
+white and a step forward, with a soft shadow so it reads over any painting.
+Mouse and focus both choose it.
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
@@ -46,17 +49,16 @@ with a thin tick in its colour. Mouse and focus both choose it.
 ### configure
 
 ```gdscript
-func configure(caption: String, at_index: int, tint: Color, font: Font) -> void
+func configure(caption: String, at_index: int, tint: Color) -> void
 ```
 
-[Source:18](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L18)
+[Source:29](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L29)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
 | `caption` | `String` | required |
 | `at_index` | `int` | required |
 | `tint` | `Color` | required |
-| `font` | `Font` | required |
 
 Return type: `void`.
 
@@ -66,7 +68,7 @@ Return type: `void`.
 func set_selected(on: bool) -> void
 ```
 
-[Source:51](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L51)
+[Source:56](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L56)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
@@ -74,16 +76,47 @@ func set_selected(on: bool) -> void
 
 Return type: `void`.
 
-### _place_tick
+### place_wash
 
 ```gdscript
-func _place_tick() -> void
+func place_wash() -> void
 ```
 
-[Source:61](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L61)
+[Source:71](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L71)
+
+The painting starts a little left of the word and is centred on it (in the
+coordinates of the layer the menu put it on, the word's own parent's).
 
 Parameters: none.
 
 Return type: `void`.
 
-Internal helper or engine callback; use system entry points for integration.
+### set_page_dim
+
+```gdscript
+func set_page_dim(on: bool) -> void
+```
+
+[Source:76](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L76)
+
+A page is open over the menu: the other words step back further.
+
+| Parameter | Type in source | Default |
+| --- | --- | --- |
+| `on` | `bool` | required |
+
+Return type: `void`.
+
+### press_in
+
+```gdscript
+func press_in() -> void
+```
+
+[Source:84](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuWord.gd#L84)
+
+Pressed: the word dips in and springs back, before its action.
+
+Parameters: none.
+
+Return type: `void`.

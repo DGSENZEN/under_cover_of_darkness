@@ -6,9 +6,9 @@
 
 Declarations come from source. Unannotated types are explicit; see the [system guides](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/docs/systems/README.md) for runtime schemas, nullability, ownership, units and side effects.
 
-The selection: a torn band of the chosen illustration brushed across the
-city behind its word. It glides between words, cross-fades its picture,
-and spreads over the right two-thirds to become a page.
+A page's painting: the chosen illustration, large and at full colour,
+standing in the city behind the page's text, torn all round and melting
+longest to the left. It blooms in where the page sits; it never travels.
 
 Base: `Control`. Registered class: `MenuBand`.
 
@@ -18,16 +18,11 @@ Long initializers are shortened; follow the source link for their full value.
 
 | Property | Type in source | Initializer | Exported | Source |
 | --- | --- | --- | --- | --- |
-| `showing` | `inferred from default` | `false` | no | [Source:24](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L24) |
-| `page` | `inferred from default` | `false` | no | [Source:25](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L25) |
-| `screen_left` | `inferred from default` | `0.0` | no | [Source:27](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L27) |
-| `_choice` | `inferred from default` | `-1` | no | [Source:28](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L28) |
-| `_shown` | `inferred from default` | `-1` | no | [Source:29](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L29) |
-| `_word_y` | `inferred from default` | `0.0` | no | [Source:30](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L30) |
-| `_target` | `inferred from default` | `Rect2()` | no | [Source:31](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L31) |
-| `_move` | `Tween` | none declared | no | [Source:32](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L32) |
-| `_fade` | `Tween` | none declared | no | [Source:33](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L33) |
-| `_pulse` | `Tween` | none declared | no | [Source:34](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L34) |
+| `showing` | `inferred from default` | `false` | no | [Source:16](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L16) |
+| `page` | `inferred from default` | `false` | no | [Source:17](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L17) |
+| `screen` | `inferred from default` | `Rect2(0, 0, 1600, 900)` | no | [Source:19](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L19) |
+| `_target` | `inferred from default` | `Rect2()` | no | [Source:20](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L20) |
+| `_fade` | `Tween` | none declared | no | [Source:21](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L21) |
 
 ## Functions
 
@@ -37,7 +32,7 @@ Long initializers are shortened; follow the source link for their full value.
 func _ready() -> void
 ```
 
-[Source:36](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L36)
+[Source:23](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L23)
 
 Parameters: none.
 
@@ -51,7 +46,7 @@ Internal helper or engine callback; use system entry points for integration.
 func _draw() -> void
 ```
 
-[Source:59](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L59)
+[Source:41](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L41)
 
 Parameters: none.
 
@@ -65,7 +60,7 @@ Internal helper or engine callback; use system entry points for integration.
 static func boil_step(t: float) -> int
 ```
 
-[Source:62](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L62)
+[Source:44](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L44)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
@@ -73,165 +68,155 @@ static func boil_step(t: float) -> int
 
 Return type: `int`.
 
-### art_scale
-
-```gdscript
-func art_scale(index: int) -> float
-```
-
-[Source:66](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L66)
-
-How much a painting is enlarged (design px per source px) to cover its box.
-
-| Parameter | Type in source | Default |
-| --- | --- | --- |
-| `index` | `int` | required |
-
-Return type: `float`.
-
 ### band_rect
 
 ```gdscript
 func band_rect() -> Rect2
 ```
 
-[Source:71](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L71)
+[Source:48](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L48)
 
-The rect the band is heading for, in design px.
+The rect the painting's page covers, in design px.
 
 Parameters: none.
 
 Return type: `Rect2`.
 
-### show_choice
+### open_page
 
 ```gdscript
-func show_choice(index: int, word_centre_y: float) -> void
+func open_page(index: int) -> void
+```
+
+[Source:52](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L52)
+
+Shows a page's painting: it blooms in where the page sits.
+
+| Parameter | Type in source | Default |
+| --- | --- | --- |
+| `index` | `int` | required |
+
+Return type: `void`.
+
+### close_page
+
+```gdscript
+func close_page() -> void
+```
+
+[Source:59](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L59)
+
+Parameters: none.
+
+Return type: `void`.
+
+### set_screen
+
+```gdscript
+func set_screen(visible: Rect2) -> void
+```
+
+[Source:65](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L65)
+
+The visible screen in design px: a page reaches its top, right and bottom.
+
+| Parameter | Type in source | Default |
+| --- | --- | --- |
+| `visible` | `Rect2` | required |
+
+Return type: `void`.
+
+### art_left
+
+```gdscript
+func art_left() -> float
+```
+
+[Source:71](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L71)
+
+Where the painting's left edge is, in design px.
+
+Parameters: none.
+
+Return type: `float`.
+
+### _page_rect
+
+```gdscript
+func _page_rect() -> Rect2
 ```
 
 [Source:74](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L74)
 
-| Parameter | Type in source | Default |
-| --- | --- | --- |
-| `index` | `int` | required |
-| `word_centre_y` | `float` | required |
-
-Return type: `void`.
-
-### hide_band
-
-```gdscript
-func hide_band() -> void
-```
-
-[Source:101](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L101)
-
-Parameters: none.
-
-Return type: `void`.
-
-### set_page
-
-```gdscript
-func set_page(on: bool) -> void
-```
-
-[Source:106](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L106)
-
-| Parameter | Type in source | Default |
-| --- | --- | --- |
-| `on` | `bool` | required |
-
-Return type: `void`.
-
-### pulse
-
-```gdscript
-func pulse() -> void
-```
-
-[Source:111](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L111)
-
-Parameters: none.
-
-Return type: `void`.
-
-### set_screen_left
-
-```gdscript
-func set_screen_left(left: float) -> void
-```
-
-[Source:119](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L119)
-
-Keeps the band reaching the screen's left edge when the window is wider than 16:9.
-
-| Parameter | Type in source | Default |
-| --- | --- | --- |
-| `left` | `float` | required |
-
-Return type: `void`.
-
-### _choice_rect
-
-```gdscript
-func _choice_rect() -> Rect2
-```
-
-[Source:124](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L124)
-
 Parameters: none.
 
 Return type: `Rect2`.
 
 Internal helper or engine callback; use system entry points for integration.
 
-### _go
+### _place
 
 ```gdscript
-func _go(rect: Rect2, at_once: bool) -> void
+func _place(rect: Rect2) -> void
 ```
 
-[Source:127](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L127)
+[Source:77](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L77)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
 | `rect` | `Rect2` | required |
-| `at_once` | `bool` | required |
 
 Return type: `void`.
 
 Internal helper or engine callback; use system entry points for integration.
 
-### _set_art
+### _fade_to
 
 ```gdscript
-func _set_art(slot: String, index: int) -> void
+func _fade_to(alpha: float, seconds: float) -> void
 ```
 
-[Source:139](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L139)
+[Source:84](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L84)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
-| `slot` | `String` | required |
+| `alpha` | `float` | required |
+| `seconds` | `float` | required |
+
+Return type: `void`.
+
+Internal helper or engine callback; use system entry points for integration.
+
+### _frame
+
+```gdscript
+func _frame(index: int) -> void
+```
+
+[Source:91](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L91)
+
+Covers ART with the painting, cropped around its face (as a word's wash is).
+
+| Parameter | Type in source | Default |
+| --- | --- | --- |
 | `index` | `int` | required |
 
 Return type: `void`.
 
 Internal helper or engine callback; use system entry points for integration.
 
-### _process
+### _art_box
 
 ```gdscript
-func _process(_delta: float) -> void
+func _art_box() -> Vector4
 ```
 
-[Source:150](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L150)
+[Source:101](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuBand.gd#L101)
 
-| Parameter | Type in source | Default |
-| --- | --- | --- |
-| `_delta` | `float` | required |
+The painting sits toward the right of the page, a little above centre.
 
-Return type: `void`.
+Parameters: none.
+
+Return type: `Vector4`.
 
 Internal helper or engine callback; use system entry points for integration.

@@ -17,14 +17,14 @@ Long initializers are shortened; follow the source link for their full value.
 
 | Property | Type in source | Initializer | Exported | Source |
 | --- | --- | --- | --- | --- |
-| `title_label` | `Label` | none declared | no | [Source:10](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L10) |
-| `body_label` | `Label` | none declared | no | [Source:11](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L11) |
-| `volume` | `HSlider` | none declared | no | [Source:12](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L12) |
-| `marks` | `CheckButton` | none declared | no | [Source:13](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L13) |
-| `back` | `MenuWord` | none declared | no | [Source:14](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L14) |
-| `_settings` | `VBoxContainer` | none declared | no | [Source:15](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L15) |
-| `_scrim` | `TextureRect` | none declared | no | [Source:16](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L16) |
-| `_fade` | `Tween` | none declared | no | [Source:17](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L17) |
+| `title_label` | `Label` | none declared | no | [Source:11](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L11) |
+| `body_label` | `Label` | none declared | no | [Source:12](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L12) |
+| `volume` | `HSlider` | none declared | no | [Source:13](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L13) |
+| `marks` | `CheckButton` | none declared | no | [Source:14](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L14) |
+| `back` | `MenuWord` | none declared | no | [Source:15](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L15) |
+| `_settings` | `VBoxContainer` | none declared | no | [Source:16](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L16) |
+| `_scrim` | `TextureRect` | none declared | no | [Source:17](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L17) |
+| `_fade` | `Tween` | none declared | no | [Source:18](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L18) |
 
 ## Functions
 
@@ -34,7 +34,7 @@ Long initializers are shortened; follow the source link for their full value.
 func build(font: Font, lore: String) -> void
 ```
 
-[Source:19](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L19)
+[Source:20](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L20)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
@@ -49,7 +49,7 @@ Return type: `void`.
 func show_page(index: int, title: String, colour: Color, message := "") -> void
 ```
 
-[Source:90](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L90)
+[Source:106](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L106)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
@@ -66,7 +66,7 @@ Return type: `void`.
 func hide_page() -> void
 ```
 
-[Source:118](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L118)
+[Source:134](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L134)
 
 Parameters: none.
 
@@ -78,7 +78,7 @@ Return type: `void`.
 func _label(font: Font, point_size: int, colour: Color, words := "") -> Label
 ```
 
-[Source:123](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L123)
+[Source:139](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L139)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
@@ -97,7 +97,7 @@ Internal helper or engine callback; use system entry points for integration.
 func _paint_controls(colour: Color) -> void
 ```
 
-[Source:136](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L136)
+[Source:152](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L152)
 
 The slider's track is a dry brush stroke; the filled part and the handle
 are pigment in the page's colour; the switch is a dab, filled when on.
@@ -116,7 +116,7 @@ Internal helper or engine callback; use system entry points for integration.
 static func _stroke_texture(colour: Color) -> ImageTexture
 ```
 
-[Source:158](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L158)
+[Source:174](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L174)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
@@ -132,7 +132,7 @@ Internal helper or engine callback; use system entry points for integration.
 static func _dab_texture(colour: Color, solid: bool) -> ImageTexture
 ```
 
-[Source:172](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L172)
+[Source:188](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MenuPages.gd#L188)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |

@@ -7,61 +7,74 @@ Controls scale together inside a centred 1600×900 design area. Design:
 
 ## The screen
 
-The title ("UNDER COVER / OF DARKNESS") sits top left. Below it,
-[MenuWord](../../scripts/UI/MenuWord.gd) buttons form one column: New Game,
-Continue, Settings and Lore. They sit at x 72, 64 design px apart, in
-letter-spaced capitals.
+Look and feel: `docs/superpowers/specs/2026-10-25-menu-look-and-feel-design.md`.
 
-- **Unselected words** are dim (alpha 0.6).
-- **The selected word** turns white, moves 8 px right and gains a thin tick
-  in its colour with a faint glow. The colours are `ef774c`, `67c9ed`,
-  `929fdb` and `efa25e`.
+**Type.** [MenuType](../../scripts/UI/MenuType.gd) loads the bundled OFL
+typefaces (`assets/fonts/`, see its README):
+- **Title:** "UNDER COVER / OF DARKNESS" in Poiret One deco capitals, widely
+  spaced, with a gold hairline (`d9b46a` fading to clear) under it.
+- **Choices:** Cormorant SC book small capitals.
+- **Page text:** Cormorant Garamond.
+
+**Words.** [MenuWord](../../scripts/UI/MenuWord.gd) buttons form one column at
+x 72 from y 400, 64 design px apart: New Game, Continue, Settings, Lore, Quit.
+There are no numerals, markers or captions.
+- **Unselected words** sit at 50% opacity.
+- **The selected word** turns white and steps 10 px right, with a soft dark
+  shadow so it reads over any painting.
 - **Input:** mouse hover and keyboard/controller focus go through one path,
   `MainMenu.select(index)`. Nothing is selected until the first input, and
   the first key selects New Game. Up and down move without wrapping.
 
-**The band.** [MenuBand](../../scripts/UI/MenuBand.gd) with
-[menu_band.gdshader](../../scripts/UI/menu_band.gdshader) is the selection:
-a 360-design-px band of the chosen illustration brushed across the city
-behind its word.
-- **Width:** it reaches the screen's left edge, including on windows wider
-  than 16:9.
-- **The painting:** it covers a 640×360 box in the right half, cut around its
-  subject from inside its painted rim (`ART_REGIONS`, `ART_FOCUS`).
-- **Edges and behind:** the band has torn top and bottom edges. The painting
-  bleeds sideways into a dark word end and into the city behind, which shows
-  through the band softened, darkened and glazed in the choice's colour.
-- **Glaze:** the painting is desaturated slightly, washed at 0.28 in its
-  colour and lit by a warm glow on the right.
-- **Motion:** only the edges move. Their noise re-rolls about 9 times a
-  second (a hand-painted boil) and never displaces the illustration. The
-  painting drifts slowly (18 s each way).
-- **Changing choice:** the band glides 0.5 s to the new word, and the
-  paintings cross-fade over 0.6 s, each keeping its own glaze. If the
-  selection changes mid-fade, the picture that is mostly showing stays.
-  The city dims to 0.72 while a band shows.
-- **Pressing** a word pulses the band.
+**Motion.** [MenuMotion](../../scripts/UI/MenuMotion.gd): one curve
+everywhere, quint easing out.
+- Words answer in 0.2 s.
+- Paintings bloom over 0.6 s and fade over 0.4 s.
+- A pressed word dips to 0.97 scale and back over 0.12 s before its action.
+
+**Washes.** Each of the first four words owns a
+[MenuWash](../../scripts/UI/MenuWash.gd) with
+[menu_wash.gdshader](../../scripts/UI/menu_wash.gdshader): its painting at
+full colour in a 440×170 design-px wash, framed on the painting's face
+(`MenuWash.FACE`).
+- **Edges:** torn top and bottom, melting long to the left into the city and
+  fraying on the right. Only the edges boil, at about 9 fps.
+- **Layer:** all washes sit on one layer behind all the words, and never
+  travel.
+- **Changing word:** the old wash fades while the new one blooms (from 0.94
+  scale and 10 px left). A third never stacks under two others; the oldest
+  clears in 0.03 s.
+- **City:** it dims to 0.72 while a painting shows.
+
+**Pages.** Continue, Settings and Lore open as book pages.
+[MenuBand](../../scripts/UI/MenuBand.gd) with
+[menu_page.gdshader](../../scripts/UI/menu_page.gdshader) is now only the
+page's painting:
+- **Painting:** an 820×560 painting at full colour, framed on its face, torn
+  all round and melting longest to the left. It sits in the page area from
+  design x 530 to the visible screen's right, top and bottom on any window
+  shape (`MainMenu.visible_design_rect`, `MenuBand.set_screen`).
+- **Words while open:** their washes fade, and the other words dim to 0.35.
+
+[MenuPages](../../scripts/UI/MenuPages.gd) writes the page in a 560-wide
+column from design (620, 270), below the title line:
+- a Cormorant SC heading and a gold hairline
+- Cormorant Garamond text: Lore's text, or Continue's line "No saved game
+  yet. Choose New Game to begin."
+- Settings' master volume (a brush-stroke slider with a pigment-dab handle)
+  and the awareness-marks switch
+
+Settings persists to `user://settings.cfg`. Back (a word) or Escape folds the
+page away, and the word's own painting returns.
+
+**Quit.** It asks "Quit?" beside it in gold italic, with Yes and No as words
+over a soft scrim. No is focused. Escape or No closes it without quitting;
+Yes calls `MainMenu.quit_game`, which defaults to `get_tree().quit()`.
 
 **Known limit.** The illustrations exist only at about 575 px inside their
-rims. The wide ones are enlarged about 1.45× in design px, roughly 1.75× at
-1080p and more at 1440p and 4K, so they look soft there. The fix is an
-upscaled derived copy, which waits on the user's approval.
-
-**Pages.** Continue, Settings and Lore spread their band from design x 530
-to the visible screen's right, top and bottom edges, on any window shape
-(`MainMenu.visible_design_rect`, `MenuBand.set_screen`). Its left side
-tears, and the painting glides right with the spread, with torn edges all
-round.
-[MenuPages](../../scripts/UI/MenuPages.gd) writes the page's content in a
-560-wide column over a feathered scrim:
-- Lore's text
-- Continue's line: "No saved game yet. Choose New Game to begin."
-- Settings' master volume (a brush-stroke slider with a pigment-dab handle)
-  and the awareness-marks switch (a dab, filled when on)
-
-Settings persists to `user://settings.cfg`. The other words dim to 0.35. Back
-(a word) or Escape folds the page back, and focus returns to its word. There
-is no grey panel.
+rims. Page paintings are enlarged about 1.4× in design px, so they look soft
+above 1080p. The fix is an upscaled derived copy, which waits on the user's
+approval.
 
 **The city.** [LivingCity](../../scripts/UI/LivingCity.gd) with
 [city_life.gdshader](../../scripts/UI/city_life.gdshader) never moves the
