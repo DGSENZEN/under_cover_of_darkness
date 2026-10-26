@@ -38,6 +38,11 @@ func _ready() -> void:
 			title_lines.append(child.text)
 	check(title_lines == ["UNDER COVER", "OF DARKNESS"], "main screen contains only the title and the menu")
 
+	# Task 4: a still painting that lives.
+	check(menu.background is LivingCity, "background is the living city")
+	check(not FileAccess.get_file_as_string("res://scripts/UI/city_life.gdshader").contains("paint_phase") and not ResourceLoader.exists("res://scripts/UI/living_paint.gdshader"), "the flow warp is retired")
+	check((menu.background.material as ShaderMaterial).get_shader_parameter("masks") != null, "the city's masks are loaded")
+
 	# Task 1: the word column and one selection path.
 	check(menu.words.size() == 4 and menu.words.map(func(w): return w.text) == ["NEW GAME", "CONTINUE", "SETTINGS", "LORE"], "four words in reading order")
 	check(menu.words[1].position.y - menu.words[0].position.y >= 56.0, "words have room between them")
@@ -68,7 +73,7 @@ func _ready() -> void:
 	check(MenuBand.boil_step(0.0) == MenuBand.boil_step(0.1) and MenuBand.boil_step(0.0) != MenuBand.boil_step(0.12), "edges boil in steps at ~9 fps")
 	for i in range(4):
 		check(menu.band.art_scale(i) <= MenuBand.ART_MAX_SCALE, "painting %d is never enlarged past 1.5x design" % i)
-	check(is_equal_approx(menu.city_dim(), 0.72), "city dims behind the band")
+	check(is_equal_approx(menu.city_dim(), 0.72) and is_equal_approx(menu.background.dim, 0.72), "city dims behind the band")
 	menu.select(3)
 	await get_tree().process_frame
 	check(mat.get_shader_parameter("mix_ab") < 0.5, "art cross-fades, not re-wiped")

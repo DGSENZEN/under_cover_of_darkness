@@ -2,10 +2,6 @@ extends CanvasLayer
 ## The title menu: four words in a column; the chosen one is lit.
 const Settings := preload("res://scripts/UI/Settings.gd")
 const ArtLoading := preload("res://scripts/UI/ArtLoadingScreen.gd")
-const CITY := preload("res://assets/ui/main_menu/city.png")
-const BUTTONS := preload("res://assets/ui/main_menu/buttons.png")
-const LIVING_PAINT := preload("res://scripts/UI/living_paint.gdshader")
-const FLOW := preload("res://scripts/UI/paint_flow.tres")
 const DESIGN := Vector2(1600, 900)
 const INK := Color("f4e6cc")
 const LORE := "THE ECLIPSE OF 1923\nMexico City was changed by the Eclipse and the seepage it left behind. The uncanny has a history here.\n\nTHE CITY ABOVE THE LAKE\nThe lakebed sinks. A failed drain brings the canal back into the streets. Colonial rooms carry machinery bolted into them decades later.\n\nTHE ZÓCALO\nThe plaza, cathedral, palace and market form the city's first district. Roofs, canals and underground passages offer different ways through."
@@ -21,7 +17,7 @@ const WORD_TOP := 360.0
 const WORD_GAP := 64.0
 var words: Array[MenuWord] = []
 var band: MenuBand
-var background: TextureRect
+var background: LivingCity
 var _dim := 1.0
 var selected := -1
 var pages: MenuPages
@@ -44,16 +40,7 @@ func _ready() -> void:
 	theme.default_font = _font
 	theme.default_font_size = 23
 	_root.theme = theme
-	background = TextureRect.new()
-	background.texture = CITY
-	var paint_motion := ShaderMaterial.new()
-	paint_motion.shader = LIVING_PAINT
-	paint_motion.set_shader_parameter("painting", CITY)
-	paint_motion.set_shader_parameter("flow_map", FLOW)
-	background.material = paint_motion
-	background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background = LivingCity.new()
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.add_child(background)
 	var veil := TextureRect.new()
@@ -124,7 +111,7 @@ func city_dim() -> float:
 
 func _process(delta: float) -> void:
 	_dim = move_toward(_dim, 0.72 if band.showing else 1.0, delta / 0.5 * 0.28)
-	background.modulate = Color(_dim, _dim, _dim)
+	background.dim = _dim
 
 func _activate(index: int) -> void:
 	if _transitioning or page_open >= 0:

@@ -52,13 +52,45 @@ func run() -> void:
 	await create_timer(2.0).timeout
 	await RenderingServer.frame_post_draw
 	var later_paint := root.get_texture().get_image()
-	var changed := 0
-	for x in range(500, 1200, 35):
-		var before := first_paint.get_pixel(x, 110)
-		var after := later_paint.get_pixel(x, 110)
-		if absf(before.r - after.r) + absf(before.g - after.g) + absf(before.b - after.b) > 0.005:
-			changed += 1
-	check(changed > 5, "background pigment visibly moves over time")
+	# Compare as shown on screen (8-bit), not the viewport's float buffer.
+	first_paint.convert(Image.FORMAT_RGBA8)
+	later_paint.convert(Image.FORMAT_RGBA8)
+	# Map painting pixels to the screen (aspect-covered) and compare.
+	var masks: Image = load("res://assets/ui/main_menu/city_masks.png").get_image()
+	var shown := Vector2(masks.get_size()) * maxf(1280.0 / masks.get_width(), 720.0 / masks.get_height())
+	var offset := (Vector2(1280, 720) - shown) * 0.5
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 23
+	var still := 0
+	var tried := 0
+	var sky_moved := 0
+	var attempts := 0
+	while tried < 20 and attempts < 5000:
+		attempts += 1
+		var at := Vector2i(rng.randi_range(0, masks.get_width() - 1), rng.randi_range(int(masks.get_height() * 0.3), masks.get_height() - 1))
+		var mask := masks.get_pixelv(at)
+		var screen := Vector2i((Vector2(at) / Vector2(masks.get_size()) * shown + offset).round())
+		# Right of the words' veil, on painting that nothing is meant to stir.
+		if screen.x < 520 or screen.x >= 1280 or screen.y >= 720 or mask.r + mask.g + mask.b + mask.a > 0.0:
+			continue
+		tried += 1
+		# The viewport dithers by a hair each frame; real motion is far larger.
+		var a := first_paint.get_pixelv(screen)
+		var b := later_paint.get_pixelv(screen)
+		if absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b) < 0.02:
+			still += 1
+	var sky_seen := 0
+	for y in range(10, 200, 4):
+		for x in range(600, 1270, 4):
+			sky_seen += 1
+			var before := first_paint.get_pixel(x, y)
+			var after := later_paint.get_pixel(x, y)
+			if absf(before.r - after.r) + absf(before.g - after.g) + absf(before.b - after.b) > 0.01:
+				sky_moved += 1
+	check(still == 20, "the painted architecture never moves (%d/20 identical)" % still)
+	check(sky_moved > sky_seen / 100, "the sky lives (%d of %d sky pixels changed)" % [sky_moved, sky_seen])
+	for region in [Rect2i(0, 0, 640, 240), Rect2i(380, 160, 520, 260), Rect2i(0, 480, 1280, 220)]:
+		later_paint.get_region(region).save_png("/private/tmp/main-menu-city-%d-%d.png" % [region.position.x, region.position.y])
 	for i in range(4):
 		menu.select(i)
 		await create_timer(0.9).timeout
