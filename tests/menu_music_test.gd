@@ -60,25 +60,25 @@ func layer_checks() -> void:
 	check(music.available and music.score.stems.size() == 7, "the test score loads")
 	check(music.player.bus == &"Music", "plays on the Music bus, made if missing")
 	check(music.state == MenuMusic.State.ARRIVAL, "the menu opens arriving")
-	check(music.layer_target_db(&"base") == 0.0 and music.layer_target_db(&"fx") == 0.0 and music.layer_target_db(&"high") == -80.0, "arrival: base and fx in, high out")
-	check(music.layer_target_db(&"low") <= -60.0, "arrival: the groove starts out")
-	run_for(music, 2.0 * BAR)
-	check(music.layer_target_db(&"low") > -10.0 and music.layer_target_db(&"low") < 0.0, "arrival: the groove comes in over four bars")
-	run_for(music, 2.0 * BAR + 0.05)
-	check(music.state == MenuMusic.State.BROWSING and music.layer_target_db(&"low") == 0.0, "after four bars it is browsing, groove full")
-	check(music.layer_target_db(&"high") == -80.0 and music.layer_target_db(&"fx") == -12.0, "browsing at rest: high out, fx low")
+	var table := func(m: MenuMusic) -> Array: return [m.layer_target_db(&"base"), m.layer_target_db(&"low"), m.layer_target_db(&"high"), m.layer_target_db(&"fx")]
+	check(table.call(music) == [0.0, 0.0, -80.0, -80.0], "arrival: base and low from the first moment")
+	run_for(music, 4.0 * BAR + 0.05)
+	check(music.state == MenuMusic.State.BROWSING and table.call(music) == [0.0, 0.0, -80.0, -80.0], "browsing: base and low")
 	music.activity = 1.0
-	check(is_equal_approx(music.layer_target_db(&"high"), -3.0), "browsing busily: high in at -3 dB")
-	music.set_selected(-1)
-	var plain := music.stem_target_db(&"rhodes")
 	music.set_selected(2)
-	check(is_equal_approx(music.stem_target_db(&"rhodes"), minf(plain + 4.0, 0.0)) and music.stem_target_db(&"trumpet") == plain, "the chosen word's instrument leans forward")
+	check(music.layer_target_db(&"high") == -80.0 and music.stem_target_db(&"rhodes") == music.stem_target_db(&"trumpet"), "moving around brings nothing in, and no word's instrument leans")
+	for screen in [MenuMusic.State.CONTINUE, MenuMusic.State.SETTINGS]:
+		music.set_state(screen)
+		check(table.call(music) == [0.0, 0.0, -80.0, -80.0], "Continue and Settings stay on base and low")
 	music.set_state(MenuMusic.State.LORE)
-	check(music.layer_target_db(&"low") == -12.0 and music.layer_target_db(&"high") == -14.0 and music.layer_target_db(&"fx") == 0.0, "Lore: the occult layer forward")
-	music.set_state(MenuMusic.State.SETTINGS)
-	check(music.layer_target_db(&"low") == -14.0 and music.layer_target_db(&"high") == -80.0 and music.layer_target_db(&"fx") == -14.0, "Settings: stripped back")
-	run_for(music, 3.0)
-	check(is_equal_approx(music.stem_gain_db(&"drums"), -14.0) and music.layer_energy(&"low") < 0.25, "gains glide to their targets")
+	check(table.call(music) == [0.0, 0.0, -80.0, 0.0], "Lore brings in fx")
+	music.set_state(MenuMusic.State.ARCHETYPE)
+	check(table.call(music) == [0.0, 0.0, 0.0, -80.0], "the archetype screen brings in high")
+	run_for(music, 4.0)
+	check(is_equal_approx(music.stem_gain_db(&"trumpet"), 0.0) and music.layer_energy(&"high") > 0.99, "gains glide to their targets")
+	music.set_state(MenuMusic.State.BROWSING)
+	run_for(music, 4.0)
+	check(music.layer_energy(&"high") == 0.0 and music.layer_energy(&"fx") == 0.0, "and back out")
 	music.set_state(MenuMusic.State.BROWSING)
 	music.activity = 0.0
 	music.note_input()
@@ -94,6 +94,9 @@ func layer_checks() -> void:
 	pos = 10.0 * BAR + 0.001
 	music.step(0.0)
 	check(music.state == MenuMusic.State.BROWSING, "back to browsing on the bar line")
+	music.state = MenuMusic.State.IDLE
+	music.set_state(MenuMusic.State.LORE)
+	check(table.call(music) == [0.0, 0.0, -80.0, 0.0], "Lore from idle: everything Lore needs comes back")
 	music.queue_free()
 	var silent := make_music("res://tests/fixtures/no_such_score.json")
 	silent.set_state(MenuMusic.State.LORE)
@@ -144,9 +147,8 @@ func ending_checks() -> void:
 	var music := make_music()
 	run_for(music, 0.5)
 	music.set_state(MenuMusic.State.BROWSING)
-	music.activity = 1.0
+	music.set_state(MenuMusic.State.ARCHETYPE)
 	for i in range(240):
-		music.activity = 1.0
 		pos += 1.0 / 60.0
 		music.step(1.0 / 60.0)
 	check(music.stem_gain_db(&"trumpet") > -4.0, "high is in before the ending (%.1f dB)" % music.stem_gain_db(&"trumpet"))

@@ -202,8 +202,8 @@ func _ready() -> void:
 	check(widest < 40.0, "the picture glides when a page opens, it does not jump (largest step %.0f px)" % widest)
 	check(menu.pages.title_label.text == "Lore" and not menu.pages.body_label.text.is_empty(), "Lore opens the city's existing setting")
 	check(menu.music.state == MenuMusic.State.LORE, "the music knows Lore is open")
-	await get_tree().create_timer(0.6).timeout
-	check(float((menu.background.material as ShaderMaterial).get_shader_parameter("fx")) > 0.5, "the occult layer stirs the city while Lore is open")
+	await get_tree().create_timer(1.8).timeout
+	check(float((menu.background.material as ShaderMaterial).get_shader_parameter("fx")) > 0.5, "the occult layer swells in and stirs the city while Lore is open")
 	var shown: Rect2 = MainMenu.visible_design_rect(get_viewport().get_visible_rect().size)
 	check(menu.band.page and menu.band.band_rect().is_equal_approx(Rect2(530, shown.position.y, shown.end.x - 530, shown.size.y)), "Lore spreads its band over the right of the screen (%s on %s)" % [menu.band.band_rect(), get_viewport().get_visible_rect().size])
 	check(menu.band.modulate.a > 0.99 and menu.washes_showing() == 0, "a page shows only its own painting, the word's wash fades")

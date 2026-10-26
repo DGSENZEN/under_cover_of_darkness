@@ -9,28 +9,29 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 signal started
 signal ended
 
-enum State { ARRIVAL, BROWSING, IDLE, LORE, SETTINGS, CONTINUE, STARTING }
+enum State { ARRIVAL, BROWSING, IDLE, LORE, SETTINGS, CONTINUE, STARTING, ARCHETYPE }
 
 const SCORE_JSON := "res://audio/music/menu/score.json"
 const LAYERS: Array[StringName] = [&"base", &"low", &"high", &"fx"]
 const OUT := -80.0
-## Each state's layer levels (dB). ARRIVAL's low and BROWSING's high are
-## worked out live (the groove's entrance; how busy the player is).
+## Each screen's layer levels (dB): the menu sits on base and low, Lore adds
+## the occult fx, the archetype screen brings in high.
 const TARGETS := {
-	State.ARRIVAL: {&"base": 0.0, &"low": OUT, &"high": OUT, &"fx": 0.0},
-	State.BROWSING: {&"base": 0.0, &"low": 0.0, &"high": OUT, &"fx": -12.0},
-	State.IDLE: {&"base": -10.0, &"low": OUT, &"high": OUT, &"fx": -14.0},
-	State.LORE: {&"base": 0.0, &"low": -12.0, &"high": -14.0, &"fx": 0.0},
-	State.SETTINGS: {&"base": 0.0, &"low": -14.0, &"high": OUT, &"fx": -14.0},
+	State.ARRIVAL: {&"base": 0.0, &"low": 0.0, &"high": OUT, &"fx": OUT},
+	State.BROWSING: {&"base": 0.0, &"low": 0.0, &"high": OUT, &"fx": OUT},
+	State.IDLE: {&"base": -10.0, &"low": OUT, &"high": OUT, &"fx": OUT},
+	State.LORE: {&"base": 0.0, &"low": 0.0, &"high": OUT, &"fx": 0.0},
+	State.SETTINGS: {&"base": 0.0, &"low": 0.0, &"high": OUT, &"fx": OUT},
+	State.ARCHETYPE: {&"base": 0.0, &"low": 0.0, &"high": 0.0, &"fx": OUT},
 }
 const ARRIVAL_BARS := 4
-const HIGH_BUSY := -3.0
 const IDLE_AFTER := 30.0
 const ACTIVITY_STEP := 0.35
 const ACTIVITY_FALL := 0.12
-const LEAN := 4.0
 ## How fast a stem's gain moves toward its target (dB per second).
 const SLEW := 24.0
+## Where a layer coming in from silence starts its swell (still inaudible).
+const ENTRY := -40.0
 ## Jingles at once: hovers overall, presses per word; the oldest gives way.
 const HOVER_VOICES := 2
 const PRESS_VOICES := 1
@@ -140,7 +141,12 @@ func step(delta: float) -> void:
 		state = State.BROWSING
 	for stem in score.stems:
 		var id := StringName(stem.id)
-		_gains[id] = move_toward(float(_gains[id]), stem_target_db(id), SLEW * delta)
+		var target := stem_target_db(id)
+		var gain := float(_gains[id])
+		# A layer coming in from silence starts where it is still inaudible.
+		if target > gain and gain < ENTRY:
+			gain = ENTRY
+		_gains[id] = move_toward(gain, target, SLEW * delta)
 	_mix()
 	_play_due(pos)
 
@@ -309,22 +315,14 @@ func layer_target_db(layer: StringName) -> float:
 	if not available:
 		return OUT
 	var current := State.BROWSING if state == State.CONTINUE or state == State.STARTING else state
-	if current == State.ARRIVAL and layer == &"low":
-		var bars := MenuClock.beat_seconds(float(score.bpm)) * int(score.beats_per_bar) * ARRIVAL_BARS
-		return maxf(linear_to_db(clampf(loop_position() / bars, 0.0, 1.0)), OUT)
-	if current == State.BROWSING and layer == &"high":
-		return maxf(linear_to_db(db_to_linear(HIGH_BUSY) * activity), OUT)
 	return float(TARGETS[current][layer])
 
-## Where one stem is heading: its layer's level, plus the lean if its word is chosen.
+## Where one stem is heading: its layer's level.
 func stem_target_db(stem_id: StringName) -> float:
 	var stem := _stem(stem_id)
 	if stem.is_empty():
 		return OUT
-	var target := layer_target_db(StringName(stem.layer))
-	if selected >= 0 and int(stem.button) == selected and target > OUT:
-		target = minf(target + LEAN, 0.0)
-	return target
+	return layer_target_db(StringName(stem.layer))
 
 func stem_gain_db(stem_id: StringName) -> float:
 	return float(_gains.get(stem_id, OUT))
