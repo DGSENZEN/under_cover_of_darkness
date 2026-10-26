@@ -2,12 +2,11 @@
 
 # scripts/UI/MainMenu.gd
 
-[Source:1](../../../../../scripts/UI/MainMenu.gd#L1)
+[Source:1](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L1)
 
-Declarations come from source. Unannotated types are explicit; see the [system guides](../../../../systems/README.md) for runtime schemas, nullability, ownership, units and side effects.
+Declarations come from source. Unannotated types are explicit; see the [system guides](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/docs/systems/README.md) for runtime schemas, nullability, ownership, units and side effects.
 
-The menu is silent until its own score is authored. Music can call
-music_marker(&"new_game" / &"continue" / &"settings" / &"lore", strength).
+The title menu: four words in a column; the chosen one is lit.
 
 Base: `CanvasLayer`. Registered class: `none`.
 
@@ -17,18 +16,35 @@ Long initializers are shortened; follow the source link for their full value.
 
 | Property | Type in source | Initializer | Exported | Source |
 | --- | --- | --- | --- | --- |
-| `game_scene` | `inferred from default` | `"res://maps/metro.tscn"` | yes | [Source:16](../../../../../scripts/UI/MainMenu.gd#L16) |
-| `buttons` | `Array[Button]` | `[]` | yes | [Source:17](../../../../../scripts/UI/MainMenu.gd#L17) |
-| `panel` | `Control` | none declared | no | [Source:18](../../../../../scripts/UI/MainMenu.gd#L18) |
-| `panel_title` | `Label` | none declared | no | [Source:19](../../../../../scripts/UI/MainMenu.gd#L19) |
-| `panel_body` | `Label` | none declared | no | [Source:20](../../../../../scripts/UI/MainMenu.gd#L20) |
-| `settings_box` | `VBoxContainer` | none declared | no | [Source:21](../../../../../scripts/UI/MainMenu.gd#L21) |
-| `_root` | `Control` | none declared | no | [Source:22](../../../../../scripts/UI/MainMenu.gd#L22) |
-| `_design` | `Control` | none declared | no | [Source:23](../../../../../scripts/UI/MainMenu.gd#L23) |
-| `_font` | `SystemFont` | none declared | no | [Source:24](../../../../../scripts/UI/MainMenu.gd#L24) |
-| `_return_focus` | `inferred from default` | `0` | no | [Source:25](../../../../../scripts/UI/MainMenu.gd#L25) |
-| `_close` | `Button` | none declared | no | [Source:26](../../../../../scripts/UI/MainMenu.gd#L26) |
-| `_transitioning` | `inferred from default` | `false` | no | [Source:27](../../../../../scripts/UI/MainMenu.gd#L27) |
+| `game_scene` | `inferred from default` | `"res://maps/metro.tscn"` | yes | [Source:10](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L10) |
+| `music_score` | `inferred from default` | `MenuMusic.SCORE_JSON` | yes | [Source:12](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L12) |
+| `words` | `Array[MenuWord]` | `[]` | no | [Source:20](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L20) |
+| `band` | `MenuBand` | none declared | no | [Source:21](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L21) |
+| `background` | `LivingCity` | none declared | no | [Source:22](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L22) |
+| `_dim` | `inferred from default` | `1.0` | no | [Source:23](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L23) |
+| `selected` | `inferred from default` | `-1` | no | [Source:24](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L24) |
+| `pages` | `MenuPages` | none declared | no | [Source:25](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L25) |
+| `music` | `MenuMusic` | none declared | no | [Source:26](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L26) |
+| `page_open` | `inferred from default` | `-1` | no | [Source:27](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L27) |
+| `_root` | `Control` | none declared | no | [Source:28](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L28) |
+| `_design` | `Control` | none declared | no | [Source:29](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L29) |
+| `_font` | `SystemFont` | none declared | no | [Source:30](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L30) |
+| `_page_turn` | `inferred from default` | `0` | no | [Source:31](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L31) |
+| `_transitioning` | `inferred from default` | `false` | no | [Source:32](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L32) |
+
+## Signals
+
+### selection_changed
+
+```gdscript
+signal selection_changed(index: int)
+```
+
+[Source:13](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L13)
+
+| Parameter | Type in source | Default |
+| --- | --- | --- |
+| `index` | `int` | required |
 
 ## Functions
 
@@ -38,7 +54,7 @@ Long initializers are shortened; follow the source link for their full value.
 func _ready() -> void
 ```
 
-[Source:29](../../../../../scripts/UI/MainMenu.gd#L29)
+[Source:34](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L34)
 
 Parameters: none.
 
@@ -52,7 +68,7 @@ Internal helper or engine callback; use system entry points for integration.
 func _text(words: String, at: Vector2, point_size: int, colour := INK) -> Label
 ```
 
-[Source:92](../../../../../scripts/UI/MainMenu.gd#L92)
+[Source:94](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L94)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
@@ -71,7 +87,7 @@ Internal helper or engine callback; use system entry points for integration.
 func _layout() -> void
 ```
 
-[Source:103](../../../../../scripts/UI/MainMenu.gd#L103)
+[Source:105](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L105)
 
 Parameters: none.
 
@@ -79,13 +95,75 @@ Return type: `void`.
 
 Internal helper or engine callback; use system entry points for integration.
 
-### _build_panel
+### city_dim
 
 ```gdscript
-func _build_panel() -> void
+func city_dim() -> float
 ```
 
-[Source:109](../../../../../scripts/UI/MainMenu.gd#L109)
+[Source:114](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L114)
+
+The city's brightness: dimmed a little while a band is showing.
+
+Parameters: none.
+
+Return type: `float`.
+
+### _process
+
+```gdscript
+func _process(delta: float) -> void
+```
+
+[Source:117](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L117)
+
+| Parameter | Type in source | Default |
+| --- | --- | --- |
+| `delta` | `float` | required |
+
+Return type: `void`.
+
+Internal helper or engine callback; use system entry points for integration.
+
+### _start_music
+
+```gdscript
+func _start_music() -> void
+```
+
+[Source:124](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L124)
+
+The theme lives under the root, so it can finish its phrase after the menu.
+
+Parameters: none.
+
+Return type: `void`.
+
+Internal helper or engine callback; use system entry points for integration.
+
+### _sound_choice
+
+```gdscript
+func _sound_choice(index: int) -> void
+```
+
+[Source:130](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L130)
+
+| Parameter | Type in source | Default |
+| --- | --- | --- |
+| `index` | `int` | required |
+
+Return type: `void`.
+
+Internal helper or engine callback; use system entry points for integration.
+
+### _exit_tree
+
+```gdscript
+func _exit_tree() -> void
+```
+
+[Source:136](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L136)
 
 Parameters: none.
 
@@ -99,7 +177,7 @@ Internal helper or engine callback; use system entry points for integration.
 func _activate(index: int) -> void
 ```
 
-[Source:172](../../../../../scripts/UI/MainMenu.gd#L172)
+[Source:140](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L140)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
@@ -109,49 +187,50 @@ Return type: `void`.
 
 Internal helper or engine callback; use system entry points for integration.
 
-### _show_panel
+### open_page
 
 ```gdscript
-func _show_panel(title: String, body: String) -> void
+func open_page(index: int, message := "") -> void
 ```
 
-[Source:194](../../../../../scripts/UI/MainMenu.gd#L194)
+[Source:161](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L161)
+
+Spreads the choice's band over the right two-thirds and writes its page on it.
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
-| `title` | `String` | required |
-| `body` | `String` | required |
+| `index` | `int` | required |
+| `message` | `inferred from default` | `""` |
 
 Return type: `void`.
 
-Internal helper or engine callback; use system entry points for integration.
-
-### close_panel
+### close_page
 
 ```gdscript
-func close_panel() -> void
+func close_page() -> void
 ```
 
-[Source:204](../../../../../scripts/UI/MainMenu.gd#L204)
+[Source:179](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L179)
+
+Folds the page back into its word's band.
 
 Parameters: none.
 
 Return type: `void`.
 
-### music_marker
+### select
 
 ```gdscript
-func music_marker(marker: StringName, strength := 1.0) -> void
+func select(index: int) -> void
 ```
 
-[Source:212](../../../../../scripts/UI/MainMenu.gd#L212)
+[Source:196](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L196)
 
-Called by the future menu score's authored part markers, never a fake BPM.
+The one path for mouse, keyboard and controller: lights one word.
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
-| `marker` | `StringName` | required |
-| `strength` | `inferred from default` | `1.0` |
+| `index` | `int` | required |
 
 Return type: `void`.
 
@@ -161,7 +240,7 @@ Return type: `void`.
 func _unhandled_key_input(event: InputEvent) -> void
 ```
 
-[Source:217](../../../../../scripts/UI/MainMenu.gd#L217)
+[Source:206](../../../../../../../../../../Users/tinkertailorr/a-world-of-darkness-alpha/scripts/UI/MainMenu.gd#L206)
 
 | Parameter | Type in source | Default |
 | --- | --- | --- |
