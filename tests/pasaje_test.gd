@@ -15,6 +15,7 @@ func _ready() -> void:
 	add_child(pasaje)
 	await _frames(5)
 	await _shell()
+	_dressed()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -56,6 +57,66 @@ func _shell() -> void:
 	var to_lane := await _walk_path(Vector3(0.0, 1.05, -6.0), lane, 1200)
 	_check("P2 the player walks the street end to end, and out into the herb market's mouth and the lane's",
 		down["ok"] and to_herbs["ok"] and to_lane["ok"], "street %s herbs %s lane %s" % [down, to_herbs, to_lane])
+
+
+## Task 3: the shell dressed in the Company's tile: no strip of either wall left bare from the floor to the ceiling
+## (over an opening, from its head), and the mains along both walls, the east wall's turning into it either side of
+## the lane's mouth.
+func _dressed() -> void:
+	var panels: Array = pasaje.get("wall_panels") if pasaje.get("wall_panels") != null else []
+	var bare := []
+	for side: int in [-1, 1]:
+		var z := -19.95
+		while z < 19.95:
+			var low := 0.05
+			for name in pasaje.OPENINGS:
+				var spec: Array = pasaje.OPENINGS[name]
+				if spec[0] == side and z > spec[1] and z < spec[2]:
+					low = spec[3] + 0.05
+			if not _covered(panels, side, z, low, pasaje.HEIGHT - 0.05):
+				bare.append("%s %.2f" % ["west" if side < 0 else "east", z])
+			z += 0.1
+	_check("P3 the walls are tiled to the openings and the stretch's ends, no strip left bare",
+		not panels.is_empty() and bare.is_empty(), "%d panels; bare %s" % [panels.size(), bare.slice(0, 6)])
+
+	var services: Array = pasaje.get("services") if pasaje.get("services") != null else []
+	var mouth: Array = pasaje.OPENINGS["candle_lane"]
+	var runs := {"water": [[-19.9, 19.9]], "gas": [[-19.9, 19.9]], "tray": [[-19.9, 19.9]],
+		"fire": [[-19.9, mouth[1] - 0.4], [mouth[2] + 0.4, 19.9]], "air": [[-19.9, mouth[1] - 0.4], [mouth[2] + 0.4, 19.9]]}
+	var broken := []
+	for main in runs:
+		var spans := []
+		for piece: MeshInstance3D in services:
+			if piece.get_meta("main", "") == main:
+				var box := _local_box(piece)
+				spans.append([box.position.z, box.end.z])
+		for run in runs[main]:
+			var z: float = run[0]
+			while z < run[1]:
+				if not spans.any(func(s): return s[0] - 0.02 <= z and z <= s[1] + 0.02):
+					broken.append("%s %.2f" % [main, z])
+					break
+				z += 0.1
+		# (Nothing of the east's mains across the lane's mouth.)
+		if main in ["fire", "air"] and spans.any(func(s): return s[1] > mouth[1] and s[0] < mouth[2]):
+			broken.append("%s across the mouth" % main)
+	_check("P3b the mains run both walls, the east's turning into the wall either side of the lane's mouth",
+		not services.is_empty() and broken.is_empty(), "%d pieces; broken %s" % [services.size(), broken.slice(0, 6)])
+
+
+## Whether a panel on the `side` wall covers its face at `z` from `low` to `high`.
+func _covered(panels: Array, side: int, z: float, low: float, high: float) -> bool:
+	for panel: MeshInstance3D in panels:
+		var box := _local_box(panel)
+		var on_wall := absf(box.get_center().x - side * (pasaje.HALF_W - pasaje.WALL)) < 0.1
+		if on_wall and box.position.z <= z and box.end.z >= z and box.position.y <= low and box.end.y >= high:
+			return true
+	return false
+
+
+## A piece's bounds in the set's frame.
+func _local_box(piece: MeshInstance3D) -> AABB:
+	return pasaje.global_transform.affine_inverse() * piece.global_transform * piece.get_aabb()
 
 
 func _ray(from: Vector3, to: Vector3) -> Vector3:

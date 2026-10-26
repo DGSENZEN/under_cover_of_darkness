@@ -34,6 +34,7 @@ import library_ward  # noqa: E402
 import library_hangings  # noqa: E402
 import candle_lane  # noqa: E402
 import lane_landmarks  # noqa: E402
+import pasaje_shell  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -2347,6 +2348,87 @@ class LaneLandmarks(unittest.TestCase):
             vs = _world(self.objects[name])
             self.assertTrue(-4.55 <= min(v.y for v in vs) and max(v.y for v in vs) <= -3.4, name)
             self.assertTrue(max(v.x for v in vs) < 4.7 or min(v.x for v in vs) > 7.7, name)
+
+
+class PasajeShell(unittest.TestCase):
+    """The Pasaje's shell dressed (tools/eclipse/pasaje_shell.py; docs/superpowers/plans/2026-10-26-pasaje-market.md
+    Task 3): the Company's tile up its 4.5 m walls in 1.2 m panels and the fills that finish each run at an opening,
+    the plaster over the openings, their reveals, the ceiling and its girders, the floor's rows, the mains' turns into
+    the wall at the lane's mouth. Closed, in budget, through the gate."""
+
+    @classmethod
+    def setUpClass(cls):
+        pasaje_shell.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        self.assertEqual(sorted(self.objects), sorted(pasaje_shell.BUDGET))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=pasaje_shell.BUDGET[n],
+                                        sliver=pasaje_shell.SLIVER[n])[:3], [], n)
+
+    def test_the_panels_stand_the_walls_height_and_the_fills_finish_each_run(self):
+        for n in ("wall", "wall_worn") + tuple(pasaje_shell.fill_name(w) for w in pasaje_shell.fills()):
+            (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            self.assertAlmostEqual(z0, 0.0, delta=0.002, msg=n)
+            self.assertAlmostEqual(z1, pasaje_shell.HEIGHT, delta=0.002, msg=n)
+            self.assertAlmostEqual(y0, -underground_walls.FACE, delta=0.002, msg=n)
+        # (Every run between an opening and the stretch's end is whole panels and one fill.)
+        for side, a, b in pasaje_shell.wall_runs():
+            panels, fill = divmod(round((b - a) * 1000), round(pasaje_shell.PANEL * 1000))
+            if fill:
+                (x0, x1), _, _ = self._extent(pasaje_shell.fill_name(fill / 1000))
+                self.assertAlmostEqual(x1 - x0, fill / 1000, delta=0.002)
+
+    def test_the_floor_fills_the_street(self):
+        # (Across: a side strip at each wall and the Metro's 1.2 m modules between; along: whole rows and a joint at
+        # each end.)
+        across = 2 * pasaje_shell.SIDE + pasaje_shell.MODULES * underground_floor.MODULE
+        self.assertAlmostEqual(across, 2 * pasaje_shell.INSIDE, delta=0.001)
+        length = pasaje_shell.ROWS * underground_floor.MODULE + 2 * pasaje_shell.JOINT
+        self.assertAlmostEqual(length, 2 * (pasaje_shell.HALF_L - pasaje_shell.SEAM), delta=0.001)
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("floor_side")
+        self.assertAlmostEqual(x1 - x0, pasaje_shell.SIDE, delta=0.006)
+        self.assertAlmostEqual(y1 - y0, underground_floor.MODULE, delta=0.006)
+        self.assertLessEqual(z1, 0.0005)
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("floor_joint")
+        self.assertAlmostEqual(x1 - x0, 2 * pasaje_shell.INSIDE, delta=0.002)
+        self.assertLessEqual(z1, 0.0005)
+
+    def test_the_girders_clear_the_openings(self):
+        (_, _), (_, _), (z0, z1) = self._extent("girder")
+        self.assertAlmostEqual(z1, 0.0, delta=0.002)
+        tallest = max(o[3] for o in pasaje_shell.OPENINGS.values())
+        self.assertGreaterEqual(pasaje_shell.HEIGHT - pasaje_shell.THICK + z0, tallest + 0.1)
+
+    def test_the_reveals_line_their_openings_and_keep_them_open(self):
+        for name, (side, a, b, high) in pasaje_shell.OPENINGS.items():
+            o = self.objects["reveal_" + name]
+            # (Above the floor none of it past the wall's outer plane; under it, the sill's lip reaches under the next
+            # floor.)
+            vs = _world(o)
+            self.assertLessEqual(max(abs(v.x) for v in vs if v.z > -0.01), pasaje_shell.HALF_W - pasaje_shell.SEAM, name)
+            self.assertLessEqual(max(abs(v.x) for v in vs), pasaje_shell.HALF_W + pasaje_shell.LIP[0] + 0.001, name)
+            middle = -(a + b) / 2
+            for up in (1.0, high - 0.1):
+                self.assertIsNone(_hit(o, (0.0, middle, up), (side, 0.0, 0.0), 6.0), name)
+            # (Its threshold under the wall's thickness, its top the floor's.)
+            sill = _hit(o, (side * (pasaje_shell.INSIDE + 0.15), middle, 0.5), (0.0, 0.0, -1.0), 1.0)
+            self.assertIsNotNone(sill, name)
+            self.assertAlmostEqual(sill.z, 0.0, delta=0.003, msg=name)
+
+    def test_the_mains_turn_into_the_wall(self):
+        for n, length in (("fire_turn_in", pasaje_shell.TURN_IN), ("air_turn_in", pasaje_shell.TURN_IN),
+                          ("fire_turn_out", pasaje_shell.TURN_OUT), ("air_turn_out", pasaje_shell.TURN_OUT)):
+            (x0, x1), (y0, y1), _ = self._extent(n)
+            self.assertAlmostEqual(y1, 0.0, delta=0.002, msg=n)
+            self.assertAlmostEqual(x1 - x0, length, delta=0.12, msg=n)
 
 
 if __name__ == "__main__":

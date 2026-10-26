@@ -9,6 +9,7 @@ extends Node3D
 
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const PLAYER := preload("res://Player.tscn")
+const Painterly := preload("res://scripts/Visual/Painterly.gd")
 
 const PLAN_ORIGIN := Vector3(-9.0, -11.0, 75.0)
 const HALF_W := 5.0
@@ -23,6 +24,34 @@ const WALL := 0.3
 const SEAM := 0.01
 const STUB := 4.0
 
+const SHELL_KIT := "res://assets/eclipse/kit/pasaje_shell.glb"
+const FLOOR_KIT := "res://assets/eclipse/kit/underground_floor.glb"
+const SERVICES_KIT := "res://assets/eclipse/kit/underground_services.glb"
+## The shell kit's measures (tools/eclipse/pasaje_shell.py): a wall panel's width, the tiles' depth off the wall; the
+## ceiling's spans and their thickness; the floor's rows of the Metro's 1.2 m modules, its side strips, its end joints.
+const PANEL := 1.2
+const FACE := 0.067
+const SPANS := 10
+const THICK := 0.04
+const MODULE := 1.2
+const SIDE := 0.5
+const MODULES := 7
+const ROWS := 33
+const JOINT := 0.19
+## The mains (their centres' heights; the tray's rungs'; the swags' hooks'): on the west wall the water, the gas and
+## the tray, over the herb market's mouth; on the east the fire main and the air line, which turn into the wall short
+## of the lane's mouth (their last lengths TURN_IN long) and out of it TURN_OUT_AT beyond it (TURN_OUT long), and
+## the heavy cables swagged on hooks, their runs ending on a hook either side of it.
+const WATER_Y := 3.6
+const GAS_Y := 3.3
+const TRAY_Y := 3.95
+const FIRE_Y := 3.4
+const AIR_Y := 3.05
+const HOOK_Y := 4.0
+const TURN_IN := 0.67
+const TURN_OUT := 3.76
+const TURN_OUT_AT := 4.23
+
 @export var standalone := true
 ## Set into a larger map: its player is the map's.
 var host_player: Node3D
@@ -35,10 +64,20 @@ var shell: Array[Node3D] = []
 ## Standalone only: the floors past its openings and ends, and the dark cards closing them.
 var stub: Node3D
 var world: WorldEnvironment
+## The shell's dressing (none of it solid: the boxes stay the collision): the tile panels, fills and lintels on the
+## walls; the mains on them; the ceiling's spans and girders; the floor's modules, strips and joints.
+var dressing: Node3D
+var wall_panels: Array[MeshInstance3D] = []
+var services: Array[MeshInstance3D] = []
+var ceiling: Array[MeshInstance3D] = []
+var floor_tiles: Array[MeshInstance3D] = []
+## The kits not found (the shell stays plain where they are missing).
+var missing: Array[String] = []
 
 
 func _ready() -> void:
 	_shell()
+	_shell_dressing()
 	if standalone:
 		_environment()
 		_stubs()
@@ -75,6 +114,179 @@ func _shell() -> void:
 		shell.append(_box(Vector3(lo, 0.0, z0), Vector3(hi, HEIGHT, cut[1]), wall + "_a"))
 		shell.append(_box(Vector3(lo, 0.0, cut[2]), Vector3(hi, HEIGHT, z1), wall + "_b"))
 		shell.append(_box(Vector3(lo, cut[3], cut[1]), Vector3(hi, HEIGHT, cut[2]), wall + "_lintel"))
+
+
+## The shell dressed in the Company's tile, as the corridor is: the walls tiled up to the ceiling in panels, a fill
+## finishing each run against its opening, plaster over the openings and cement reveals round them; the ceiling's
+## plaster in spans, an iron girder under each joint; the floor in the Metro's modules between a strip along each wall,
+## a joint at each end; the mains along both walls.
+func _shell_dressing() -> void:
+	dressing = Node3D.new()
+	dressing.name = "dressing"
+	add_child(dressing)
+	if not ResourceLoader.exists(SHELL_KIT):
+		missing.append(SHELL_KIT)
+		return
+	var meshes := SetKit.kit(SHELL_KIT)
+	var look := Painterly.material(SetKit.painted(["pasaje_shell.png", "pasaje_shell_base.png"]), &"bespoke")
+
+	# The walls: each run panels from the stretch's end, its fill against the opening; the panels worn by the
+	# openings' traffic and here and there by the years.
+	for side: int in [-1, 1]:
+		for run in _wall_runs(side):
+			var a: float = run[0]
+			var b: float = run[1]
+			var count := int(floor((b - a) / PANEL + 0.001))
+			var fill := b - a - count * PANEL
+			var at_end := absf(b - (HALF_L - SEAM)) < 0.001
+			var z := a + fill if at_end else a
+			for k in count:
+				var by_opening := (k == 0 and at_end) or (k == count - 1 and not at_end)
+				var kind := "wall_worn" if by_opening or _hash(side * 7.0 + z) > 0.8 else "wall"
+				wall_panels.append(_wall_piece(meshes, look, kind, side, z, PANEL))
+				z += PANEL
+			if fill > 0.001:
+				var kind := "wall_fill_%d" % roundi(fill * 100.0)
+				wall_panels.append(_wall_piece(meshes, look, kind, side, a if at_end else b - fill, fill))
+	for name in OPENINGS:
+		var spec: Array = OPENINGS[name]
+		wall_panels.append(_wall_piece(meshes, look, "lintel_" + name, spec[0], spec[1], spec[2] - spec[1]))
+		SetKit.place(dressing, meshes["reveal_" + name], look, "reveal_" + name, Vector3.ZERO, 0.0, false)
+
+	_ceiling(meshes)
+	_floor(meshes, look)
+	_services(meshes, look)
+
+
+## The runs of one wall between the stretch's ends and its openings: [z from, z to].
+func _wall_runs(side: int) -> Array:
+	var runs := []
+	var z := -HALF_L + SEAM
+	for name in OPENINGS:
+		if OPENINGS[name][0] == side:
+			runs.append([z, OPENINGS[name][1]])
+			z = OPENINGS[name][2]
+	runs.append([z, HALF_L - SEAM])
+	return runs
+
+
+## A wall piece (its run along its +x, its face out of the wall toward the street) on the `side` wall covering z from
+## `low` to `low` + `width`; the west wall's turned to run toward -z.
+func _wall_piece(meshes: Dictionary, look: Material, kind: String, side: int, low: float, width: float) -> MeshInstance3D:
+	var x := side * (HALF_W - WALL)
+	var at := Vector3(x, 0.0, low + width if side < 0 else low)
+	return SetKit.place(dressing, meshes[kind], look, kind, at, -side * PI / 2.0, false)
+
+
+## The ceiling: its plaster in spans, each turned one way or the other against repetition, its underside under the
+## ceiling's box; under each joint between them, a girder.
+func _ceiling(meshes: Dictionary) -> void:
+	var plaster := Painterly.material(SetKit.painted(["pasaje_shell.png", "pasaje_shell_base.png"]), &"bespoke")
+	# (As the corridor's vault: a warm bounce off the lit floor below, its shadows not tinted cool.)
+	plaster.set_shader_parameter("ambient_ground", Color(0.52, 0.38, 0.26))
+	plaster.set_shader_parameter("ambient_sky", Color(0.46, 0.36, 0.27))
+	plaster.set_shader_parameter("ambient_amount", 0.26)
+	plaster.set_shader_parameter("shadow_cool", Vector3(0.95, 0.9, 0.92))
+	plaster.set_shader_parameter("rim_colour", Color(0.5, 0.38, 0.27))
+	var span := 2.0 * (HALF_L - SEAM) / SPANS
+	var under := HEIGHT - THICK
+	for k in SPANS:
+		var z := -HALF_L + SEAM + span * k
+		var turned := k % 2 == 1
+		var at := Vector3(0.0, under, z if turned else z + span)
+		ceiling.append(SetKit.place(dressing, meshes["ceiling_span"], plaster, "ceiling_span", at, PI if turned else 0.0, false))
+		if k > 0:
+			ceiling.append(SetKit.place(dressing, meshes["girder"], plaster, "girder", Vector3(0.0, under, z), 0.0, false))
+
+
+## The floor: rows of the Metro's modules (worn where the openings' traffic and the street's middle tread them),
+## each turned one way or the other, between a strip along each wall; a joint at each end. The plain slab under it
+## hidden (it stays the floor's collision).
+func _floor(meshes: Dictionary, look: Material) -> void:
+	if not ResourceLoader.exists(FLOOR_KIT):
+		missing.append(FLOOR_KIT)
+		return
+	var modules := SetKit.kit(FLOOR_KIT)
+	var tiles := Painterly.material(SetKit.painted(["underground_floor.png", "underground_floor_base.png"]), &"bespoke")
+	var inside := HALF_W - WALL
+	for r in ROWS:
+		var z := -HALF_L + SEAM + JOINT + MODULE * r
+		for i in MODULES:
+			var x := -inside + SIDE + MODULE * i
+			var trodden := (i == 3 and _hash(z * 3.1) > 0.6) or _by_opening(i, z)
+			var kind := "floor_field_worn" if trodden else "floor_field"
+			var turned := _hash(x * 12.9898 + z * 78.233) > 0.5
+			var at := Vector3(x + MODULE, 0.0, z) if turned else Vector3(x, 0.0, z + MODULE)
+			floor_tiles.append(SetKit.place(dressing, modules[kind], tiles, kind, at, PI if turned else 0.0, false))
+		floor_tiles.append(SetKit.place(dressing, meshes["floor_side"], look, "floor_side", Vector3(-inside, 0.0, z + MODULE), 0.0, false))
+		floor_tiles.append(SetKit.place(dressing, meshes["floor_side"], look, "floor_side", Vector3(inside, 0.0, z), PI, false))
+	# (Each joint's lip reaches under the next stretch's floor.)
+	floor_tiles.append(SetKit.place(dressing, meshes["floor_joint"], look, "floor_joint", Vector3(0.0, 0.0, -HALF_L + SEAM), PI, false))
+	floor_tiles.append(SetKit.place(dressing, meshes["floor_joint"], look, "floor_joint", Vector3(0.0, 0.0, HALF_L - SEAM), 0.0, false))
+	shell[0].visible = false
+
+
+## Whether module column `i` of the row from `z` lies in an opening's mouth, beside its wall.
+func _by_opening(i: int, z: float) -> bool:
+	for name in OPENINGS:
+		var spec: Array = OPENINGS[name]
+		var column := 0 if spec[0] < 0 else MODULES - 1
+		if i == column and z + MODULE > spec[1] and z < spec[2]:
+			return true
+	return false
+
+
+## The mains. West: the water main, the gas line below it and the Company's tray above, the length of the stretch
+## over the herb market's mouth, a cable let loose from the tray there (where the herb sellers' power was tapped).
+## East: the fire main (its gate valve in it) and the air line, into the wall short of the lane's mouth and out again
+## beyond it; the heavy cables swagged on hooks either side.
+func _services(meshes: Dictionary, shell_look: Material) -> void:
+	if not ResourceLoader.exists(SERVICES_KIT):
+		missing.append(SERVICES_KIT)
+		return
+	var kit := SetKit.kit(SERVICES_KIT)
+	var look := Painterly.material(SetKit.painted(["underground_services.png", "underground_services_base.png"]), &"bespoke")
+	for k in 10:
+		var low := HALF_L - SEAM - 4.0 * (k + 1)
+		_main(kit, look, "pipe_green_4", "water", -1, low, WATER_Y)
+		_main(kit, look, "pipe_ochre_4", "gas", -1, low, GAS_Y)
+		_main(kit, look, "cable_tray_4_spill" if k == 5 else "cable_tray_4", "tray", -1, low, TRAY_Y)
+	var mouth: Array = OPENINGS["candle_lane"]
+	for k in 4:
+		var low := -HALF_L + SEAM + 4.0 * k
+		_main(kit, look, "pipe_red_valve" if k == 1 else "pipe_red_4", "fire", 1, low, FIRE_Y)
+		_main(kit, look, "pipe_blue_4", "air", 1, low, AIR_Y)
+	var turn_at := -HALF_L + SEAM + 16.0
+	# (Their turns into the wall are the shell kit's, painted on its atlas.)
+	_main(meshes, shell_look, "fire_turn_in", "fire", 1, turn_at, FIRE_Y)
+	_main(meshes, shell_look, "air_turn_in", "air", 1, turn_at, AIR_Y)
+	_main(meshes, shell_look, "fire_turn_out", "fire", 1, TURN_OUT_AT, FIRE_Y)
+	_main(meshes, shell_look, "air_turn_out", "air", 1, TURN_OUT_AT, AIR_Y)
+	for k in 3:
+		var low := TURN_OUT_AT + TURN_OUT + 4.0 * k
+		_main(kit, look, "pipe_red_4", "fire", 1, low, FIRE_Y)
+		_main(kit, look, "pipe_blue_4", "air", 1, low, AIR_Y)
+	for hook in [-19.5, -16.5, -13.5, -10.5, -7.5, 4.5, 7.5, 10.5, 13.5, 16.5]:
+		_main(kit, look, "cable_swag", "swag", 1, hook, HOOK_Y)
+	for hook in [mouth[1] - 1.5, 19.5]:
+		_main(kit, look, "cable_hook", "swag", 1, hook, HOOK_Y)
+
+
+## A length of a main (run along its +x, out from the wall's tiles) on the `side` wall from z `low`, at `height`;
+## marked with the main it is part of. (The west wall's, turned to run toward -z, are all four-metre lengths.)
+func _main(kit: Dictionary, look: Material, kind: String, main: String, side: int, low: float,
+		height: float) -> MeshInstance3D:
+	var x := side * (HALF_W - WALL - FACE)
+	var at := Vector3(x, height, low + 4.0 if side < 0 else low)
+	var piece := SetKit.place(dressing, kit[kind], look, kind, at, -side * PI / 2.0, false)
+	piece.set_meta("main", main)
+	services.append(piece)
+	return piece
+
+
+## A steady hash in [0, 1) of `v`.
+func _hash(v: float) -> float:
+	return fposmod(sin(v * 12.9898) * 43758.5453, 1.0)
 
 
 ## Standalone: floors past each opening and each end, each closed by a dark card, so it can be walked and judged alone.
