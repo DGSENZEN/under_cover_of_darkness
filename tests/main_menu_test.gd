@@ -36,6 +36,11 @@ func _ready() -> void:
 		check(false, "game has a playable main menu")
 		get_tree().quit(1)
 		return
+	# No saves at all: Continue explains it (a folder of this suite's own, empty).
+	var saves := preload("res://scripts/Save/SaveFiles.gd")
+	saves.use_root("user://test_saves/main_menu_none")
+	for run in saves.runs():
+		saves.delete_run(run["id"])
 	var scene: PackedScene = load("res://main_menu.tscn")
 	var menu := scene.instantiate()
 	menu.music_score = "res://tests/fixtures/menu_score/score.json"

@@ -7,7 +7,8 @@ const Settings := preload("res://scripts/UI/Settings.gd")
 const INK := Color("f4e6cc")
 const GOLD := Color("d9b46a")
 const AREA := Rect2(620, 270, 560, 560)
-const CONTINUE_LINE := "No saved game yet. Choose New Game to begin."
+## Continue's line with no save at all (SaveWords: the user's to write).
+const CONTINUE_LINE := preload("res://scripts/Save/SaveWords.gd").NO_SAVE
 
 var title_label: Label
 var body_label: Label

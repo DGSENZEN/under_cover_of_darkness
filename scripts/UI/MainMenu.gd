@@ -1,6 +1,8 @@
 class_name MainMenu
 extends CanvasLayer
 ## The title menu: four words in a column; the chosen one is lit.
+const SaveFiles := preload("res://scripts/Save/SaveFiles.gd")
+const SaveWords := preload("res://scripts/Save/SaveWords.gd")
 const Settings := preload("res://scripts/UI/Settings.gd")
 const ArtLoading := preload("res://scripts/UI/ArtLoadingScreen.gd")
 const DESIGN := Vector2(1600, 900)
@@ -41,6 +43,9 @@ var confirm_no: MenuWord
 var _confirm: Control
 ## What Yes does (tests replace it).
 var quit_game: Callable
+## What Continue does with the save it found ({run, slot, ...}): loads it
+## (SaveGame.load_slot); returns an Error (tests replace it).
+var continue_game: Callable
 var _transitioning := false
 var _pressing := false
 ## After New Game: who you are (the archetype triptych), open while choosing.
@@ -138,6 +143,9 @@ func _ready() -> void:
 	transition = ArchetypeTransition.new()
 	add_child(transition)
 	quit_game = func(): get_tree().quit()
+	continue_game = func(target: Dictionary) -> Error:
+		var save := get_node_or_null("/root/SaveGame")
+		return await save.load_slot(String(target["run"]), String(target["slot"])) if save != null else ERR_UNAVAILABLE
 	_start_music()
 	get_viewport().size_changed.connect(_layout)
 	_layout()
@@ -222,8 +230,22 @@ func _activate(index: int) -> void:
 		music.press(index)
 	if index == 0:
 		open_archetypes()
+	elif index == 1 and not SaveFiles.continue_target().is_empty():
+		_continue()
 	else:
 		open_page(index)
+
+## Continue: the newest save of the run played last, loaded as New Game
+## starts a game (the song finishing under the loading cover).
+func _continue() -> void:
+	_transitioning = true
+	if is_instance_valid(music):
+		music.start_game()
+	var error: Error = await continue_game.call(SaveFiles.continue_target())
+	if error != OK:
+		_transitioning = false
+		_start_music()
+		open_page(1, SaveWords.LOAD_FAILED)
 
 ## New Game: the menu steps away and the three archetypes rise in, on the
 ## song's high layer.
@@ -285,6 +307,10 @@ func _start_game(index: int) -> void:
 	var city := get_node_or_null("/root/CityState")
 	if city:
 		city.archetype = ArchetypeScreen.IDS[index]
+	# A run of its own on disk, its saves kept together (SaveGame).
+	var save := get_node_or_null("/root/SaveGame")
+	if save:
+		save.begin_run(ArchetypeScreen.IDS[index])
 	# The song finishes its phrase under the transition and the loading cover.
 	if is_instance_valid(music):
 		music.press(ARCHETYPE_JINGLES + index)
