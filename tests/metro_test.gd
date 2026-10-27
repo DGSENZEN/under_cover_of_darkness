@@ -145,10 +145,73 @@ func _sets() -> void:
 	await _pasaje_in_place()
 	_one_crowd()
 	_pasaje_shows()
+	await _astral()
 
 
 ## The Pasaje set (docs/superpowers/plans/2026-10-26-pasaje-market.md): in its place, the greybox gone from its middle
 ## only; its seams to the lane's standard; walked from the market stairs down it into the lane.
+## M18: the dark stretches either side of the Pasaje, beyond the market's wards, are astral passages: in each its
+## skin of deep space on the walls and ceiling (cut where the corridor's own openings are), its veils across the way
+## parting round whoever walks through, its rings on the floor, its motes; all of it in its own space, nothing to walk
+## into and no light of its own.
+func _astral() -> void:
+	var wrong := []
+	for spec in [["astral_north", "pasaje_n"], ["astral_south", "pasaje_s"]]:
+		var passage: Node3D = map.get_node_or_null(spec[0])
+		if passage == null:
+			wrong.append("no %s" % spec[0])
+			continue
+		var space := _rect(spec[1])
+		for node: VisualInstance3D in passage.find_children("*", "VisualInstance3D", true, false):
+			var box: AABB = node.global_transform * node.get_aabb() if not node is Decal else \
+				AABB(node.global_position - (node as Decal).size / 2.0, (node as Decal).size)
+			if not space.grow(0.1).encloses(Rect2(box.position.x, box.position.z, box.size.x, box.size.z)):
+				wrong.append("%s %s out of %s" % [spec[0], node.name, spec[1]])
+		var skins: Array = passage.get("skins") if passage.get("skins") != null else []
+		var veils: Array = passage.get("veils") if passage.get("veils") != null else []
+		var rings: Array = passage.get("rings") if passage.get("rings") != null else []
+		if skins.is_empty() or veils.size() != 3 or rings.size() != 3 or passage.get("motes") == null:
+			wrong.append("%s: %d skins, %d veils, %d rings, motes %s" % [spec[0], skins.size(), veils.size(), rings.size(),
+				passage.get("motes")])
+		if not passage.find_children("*", "CollisionObject3D", true, false).is_empty() \
+				or not passage.find_children("*", "Light3D", true, false).is_empty():
+			wrong.append("%s solid or lit" % spec[0])
+		# (Its skin never over the corridor's openings: they stay open to the eye.)
+		for space_spec: Dictionary in map.plan["spaces"]:
+			if space_spec["name"] != spec[1]:
+				continue
+			for opening: Dictionary in space_spec.get("openings", []):
+				var at := Vector2(opening["at"][0], opening["at"][1])
+				var half: float = float(opening["width"]) / 2.0 - 0.05
+				for skin: MeshInstance3D in skins:
+					var box: AABB = skin.global_transform * skin.get_aabb()
+					# (A wall's skin, upright: the ceiling's lies over the openings' spans on the plan, not in them.)
+					if box.size.y < 1.0:
+						continue
+					# (An opening in this wall's own plane, its span along the wall overlapping the skin's.)
+					var along_x := box.size.x > box.size.z
+					var plane := box.get_center().z if along_x else box.get_center().x
+					var in_plane := absf((at.y if along_x else at.x) - plane) < 0.2
+					var at_along := at.x if along_x else at.y
+					var lo := box.position.x if along_x else box.position.z
+					var hi := box.end.x if along_x else box.end.z
+					if in_plane and at_along + half > lo and at_along - half < hi:
+						wrong.append("%s skin over its opening to %s" % [spec[0], opening["to"]])
+		# Its veils part round the player.
+		if veils.size() == 3:
+			var veil: MeshInstance3D = veils[1]
+			map.player.global_position = veil.global_position + Vector3(0.3, 0.0, 0.0)
+			await _frames(3)
+			var look: ShaderMaterial = veil.get_surface_override_material(0) if veil.get_surface_override_material(0) \
+				else veil.mesh.surface_get_material(0)
+			var told: Vector3 = look.get_shader_parameter(&"walker") if look != null else Vector3.INF
+			if told.distance_to(map.player.global_position) > 0.2:
+				wrong.append("%s's veil not told where the player is (%s)" % [spec[0], told])
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(3)
+	_check("M18 the dark stretches either side of the Pasaje are astral passages", wrong.is_empty(), "%s" % [wrong])
+
+
 ## M17: everything the Pasaje set lights, sounds and shows stands in the map's Pasaje, at its floor's level (its crowd,
 ## which walks, excepted; and what is drawn in the world's frame).
 func _pasaje_shows() -> void:

@@ -49,6 +49,11 @@ const VIEWS := [
 	[Vector3(0.0, 1.65, 11.5), Vector3(0.0, 1.5, 17.2), "12a_the_kiosk"],
 	[Vector3(-1.4, 1.65, 14.4), Vector3(0.2, 1.2, 17.0), "12b_the_kiosk_close"],
 	[Vector3(-3.0, 1.65, 19.4), Vector3(0.0, 1.4, 17.4), "12c_behind_the_kiosk"],
+	[Vector3(-1.0, 1.65, -40.0), Vector3(0.0, 1.6, -20.0), "13a_astral_north_from_the_stairs"],
+	[Vector3(0.0, 1.65, -32.0), Vector3(0.0, 1.8, -20.0), "13b_astral_north_halfway"],
+	[Vector3(-1.0, 1.65, -30.0), Vector3(-5.0, 2.4, -27.0), "13c_astral_north_its_wall"],
+	[Vector3(0.0, 1.65, 23.0), Vector3(0.0, 1.6, 40.0), "13d_astral_south_going_on"],
+	[Vector3(0.0, 1.65, 36.0), Vector3(0.0, 1.6, 15.0), "13e_astral_south_coming_back"],
 ]
 ## The close views lit: [eye, looks at, name].
 const CLOSE := [

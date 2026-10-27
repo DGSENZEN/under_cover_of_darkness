@@ -23,6 +23,9 @@ const LABEL_RANGE := 30.0
 ## Each is set in with standalone off (no stubs of its own; the map's player) at its PLAN_ORIGIN.
 const SETS := {"candle_lane": ["res://maps/candle_lane.tscn", ["candle_lane", "librarian_shop"]],
 	"pasaje": ["res://maps/pasaje.tscn", ["pasaje"]]}
+const AstralPassage := preload("res://scripts/Visual/AstralPassage.gd")
+## How far into the south stretch from the Pasaje's mouth its astral passage runs (m).
+const ASTRAL_SOUTH := 22.0
 
 var plan: Dictionary
 var greybox: GreyboxLoader
@@ -64,6 +67,33 @@ func _sets() -> void:
 	var pasaje := get_node_or_null("pasaje")
 	if lane != null and pasaje != null:
 		pasaje.draught = lane.draught_now
+	_astral()
+
+
+## The dark stretches either side of the Pasaje, beyond the market's wards, are astral passages (AstralPassage.gd):
+## the north stretch from the market stairs to the market's mouth, and the south stretch's first ASTRAL_SOUTH metres
+## beyond its other mouth (the rest waits for the south stretch's own set).
+func _astral() -> void:
+	if get_node_or_null("pasaje") == null:
+		return
+	for spec in [["astral_north", "pasaje_n", 1, 0.0], ["astral_south", "pasaje_s", -1, ASTRAL_SOUTH]]:
+		for space: Dictionary in plan["spaces"]:
+			if space["name"] != spec[1]:
+				continue
+			var lo := Vector2(INF, INF)
+			var hi := Vector2(-INF, -INF)
+			for p in space["polygon"]:
+				lo = Vector2(minf(lo.x, p[0]), minf(lo.y, p[1]))
+				hi = Vector2(maxf(hi.x, p[0]), maxf(hi.y, p[1]))
+			if spec[3] > 0.0:
+				hi.y = lo.y + spec[3]
+			var gaps := []
+			for opening: Dictionary in space.get("openings", []):
+				gaps.append([opening["at"], opening["width"]])
+			var box := AABB(Vector3(lo.x, space["floor"], lo.y), Vector3(hi.x - lo.x, space["height"], hi.y - lo.y))
+			var passage := AstralPassage.make(box, spec[2], gaps, player)
+			passage.name = spec[0]
+			add_child(passage)
 
 
 func _unhandled_input(event: InputEvent) -> void:
