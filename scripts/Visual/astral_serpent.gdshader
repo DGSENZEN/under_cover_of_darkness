@@ -137,16 +137,36 @@ void fragment() {
 		col = mix(col, ink, smoothstep(0.75, 1.0, UV2.x));
 		rough = 0.18;
 	} else {
-		// Its eye: burning marigold, a slit, a glint.
+		// Its eye, set in a lid of its own hide: a wet dark line round it; its iris fibred, pale gold round its pupil
+		// going to marigold and dark oxblood at its limbus, burning; its pupil a slit, upright, narrowing to points, a
+		// red glow deep in it; glossy, so the deep's light leaves its highlight on it, and a small glint of its own.
 		vec2 e = UV2 * 2.0 - 1.0;
 		float d = length(e);
-		float fibres = 0.75 + 0.25 * sin(atan(e.y, e.x) * 40.0);
-		vec3 iris = mix(marigold * 1.4, oxblood, smoothstep(0.3, 1.0, d)) * fibres;
-		float slit = smoothstep(0.17, 0.12, abs(e.x)) * smoothstep(1.0, 0.9, abs(e.y));
-		col = ink;
-		glow = iris * (1.0 - slit) * 1.2;
-		rough = 0.1;
-		glow += vec3(1.0, 0.92, 0.75) * smoothstep(0.2, 0.0, length(e - vec2(-0.35, 0.4)));
+		float a = atan(e.y, e.x);
+		float lid = smoothstep(0.8, 0.88, d);
+		float wet = smoothstep(0.06, 0.0, abs(d - 0.8));
+		float fibres = texture(noise, vec3(cos(a) * 3.0, sin(a) * 3.0, d * 2.5)).r;
+		fibres = 0.65 + 0.7 * (fibres - 0.5) + 0.18 * sin(a * 70.0 + fibres * 9.0);
+		vec3 iris = mix(vec3(1.0, 0.76, 0.34), marigold, smoothstep(0.12, 0.45, d));
+		iris = mix(iris, oxblood * 0.8, smoothstep(0.5, 0.74, d)) * fibres;
+		iris += vec3(1.0, 0.8, 0.45) * 0.18 * smoothstep(0.05, 0.0, abs(d - 0.3));
+		iris *= 1.0 - 0.75 * smoothstep(0.66, 0.79, d);
+		// (Its slit: widest at its middle, tapering to points above and below.)
+		float slit_w = 0.09 * sqrt(max(1.0 - e.y * e.y / 0.62, 0.0));
+		float slit = smoothstep(slit_w + 0.025, slit_w, abs(e.x)) * step(abs(e.y), 0.79);
+		// (Black within, a thin red where its edge meets the iris.)
+		vec3 pupil = mix(ink * 0.2, oxblood * 0.5, smoothstep(slit_w * 0.4, slit_w + 0.02, abs(e.x)));
+		vec3 ball = mix(iris, pupil, slit);
+		// Its lid: the head's hide, dark; a wet line where it meets the eye.
+		vec3 s = scales(UV2 * vec2(8.0, 8.0));
+		vec3 hide = mix(ink * 1.4, seeped * 0.07, 0.4 + 0.4 * s.z) * (0.7 + 0.3 * s.x);
+		col = mix(ink * 0.4, hide, lid);
+		glow = ball * (1.0 - lid) * 1.6;
+		glow += vec3(1.0, 0.95, 0.85) * 1.5 * smoothstep(0.09, 0.0, length(e - vec2(-0.3, 0.34)));
+		glow += vec3(1.0, 0.95, 0.85) * 0.4 * smoothstep(0.05, 0.0, length(e - vec2(0.22, -0.3)));
+		glow += oxblood * 0.4 * wet;
+		rough = mix(0.06, 0.55, lid);
+		metal = 0.0;
 	}
 	ALBEDO = col;
 	ROUGHNESS = rough;

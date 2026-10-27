@@ -109,6 +109,7 @@ func _ready() -> void:
 		var long := [
 			[func(): return serpent.to_global(Vector3(0.0, 0.0, -6.0)), 34.0, "13m_astral_zoom_the_serpent"],
 			[func(): return serpent.to_global(Vector3(0.0, 0.2, 1.2)), 9.0, "13n_astral_zoom_its_head"],
+			[func(): return serpent.to_global(Vector3(0.6, 0.34, 0.95)), 2.6, "13t_astral_zoom_the_serpents_eye"],
 			[func(): return (eyes.get_child(0) as Node3D).global_position, 8.0, "13o_astral_zoom_an_eye", -37.5],
 			[func(): return passage.constellations[2].global_position, 40.0, "13p_astral_zoom_a_constellation"],
 		]

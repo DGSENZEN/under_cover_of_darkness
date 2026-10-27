@@ -1210,7 +1210,7 @@ func _serpent() -> Node3D:
 		Vector3(0.42, -0.1, 1.75), Vector3(-0.42, -0.1, 1.75)], -1.0, 0.42), 3, -6)
 	_serpent_part(jaw, "fangs_lower", _fangs_mesh([Vector3(0.26, 0.05, 1.95), Vector3(-0.26, 0.05, 1.95)], 1.0, 0.26), 3, -6)
 	for side in [1.0, -1.0]:
-		var eye := _serpent_part(serpent, "serpent_eye" if side > 0.0 else "serpent_eye_left", _dome_mesh(0.2), 4, -4)
+		var eye := _serpent_part(serpent, "serpent_eye" if side > 0.0 else "serpent_eye_left", _dome_mesh(0.25), 4, -4)
 		# (On its head's side under its brow.)
 		eye.position = Vector3(0.6 * side, 0.34, 0.95)
 		eye.rotation = Vector3(-0.3, PI / 2.0 * side, 0.0)
@@ -1242,7 +1242,9 @@ func _serpent_frames() -> Array:
 	var points := []
 	for i in rings + 1:
 		var s := SERPENT_LENGTH * i / rings
-		points.append(Vector3(1.8 * sin(s * 0.33), 1.0 * sin(s * 0.2 + 0.7), -s))
+		# (From its head straight back, its sway easing in over its first metres: its neck where its head is.)
+		var ease := smoothstep(0.0, 4.0, s)
+		points.append(Vector3(1.8 * sin(s * 0.33) * ease, (sin(s * 0.2 + 0.7) - sin(0.7)) * ease, -s))
 	var frames := []
 	for i in rings + 1:
 		var t := float(i) / rings
