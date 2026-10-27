@@ -55,10 +55,10 @@ const SERPENT := preload("res://scripts/Visual/astral_serpent.gdshader")
 ## The serpent's swim (its reach at its tail, m); its feathers along its back (how far apart, m; how long, a share of
 ## its body's girth there), the ruff round its neck (how many, how long, m), its tail's plume (how many, how long, m).
 const SERPENT_SWIM := 1.2
-const FEATHER_EVERY := 0.85
-const FEATHER_LENGTH := 2.2
-const RUFF := 14
-const RUFF_LENGTH := 2.0
+const FEATHER_EVERY := 1.3
+const FEATHER_LENGTH := 1.5
+const RUFF := 18
+const RUFF_LENGTH := 2.2
 const PLUME := 7
 const PLUME_LENGTH := 3.4
 ## Its tongue flicking out: how often (s), how long it is out (s).
@@ -185,6 +185,9 @@ const BELOW := 0.6
 ## its sky's clouds.
 const DEEP_SEEN := 30.0
 const DEEP_SCALE := 0.75
+## The deep's light (its colour; its energy four times the alpha): the eclipse's pale fire, the green from below.
+const DEEP_KEY := Color(1.0, 0.82, 0.6, 0.32)
+const DEEP_FILL := Color(0.45, 0.8, 0.5, 0.1)
 const BRUSH := "res://textures/brushes/brush_02.png"
 ## The motes drifting toward the market: how many, how long each lives (s), their pace (m/s).
 const MOTES := 180
@@ -1194,11 +1197,13 @@ func _serpent() -> Node3D:
 	_serpent_part(serpent, "coils", _coils_mesh(frames), 0, -7)
 	_serpent_part(serpent, "feathers", _feathers_mesh(frames), 1, -6)
 	# Its head: skull, jaw (hinged below its neck, a little open), fangs, eyes.
-	_serpent_part(serpent, "head", _head_mesh([0.74, 0.95, 0.74, 0.62, 0.3, 0.12, 0.3], -0.1, 2.7, 0.0), 2, -5)
+	# (The skull begins inside its neck, as round as its body there.)
+	_serpent_part(serpent, "head", _head_mesh([0.74, 0.95, 0.74, 0.62, 0.3, 0.12, 0.3], -0.5, 2.7, 0.0,
+		float(frames[0][4])), 2, -5)
 	var tongue := _serpent_part(serpent, "tongue", _tongue_mesh(), 5, -6)
 	tongue.position = Vector3(0.0, -0.14, 2.2)
 	tongue.scale = Vector3(1.0, 1.0, 0.01)
-	var jaw := _serpent_part(serpent, "jaw", _head_mesh([0.62, 0.72, 0.14, 0.1, 0.24, 0.1], 0.0, 2.3, 0.0), 2, -6)
+	var jaw := _serpent_part(serpent, "jaw", _head_mesh([0.6, 0.66, 0.16, 0.08, 0.26, 0.1], 0.15, 2.3, 0.0), 2, -6)
 	jaw.position = Vector3(0.0, -0.28, 0.12)
 	jaw.rotation.x = 0.22
 	_serpent_part(serpent, "fangs", _fangs_mesh([Vector3(0.3, -0.12, 2.15), Vector3(-0.3, -0.12, 2.15),
@@ -1206,7 +1211,8 @@ func _serpent() -> Node3D:
 	_serpent_part(jaw, "fangs_lower", _fangs_mesh([Vector3(0.26, 0.05, 1.95), Vector3(-0.26, 0.05, 1.95)], 1.0, 0.26), 3, -6)
 	for side in [1.0, -1.0]:
 		var eye := _serpent_part(serpent, "serpent_eye" if side > 0.0 else "serpent_eye_left", _dome_mesh(0.2), 4, -4)
-		eye.position = Vector3(0.48 * side, 0.36, 1.18)
+		# (On its head's side under its brow.)
+		eye.position = Vector3(0.6 * side, 0.34, 0.95)
 		eye.rotation = Vector3(-0.3, PI / 2.0 * side, 0.0)
 	return serpent
 
@@ -1232,7 +1238,7 @@ func _serpent_part(parent: Node3D, name: String, mesh: ArrayMesh, part: int, pri
 
 ## Its body's line, ring by ring from its neck to its tail: [where, forward, side, up, its girth's radius].
 func _serpent_frames() -> Array:
-	var rings := 140
+	var rings := 200
 	var points := []
 	for i in rings + 1:
 		var s := SERPENT_LENGTH * i / rings
@@ -1255,7 +1261,7 @@ func _coils_mesh(frames: Array) -> ArrayMesh:
 		sections.append([frame[0], frame[2], frame[3], frame[4], frame[4], frame[4]])
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_loft(tool, sections, 16, func(i: int) -> float: return float(i) / (frames.size() - 1))
+	_loft(tool, sections, 22, func(i: int) -> float: return float(i) / (frames.size() - 1))
 	tool.generate_normals()
 	return tool.commit()
 
@@ -1263,25 +1269,31 @@ func _coils_mesh(frames: Array) -> ArrayMesh:
 ## A head's piece lofted from `z0` to `z1` along +z, its section at each share s an ellipse [its half width at its
 ## back, at its widest (s 0.3), its height over its middle at its back, at its snout, under its middle at its back, at
 ## its snout], closed to a point at its snout; it doesn't swim (UV.x 0), its plates on UV2.
-func _head_mesh(shape: Array, z0: float, z1: float, y: float) -> ArrayMesh:
+func _head_mesh(shape: Array, z0: float, z1: float, y: float, neck := 0.0) -> ArrayMesh:
 	var sections := []
-	var steps := 14
+	var steps := 22
 	for i in steps + 1:
 		var s := float(i) / steps
 		var wide := lerpf(shape[0], shape[1], smoothstep(0.0, 0.3, s)) * (1.0 - 0.62 * s * s)
 		var over := lerpf(shape[2], shape[3], s) * (1.0 - 0.45 * pow(s, 1.5))
 		var under := lerpf(shape[4], shape[5], s)
+		# (Grown out of its neck, round as the body there, not set on it.)
+		if neck > 0.0:
+			var grown := smoothstep(0.0, 0.32, s)
+			wide = lerpf(neck, wide, grown)
+			over = lerpf(neck, over, grown)
+			under = lerpf(neck, under, grown)
 		# (Its brows: two ridges over its eyes, s 0.42 along it.)
 		var brow: float = float(shape[6]) * exp(-pow((s - 0.42) / 0.12, 2.0)) if shape.size() > 6 else 0.0
 		sections.append([Vector3(0.0, y + 0.05 * s, lerpf(z0, z1, s)), Vector3(-1.0, 0.0, 0.0), Vector3.UP, wide, over,
 			under, brow])
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_loft(tool, sections, 18, func(_i: int) -> float: return 0.0)
-	# Its snout closed.
+	_loft(tool, sections, 24, func(_i: int) -> float: return 0.0)
+	# Its snout closed, rounded off a little ahead of its last section.
 	var last: Array = sections[steps]
-	var tip := Vector3(0.0, y + 0.06, z1 + 0.12)
-	var sides := 18
+	var tip := Vector3(0.0, y + 0.03, z1 + float(last[3]) * 0.55)
+	var sides := 24
 	for j in sides:
 		var a := _section_point(last, j, sides)
 		var b := _section_point(last, j + 1, sides)
@@ -1364,36 +1376,36 @@ func _feathers_mesh(frames: Array) -> ArrayMesh:
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	tool.set_smooth_group(-1)
 	var rings := frames.size() - 1
-	# The ruff.
-	for k in RUFF:
-		var a := TAU * k / RUFF
-		var out := Vector3(cos(a), sin(a) * 0.9 + 0.15, 0.0).normalized()
-		_feather(tool, out * 0.62 + Vector3(0.0, 0.0, -0.1), (out * 0.75 + Vector3(0.0, 0.0, -0.66)).normalized(),
-			RUFF_LENGTH * (0.8 + 0.3 * smoothstep(-0.3, 1.0, out.y)), 0.38, 0.004)
+	# The ruff: an outer ring of long feathers, an inner of shorter ones between them, full round its neck.
+	for layer in 2:
+		var count := RUFF if layer == 0 else RUFF - 6
+		for k in count:
+			var a := TAU * (k + 0.5 * layer) / count
+			var out := Vector3(cos(a), sin(a) * 0.9 + 0.15, 0.0).normalized()
+			var reach := RUFF_LENGTH * (1.0 if layer == 0 else 0.62) * (0.8 + 0.3 * smoothstep(-0.3, 1.0, out.y))
+			_feather(tool, out * (0.66 - 0.08 * layer) + Vector3(0.0, 0.0, -0.1 + 0.12 * layer),
+				(out * (0.75 - 0.15 * layer) + Vector3(0.0, 0.0, -0.66)).normalized(), reach, 0.42 - 0.06 * layer, 0.004)
 	# A crown on its head, swept back over its neck.
 	for k in 6:
 		var side := -1.0 if k % 2 == 0 else 1.0
 		var root := Vector3(side * (0.12 + 0.1 * (k / 2)), 0.6, 1.15 - 0.22 * (k / 2))
 		var dir := Vector3(side * 0.25, 0.5, -0.83).normalized()
 		_feather(tool, root, dir, 1.6 + 0.3 * (k / 2), 0.3, 0.0)
-	# Down its back: plumage in two rows a side, lying back along it, the upper row half a step on; a crest along
-	# its spine over its front half.
+	# Down its back: a row of plumage either side of its spine, lying back along it, and a crest along its spine over
+	# its front half; its scales bare below them.
 	var s := 1.2
-	var step := 0
 	while s < SERPENT_LENGTH * 0.82:
 		var frame: Array = frames[roundi(s / SERPENT_LENGTH * rings)]
 		var r: float = frame[4]
-		var length := FEATHER_LENGTH * (r / 0.74) * (0.85 + 0.15 * sin(s * 1.9)) + 0.35
-		var row_angle := 70.0 if step % 2 == 0 else 35.0
+		var length := FEATHER_LENGTH * (r / 0.74) * (0.85 + 0.15 * sin(s * 1.9)) + 0.3
 		for side in [1.0, -1.0]:
-			var radial: Vector3 = (frame[3] * cos(deg_to_rad(row_angle)) + frame[2] * side * sin(deg_to_rad(row_angle))).normalized()
-			var dir: Vector3 = (frame[1] * 0.92 + radial * 0.38).normalized()
-			_feather(tool, frame[0] + radial * r * 0.9, dir, length, length * 0.2, s / SERPENT_LENGTH)
-		if s < SERPENT_LENGTH * 0.5 and step % 2 == 0:
+			var radial: Vector3 = (frame[3] * cos(deg_to_rad(45.0)) + frame[2] * side * sin(deg_to_rad(45.0))).normalized()
+			var dir: Vector3 = (frame[1] * 0.94 + radial * 0.32).normalized()
+			_feather(tool, frame[0] + radial * r * 0.92, dir, length, length * 0.22, s / SERPENT_LENGTH)
+		if s < SERPENT_LENGTH * 0.5:
 			var crest: Vector3 = (frame[1] * 0.6 + frame[3] * 0.8).normalized()
-			_feather(tool, frame[0] + frame[3] * r * 0.95, crest, length * 0.55, length * 0.16, s / SERPENT_LENGTH)
-		s += FEATHER_EVERY / 2.0
-		step += 1
+			_feather(tool, frame[0] + frame[3] * r * 0.97, crest, length * 0.5, length * 0.18, s / SERPENT_LENGTH)
+		s += FEATHER_EVERY
 	# The plume at its tail, fanned wide and drooping.
 	var tail: Array = frames[rings]
 	for k in PLUME:
@@ -1563,6 +1575,16 @@ func _make_deep() -> void:
 	_deep.name = "deep_world"
 	_deep.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	deep.add_child(_deep)
+	# Its light (what in it is lit: the serpent): the eclipse's pale fire from high ahead, the seeped dark's green from
+	# far below.
+	for spec in [["deep_key", _eclipse_at(), DEEP_KEY], ["deep_fill", bounds.get_center() + Vector3(0.0, -200.0, 30.0), DEEP_FILL]]:
+		var light := DirectionalLight3D.new()
+		light.name = spec[0]
+		light.light_color = (spec[2] as Color)
+		light.light_energy = (spec[2] as Color).a * 4.0
+		light.shadow_enabled = false
+		_deep.add_child(light)
+		light.look_at_from_position(spec[1], bounds.get_center(), Vector3.UP if spec[0] == "deep_key" else Vector3.FORWARD)
 	# (Whether its box, its windows' and its bleeds' with it, is in the camera's view at all.)
 	_on_screen = VisibleOnScreenNotifier3D.new()
 	_on_screen.name = "on_screen"
@@ -1603,10 +1625,15 @@ func _eclipse() -> void:
 	eclipse.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	eclipse.extra_cull_margin = ECLIPSE_SIZE
 	_deep.add_child(eclipse)
+	eclipse.position = _eclipse_at()
+
+
+## Where the eclipse hangs: high ahead toward the market and a little west, far off.
+func _eclipse_at() -> Vector3:
 	var high := deg_to_rad(ECLIPSE_HIGH)
 	var round_by := deg_to_rad(ECLIPSE_ROUND)
 	var ahead := Vector3(-sin(round_by), 0.0, cos(round_by) * float(mouth_end))
-	eclipse.position = bounds.get_center() + (ahead * cos(high) + Vector3.UP * sin(high)) * ECLIPSE_FAR
+	return bounds.get_center() + (ahead * cos(high) + Vector3.UP * sin(high)) * ECLIPSE_FAR
 
 
 ## Where `at` ([how far, degrees round from straight ahead toward the market, degrees up]) lies from its middle.

@@ -768,7 +768,10 @@ func _void(passage: Node3D) -> void:
 	var windows: Array = passage.get("windows") if passage.get("windows") != null else []
 	if passage.get("sky") == null:
 		wrong.append("no sky")
-	if not passage.find_children("*", "Light3D", true, false).is_empty():
+	# (No light of its own in the Metro: the deep's light is the deep's own world's, lighting nothing outside it.)
+	var deep_world: Node = passage.get("deep")
+	if not passage.find_children("*", "Light3D", true, false).filter(func(l): return deep_world == null \
+			or not deep_world.is_ancestor_of(l)).is_empty():
 		wrong.append("lit")
 	var box: AABB = passage.bounds
 	# Rays out from the passage's middle line: every wall, the ceiling and the floor meet a window, but through a gap.
