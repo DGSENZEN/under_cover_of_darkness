@@ -52,6 +52,9 @@ const VIEWS := [
 	[Vector3(-1.0, 1.65, -40.0), Vector3(0.0, 1.6, -20.0), "13a_astral_north_from_the_stairs"],
 	[Vector3(0.0, 1.65, -32.0), Vector3(0.0, 1.8, -20.0), "13b_astral_north_halfway"],
 	[Vector3(-1.0, 1.65, -30.0), Vector3(-5.0, 2.4, -27.0), "13c_astral_north_its_wall"],
+	[Vector3(0.5, 1.65, -31.0), Vector3(14.0, 0.5, -28.0), "13f_astral_north_looking_east"],
+	[Vector3(-0.5, 1.65, -31.0), Vector3(-14.0, 7.0, -33.0), "13g_astral_north_looking_west_up"],
+	[Vector3(0.5, 1.65, -27.0), Vector3(2.0, -12.0, -24.0), "13h_astral_north_looking_down"],
 	[Vector3(0.0, 1.65, 23.0), Vector3(0.0, 1.6, 40.0), "13d_astral_south_going_on"],
 	[Vector3(0.0, 1.65, 36.0), Vector3(0.0, 1.6, 15.0), "13e_astral_south_coming_back"],
 ]

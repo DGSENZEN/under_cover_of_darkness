@@ -28,6 +28,21 @@ const FRAGMENT_OUT := Vector2(4.0, 30.0)
 const FRAGMENT_SIZE := Vector2(1.0, 2.2)
 const FRAGMENT_TURN := Vector2(0.5, 3.0)
 const FRAGMENT_BOB := Vector2(0.25, 0.08)
+const CUTOUT := preload("res://scripts/Visual/astral_cutout.gdshader")
+const EYE := preload("res://scripts/Visual/astral_eye.gdshader")
+const Silhouette := preload("res://scripts/Visual/Silhouette.gd")
+## The presences: the serpent (its length, its circle's radius round the passage, its pace round it in radians a
+## second); the eyes' clusters [where (out from the passage's middle), how many]; the shades walking a way of their own
+## (how far out past the east wall, who, their pace); the giant hand (its size, where it drifts).
+const SERPENT_LENGTH := 30.0
+const SERPENT_ROUND := 26.0
+const SERPENT_PACE := 0.018
+const EYES := [[Vector3(-22.0, 3.0, -4.0), 3], [Vector3(18.0, 7.0, 6.0), 1], [Vector3(-4.0, -16.0, 2.0), 4]]
+const SHADES_OUT := 11.0
+const SHADE_WALKS := ["city_priest", "city_grandmother", "city_pelona", "walk_coat", "city_nun", "city_old_man"]
+const SHADE_PACE := 0.55
+const HAND_SIZE := 6.0
+const HAND_AT := Vector3(-18.0, 9.0, 0.0)
 ## How far below the floor the floor's window lies (the way's stones over it hide it), and the walls' windows reach.
 const BELOW := 0.6
 ## The sky's sphere round the passage's middle (m).
@@ -92,6 +107,7 @@ func _ready() -> void:
 	_landings()
 	_stones()
 	_fragments()
+	_presences()
 	_veils()
 	_motes()
 	# (Held on the way after the walker has moved this frame.)
@@ -109,6 +125,7 @@ func _process(delta: float) -> void:
 		piece.rotate(piece.get_meta("axis"), deg_to_rad(float(piece.get_meta("turn"))) * delta)
 		var home: Vector3 = piece.get_meta("home")
 		piece.position.y = home.y + FRAGMENT_BOB.x * sin(TAU * FRAGMENT_BOB.y * _clock + float(piece.get_meta("phase")))
+	_drift(delta)
 	if walker == null or not is_instance_valid(walker):
 		return
 	var at := walker.global_position
@@ -245,6 +262,174 @@ func _fragments() -> void:
 		piece.set_meta("turn", rng.randf_range(FRAGMENT_TURN.x, FRAGMENT_TURN.y))
 		piece.set_meta("phase", rng.randf() * TAU)
 		fragments.append(piece)
+
+
+## The presences in the dark, far off, never reached: the vast serpent's coils passing round the passage, eyes opening
+## and closing, a line of the city's shades walking a way of their own toward the market, the soot hand's maker's hand
+## drifting past. Seen only through the windows.
+func _presences() -> void:
+	var middle := bounds.get_center()
+	# The serpent.
+	var serpent := Node3D.new()
+	serpent.name = "serpent"
+	serpent.set_meta("kind", "serpent")
+	add_child(serpent)
+	var body := MeshInstance3D.new()
+	body.name = "coils"
+	body.mesh = _serpent_mesh()
+	body.material_override = _ink(3.3, 1.4)
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	serpent.add_child(body)
+	presences.append(serpent)
+	# The eyes.
+	for k in EYES.size():
+		var cluster := Node3D.new()
+		cluster.name = "eyes"
+		cluster.set_meta("kind", "eyes")
+		cluster.set_meta("home", middle + EYES[k][0])
+		add_child(cluster)
+		cluster.position = middle + EYES[k][0]
+		for j in int(EYES[k][1]):
+			var look := ShaderMaterial.new()
+			look.shader = EYE
+			look.render_priority = -4
+			look.set_shader_parameter(&"seed", k * 0.37 + j * 0.21)
+			var quad := QuadMesh.new()
+			quad.size = Vector2(1.6, 0.8)
+			var eye := MeshInstance3D.new()
+			eye.name = "eye"
+			eye.mesh = quad
+			eye.material_override = look
+			eye.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			cluster.add_child(eye)
+			eye.position = Vector3((j - 1.5) * 2.4 * sin(j * 1.3 + k), (j % 2) * 1.6 - 0.8, cos(j * 2.1) * 1.5)
+			eye.scale = Vector3.ONE * (1.0 + 0.6 * ((j + k) % 3))
+		presences.append(cluster)
+	# The shades walking their own way.
+	var line := Node3D.new()
+	line.name = "shades"
+	line.set_meta("kind", "shades")
+	add_child(line)
+	for k in SHADE_WALKS.size():
+		var shade: MeshInstance3D = Silhouette.make_loop(SHADE_WALKS[k])
+		if shade == null:
+			continue
+		line.add_child(shade)
+		var look: ShaderMaterial = shade.get("_look")
+		look.shader = CUTOUT
+		look.render_priority = -4
+		shade.set_meta("along", float(k) / SHADE_WALKS.size() * (_span + 16.0))
+		# (Not whole: under the presence their smoke rises at, so none rises off them out there.)
+		shade.presence = 0.7
+	line.position = Vector3(bounds.end.x + SHADES_OUT, bounds.position.y, bounds.position.z - 8.0)
+	presences.append(line)
+	# The hand.
+	var hand := Node3D.new()
+	hand.name = "hand"
+	hand.set_meta("kind", "hand")
+	add_child(hand)
+	var sheet := SetKit.painted(["pasaje_marks.png"], SetKit.ATLAS_DIR, true)
+	var palm := MeshInstance3D.new()
+	palm.name = "palm"
+	var quad := QuadMesh.new()
+	quad.size = Vector2(HAND_SIZE, HAND_SIZE)
+	palm.mesh = quad
+	var look := ShaderMaterial.new()
+	look.shader = CUTOUT
+	look.render_priority = -4
+	look.set_shader_parameter(&"sheet", sheet)
+	look.set_shader_parameter(&"noise", Vfx.noise_3d())
+	look.set_shader_parameter(&"cell_scale", Vector2(0.5, 0.5))
+	look.set_shader_parameter(&"cell_offset", Vector2(0.0, 0.5))
+	look.set_shader_parameter(&"presence", 0.7)
+	palm.material_override = look
+	palm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	hand.add_child(palm)
+	presences.append(hand)
+	_drift(0.0)
+
+
+## The presences on their ways this frame.
+func _drift(delta: float) -> void:
+	if presences.is_empty():
+		return
+	var middle := bounds.get_center()
+	for presence in presences:
+		match String(presence.get_meta("kind", "")):
+			"serpent":
+				var a := _clock * SERPENT_PACE
+				presence.position = middle + Vector3(cos(a) * SERPENT_ROUND, 2.0 + 4.0 * sin(a * 2.3), sin(a) * SERPENT_ROUND)
+				# (Its head leading round its circle.)
+				presence.rotation.y = -a
+			"eyes":
+				var home: Vector3 = presence.get_meta("home")
+				presence.position = home + Vector3(0.0, 0.6 * sin(_clock * 0.11 + home.x), 0.4 * cos(_clock * 0.07 + home.z))
+			"shades":
+				for shade: Node in presence.get_children():
+					if not shade is MeshInstance3D:
+						continue
+					var along: float = fposmod(float(shade.get_meta("along")) + delta * SHADE_PACE, _span + 16.0)
+					shade.set_meta("along", along)
+					(shade as Node3D).position = Vector3(0.0, 0.0, along if mouth_end > 0 else _span + 16.0 - along)
+					shade.set("heading", Vector3(0.0, 0.0, float(mouth_end)))
+					if delta > 0.0:
+						shade.call("walk", delta * SHADE_PACE)
+			"hand":
+				presence.position = middle + HAND_AT + Vector3(0.0, sin(_clock * 0.05) * 1.5, sin(_clock * 0.03) * (_span * 0.5))
+				presence.rotation = Vector3(0.0, PI / 2.0 + sin(_clock * 0.04) * 0.3, sin(_clock * 0.06) * 0.2)
+
+
+## An ink material for what floats in the void (`glow` its rim's strength).
+func _ink(seed: float, glow: float) -> ShaderMaterial:
+	var look := ShaderMaterial.new()
+	look.shader = INK
+	look.render_priority = -5
+	look.set_shader_parameter(&"noise", Vfx.noise_3d())
+	look.set_shader_parameter(&"flicker_seed", seed)
+	look.set_shader_parameter(&"glow", glow)
+	return look
+
+
+## The serpent's coils: a long body (along its own -z) swinging side to side and up and down, thick behind its head and
+## tapering to its tail, scaled in ridges, its head heavier.
+func _serpent_mesh() -> ArrayMesh:
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rings := 90
+	var sides := 10
+	var points := []
+	for i in rings + 1:
+		var s := SERPENT_LENGTH * i / rings
+		points.append(Vector3(1.8 * sin(s * 0.33), 1.0 * sin(s * 0.2 + 0.7), -s))
+	var radius := func(i: int) -> float:
+		var t := float(i) / rings
+		var r := 0.12 + 0.62 * pow(1.0 - t, 0.8)
+		# (Its ridges, and its head heavier.)
+		r *= 1.0 + 0.1 * sin(i * 2.2)
+		if t < 0.05:
+			r *= 1.25
+		return r
+	var ring := []
+	for i in rings + 1:
+		var ahead: Vector3 = points[mini(i + 1, rings)] - points[maxi(i - 1, 0)]
+		var forward := ahead.normalized()
+		var side := forward.cross(Vector3.UP).normalized()
+		var up := side.cross(forward)
+		var circle := []
+		for j in sides:
+			var a := TAU * j / sides
+			circle.append(points[i] + (side * cos(a) + up * sin(a)) * radius.call(i))
+		ring.append(circle)
+	for i in rings:
+		for j in sides:
+			var a: Vector3 = ring[i][j]
+			var b: Vector3 = ring[i][(j + 1) % sides]
+			var c: Vector3 = ring[i + 1][(j + 1) % sides]
+			var d: Vector3 = ring[i + 1][j]
+			for v in [a, b, c, a, c, d]:
+				tool.add_vertex(v)
+	tool.generate_normals()
+	return tool.commit()
 
 
 ## The windows where its walls, ceiling and floor were: each wall cut round its gaps (a run either side, a lintel over),

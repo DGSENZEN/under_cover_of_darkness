@@ -162,6 +162,49 @@ func _astral() -> void:
 	await _void(passage)
 	await _way(passage)
 	await _fragments(passage)
+	await _presences(passage)
+
+
+## M18e: the presences far off in the void, never near the way (8 m and more), drawn only through its windows: the
+## serpent, three clusters of eyes, a line of shades walking a way of their own, the giant hand; all of them moving.
+func _presences(passage: Node3D) -> void:
+	var wrong := []
+	var found: Array = passage.get("presences") if passage.get("presences") != null else []
+	var kinds := {}
+	var through := ["astral_ink.gdshader", "astral_eye.gdshader", "astral_cutout.gdshader"]
+	var was := {}
+	var watched := []
+	for presence: Node3D in found:
+		var kind: String = presence.get_meta("kind", "")
+		kinds[kind] = int(kinds.get(kind, 0)) + 1
+		var parts: Array = [presence] + presence.find_children("*", "MeshInstance3D", true, false)
+		for part: Node in parts:
+			if not part is MeshInstance3D or not (part as MeshInstance3D).is_visible_in_tree():
+				continue
+			var mesh := part as MeshInstance3D
+			var look: Material = mesh.material_override if mesh.material_override != null else \
+				(mesh.mesh.surface_get_material(0) if mesh.mesh != null else null)
+			if not (look is ShaderMaterial and through.any(func(f): return (look as ShaderMaterial).shader.resource_path.ends_with(f))):
+				wrong.append("%s's %s not through the windows" % [kind, mesh.name])
+			watched.append(mesh)
+			was[mesh] = mesh.global_position
+			var far := INF
+			for line: PackedVector3Array in passage.way:
+				for i in line.size() - 1:
+					far = minf(far, Geometry3D.get_closest_point_to_segment(mesh.global_position, line[i], line[i + 1]).distance_to(mesh.global_position))
+			if far < 8.0:
+				wrong.append("%s's %s %.1f m from the way" % [kind, mesh.name, far])
+	for kind in ["serpent", "eyes", "shades", "hand"]:
+		if not kinds.has(kind):
+			wrong.append("no %s" % kind)
+	if int(kinds.get("eyes", 0)) < 3:
+		wrong.append("%d clusters of eyes" % int(kinds.get("eyes", 0)))
+	await _frames(40)
+	var still := watched.filter(func(m): return m.global_position.is_equal_approx(was[m]) and not m.get_meta("blinks", false))
+	if not still.is_empty():
+		wrong.append("%d of them still: %s" % [still.size(), still.slice(0, 3).map(func(m): return m.name)])
+	_check("M18e the presences far off in the void, seen only through its windows, moving", wrong.is_empty(),
+		"%s" % [wrong.slice(0, 6)])
 
 
 ## M18c: the city's fragments float in the void (more than 3 m outside the passage), drawn in its ink (seen only
