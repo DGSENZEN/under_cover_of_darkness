@@ -2461,6 +2461,14 @@ class PasajeStalls(unittest.TestCase):
     def test_every_piece_stands_in_a_stalls_depth_under_the_mains(self):
         for n in self.objects:
             (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            if n == "kiosk":
+                # (The kiosk stands free in the street's middle, not against the wall: within its own body and
+                # wings, under the canopy's sag.)
+                self.assertLessEqual(max(-y0, y1), 1.2, n)
+                self.assertLessEqual(max(-x0, x1), 1.8, n)
+                self.assertGreaterEqual(z0, -0.0005, n)
+                self.assertLessEqual(z1, pasaje_stalls.KIOSK_SIGN_TOP + 0.001, n)
+                continue
             self.assertGreaterEqual(y0, -pasaje_stalls.REACH - 0.001, n)
             self.assertLessEqual(y1, 0.0005, n)
             self.assertGreaterEqual(z0, -0.0005, n)
@@ -2571,7 +2579,8 @@ class PasajeOverhead(unittest.TestCase):
         # (Blender y is the set's -z: z 13 to the stretch's end.)
         self.assertLessEqual(y0, -19.9)
         self.assertGreaterEqual(y1, -13.0)
-        self.assertGreaterEqual(z0, 2.4)
+        # (Its fringe over a head: the player's capsule stands 2.05 m tall.)
+        self.assertGreaterEqual(z0, 2.12)
         # Its edges, where the mains stand off the walls, between the air line's top and the gas main's bottom.
         edge = [v.z for v in _world(self.objects["canopy"]) if abs(v.x) >= 4.4]
         self.assertTrue(edge and min(edge) > 3.125 and max(edge) < 3.21, (min(edge), max(edge)))

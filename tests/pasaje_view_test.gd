@@ -16,6 +16,9 @@ const GREYBOX := [Vector3(0.0, 1.65, -19.0), Vector3(0.0, 1.4, -40.0), "view_0_g
 ## A neon hue: saturated and bright; a tube's hue counts when its glowing pixels are this share of the frame (a far
 ## tube's glow is some 150 pixels; the plan's 0.2 % was for clusters over the whole frame).
 const NEON_SHARE := 0.0002
+## The layer the set's drawn meshes are made solid on for the view's rays alone.
+const SEEN_LAYER := 1 << 30
+const Silhouette := preload("res://scripts/Visual/Silhouette.gd")
 
 var results: Array[String] = []
 var failures := 0
@@ -85,6 +88,15 @@ func _ready() -> void:
 	# greybox there is unlit, black (its grey measured on the north stretch: %.3f), as black as the shades and the
 	# shadows under the stalls.)
 	var middle := Rect2i(a.get_width() / 3, a.get_height() / 3, a.get_width() / 3, a.get_height() / 3)
+	# (-- --bare-end: the check's own baseline, the kiosk and the canopy's back tarpaulins hidden.)
+	if OS.get_cmdline_user_args().has("--bare-end"):
+		if pasaje.get("kiosk") != null:
+			pasaje.kiosk.visible = false
+		for piece: Node3D in pasaje.overhead:
+			if piece.name == "canopy_back":
+				piece.visible = false
+	_seen_as_solid()
+	await _seconds(0.1)
 	var space := get_world_3d().direct_space_state
 	var greybox: Node = map.get("greybox")
 	var greyed := 0
@@ -93,7 +105,8 @@ func _ready() -> void:
 		for x in range(middle.position.x, middle.end.x, 4):
 			n += 1
 			var from := eye.project_ray_origin(Vector2(x, y))
-			var query := PhysicsRayQueryParameters3D.create(from, from + eye.project_ray_normal(Vector2(x, y)) * 80.0)
+			var query := PhysicsRayQueryParameters3D.create(from, from + eye.project_ray_normal(Vector2(x, y)) * 80.0,
+				0xFFFFFFFF)
 			var hit := space.intersect_ray(query)
 			if not hit.is_empty() and greybox != null and greybox.is_ancestor_of(hit["collider"]):
 				greyed += 1
@@ -105,6 +118,21 @@ func _ready() -> void:
 	for r in results:
 		print(r)
 	get_tree().quit(1 if failures > 0 else 0)
+
+
+## What the eye sees as solid, made solid to the view's rays (test-side, on a layer of its own): every mesh the set
+## draws, its cloth and tarpaulins too, which carry no collider for the player. (Not the shades: cut-outs on quads.)
+func _seen_as_solid() -> void:
+	for mesh: MeshInstance3D in pasaje.find_children("*", "MeshInstance3D", true, false):
+		if mesh.mesh == null or not mesh.is_visible_in_tree() or mesh is Silhouette or mesh.get_parent() is Silhouette:
+			continue
+		var body := StaticBody3D.new()
+		body.collision_layer = SEEN_LAYER
+		body.collision_mask = 0
+		var shape := CollisionShape3D.new()
+		shape.shape = mesh.mesh.create_trimesh_shape()
+		body.add_child(shape)
+		mesh.add_child(body)
 
 
 ## The greybox's own grey (its value), from the middle of the view of the plain stretch north of the set.

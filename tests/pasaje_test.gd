@@ -4,7 +4,8 @@ extends Node3D
 
 const PASAJE := preload("res://maps/pasaje.tscn")
 const Layers := preload("res://scripts/Visual/Layers.gd")
-## The set's shadowless lights at most: the stalls' sixteen neons and eight bulbs, and one to each ward's candles.
+## The set's shadowless lights at most: the stalls' sixteen neons and eight bulbs, the kiosk's bulb, and one to each
+## ward's candles.
 const LIGHT_BUDGET := 30
 
 var results: Array[String] = []
@@ -61,7 +62,8 @@ func _shell() -> void:
 	_check("P1 the stretch's shell at the plan's measure, its openings open", floored and walled and roofed and open,
 		"floored %s walled %s roofed %s openings %s" % [floored, walled, roofed, open])
 
-	var street: Array[Vector3] = [Vector3(0.0, 1.05, 19.0)]
+	# (Round the kiosk at the south end, by its west side.)
+	var street: Array[Vector3] = [Vector3(-2.35, 1.05, 15.2), Vector3(-2.35, 1.05, 19.0), Vector3(0.0, 1.05, 19.3)]
 	var down := await _walk_path(Vector3(0.0, 1.05, -19.0), street, 2400)
 	var herbs: Array[Vector3] = [Vector3(-3.0, 1.05, -1.0), Vector3(-5.6, 1.05, -1.0)]
 	var to_herbs := await _walk_path(Vector3(0.0, 1.05, -6.0), herbs, 1200)
@@ -148,7 +150,15 @@ func _stalls() -> void:
 		var near := box.position.x if side > 0 else -box.end.x
 		var middle := box.get_center().z
 		var front: Array[Vector3] = [Vector3(side * (near - 0.6), 1.05, middle)]
-		var walk := await _walk_path(Vector3(0.0, 1.05, middle), front, 300)
+		var start := Vector3(0.0, 1.05, middle)
+		# (Where the kiosk stands in the street's middle, from in front of it, round its side.)
+		var kiosk: Node3D = pasaje.get("kiosk")
+		if kiosk != null:
+			var around := _stall_box(kiosk).grow(0.6)
+			if around.has_point(Vector3(0.0, around.get_center().y, middle)):
+				start = Vector3(0.0, 1.05, around.position.z)
+				front.push_front(Vector3(side * (near - 0.6), 1.05, around.position.z))
+		var walk := await _walk_path(start, front, 400)
 		if not walk["ok"]:
 			unreached.append("%s %s" % [name, walk["end"]])
 	_check("P4b the player reaches every stall's front", not stalls.is_empty() and unreached.is_empty(),
@@ -255,7 +265,8 @@ func _overhead() -> void:
 	var low := []
 	for piece: MeshInstance3D in overhead:
 		var box := _local_box(piece)
-		if box.position.x < 3.0 and box.end.x > -3.0 and box.position.y < 2.4:
+		# (Over every head: the player's capsule stands 2.05 m; the canopy's fringe hangs to 2.15 m and more.)
+		if box.position.x < 3.0 and box.end.x > -3.0 and box.position.y < 2.12:
 			low.append("%s %.2f" % [piece.name, box.position.y])
 	_check("P6 nothing overhead hangs into the walk", not overhead.is_empty() and low.is_empty(),
 		"%d pieces; low %s" % [overhead.size(), low.slice(0, 4)])
@@ -501,6 +512,43 @@ func _life() -> void:
 		else:
 			detail = "no echo on %s" % walker.get("shade")
 	_check("P8d a walker with susto is followed by the faint shade of their own soul", echoed, detail)
+
+	# The kiosk the stallholders built in the street's middle under the canopy, closing the view down it: walkable
+	# either side (clear of the stalls by a capsule's width and more), off the canopy's circle, out of the crowd's way.
+	var kiosk: Node3D = pasaje.get("kiosk")
+	var problems := []
+	if kiosk == null:
+		problems.append("no kiosk")
+	else:
+		var box := _stall_box(kiosk)
+		if absf(box.get_center().x) > 0.3 or box.position.z < 13.0 or box.end.z > 19.9:
+			problems.append("at %s" % box)
+		if kiosk.find_children("*", "CollisionShape3D", true, false).is_empty():
+			problems.append("not solid")
+		for name in boxes:
+			var stall: AABB = boxes[name]
+			if stall.end.z > box.position.z and stall.position.z < box.end.z:
+				var gap := stall.position.x - box.end.x if stall.get_center().x > 0.0 else box.position.x - stall.end.x
+				if gap < 1.1:
+					problems.append("%.2f m to %s" % [gap, name])
+		var circle_at := _ward_middle(pasaje.wards["canopy_circle"])
+		if Vector2(clampf(circle_at.x, box.position.x, box.end.x) - circle_at.x,
+				clampf(circle_at.z, box.position.z, box.end.z) - circle_at.z).length() < 1.0:
+			problems.append("on the canopy's circle")
+		var grown := box.grow(0.3)
+		for route: Array in routes:
+			for i in route[1].size() - 1:
+				for t in 21:
+					var p: Vector3 = route[1][i].lerp(route[1][i + 1], t / 20.0)
+					if p.x > grown.position.x and p.x < grown.end.x and p.z > grown.position.z and p.z < grown.end.z:
+						problems.append("%s through it" % route[0])
+						break
+		for person: Node3D in people:
+			var at := pasaje.to_local(person.global_position)
+			if at.x > grown.position.x and at.x < grown.end.x and at.z > grown.position.z and at.z < grown.end.z:
+				problems.append("%s in it" % person.get_meta("pose", ""))
+	_check("P8e a kiosk in the street's middle under the canopy, walkable either side, off the circle, out of the way",
+		problems.is_empty(), "%s" % [problems])
 
 
 ## A ward's middle in the set's frame (the mean of its candles).

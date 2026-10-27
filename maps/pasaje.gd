@@ -186,13 +186,17 @@ const HAND_TILT := 0.14
 const SWING := deg_to_rad(4.0)
 const SWING_FULL := 1.0
 ## The food's steam: [stall, its Vfx preset, where it leaves (the stall's frame)].
+## The kiosk's place: in the street's middle under the canopy, short of its candle circle.
+const KIOSK_AT := Vector3(0.0, 0.0, 17.2)
+## Its bulb, in its own frame: inside its hatch, under its roof.
+const KIOSK_BULB_AT := Vector3(0.0, 2.25, 0.35)
 ## The crowd's routes (scripts/Visual/ShadeCrowd.gd; the set's frame, on the floor): [name, points, every (s, least
 ## and most between one setting out and the next), keep (how much of it one walks before it may come apart), along
-## (the chance one forms partway along)]. The street both ways, each keeping to its right (clear of the canopy's
-## circle at the south end); into the herb market's mouth and out of it.
+## (the chance one forms partway along)]. The street both ways, each keeping to its right, as far as the kiosk; into
+## the herb market's mouth and out of it.
 const ROUTES := [
-	["street_south", [Vector3(1.2, 0.0, -19.5), Vector3(1.2, 0.0, 17.6)], Vector2(2.0, 4.0), Vector2(0.5, 1.0), 0.4],
-	["street_north", [Vector3(-1.2, 0.0, 19.5), Vector3(-1.2, 0.0, -19.5)], Vector2(2.0, 4.0), Vector2(0.5, 1.0), 0.4],
+	["street_south", [Vector3(1.2, 0.0, -19.5), Vector3(1.2, 0.0, 15.6)], Vector2(2.0, 4.0), Vector2(0.5, 1.0), 0.4],
+	["street_north", [Vector3(-1.2, 0.0, 15.6), Vector3(-1.2, 0.0, -19.5)], Vector2(2.0, 4.0), Vector2(0.5, 1.0), 0.4],
 	["into_herbs", [Vector3(1.2, 0.0, -9.0), Vector3(0.0, 0.0, -3.0), Vector3(-2.6, 0.0, -1.2), Vector3(-4.5, 0.0, -1.2)],
 		Vector2(5.0, 9.0), Vector2(0.8, 1.0), 0.2],
 	["out_of_herbs", [Vector3(-4.5, 0.0, -1.6), Vector3(-2.6, 0.0, -1.6), Vector3(-1.2, 0.0, 2.5),
@@ -260,6 +264,8 @@ var missing: Array[String] = []
 ## The stalls by name: each a root on its wall at its place, its pieces in the stall's frame (x along the wall, the
 ## tiles at z 0, the street toward +z).
 var stalls := {}
+## The newspaper and lottery kiosk in the street's middle under the canopy.
+var kiosk: Node3D
 ## The set's own lights: the neons' and the bulbs'.
 var lights: Array[Light3D] = []
 ## The food's steam (Vfx systems), leaning on the draught.
@@ -562,6 +568,15 @@ func _stalls() -> void:
 			SetKit.place(root, kit[piece[0]], look, piece[0], Vector3.ZERO, 0.0, piece[1], true)
 		_neon(root, kit, look, width, spec[6], k)
 		stalls[spec[0]] = root
+	# The kiosk the stallholders built in the street's middle under their canopy, its hatch to the north: what the eye
+	# meets looking down the street (the unbuilt stretch beyond is the greybox's).
+	if kit.has("kiosk"):
+		kiosk = Node3D.new()
+		kiosk.name = "kiosk"
+		add_child(kiosk)
+		kiosk.position = KIOSK_AT
+		kiosk.rotation.y = PI
+		SetKit.place(kiosk, kit["kiosk"], look, "kiosk", Vector3.ZERO, 0.0, true, true)
 
 
 ## A stall's neon over its cover: the box (its face blank) and its tube, lit by a NeonSign of the stall's colour.
@@ -602,21 +617,10 @@ func _wares() -> void:
 		var root: Node3D = stalls[name]
 		var at := BULB_AT if root.find_children("counter*", "MeshInstance3D", true, false).size() > 0 \
 			else Vector3(0.0, BULB_AT.y, BULB_AT.z)
-		var bulb := SetKit.place(root, kit["bulb"], look, "bulb", at, 0.0, false)
-		# (Its glass glowing; its socket and cord painted.)
-		for i in bulb.mesh.get_surface_count():
-			var slot: Material = bulb.mesh.surface_get_material(i)
-			if slot != null and slot.resource_name.begins_with("glass"):
-				bulb.set_surface_override_material(i, lit)
-		var light := OmniLight3D.new()
-		light.name = "bulb_light"
-		light.light_color = BULB_COLOUR
-		light.light_energy = 0.9
-		light.omni_range = 3.2
-		light.shadow_enabled = false
-		root.add_child(light)
-		light.position = at + Vector3(0.0, -0.26, 0.0)
-		lights.append(light)
+		_bulb(root, kit, look, lit, at)
+	# The kiosk's, inside its hatch over the papers: what the eye meets at the street's end, lit.
+	if kiosk != null:
+		_bulb(kiosk, kit, look, lit, KIOSK_BULB_AT)
 	for spec in STEAM:
 		var system := Vfx.system(spec[1])
 		system.name = "steam"
@@ -624,6 +628,24 @@ func _wares() -> void:
 		system.position = spec[2]
 		Vfx.emit(system, true)
 		steam.append(system)
+
+
+## A bare bulb hung at `at` in `root`, its glass glowing (its socket and cord painted), its light under it.
+func _bulb(root: Node3D, kit: Dictionary, look: Material, lit: Material, at: Vector3) -> void:
+	var bulb := SetKit.place(root, kit["bulb"], look, "bulb", at, 0.0, false)
+	for i in bulb.mesh.get_surface_count():
+		var slot: Material = bulb.mesh.surface_get_material(i)
+		if slot != null and slot.resource_name.begins_with("glass"):
+			bulb.set_surface_override_material(i, lit)
+	var light := OmniLight3D.new()
+	light.name = "bulb_light"
+	light.light_color = BULB_COLOUR
+	light.light_energy = 0.9
+	light.omni_range = 3.2
+	light.shadow_enabled = false
+	root.add_child(light)
+	light.position = at + Vector3(0.0, -0.26, 0.0)
+	lights.append(light)
 
 
 ## What the market hung over its street: direction signs on rods from the girders, cables and bulb strings slung
@@ -656,6 +678,9 @@ func _overhead() -> void:
 				string.set_surface_override_material(i, lit)
 		overhead.append(string)
 	overhead.append(SetKit.place(root, kit["canopy"], look, "canopy", Vector3.ZERO, 0.0, false))
+	# (Its back closed to the ceiling with tarpaulins: the dark beyond the stretch's end not seen over it.)
+	if kit.has("canopy_back"):
+		overhead.append(SetKit.place(root, kit["canopy_back"], look, "canopy_back", Vector3.ZERO, 0.0, false))
 	overhead.append(SetKit.place(root, kit["gantry"], look, "gantry", Vector3(0.0, 0.0, GANTRY_Z), 0.0, false))
 	for x in GANTRY_HOOKS:
 		_hung_sign(root, kit, look, "sign_board_b", Vector3(x, GANTRY_HOOK_Y, GANTRY_Z))

@@ -57,10 +57,10 @@ CANOPY_MIDDLE = 3.1
 CANOPY_LINES = (13.0, 16.0, SOUTH)
 CANOPY_SAG = 0.08
 CANOPY_T = 0.02
-# Its valance and fringe: how far they hang (the fringe to 2.45 m over the walk), their flaps' width and gaps, how far
-# out across the street they reach (short of the mains).
+# Its valance and fringe: how far they hang (the fringe to about 2.2 m, over a head, closing the view under the canopy
+# with the kiosk), their flaps' width and gaps, how far out across the street they reach (short of the mains).
 VALANCE = 0.28
-FRINGE = 0.62
+FRINGE = 0.9
 FLAP_W = 0.34
 FLAP_GAP = 0.05
 FLAP_X = 4.3
@@ -194,6 +194,21 @@ def canopy(m):
                 box(m, (x - 0.04, -to_z - 0.04, CEILING - 0.012), (x + 0.04, -to_z + 0.04, CEILING), "iron", r=0.0)
 
 
+def canopy_back(m):
+    """The tarpaulins the stallholders hung from the ceiling at the canopy's back, closing the dark over it from the
+    street: four lengths tied to eyes in the ceiling, overlapping, their feet tucked behind the canopy's end."""
+    lengths = ((-4.3, -2.1), (-2.2, 0.05), (-0.05, 2.2), (2.1, 4.3))
+    for k, (x0, x1) in enumerate(lengths):
+        # (Each overlaps the next, one before it and one behind: their faces 4 cm apart.)
+        # (Short of the stretch's end by little: the map's south stretch begins there.)
+        z0 = SOUTH + (0.035 if k % 2 == 0 else 0.075)
+        foot = min(_canopy_top(x0, SOUTH), _canopy_top(x1, SOUTH)) - 0.12
+        box(m, (x0, -z0 - 0.02, foot), (x1, -z0, CEILING - 0.04), "cloth_patch" if k == 1 else "cloth_blue", r=0.0)
+        for x in (x0 + 0.15, x1 - 0.15):
+            pipe(m, [(x, -z0 - 0.01, CEILING - 0.05), (x, -z0 - 0.01, CEILING - 0.012)], 0.006, 4, "burlap")
+            box(m, (x - 0.04, -z0 - 0.03, CEILING - 0.012), (x + 0.04, -z0 + 0.01, CEILING), "iron", r=0.0)
+
+
 def gantry(m):
     """The pipe gantry under the canopy: its beam across the street, hung on rods up through the tarpaulin to the
     ceiling, the signs' hooks along it."""
@@ -234,7 +249,8 @@ def bill_curl(m):
 
 
 PIECES = [(n, _sign(*SIGNS[n])) for n in SIGNS] + [("drop_rod", drop_rod), ("cable_bundle", cable_bundle),
-                                                   ("bulb_string", bulb_string), ("canopy", canopy), ("gantry", gantry)]
+                                                   ("bulb_string", bulb_string), ("canopy", canopy), ("gantry", gantry),
+                                                   ("canopy_back", canopy_back)]
 PIECES += [("bill_curl", bill_curl)]
 BUDGET = {name: 3000 for name, _ in PIECES}
 BUDGET["canopy"] = 2000
