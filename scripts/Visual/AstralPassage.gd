@@ -43,6 +43,16 @@ const SHADE_WALKS := ["city_priest", "city_grandmother", "city_pelona", "walk_co
 const SHADE_PACE := 0.55
 const HAND_SIZE := 6.0
 const HAND_AT := Vector3(-18.0, 9.0, 0.0)
+const MEMBRANE := preload("res://scripts/Visual/astral_membrane.gdshader")
+const WARP := preload("res://scripts/Visual/astral_warp.gdshader")
+## The wards' sheet, whose circle rings the thresholds.
+const RINGS_SHEET := "pasaje_wards.png"
+## The warp of a crossing: how long (s). The muffle inside: the World and Ambience buses' low-pass, its cutoff inside
+## and out (Hz), how fast it eases (a share a second, in log).
+const WARP_TIME := 0.6
+const MUFFLE_BUSES := [&"World", &"Ambience"]
+const MUFFLE := Vector2(900.0, 20000.0)
+const MUFFLE_EASE := 2.5
 ## How far below the floor the floor's window lies (the way's stones over it hide it), and the walls' windows reach.
 const BELOW := 0.6
 ## The sky's sphere round the passage's middle (m).
@@ -108,6 +118,7 @@ func _ready() -> void:
 	_stones()
 	_fragments()
 	_presences()
+	_thresholds()
 	_veils()
 	_motes()
 	# (Held on the way after the walker has moved this frame.)
@@ -131,6 +142,16 @@ func _process(delta: float) -> void:
 	var at := walker.global_position
 	for veil in veils:
 		(veil.get_surface_override_material(0) as ShaderMaterial).set_shader_parameter(&"walker", at)
+	for membrane in thresholds:
+		(membrane.material_override as ShaderMaterial).set_shader_parameter(&"walker", at)
+	# Crossing a threshold: in or out, the warp; inside, the world's sound eased dull.
+	var now := at.x > bounds.position.x and at.x < bounds.end.x and at.z > bounds.position.z and at.z < bounds.end.z \
+		and at.y > bounds.position.y - 1.0 and at.y < bounds.end.y
+	if now != inside:
+		inside = now
+		crossings += 1
+		_warp()
+	_muffle(delta)
 
 
 ## The walker held on the way: off it by more than HALF_WAY inside the passage, set back to its edge, their going
@@ -377,6 +398,105 @@ func _drift(delta: float) -> void:
 			"hand":
 				presence.position = middle + HAND_AT + Vector3(0.0, sin(_clock * 0.05) * 1.5, sin(_clock * 0.03) * (_span * 0.5))
 				presence.rotation = Vector3(0.0, PI / 2.0 + sin(_clock * 0.04) * 0.3, sin(_clock * 0.06) * 0.2)
+
+
+## Its thresholds: a membrane filling each of its gaps.
+func _thresholds() -> void:
+	var ring := _ring_cell()
+	for gap: Dictionary in gaps:
+		var a: Vector2 = gap["a"]
+		var b: Vector2 = gap["b"]
+		var y0: float = gap["y0"]
+		var y1: float = minf(float(gap["y1"]), bounds.end.y)
+		var width := a.distance_to(b)
+		var look := ShaderMaterial.new()
+		look.shader = MEMBRANE
+		look.set_shader_parameter(&"noise", Vfx.noise_3d())
+		look.set_shader_parameter(&"ring", ring)
+		look.set_shader_parameter(&"size", Vector2(width, y1 - y0))
+		var quad := QuadMesh.new()
+		quad.size = Vector2(width, y1 - y0)
+		var membrane := MeshInstance3D.new()
+		membrane.name = "threshold"
+		membrane.mesh = quad
+		membrane.material_override = look
+		membrane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(membrane)
+		var middle := (a + b) / 2.0
+		membrane.position = Vector3(middle.x, (y0 + y1) / 2.0, middle.y)
+		# (Across its gap: its face along the gap's normal.)
+		var along := (b - a).normalized()
+		membrane.rotation.y = atan2(-along.y, along.x)
+		thresholds.append(membrane)
+
+
+## The wards' circle (their sheet's first cell), for the thresholds' glyph rings.
+func _ring_cell() -> Texture2D:
+	var sheet := SetKit.painted([RINGS_SHEET], SetKit.ATLAS_DIR, true)
+	if sheet == null:
+		return null
+	var image := sheet.get_image()
+	if image.is_compressed():
+		image.decompress()
+	var size := image.get_width() / 2
+	var cell := image.get_region(Rect2i(0, 0, size, size))
+	cell.generate_mipmaps()
+	return ImageTexture.create_from_image(cell)
+
+
+var _warp_layer: CanvasLayer
+var _warp_look: ShaderMaterial
+var _warp_tween: Tween
+
+
+## The warp of a crossing: the view swirling a moment and settling.
+func _warp() -> void:
+	if _warp_layer == null:
+		_warp_layer = CanvasLayer.new()
+		_warp_layer.name = "warp"
+		_warp_layer.layer = 40
+		add_child(_warp_layer)
+		var rect := ColorRect.new()
+		rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_warp_look = ShaderMaterial.new()
+		_warp_look.shader = WARP
+		rect.material = _warp_look
+		_warp_layer.add_child(rect)
+	_warp_layer.visible = true
+	if _warp_tween != null:
+		_warp_tween.kill()
+	_warp_tween = create_tween()
+	_warp_tween.tween_method(func(s: float): _warp_look.set_shader_parameter(&"strength", sin(s * PI)), 0.0, 1.0,
+		WARP_TIME)
+	_warp_tween.tween_callback(func(): _warp_layer.visible = false)
+
+
+var _muffles: Array[AudioEffectLowPassFilter] = []
+
+
+## Inside, the world's sound eased dull; outside, eased back (its low-pass on World and Ambience, added once).
+func _muffle(delta: float) -> void:
+	if _muffles.is_empty():
+		for name in MUFFLE_BUSES:
+			var bus := AudioServer.get_bus_index(name)
+			if bus < 0:
+				continue
+			var found: AudioEffectLowPassFilter = null
+			for i in AudioServer.get_bus_effect_count(bus):
+				var effect := AudioServer.get_bus_effect(bus, i)
+				if effect is AudioEffectLowPassFilter and effect.resource_name == "astral":
+					found = effect
+			if found == null:
+				found = AudioEffectLowPassFilter.new()
+				found.resource_name = "astral"
+				found.cutoff_hz = MUFFLE.y
+				AudioServer.add_bus_effect(bus, found)
+			_muffles.append(found)
+	var target := MUFFLE.x if inside else MUFFLE.y
+	for filter in _muffles:
+		var log_now := log(filter.cutoff_hz)
+		filter.cutoff_hz = exp(lerpf(log_now, log(target), clampf(MUFFLE_EASE * delta, 0.0, 1.0)))
 
 
 ## An ink material for what floats in the void (`glow` its rim's strength).

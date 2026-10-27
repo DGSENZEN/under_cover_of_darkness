@@ -55,6 +55,9 @@ const VIEWS := [
 	[Vector3(0.5, 1.65, -31.0), Vector3(14.0, 0.5, -28.0), "13f_astral_north_looking_east"],
 	[Vector3(-0.5, 1.65, -31.0), Vector3(-14.0, 7.0, -33.0), "13g_astral_north_looking_west_up"],
 	[Vector3(0.5, 1.65, -27.0), Vector3(2.0, -12.0, -24.0), "13h_astral_north_looking_down"],
+	[Vector3(0.0, 1.65, -23.5), Vector3(0.0, 1.6, -14.0), "13j_astral_the_markets_threshold"],
+	[Vector3(-1.0, 1.65, -37.0), Vector3(-1.0, 1.4, -46.0), "13k_astral_the_stairs_threshold"],
+	[Vector3(0.0, 1.65, -14.0), Vector3(0.0, 1.6, -32.0), "13l_astral_from_the_market"],
 	[Vector3(0.0, 1.65, 23.0), Vector3(0.0, 1.6, 40.0), "13d_astral_south_going_on"],
 	[Vector3(0.0, 1.65, 36.0), Vector3(0.0, 1.6, 15.0), "13e_astral_south_coming_back"],
 ]
@@ -105,6 +108,16 @@ func _ready() -> void:
 		_look(view[0], view[1])
 		await _seconds(0.5)
 		_shot(view[2])
+	# In the north astral passage through the player's own camera, its hands up: the void behind them, never over them.
+	lamp.queue_free()
+	var player: Node3D = map.player
+	player.global_position = pasaje.to_global(Vector3(-1.0, 1.05, -37.5))
+	player.rotation.y = PI
+	var own: Array = player.find_children("*", "Camera3D", true, false)
+	if not own.is_empty():
+		(own[0] as Camera3D).make_current()
+		await _seconds(1.5)
+		_shot("13i_astral_through_your_own_eyes")
 	get_tree().quit(0)
 
 

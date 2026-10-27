@@ -163,6 +163,52 @@ func _astral() -> void:
 	await _way(passage)
 	await _fragments(passage)
 	await _presences(passage)
+	await _thresholds(passage)
+
+
+## M18d: a threshold in each of the passage's gaps; walking in through the stairs' gap one crossing, the walker inside,
+## the world's sound muffled (World's low-pass down to 1.5 kHz and under within 2 s); walking back out another, the
+## muffle lifted (5 kHz and over within 2 s).
+func _thresholds(passage: Node3D) -> void:
+	var wrong := []
+	var membranes: Array = passage.get("thresholds") if passage.get("thresholds") != null else []
+	if membranes.size() != passage.gaps.size():
+		wrong.append("%d thresholds for %d gaps" % [membranes.size(), passage.gaps.size()])
+	var y: float = passage.bounds.position.y
+	var was: int = passage.crossings
+	# (The game's buses, as Sfx makes them when it first plays: the headless run may not have them yet.)
+	for name in [&"World", &"Ambience"]:
+		if AudioServer.get_bus_index(name) < 0:
+			AudioServer.add_bus()
+			AudioServer.set_bus_name(AudioServer.bus_count - 1, name)
+	var walk_in := await _tour([[-10.0, y, 32.6], [-10.0, y, 35.6]], true)
+	await _frames(120)
+	var muffled := _astral_cutoff()
+	if not walk_in["ok"] or passage.crossings != was + 1 or not passage.inside or muffled < 0.0 or muffled > 1500.0:
+		wrong.append("in: %s, crossings %d, inside %s, cutoff %.0f" % [walk_in["ok"], passage.crossings - was,
+			passage.inside, muffled])
+	var walk_out := await _tour([[-10.0, y, 35.6], [-10.0, y, 32.6]])
+	await _frames(120)
+	var lifted := _astral_cutoff()
+	if not walk_out["ok"] or passage.crossings != was + 2 or passage.inside or lifted < 5000.0:
+		wrong.append("out: %s, crossings %d, inside %s, cutoff %.0f" % [walk_out["ok"], passage.crossings - was,
+			passage.inside, lifted])
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(3)
+	_check("M18d a threshold at each gap, fired once a crossing, the world's sound muffled inside", wrong.is_empty(),
+		"%s" % [wrong])
+
+
+## The astral passage's low-pass on the World bus (its cutoff, Hz); -1 if none.
+func _astral_cutoff() -> float:
+	var bus := AudioServer.get_bus_index(&"World")
+	if bus < 0:
+		return -1.0
+	for i in AudioServer.get_bus_effect_count(bus):
+		var effect := AudioServer.get_bus_effect(bus, i)
+		if effect is AudioEffectLowPassFilter and effect.resource_name == "astral":
+			return effect.cutoff_hz
+	return -1.0
 
 
 ## M18e: the presences far off in the void, never near the way (8 m and more), drawn only through its windows: the

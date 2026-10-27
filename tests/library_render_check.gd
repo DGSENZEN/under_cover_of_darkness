@@ -26,6 +26,10 @@ func _ready() -> void:
 		await _pasaje()
 		get_tree().quit()
 		return
+	if "--astral" in OS.get_cmdline_user_args():
+		await _astral()
+		get_tree().quit()
+		return
 
 	var shop: Node3D = SHOP.instantiate()
 	add_child(shop)
@@ -87,6 +91,22 @@ func _pasaje() -> void:
 	print("render: the Pasaje frame %.2f ms CPU %.2f ms; the candle lane frame %.2f ms CPU %.2f ms (%.2f times)"
 		% [ours.x, ours.y, theirs.x, theirs.y, ours.x / maxf(theirs.x, 0.001)])
 	print("%s  the Pasaje's frames take no more than 1.25 times the candle lane's, drawn   [%.2f vs %.2f ms]"
+		% ["PASS" if ours.x > 0.0 and theirs.x > 0.0 and ours.x <= 1.25 * theirs.x else "FAIL", ours.x, theirs.x])
+
+
+## (-- --astral) The north astral passage (docs/superpowers/plans/2026-10-26-astral-passages.md, Task 6): three eyes
+## along it against the candle lane's own three, in the same map and run; no more than 1.25 times the lane's frame.
+func _astral() -> void:
+	var map: Node3D = METRO.instantiate()
+	add_child(map)
+	await _frames(120)
+	var lane: Node3D = map.get_node("candle_lane")
+	var ours: Vector2 = await _measure(map, [Vector3(-10.0, -9.3, 36.0), Vector3(-9.5, -9.3, 44.0), Vector3(-9.0, -9.3, 52.0)])
+	var theirs: Vector2 = await _measure(map, [Vector3(-12.0, 1.7, 1.1), Vector3(0.0, 1.7, 1.1), Vector3(12.0, 1.7, 1.1)].map(
+		func(p): return lane.to_global(p)))
+	print("render: the astral passage frame %.2f ms CPU %.2f ms; the candle lane frame %.2f ms CPU %.2f ms (%.2f times)"
+		% [ours.x, ours.y, theirs.x, theirs.y, ours.x / maxf(theirs.x, 0.001)])
+	print("%s  the astral passage's frames take no more than 1.25 times the candle lane's, drawn   [%.2f vs %.2f ms]"
 		% ["PASS" if ours.x > 0.0 and theirs.x > 0.0 and ours.x <= 1.25 * theirs.x else "FAIL", ours.x, theirs.x])
 
 
