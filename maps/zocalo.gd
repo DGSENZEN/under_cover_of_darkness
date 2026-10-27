@@ -48,6 +48,8 @@ var _night: Environment
 
 
 func _ready() -> void:
+	# Saved and loaded in play (SaveGame: quicksave, the autosave on arriving).
+	add_to_group(&"game_map")
 	# Saves itself (SaveGame); absent when a tool runs the script alone.
 	var save := get_node_or_null("/root/SaveGame")
 

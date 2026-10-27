@@ -33,6 +33,8 @@ var lamps: Array[OmniLight3D] = []
 
 
 func _ready() -> void:
+	# Saved and loaded in play (SaveGame: quicksave, the autosave on arriving).
+	add_to_group(&"game_map")
 	reset_physics_interpolation.call_deferred()
 	plan = JSON.parse_string(FileAccess.get_file_as_string(PLAN))
 	var taken := []

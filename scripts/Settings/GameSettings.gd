@@ -72,7 +72,7 @@ const BUSES := {
 ## The game's actions the player may rebind, in the order the page lists them.
 const ACTIONS: Array[StringName] = [&"move_forward", &"move_back", &"move_left", &"move_right", &"jump", &"sprint",
 		&"crouch", &"frob", &"inventory", &"throw", &"block", &"kick", &"dodge", &"lean_left", &"lean_right",
-		&"belt_next", &"belt_prev"]
+		&"belt_next", &"belt_prev", &"quick_save", &"quick_load"]
 
 ## Tells the scene's pieces a setting changed: changed(key). Connect a node's
 ## method (it lets go when the node is freed); a lambda left connected is

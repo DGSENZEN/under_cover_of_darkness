@@ -14,6 +14,10 @@ extends Node
 
 const SaveFiles := preload("res://scripts/Save/SaveFiles.gd")
 const SaveMigrations := preload("res://scripts/Save/SaveMigrations.gd")
+const SaveWords := preload("res://scripts/Save/SaveWords.gd")
+const ArtLoading := preload("res://scripts/UI/ArtLoadingScreen.gd")
+## How long the HUD's notes about saving stay up (s).
+const NOTE_FOR := 1.5
 
 signal saved(run_id: String, slot: String, error: Error)
 signal loaded(run_id: String, slot: String)
@@ -36,10 +40,52 @@ var last_error := ""
 var _registered: Array[Node] = []
 var _gone_scene: Node = null
 var _holds := {}
+## Saves asked for and waiting until saving is allowed: [{kind, named, slot}].
+var _waiting: Array[Dictionary] = []
+## A save is being gathered or written (one at a time).
+var _saving := false
+## The scene now came in by a load (no autosave for arriving in it).
+var _arrived_by_load := false
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().scene_changed.connect(_on_scene_changed)
+
+
+func _process(_delta: float) -> void:
+	if not _waiting.is_empty() and not _saving and can_save():
+		var asked: Dictionary = _waiting.pop_front()
+		_save_now(asked["kind"], asked["named"], asked["slot"])
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not _in_game_map():
+		return
+
+	if InputMap.has_action(&"quick_save") and event.is_action_pressed(&"quick_save"):
+		get_viewport().set_input_as_handled()
+		request_save(&"quick")
+	elif InputMap.has_action(&"quick_load") and event.is_action_pressed(&"quick_load"):
+		get_viewport().set_input_as_handled()
+		quickload()
+
+
+## The current scene is a map of the game (not a gym or the menu).
+func _in_game_map() -> bool:
+	var scene := get_tree().current_scene
+	return scene != null and scene.is_in_group(&"game_map")
+
+
+## A new scene: a map of the game come into, not by a load, saves itself
+## once the loading cover has gone (the request waits for it).
+func _on_scene_changed() -> void:
+	var by_load := _arrived_by_load
+	_arrived_by_load = false
+	var city := _city()
+
+	if not by_load and _in_game_map() and city != null and city.run_id != "":
+		request_save(&"auto")
 
 
 # Who saves
@@ -200,7 +246,158 @@ func _states(scene: Node) -> Dictionary:
 	return states
 
 
+## A save of `kind` (&"quick", &"auto" or &"named"; `named` its name, `slot`
+## one to write over, else the kind's next): now if it may be, else as soon
+## as it may (the HUD says it waits).
+func request_save(kind: StringName, named := "", slot := "") -> void:
+	if _saving or not can_save():
+		if not _waiting.any(func(w): return w["kind"] == kind and w["slot"] == slot):
+			_waiting.append({"kind": kind, "named": named, "slot": slot})
+
+		save_held.emit(&"busy" if _saving else &"not_now")
+
+		if kind != &"auto":
+			_note(SaveWords.HELD)
+
+		return
+
+	_save_now(kind, named, slot)
+
+
+## Gathers the game now; takes the picture on the next frame drawn (without
+## the HUD), or the one grabbed as the pause opened; writes off the main
+## thread; says how it went.
+func _save_now(kind: StringName, named: String, slot: String) -> void:
+	_saving = true
+	var body := gather()
+
+	if body.is_empty():
+		_saving = false
+		_note(SaveWords.FAILED)
+		saved.emit("", slot, ERR_INVALID_DATA)
+		return
+
+	var city := _city()
+
+	if city != null and city.run_id == "":
+		begin_run(city.archetype)
+
+	var run_id: String = city.run_id if city != null else ""
+	var into := slot if slot != "" else SaveFiles.next_slot(run_id, kind)
+	var scene := get_tree().current_scene
+	var header := {"version": SaveMigrations.CURRENT, "run": run_id, "slot": into, "kind": kind, "name": named, "map": scene.scene_file_path,
+		"place": SaveWords.PLACES.get(scene.scene_file_path, SaveWords.SOMEWHERE), "archetype": city.archetype if city != null else &"",
+		"date": int(Time.get_unix_time_from_system()), "played": city.played if city != null else 0.0}
+	var picture := await _picture()
+	var played: float = header["played"]
+	WorkerThreadPool.add_task(func():
+		var error := SaveFiles.write(run_id, into, header, body, picture)
+		SaveFiles.set_played(run_id, played)
+		_written.call_deferred(run_id, into, kind, error))
+
+
+func _written(run_id: String, slot: String, kind: StringName, error: Error) -> void:
+	_saving = false
+
+	if error != OK:
+		_note(SaveWords.FAILED)
+	elif kind != &"auto":
+		_note(SaveWords.SAVED)
+
+	saved.emit(run_id, slot, error)
+
+
+## The game as it was last drawn, without the HUD: a frame from the pause's
+## opening when paused, else the next frame with the HUD hidden for it. None
+## where nothing is drawn (headless).
+func _picture() -> Image:
+	if get_tree().paused:
+		return paused_frame
+
+	if DisplayServer.get_name() == "headless":
+		return null
+
+	var player := _player()
+	var hud: CanvasLayer = player.get("hud") if player != null else null
+	var was_shown := hud != null and hud.visible
+
+	if was_shown:
+		hud.visible = false
+
+	await RenderingServer.frame_post_draw
+	var image := get_viewport().get_texture().get_image()
+
+	if was_shown and is_instance_valid(hud):
+		hud.visible = true
+
+	return image
+
+
+## A short line on the player's HUD.
+func _note(text: String) -> void:
+	var player := _player()
+	var hud: Node = player.get("hud") if player != null else null
+
+	if hud != null and hud.has_method("show_caption"):
+		hud.show_caption(text, NOTE_FOR)
+
+
 # Loading
+
+## Loads the run's newest quicksave (nothing while a load is under way).
+func quickload() -> Error:
+	if loading:
+		return ERR_BUSY
+
+	var city := _city()
+	var run_id: String = city.run_id if city != null and city.run_id != "" else SaveFiles.last_run()
+	var quick := SaveFiles.saves(run_id).filter(func(s): return s["kind"] == &"quick" and s["readable"])
+
+	if quick.is_empty():
+		_note(SaveWords.NOTHING_TO_LOAD)
+		return ERR_DOES_NOT_EXIST
+
+	return await load_slot(run_id, quick[0]["slot"])
+
+
+## Loads a save: read, then its map built under the loading cover and the
+## save set on it before the game plays on (unpaused, the pause gone).
+func load_slot(run_id: String, slot: String) -> Error:
+	if loading:
+		return ERR_BUSY
+
+	var read := SaveFiles.read(SaveFiles.root().path_join(run_id).path_join(slot + ".save"))
+
+	if read.has("error"):
+		push_warning("save: %s" % read["error"])
+		_note(SaveWords.UNREADABLE)
+		return ERR_FILE_CORRUPT
+
+	loading = true
+	pending = read
+	_waiting.clear()
+	_arrived_by_load = true
+	var city := _city()
+
+	if city != null:
+		city.run_id = run_id
+
+	SaveFiles.set_last_run(run_id)
+	get_tree().paused = false
+	var cover := ArtLoading.open(get_tree())
+	cover.fade_in(0.25)
+	var error: Error = await cover.change_to(String(read["header"]["map"]))
+
+	if error != OK:
+		pending = {}
+		loading = false
+		_arrived_by_load = false
+		_note(SaveWords.UNREADABLE)
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+	return error
+
 
 ## Sets the current scene back as `body` has it, in order: the city's memory,
 ## what was gone, the things in the map, the player, the global holders.

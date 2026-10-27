@@ -23,6 +23,8 @@ const RUN_FILE := "run.cfg"
 const LAST_RUN := "last_run"
 
 static var _root := ""
+## Whether the last write() ran on the main thread (the save suite checks it never does).
+static var wrote_on_main := false
 
 
 ## Where the saves are kept; a test run (a scene under res://tests/) keeps its
@@ -238,6 +240,7 @@ static func next_slot(run_id: String, kind: StringName) -> String:
 ## <slot>.tmp, renamed over <slot>.save; then the picture, and the run as the
 ## one played last. On an error the old save is left as it was.
 static func write(run_id: String, slot: String, header: Dictionary, body: Dictionary, picture: Image) -> Error:
+	wrote_on_main = OS.get_thread_caller_id() == OS.get_main_thread_id()
 	var folder := _run_dir(run_id)
 	var error := DirAccess.make_dir_recursive_absolute(folder)
 
