@@ -38,6 +38,7 @@ import pasaje_shell  # noqa: E402
 import pasaje_stalls  # noqa: E402
 import pasaje_wares  # noqa: E402
 import pasaje_overhead  # noqa: E402
+import astral  # noqa: E402
 import common  # noqa: E402
 import gate  # noqa: E402
 
@@ -2534,6 +2535,38 @@ class PasajeWares(unittest.TestCase):
             # (Small enough for a counter or a shelf.)
             self.assertLessEqual(x1 - x0, 1.6, n)
             self.assertLessEqual(y1 - y0, 0.7, n)
+
+
+class Astral(unittest.TestCase):
+    """The astral passages' kit (tools/eclipse/astral.py; docs/superpowers/plans/2026-10-26-astral-passages.md): the
+    way's stones, each a slab with its top flat at the floor (z 0), wide enough to walk, crumbled under; closed, in
+    budget, through the gate."""
+
+    @classmethod
+    def setUpClass(cls):
+        astral.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        self.assertEqual(sorted(self.objects), sorted(astral.BUDGET))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=astral.BUDGET[n], sliver=astral.SLIVER[n])[:3], [], n)
+
+    def test_the_stones_are_walked_on_their_flat_tops(self):
+        for n in astral.STONES:
+            (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            self.assertAlmostEqual(z1, 0.0, delta=0.002, msg=n)
+            self.assertGreaterEqual(min(x1 - x0, y1 - y0), 1.2, n)
+            self.assertLessEqual(z0, -0.3, n)
+            # (Its top one flat face, nearly all of its outline.)
+            top = [v for v in _world(self.objects[n]) if v[2] > -0.002]
+            self.assertGreaterEqual(len(top), 6, n)
 
 
 class PasajeOverhead(unittest.TestCase):

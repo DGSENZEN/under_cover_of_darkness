@@ -158,6 +158,49 @@ func _astral() -> void:
 		_check("M18a the stretch's box gone, the void behind its windows", false, "no astral_north")
 		return
 	await _void(passage)
+	await _way(passage)
+
+
+## M18b: the way walked from the stairs to the market's mouth, and along its branch to the cistern lane; walked off
+## (straight at the void for 2 s), the walker is held at its edge.
+func _way(passage: Node3D) -> void:
+	var paths: Array = passage.way
+	var wrong := []
+	if paths.size() < 2 or passage.get("stones") == null or passage.stones.size() < 15:
+		wrong.append("%d paths, %s stones" % [paths.size(), passage.get("stones").size() if passage.get("stones") else 0])
+	else:
+		var main: Array = Array(paths[0]).map(func(p): return [p.x, p.y, p.z])
+		var through := await _tour(main, true)
+		if not through["ok"]:
+			wrong.append("the way through: %s" % through)
+		var branch: Array = Array(paths[1]).map(func(p): return [p.x, p.y, p.z])
+		var aside := await _tour(branch, true)
+		if not aside["ok"]:
+			wrong.append("the branch: %s" % aside)
+		# Off the way, at right angles, both sides.
+		for side in [1.0, -1.0]:
+			var player: CharacterBody3D = map.player
+			player.global_position = paths[0][2] + Vector3(0.0, 1.05, 0.0)
+			player.velocity = Vector3.ZERO
+			await _frames(10)
+			player.rotation.y = atan2(-side, 0.0)
+			Input.action_press("move_forward")
+			for i in 120:
+				await get_tree().physics_frame
+			Input.action_release("move_forward")
+			await _frames(6)
+			var off := INF
+			var at := player.global_position
+			for line: PackedVector3Array in paths:
+				for i in line.size() - 1:
+					var p := Geometry3D.get_closest_point_to_segment(Vector3(at.x, line[i].y, at.z), line[i], line[i + 1])
+					off = minf(off, Vector2(p.x - at.x, p.z - at.z).length())
+			if off > passage.HALF_WAY + 0.1:
+				wrong.append("walked %s off the way: %.2f m" % ["east" if side > 0 else "west", off])
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(3)
+	_check("M18b the way walkable mouth to mouth and to the cistern lane, and nowhere off it", wrong.is_empty(),
+		"%s" % [wrong])
 
 
 ## M18a: the stretch's greybox unseen but still solid; windows over its walls, ceiling and floor but for its gaps (to

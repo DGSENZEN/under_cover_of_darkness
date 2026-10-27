@@ -12,6 +12,13 @@ const Layers := preload("res://scripts/Visual/Layers.gd")
 const WINDOW := preload("res://scripts/Visual/astral_window.gdshader")
 const SKY := preload("res://scripts/Visual/astral_sky.gdshader")
 const VEIL := preload("res://scripts/Visual/astral_veil.gdshader")
+const STONE := preload("res://scripts/Visual/astral_stone.gdshader")
+const KIT := "res://assets/eclipse/kit/astral.glb"
+const STONES := ["way_stone_a", "way_stone_b", "way_stone_c"]
+## How far apart the way's stones lie along it (m); how far from its line the walker may go (m: the way 1.5 m wide
+## with the walker's own half metre either side); the landings across its ends' gaps.
+const STONE_EVERY := 1.1
+const HALF_WAY := 0.75
 ## How far below the floor the floor's window lies (the way's stones over it hide it), and the walls' windows reach.
 const BELOW := 0.6
 ## The sky's sphere round the passage's middle (m).
@@ -72,8 +79,12 @@ func _ready() -> void:
 		greybox.visible = false
 	_windows()
 	_sky()
+	_landings()
+	_stones()
 	_veils()
 	_motes()
+	# (Held on the way after the walker has moved this frame.)
+	process_physics_priority = 10
 
 
 ## How strongly it shows `t` (share from the market's mouth) along.
@@ -87,6 +98,89 @@ func _process(_delta: float) -> void:
 	var at := walker.global_position
 	for veil in veils:
 		(veil.get_surface_override_material(0) as ShaderMaterial).set_shader_parameter(&"walker", at)
+
+
+## The walker held on the way: off it by more than HALF_WAY inside the passage, set back to its edge, their going
+## outward stopped (as a wall would).
+func _physics_process(_delta: float) -> void:
+	if walker == null or not is_instance_valid(walker) or way.is_empty():
+		return
+	var at := walker.global_position
+	if at.x < bounds.position.x or at.x > bounds.end.x or at.z < bounds.position.z or at.z > bounds.end.z \
+			or at.y < bounds.position.y - 1.0 or at.y > bounds.end.y:
+		return
+	var nearest := _nearest(at)
+	var out := Vector2(at.x - nearest.x, at.z - nearest.z)
+	if out.length() <= HALF_WAY:
+		return
+	var edge := out.normalized() * HALF_WAY
+	walker.global_position = Vector3(nearest.x + edge.x, at.y, nearest.z + edge.y)
+	if walker is CharacterBody3D:
+		var body := walker as CharacterBody3D
+		var flat := Vector2(body.velocity.x, body.velocity.z)
+		var outward := out.normalized()
+		var going := flat.dot(outward)
+		if going > 0.0:
+			flat -= outward * going
+			body.velocity = Vector3(flat.x, body.velocity.y, flat.y)
+
+
+## The nearest point of the way (its polylines, on the floor) to `at`, in x-z.
+func _nearest(at: Vector3) -> Vector3:
+	var best := Vector3.INF
+	var best_d := INF
+	for line: PackedVector3Array in way:
+		for i in line.size() - 1:
+			var p := Geometry3D.get_closest_point_to_segment(Vector3(at.x, line[i].y, at.z), line[i], line[i + 1])
+			var d := Vector2(p.x - at.x, p.z - at.z).length()
+			if d < best_d:
+				best_d = d
+				best = p
+	return best
+
+
+## Landings across its ends' gaps (the stairs', the market's mouth): the way as wide as the gap there, so the walker
+## steps in anywhere and is on it.
+func _landings() -> void:
+	if way.is_empty():
+		return
+	var y: float = way[0][0].y
+	for gap: Dictionary in gaps:
+		var a: Vector2 = gap["a"]
+		var b: Vector2 = gap["b"]
+		# (Only the gaps in its ends, across the corridor: a side gap's branch is its own way.)
+		if absf(a.y - b.y) > 0.05:
+			continue
+		var inward := 0.6 if absf(a.y - bounds.position.z) < 0.05 else -0.6
+		var lo := minf(a.x, b.x) + HALF_WAY
+		var hi := maxf(a.x, b.x) - HALF_WAY
+		if hi > lo:
+			way.append(PackedVector3Array([Vector3(lo, y, a.y + inward), Vector3(hi, y, a.y + inward)]))
+
+
+## The way's stones along it, every STONE_EVERY, each a little turned and sized, their tops at the floor.
+func _stones() -> void:
+	if way.is_empty() or not ResourceLoader.exists(KIT):
+		return
+	var kit := SetKit.kit(KIT)
+	var look := ShaderMaterial.new()
+	look.shader = STONE
+	look.set_shader_parameter(&"atlas", SetKit.painted(["astral.png", "astral_base.png"]))
+	look.set_shader_parameter(&"noise", Vfx.noise_3d())
+	var k := 0
+	for line: PackedVector3Array in way:
+		for i in line.size() - 1:
+			var a := line[i]
+			var b := line[i + 1]
+			var count := maxi(int(ceil(a.distance_to(b) / STONE_EVERY)), 1)
+			for j in count:
+				var at := a.lerp(b, (j + 0.5) / count)
+				var stone: MeshInstance3D = SetKit.place(self, kit[STONES[k % STONES.size()]], look, "stone", at,
+					fposmod(k * 2.39, TAU), false)
+				stone.material_override = look
+				stone.scale = Vector3(1.0 + 0.12 * sin(k * 1.7), 1.0, 0.9 + 0.1 * cos(k * 2.3))
+				stones.append(stone)
+				k += 1
 
 
 ## The windows where its walls, ceiling and floor were: each wall cut round its gaps (a run either side, a lintel over),
