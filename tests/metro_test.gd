@@ -168,6 +168,7 @@ func _astral() -> void:
 	await _gates(passage)
 	_detail(passage)
 	_vast(passage)
+	_smooth(passage)
 	await _plane(passage)
 	await _glimpses(passage)
 	await _south()
@@ -240,6 +241,21 @@ func _vast(passage: Node3D) -> void:
 		wrong.append("the rivers reach %.0f m" % reach)
 	_check("M18i the deep vast: colossi far out, the rivers running on far past its ends", wrong.is_empty(),
 		"%s" % [wrong.slice(0, 5)])
+
+
+## M18l: what the passage moves every frame (its gates' rings and arch stones, its fragments, its presences, its
+## colossi) moves without physics interpolation: moved outside the physics step, interpolated it judders (the jitter
+## seen at the gates).
+func _smooth(passage: Node3D) -> void:
+	var judder := []
+	var moving: Array = passage.fragments + passage.presences + passage.colossi
+	for gate: Node3D in passage.thresholds:
+		moving += gate.find_children("ring*", "Node3D", true, false) + gate.find_children("arch*", "Node3D", true, false)
+	for node: Node3D in moving:
+		if node.is_physics_interpolated():
+			judder.append(node.name)
+	_check("M18l the passage's moving parts move without physics interpolation (no judder)", judder.is_empty() \
+		and moving.size() > 20, "%d moving, interpolated: %s" % [moving.size(), judder.slice(0, 5)])
 
 
 ## M18j: the shift of planes: the plane's own look over the screen, none of it outside, eased in inside (0.8 and more

@@ -7,8 +7,7 @@ extends Node3D
 ## marigold the dead): its painted sky (astral_sky.gdshader), the city's eclipse seen from the other side, rivers of
 ## the dead flowing toward the market, the script's glyphs as constellations lit one by one as the walker goes; the
 ## city's fragments and the presences drifting in it (the feathered serpent, eyes in cracks in the dark, the shades,
-## the hand). Veils of pale light across the way part round the walker (astral_veil.gdshader); motes drift toward the
-## market; each gap a ward-gate's vortex. Our own effects: no lights.
+## the hand). Motes drift toward the market; each gap a ward-gate's vortex. Our own effects: no lights.
 ## Set up by `make` (maps/metro.gd), in the map's frame.
 
 const Layers := preload("res://scripts/Visual/Layers.gd")
@@ -16,7 +15,6 @@ const WINDOW := preload("res://scripts/Visual/astral_window.gdshader")
 ## The void marked round the gates and past the gaps (what lies in its plane over it leans toward the eye).
 const MARK := preload("res://scripts/Visual/astral_mark.gdshader")
 const SKY := preload("res://scripts/Visual/astral_sky.gdshader")
-const VEIL := preload("res://scripts/Visual/astral_veil.gdshader")
 const STONE := preload("res://scripts/Visual/astral_stone.gdshader")
 const KIT := "res://assets/eclipse/kit/astral.glb"
 const STONES := ["way_stone_a", "way_stone_b", "way_stone_c"]
@@ -161,8 +159,6 @@ const BELOW := 0.6
 ## The sky's sphere round the passage's middle (m); the brush sheet breaking its clouds.
 const SKY_RADIUS := 45.0
 const BRUSH := "res://textures/brushes/brush_02.png"
-## Where along the passage (its share from the market's mouth) the veils hang.
-const VEILS_AT := [0.25, 0.5, 0.75]
 ## The motes drifting toward the market: how many, how long each lives (s), their pace (m/s).
 const MOTES := 180
 const MOTE_LIFE := 14.0
@@ -198,7 +194,6 @@ var rest: MeshInstance3D
 var glimpses: Array[Node3D] = []
 ## Which constellation is lit (the one beside the walker along the passage); -1 with the walker outside.
 var lit_constellation := -1
-var veils: Array[MeshInstance3D] = []
 var motes: GPUParticles3D
 ## Its crossings (each time the walker passes a threshold) and whether the walker is inside.
 var crossings := 0
@@ -229,6 +224,8 @@ func _ready() -> void:
 	_span = bounds.size.z
 	_mouth = Vector3(middle.x, bounds.position.y, bounds.end.z if mouth_end > 0 else bounds.position.z)
 	_away = Vector3(0.0, 0.0, -float(mouth_end))
+	# (All it moves it moves each frame, not in the physics step: interpolated, it would judder.)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	if greybox != null:
 		greybox.visible = false
 		rest = _rest_of(greybox)
@@ -243,7 +240,6 @@ func _ready() -> void:
 	_fragments()
 	_presences()
 	_thresholds()
-	_veils()
 	_motes()
 	_glimpses()
 	_plane()
@@ -300,11 +296,6 @@ func _cut(poly: Array, at: float, past: bool) -> Array:
 	return out
 
 
-## How strongly it shows `t` (share from the market's mouth) along.
-func grown(t: float) -> float:
-	return smoothstep(1.0, 0.55, t) * (0.45 + 0.55 * smoothstep(0.0, 0.18, t))
-
-
 func _process(delta: float) -> void:
 	_clock += delta
 	for piece in fragments:
@@ -330,8 +321,6 @@ func _process(delta: float) -> void:
 	if walker == null or not is_instance_valid(walker):
 		return
 	var at := walker.global_position
-	for veil in veils:
-		(veil.get_surface_override_material(0) as ShaderMaterial).set_shader_parameter(&"walker", at)
 	for gate in thresholds:
 		for part: Node in gate.get_children():
 			if part is MeshInstance3D and (part as MeshInstance3D).material_override is ShaderMaterial:
@@ -1775,25 +1764,6 @@ func _show_glimpses(at: Vector3, delta: float) -> void:
 			look.set_shader_parameter(&"shown", eased)
 		if glimpse.has_meta("light"):
 			(glimpse.get_meta("light") as ShaderMaterial).set_shader_parameter(&"lit", eased)
-
-
-## The veils across the way.
-func _veils() -> void:
-	for t: float in VEILS_AT:
-		var look := ShaderMaterial.new()
-		look.shader = VEIL
-		look.set_shader_parameter(&"noise", Vfx.noise_3d())
-		look.set_shader_parameter(&"strength", grown(t))
-		var quad := QuadMesh.new()
-		quad.size = Vector2(bounds.size.x - 0.3, bounds.size.y - 0.1)
-		var veil := MeshInstance3D.new()
-		veil.name = "veil"
-		veil.mesh = quad
-		veil.set_surface_override_material(0, look)
-		veil.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(veil)
-		veil.position = _mouth + _away * t * _span + Vector3(0.0, (bounds.size.y - 0.1) / 2.0, 0.0)
-		veils.append(veil)
 
 
 ## The motes, drifting toward the market.
