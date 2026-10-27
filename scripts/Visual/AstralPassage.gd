@@ -64,16 +64,30 @@ const SOCKET := Vector2(1.35, 1.6)
 const MEMBRANE := preload("res://scripts/Visual/astral_membrane.gdshader")
 const RING := preload("res://scripts/Visual/astral_ring.gdshader")
 const SPIRAL := preload("res://scripts/Visual/astral_spiral.gdshader")
-const WARP := preload("res://scripts/Visual/astral_warp.gdshader")
+const PLANE := preload("res://scripts/Visual/astral_plane.gdshader")
 ## The ward-gates: their three rings' sheet (tools/textures/astral_glyphs.py), the rings' depths (m off the gate's
 ## face) and turns (radians a second, against each other); the vortex's circle (its share of the gap's shorter side);
 ## its embers and spiralling motes (how many, how long each lives, s).
 const RINGS_SHEET := "astral_rings.png"
 const RING_DEPTHS := [0.0, -0.15, 0.15]
 const RING_TURN := [0.11, -0.19, 0.07]
-const GATE_CIRCLE := 0.47
-## The void round a gate's circle starts this far out (a share of its circle's radius: past its burning rim).
-const GATE_HOLE := 1.16
+const GATE_CIRCLE := 0.34
+## The void round a gate's circle starts at its rim (a share of its circle's radius), its fire burning over it; the
+## sheet's outer ring's rim (its share of the cell).
+const GATE_HOLE := 1.0
+const RING_SHEET_RIM := 0.48
+const TEAR_EDGE := preload("res://scripts/Visual/astral_tear.gdshader")
+## Each gate's arch: how far out round its circle (a share of its rim), its stones' size (along, across, deep, m), how
+## far apart (m), how far they float (m).
+const ARCH := preload("res://scripts/Visual/astral_arch.gdshader")
+const ARCH_OUT := 1.24
+const ARCH_STONE := Vector3(0.36, 0.34, 0.5)
+const ARCH_EVERY := 0.44
+const ARCH_FLOAT := 0.035
+## The void bleeding out past its gaps: how far its tongues reach (m), how far off the world's surfaces (m, clear of
+## them).
+const BLEED := 1.6
+const BLEED_OFF := 0.03
 const EMBERS := 70
 const EMBER_LIFE := 1.8
 const SPIRAL_MOTES := 90
@@ -83,24 +97,55 @@ const RIVER := preload("res://scripts/Visual/astral_river.gdshader")
 const STAR := preload("res://scripts/Visual/astral_star.gdshader")
 ## The eclipse: how far off (m), how high (degrees over the horizon), how far round from straight ahead toward the
 ## market (degrees, west), its size (m).
-const ECLIPSE_FAR := 38.0
+const ECLIPSE_FAR := 300.0
 const ECLIPSE_HIGH := 25.0
 const ECLIPSE_ROUND := 30.0
-const ECLIPSE_SIZE := 30.0
+const ECLIPSE_SIZE := 236.0
 ## The rivers of the dead: [how far under or over the floor (m), how far out east (m), how wide (m), its tilt
 ## (radians about its flow), its sway (m)]; the first under the way itself, following it.
 const RIVERS := [[-4.5, 0.0, 3.0, 0.0, 0.8], [12.0, -6.0, 4.0, 0.35, 5.0], [1.0, 16.0, 3.5, 0.8, 2.0]]
+## How far they run on past the passage's ends (m), to the deep's horizon either way.
+const RIVER_BEYOND := 140.0
+## The colossi far out in the deep, for its size: the sun stone adrift (its radius, thickness, [how far, degrees round
+## from ahead toward the market (west negative), degrees up]); the city hanging upside down overhead (its pieces' size,
+## where); the stair spiralling down into the abyss (its steps, their drop, the spiral's radius, where).
+const COLOSSUS := preload("res://scripts/Visual/astral_colossus.gdshader")
+const SUN_STONE := Vector2(70.0, 10.0)
+const SUN_STONE_AT := Vector3(420.0, -65.0, 14.0)
+const CITY_SCALE := 14.0
+const CITY_AT := Vector3(260.0, 55.0, 32.0)
+const STAIR_STEPS := 110
+const STAIR_DROP := 1.7
+const STAIR_ROUND := 26.0
+const STAIR_AT := Vector3(220.0, 125.0, -30.0)
 ## The constellations: the glyphs' strokes (tools/textures/astral_glyphs.py), their size (m), how far out (m), how
 ## fast the lit one brightens and the rest fade (a share a second; its threads drawn in as it does), how fast the
 ## flare of its lighting fades (a share a second).
 const CONSTELLATIONS_FILE := "res://textures/painted/underground/astral_constellations.json"
-const CONSTELLATION_SIZE := 8.5
-const CONSTELLATION_OUT := 10.0
+const CONSTELLATION_SIZE := 22.0
+const CONSTELLATION_OUT := 55.0
 const LIT_EASE := 0.8
 const FLARE_FADE := 1.2
-## The warp of a crossing: how long (s). The muffle inside: the World and Ambience buses' low-pass, its cutoff inside
-## and out (Hz), how fast it eases (a share a second, in log).
-const WARP_TIME := 0.6
+## The glimpses from spot to spot: [its name, where along the passage it shows (a share from its far end)]; how near
+## the walker must be to it (a share), how fast it forms and goes (a share a second). The echo of the way hung upside
+## down overhead (how far up, m); the band of starry eyes across the deep (how many, how far, its arch's span in
+## degrees); the great door standing in the deep ahead (its size, [how far, degrees round, degrees up]).
+const GLIMPSES := [["echo", 0.15], ["star_skirt", 0.5], ["great_door", 0.85]]
+const GLIMPSE_NEAR := 0.17
+const GLIMPSE_EASE := 0.6
+const ECHO_UP := 34.0
+const SKIRT_EYES := 36
+const SKIRT_FAR := 120.0
+const SKIRT_SPAN := 150.0
+const DOOR_SCALE := 26.0
+const DOOR_AT := Vector3(170.0, 60.0, 9.0)
+## The plane over the eye: its canvas layer (under the HUD), how fast it eases in inside and out outside (a share a
+## second), how long the breath of a crossing takes to fall away (s). The muffle inside: the World and Ambience buses'
+## low-pass, its cutoff inside and out (Hz), how fast it eases (a share a second, in log).
+const PLANE_LAYER := -5
+const PLANE_IN := 1.0
+const PLANE_OUT := 0.7
+const SHIFT_TIME := 1.1
 const MUFFLE_BUSES := [&"World", &"Ambience"]
 const MUFFLE := Vector2(900.0, 20000.0)
 const MUFFLE_EASE := 2.5
@@ -135,6 +180,13 @@ var thresholds: Array[Node3D] = []
 var eclipse: MeshInstance3D
 var rivers: Array[MeshInstance3D] = []
 var constellations: Array[Node3D] = []
+var colossi: Array[Node3D] = []
+## The void bled out past the market's mouth (windows and their burning edges).
+var bleeds: Array[MeshInstance3D] = []
+## The plane over the eye (astral_plane.gdshader).
+var plane_shift: CanvasLayer
+## The glimpses from spot to spot (each its meta "at" and "shown", 0..1).
+var glimpses: Array[Node3D] = []
 ## Which constellation is lit (the one beside the walker along the passage); -1 with the walker outside.
 var lit_constellation := -1
 var veils: Array[MeshInstance3D] = []
@@ -172,6 +224,7 @@ func _ready() -> void:
 	_windows()
 	_sky()
 	_eclipse()
+	_colossi()
 	_rivers()
 	_constellations()
 	_landings()
@@ -181,6 +234,8 @@ func _ready() -> void:
 	_thresholds()
 	_veils()
 	_motes()
+	_glimpses()
+	_plane()
 	# (Held on the way after the walker has moved this frame.)
 	process_physics_priority = 10
 
@@ -197,12 +252,21 @@ func _process(delta: float) -> void:
 		var home: Vector3 = piece.get_meta("home")
 		piece.position.y = home.y + FRAGMENT_BOB.x * sin(TAU * FRAGMENT_BOB.y * _clock + float(piece.get_meta("phase")))
 	_drift(delta)
+	for colossus in colossi:
+		colossus.rotate_object_local(Vector3.UP, (colossus.get_meta("turn") as Vector3).y * delta)
 	# The gates' rings turning against each other.
 	for gate in thresholds:
 		for k in RING_DEPTHS.size():
 			var ring := gate.get_node_or_null("ring%d" % (k + 1)) as Node3D
 			if ring != null:
 				ring.rotation.z = wrapf(ring.rotation.z + float(RING_TURN[k]) * delta, -PI, PI)
+		# Its arch's stones floating, each on its own slow breath.
+		for stone: Node in gate.get_children():
+			if stone.has_meta("home"):
+				var home: Vector3 = stone.get_meta("home")
+				var phase: float = stone.get_meta("phase")
+				(stone as Node3D).position = home + Vector3(home.x, home.y, 0.0).normalized() * ARCH_FLOAT * sin(_clock * 0.7 + phase) \
+					+ Vector3(0.0, 0.0, ARCH_FLOAT * sin(_clock * 0.5 + phase * 1.3))
 	if walker == null or not is_instance_valid(walker):
 		return
 	var at := walker.global_position
@@ -213,6 +277,7 @@ func _process(delta: float) -> void:
 			if part is MeshInstance3D and (part as MeshInstance3D).material_override is ShaderMaterial:
 				((part as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter(&"walker", at)
 	_light_constellations(at, delta)
+	_show_glimpses(at, delta)
 	# Crossing a threshold: in or out, the warp; inside, the world's sound eased dull.
 	var now := at.x > bounds.position.x and at.x < bounds.end.x and at.z > bounds.position.z and at.z < bounds.end.z \
 		and at.y > bounds.position.y - 1.0 and at.y < bounds.end.y
@@ -221,6 +286,7 @@ func _process(delta: float) -> void:
 		crossings += 1
 		_warp()
 	_muffle(delta)
+	_ease_plane(delta)
 
 
 ## The walker held on the way: off it by more than HALF_WAY inside the passage, set back to its edge, their going
@@ -514,7 +580,8 @@ func _thresholds() -> void:
 		look.set_shader_parameter(&"size", size)
 		look.set_shader_parameter(&"circle", GATE_CIRCLE)
 		_gate_quad(gate, "vortex", size, look)
-		# Its rings, each the size of the shorter side (the sheet's rings sit within it).
+		# Its rings, sized so the sheet's outer ring sits at its circle's rim.
+		var rim := side * GATE_CIRCLE
 		for k in RING_DEPTHS.size():
 			var ring_look := ShaderMaterial.new()
 			ring_look.shader = RING
@@ -522,19 +589,153 @@ func _thresholds() -> void:
 			ring_look.set_shader_parameter(&"cell", float(k))
 			ring_look.set_shader_parameter(&"seed", k * 1.7 + gate.position.z)
 			ring_look.render_priority = 1
-			var ring := _gate_quad(gate, "ring%d" % (k + 1), Vector2(side, side), ring_look)
+			var ring := _gate_quad(gate, "ring%d" % (k + 1), Vector2.ONE * rim / RING_SHEET_RIM, ring_look)
 			ring.position.z = RING_DEPTHS[k]
 			ring.rotation.z = k * 0.9
-		var rim := side * GATE_CIRCLE
-		# Round its circle, the void: a window with the circle (and its burning rim) cut out of it.
+		# Round its circle, the void: a window with the circle cut out of it (from inside one with the passage's own
+		# void, so the gate floats in it); past it, the void bleeding out over the world's surfaces.
 		var frame_look := ShaderMaterial.new()
 		frame_look.shader = WINDOW
+		frame_look.set_shader_parameter(&"noise", Vfx.noise_3d())
 		frame_look.set_shader_parameter(&"hole", rim * GATE_HOLE)
 		frame_look.set_shader_parameter(&"size", size)
 		_gate_quad(gate, "frame", size, frame_look)
+		_arch(gate, rim, size, sheet)
 		gate.add_child(_embers(rim))
 		gate.add_child(_spiral(rim * 0.95))
 		thresholds.append(gate)
+		_bleed(gaps.find(gap), gap)
+
+
+## The burning edge's look over a torn window (astral_tear.gdshader), with the window's `params`.
+func _tear_look(params: Dictionary) -> ShaderMaterial:
+	var look := ShaderMaterial.new()
+	look.shader = TEAR_EDGE
+	look.render_priority = 2
+	look.set_shader_parameter(&"noise", Vfx.noise_3d())
+	for key in params:
+		look.set_shader_parameter(key, params[key])
+	return look
+
+
+## The arch round a gate's circle (`rim` m round, in its gap `size`): carved stones floating apart, up its jambs from
+## the floor and over its top, a keystone at its crown; drawn in the void (astral_arch.gdshader).
+func _arch(gate: Node3D, rim: float, size: Vector2, sheet: Texture2D) -> void:
+	var out := rim * ARCH_OUT
+	var base := -size.y / 2.0 + ARCH_STONE.y / 2.0
+	# Its line: up the left jamb, over the top, down the right (in the gate's face, x-y).
+	var line := PackedVector2Array([Vector2(-out, base)])
+	for k in 25:
+		var a := PI - PI * k / 24.0
+		line.append(Vector2(cos(a), sin(a)) * out)
+	line.append(Vector2(out, base))
+	var total := 0.0
+	for i in line.size() - 1:
+		total += line[i].distance_to(line[i + 1])
+	var count := int(total / ARCH_EVERY)
+	for k in count + 1:
+		var s := float(k) / count
+		var at := _on_line(line, s * total)
+		var ahead := (_on_line(line, minf(s * total + 0.05, total)) - _on_line(line, maxf(s * total - 0.05, 0.0))).normalized()
+		var keystone := absf(s - 0.5) < 0.5 / count
+		var box := BoxMesh.new()
+		box.size = ARCH_STONE * (1.35 if keystone else 1.0)
+		var look := ShaderMaterial.new()
+		look.shader = ARCH
+		look.render_priority = -3
+		look.set_shader_parameter(&"rings", sheet)
+		look.set_shader_parameter(&"noise", Vfx.noise_3d())
+		look.set_shader_parameter(&"gate_at", gate.global_position)
+		look.set_shader_parameter(&"place", s)
+		look.set_shader_parameter(&"keystone", keystone)
+		look.set_shader_parameter(&"stone", Color(0.12, 0.1, 0.09).lerp(Color(0.16, 0.13, 0.11), fposmod(k * 0.37, 1.0)))
+		var stone := MeshInstance3D.new()
+		stone.name = "arch%d" % k
+		stone.mesh = box
+		stone.material_override = look
+		stone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		gate.add_child(stone)
+		# (Each a little apart from its fellows and turned, floating.)
+		stone.position = Vector3(at.x, at.y, 0.0)
+		stone.rotation.z = atan2(ahead.y, ahead.x) + sin(k * 2.3) * 0.08
+		stone.rotation.x = sin(k * 1.7) * 0.06
+		stone.set_meta("home", stone.position)
+		stone.set_meta("phase", k * 0.9)
+
+
+## The point `by` m along `line`.
+func _on_line(line: PackedVector2Array, by: float) -> Vector2:
+	for i in line.size() - 1:
+		var piece := line[i].distance_to(line[i + 1])
+		if by <= piece:
+			return line[i].lerp(line[i + 1], by / piece)
+		by -= piece
+	return line[line.size() - 1]
+
+
+## The void bleeding out past gap `k` (`gap`) over the world's own surfaces beyond it, in ragged tongues spreading
+## from the gap's edges (astral_window.gdshader's bleed), burning along their edges (astral_tear.gdshader): past a
+## corridor's mouth (a gap with an "inset": how far in the world's walls stand from its edges), over the corridor's
+## floor, walls and ceiling; past a hole in a wall, over the floor below it and the wall round it.
+func _bleed(k: int, gap: Dictionary) -> void:
+	var a2: Vector2 = gap["a"]
+	var b2: Vector2 = gap["b"]
+	var y0: float = gap["y0"]
+	var y1: float = minf(float(gap["y1"]), bounds.end.y)
+	var along2 := (b2 - a2).normalized()
+	var out2 := Vector2(-along2.y, along2.x)
+	var centre := Vector2(bounds.get_center().x, bounds.get_center().z)
+	if out2.dot((a2 + b2) / 2.0 - centre) < 0.0:
+		out2 = -out2
+	var along := Vector3(along2.x, 0.0, along2.y)
+	var out := Vector3(out2.x, 0.0, out2.y)
+	var reach := BLEED * 1.5
+	var h := y1 - y0
+	# [its middle, its two axes (their lengths its size), the edge it spreads from (two points)].
+	var faces := []
+	if gap.has("inset"):
+		var inset: float = gap["inset"]
+		var a := Vector3(a2.x, 0.0, a2.y) + along * inset
+		var b := Vector3(b2.x, 0.0, b2.y) - along * inset
+		var width := a.distance_to(b)
+		var mid := (a + b) / 2.0
+		for y in [y0 + BLEED_OFF, y1 - BLEED_OFF]:
+			faces.append([mid + Vector3(0.0, y, 0.0) + out * reach / 2.0, along * width, out * reach,
+				a + Vector3(0.0, y, 0.0), b + Vector3(0.0, y, 0.0)])
+		for side in [[a, along], [b, -along]]:
+			var foot: Vector3 = side[0] + side[1] * BLEED_OFF
+			faces.append([foot + Vector3(0.0, y0 + h / 2.0, 0.0) + out * reach / 2.0, out * reach, Vector3.UP * h,
+				foot + Vector3(0.0, y0, 0.0), foot + Vector3(0.0, y1, 0.0)])
+	else:
+		var a := Vector3(a2.x, 0.0, a2.y) + out * BLEED_OFF
+		var b := Vector3(b2.x, 0.0, b2.y) + out * BLEED_OFF
+		var width := a.distance_to(b)
+		var mid := (a + b) / 2.0
+		# The floor below it.
+		faces.append([mid + Vector3(0.0, y0 + BLEED_OFF, 0.0) + out * reach / 2.0, along * (width + reach * 2.0),
+			out * reach, Vector3(a.x, y0, a.z), Vector3(b.x, y0, b.z)])
+		# The wall round it: either side of it and over it.
+		for side in [[a, -along], [b, along]]:
+			var edge: Vector3 = side[0]
+			faces.append([edge + side[1] * reach / 2.0 + Vector3(0.0, y0 + (h + reach) / 2.0, 0.0), along * reach,
+				Vector3.UP * (h + reach), edge + Vector3(0.0, y0, 0.0), edge + Vector3(0.0, y1, 0.0)])
+		faces.append([mid + Vector3(0.0, y1 + reach / 2.0, 0.0), along * width, Vector3.UP * reach,
+			a + Vector3(0.0, y1, 0.0), b + Vector3(0.0, y1, 0.0)])
+	for face: Array in faces:
+		var params := {&"bleed": BLEED, &"seg_a": face[3], &"seg_b": face[4]}
+		var look := ShaderMaterial.new()
+		look.shader = WINDOW
+		look.set_shader_parameter(&"noise", Vfx.noise_3d())
+		for key in params:
+			look.set_shader_parameter(key, params[key])
+		var u: Vector3 = face[1]
+		var v: Vector3 = face[2]
+		for piece in [_plain(look, Vector2(u.length(), v.length())), _plain(_tear_look(params), Vector2(u.length(), v.length()))]:
+			piece.name = "bleed"
+			windows.erase(piece)
+			piece.set_meta("gap", k)
+			bleeds.append(piece)
+			piece.transform = Transform3D(Basis(u.normalized(), v.normalized(), u.cross(v).normalized()), face[0])
 
 
 func _gate_quad(gate: Node3D, name: String, size: Vector2, look: Material) -> MeshInstance3D:
@@ -637,32 +838,49 @@ func _glow_quad(size: float) -> QuadMesh:
 	return quad
 
 
-var _warp_layer: CanvasLayer
-var _warp_look: ShaderMaterial
-var _warp_tween: Tween
+var _plane_look: ShaderMaterial
+var _plane_in := 0.0
+var _shift := 0.0
 
 
-## The warp of a crossing: the view swirling a moment and settling.
+## The plane over the eye (astral_plane.gdshader), under the HUD, shown only while any of it is.
+func _plane() -> void:
+	plane_shift = CanvasLayer.new()
+	plane_shift.name = "plane_shift"
+	plane_shift.layer = PLANE_LAYER
+	plane_shift.visible = false
+	add_child(plane_shift)
+	var rect := ColorRect.new()
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_plane_look = ShaderMaterial.new()
+	_plane_look.shader = PLANE
+	var flow := NoiseTexture2D.new()
+	flow.seamless = true
+	flow.width = 256
+	flow.height = 256
+	flow.noise = FastNoiseLite.new()
+	_plane_look.set_shader_parameter(&"noise", flow)
+	_plane_look.set_shader_parameter(&"strength", 0.0)
+	rect.material = _plane_look
+	plane_shift.add_child(rect)
+
+
+## The crossing of a threshold: the breath of the shift of planes.
 func _warp() -> void:
-	if _warp_layer == null:
-		_warp_layer = CanvasLayer.new()
-		_warp_layer.name = "warp"
-		_warp_layer.layer = 40
-		add_child(_warp_layer)
-		var rect := ColorRect.new()
-		rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_warp_look = ShaderMaterial.new()
-		_warp_look.shader = WARP
-		rect.material = _warp_look
-		_warp_layer.add_child(rect)
-	_warp_layer.visible = true
-	if _warp_tween != null:
-		_warp_tween.kill()
-	_warp_tween = create_tween()
-	_warp_tween.tween_method(func(s: float): _warp_look.set_shader_parameter(&"strength", sin(s * PI)), 0.0, 1.0,
-		WARP_TIME)
-	_warp_tween.tween_callback(func(): _warp_layer.visible = false)
+	_shift = 1.0
+
+
+## The plane eased in while the walker is inside, out while not; the crossing's breath falling away.
+func _ease_plane(delta: float) -> void:
+	if _plane_look == null:
+		return
+	_plane_in = move_toward(_plane_in, 1.0 if inside else 0.0, (PLANE_IN if inside else PLANE_OUT) * delta)
+	_shift = move_toward(_shift, 0.0, delta / SHIFT_TIME)
+	# (Eased: the breath sharp at first, slow to let go.)
+	_plane_look.set_shader_parameter(&"strength", smoothstep(0.0, 1.0, _plane_in))
+	_plane_look.set_shader_parameter(&"shift", _shift * _shift)
+	plane_shift.visible = _plane_in > 0.0 or _shift > 0.0
 
 
 var _muffles: Array[AudioEffectLowPassFilter] = []
@@ -1034,7 +1252,6 @@ func _sky() -> void:
 	look.shader = SKY
 	look.render_priority = -10
 	look.set_shader_parameter(&"noise", Vfx.noise_3d())
-	look.set_shader_parameter(&"centre", bounds.get_center())
 	# (The user's brush sheets, when they are here: kept out of the repository.)
 	if ResourceLoader.exists(BRUSH):
 		look.set_shader_parameter(&"brush", load(BRUSH))
@@ -1074,6 +1291,102 @@ func _eclipse() -> void:
 	eclipse.position = bounds.get_center() + (ahead * cos(high) + Vector3.UP * sin(high)) * ECLIPSE_FAR
 
 
+## Where `at` ([how far, degrees round from straight ahead toward the market, degrees up]) lies from its middle.
+func _out_in_the_deep(at: Vector3) -> Vector3:
+	var round_by := deg_to_rad(at.y)
+	var high := deg_to_rad(at.z)
+	var ahead := Vector3(sin(round_by), 0.0, cos(round_by) * float(mouth_end))
+	return bounds.get_center() + (ahead * cos(high) + Vector3.UP * sin(high)) * at.x
+
+
+## The colossi far out in the deep, turning slowly: the sun stone adrift, its wedge broken away; the city hanging
+## upside down overhead; the stair spiralling down into the abyss.
+func _colossi() -> void:
+	# The sun stone.
+	var disc := CylinderMesh.new()
+	disc.top_radius = SUN_STONE.x
+	disc.bottom_radius = SUN_STONE.x
+	disc.height = SUN_STONE.y
+	disc.radial_segments = 72
+	var look := ShaderMaterial.new()
+	look.shader = COLOSSUS
+	look.render_priority = -9
+	look.set_shader_parameter(&"rings", SetKit.painted([RINGS_SHEET], SetKit.ATLAS_DIR, true))
+	look.set_shader_parameter(&"noise", Vfx.noise_3d())
+	look.set_shader_parameter(&"radius", SUN_STONE.x)
+	look.set_shader_parameter(&"half_thick", SUN_STONE.y / 2.0)
+	look.set_shader_parameter(&"light_at", eclipse.global_position if eclipse != null else bounds.get_center() + Vector3.UP * 300.0)
+	var stone := MeshInstance3D.new()
+	stone.name = "sun_stone"
+	stone.mesh = disc
+	stone.material_override = look
+	stone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	stone.extra_cull_margin = SUN_STONE.x * 2.0
+	add_child(stone)
+	stone.position = _out_in_the_deep(SUN_STONE_AT)
+	stone.rotation = Vector3(1.15, 0.4, 0.25)
+	stone.set_meta("turn", Vector3(0.0, 0.012, 0.0))
+	colossi.append(stone)
+	# The city hanging upside down.
+	if ResourceLoader.exists(KIT):
+		var kit := SetKit.kit(KIT)
+		var city := Node3D.new()
+		city.name = "hanging_city"
+		add_child(city)
+		city.position = _out_in_the_deep(CITY_AT)
+		city.rotation = Vector3(0.0, 0.3, PI)
+		var plan := [["arch", Vector3(0, 0, 0)], ["doorway", Vector3(30, 4, -10)], ["stairs", Vector3(-28, 0, 12)],
+			["bell", Vector3(8, 22, 26)], ["lamp_post", Vector3(-12, 0, -30)], ["stall_frame", Vector3(40, -2, 28)],
+			["tile_slab", Vector3(0, -6, 0)], ["arch", Vector3(-40, 6, -6)], ["doorway", Vector3(16, 0, 40)]]
+		for k in plan.size():
+			if not kit.has(plan[k][0]):
+				continue
+			var piece := MeshInstance3D.new()
+			piece.name = "city_" + plan[k][0]
+			piece.mesh = kit[plan[k][0]]
+			piece.material_override = _far_ink(k * 1.3)
+			piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			piece.extra_cull_margin = 40.0
+			city.add_child(piece)
+			piece.position = plan[k][1]
+			piece.rotation.y = k * 0.7
+			piece.scale = Vector3.ONE * CITY_SCALE * (0.8 + 0.1 * (k % 4))
+		city.set_meta("turn", Vector3(0.0, 0.006, 0.0))
+		colossi.append(city)
+	# The stair down into the abyss.
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var step := BoxMesh.new()
+	step.size = Vector3(9.0, 1.4, 3.2)
+	for k in STAIR_STEPS:
+		var a := k * 0.16
+		var place := Transform3D(Basis(Vector3.UP, -a), Vector3(cos(a) * STAIR_ROUND, -k * STAIR_DROP, sin(a) * STAIR_ROUND))
+		tool.append_from(step, 0, place)
+	var stair := MeshInstance3D.new()
+	stair.name = "abyss_stair"
+	stair.mesh = tool.commit()
+	stair.material_override = _far_ink(7.7)
+	stair.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	stair.extra_cull_margin = 200.0
+	add_child(stair)
+	stair.position = _out_in_the_deep(STAIR_AT)
+	stair.set_meta("turn", Vector3(0.0, -0.01, 0.0))
+	colossi.append(stair)
+
+
+## The ink of what is far out in the deep: lost far more slowly into its haze, drawn behind all that is near.
+func _far_ink(seed: float) -> ShaderMaterial:
+	var look := ShaderMaterial.new()
+	look.shader = INK
+	look.render_priority = -9
+	look.set_shader_parameter(&"noise", Vfx.noise_3d())
+	look.set_shader_parameter(&"flicker_seed", seed)
+	look.set_shader_parameter(&"glow", 0.7)
+	look.set_shader_parameter(&"haze_near", 120.0)
+	look.set_shader_parameter(&"haze_far", 520.0)
+	return look
+
+
 ## The rivers of the dead, flowing toward the market: the first under the way itself, following it, the others far
 ## out over and beside the passage, each a ribbon of slow lights (astral_river.gdshader).
 func _rivers() -> void:
@@ -1088,15 +1401,15 @@ func _rivers() -> void:
 	for k in RIVERS.size():
 		var spec: Array = RIVERS[k]
 		var points := PackedVector3Array()
-		var count := 60
+		var count := 160
 		for i in count + 1:
 			var s := float(i) / count
 			var at: Vector3
 			if k == 0:
-				at = _along(line, s, 8.0)
+				at = _along(line, s, RIVER_BEYOND)
 			else:
 				at = Vector3(lerpf(bounds.position.x, bounds.end.x, s * 0.6 + 0.2), 0.0,
-					lerpf(bounds.position.z - 12.0, bounds.end.z + 12.0, s if mouth_end > 0 else 1.0 - s))
+					lerpf(bounds.position.z - RIVER_BEYOND, bounds.end.z + RIVER_BEYOND, s if mouth_end > 0 else 1.0 - s))
 			at.x += float(spec[1]) + float(spec[4]) * sin(s * TAU * 1.3 + k)
 			at.y = floor_y + float(spec[0]) + 0.6 * sin(s * TAU * 0.8 + k * 2.0)
 			points.append(at)
@@ -1203,7 +1516,7 @@ func _constellations() -> void:
 				var key := Vector2i(roundi(points[i].x * 20.0), roundi(points[i].y * 20.0))
 				if (i == 0 or i == points.size() - 1 or i % 3 == 0) and not placed.has(key):
 					placed[key] = true
-					var star := _flat(star_look, Vector2(1.5, 1.5) * (1.3 if i == 0 else 1.0))
+					var star := _flat(star_look, Vector2(3.2, 3.2) * (1.3 if i == 0 else 1.0))
 					star.name = "star%d" % n
 					group.add_child(star)
 					star.position = points[i]
@@ -1255,6 +1568,110 @@ func _light_constellations(at: Vector3, delta: float) -> void:
 		for look: ShaderMaterial in group.get_meta("looks"):
 			look.set_shader_parameter(&"lit", lit)
 			look.set_shader_parameter(&"flare", flare)
+
+
+## How far along the passage `at` is (a share from its far end toward the market's mouth).
+func _share(at: Vector3) -> float:
+	var far_z := bounds.position.z if mouth_end > 0 else bounds.end.z
+	return clampf((at.z - far_z) * float(mouth_end) / _span, 0.0, 1.0)
+
+
+## The glimpses from spot to spot, each forming out of the dark only near its spot and going back to it after: the
+## way echoed upside down overhead, a band of starry eyes opening across the deep (the codices' night), a great door
+## standing far off in the deep ahead, lit from within.
+func _glimpses() -> void:
+	for spec: Array in GLIMPSES:
+		var glimpse := Node3D.new()
+		glimpse.name = spec[0]
+		glimpse.set_meta("at", spec[1])
+		glimpse.set_meta("shown", 0.0)
+		add_child(glimpse)
+		var looks := []
+		match String(spec[0]):
+			"echo":
+				# The stones of the way upside down over it, their chequered tops toward the walker (drawn in the void:
+				# astral_arch.gdshader, its chequer and no glyphs).
+				var floor_y := bounds.position.y
+				for stone in stones:
+					var echo := MeshInstance3D.new()
+					echo.mesh = stone.mesh
+					var look := ShaderMaterial.new()
+					look.shader = ARCH
+					look.render_priority = -6
+					look.set_shader_parameter(&"noise", Vfx.noise_3d())
+					look.set_shader_parameter(&"glyphs", false)
+					look.set_shader_parameter(&"chequer", true)
+					look.set_shader_parameter(&"place", fposmod(stone.position.z * 0.37, 1.0))
+					look.set_shader_parameter(&"gate_at", stone.position + Vector3.UP * (ECHO_UP * 2.0))
+					echo.material_override = look
+					echo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					glimpse.add_child(echo)
+					echo.transform = stone.transform
+					echo.position.y = floor_y + ECHO_UP + (floor_y - stone.position.y)
+					echo.rotation.z += PI
+					looks.append(look)
+			"star_skirt":
+				var span := deg_to_rad(SKIRT_SPAN)
+				for k in SKIRT_EYES:
+					var a := -span / 2.0 + span * k / (SKIRT_EYES - 1)
+					var look := ShaderMaterial.new()
+					look.shader = EYE
+					look.render_priority = -8
+					look.set_shader_parameter(&"seed", k * 0.173)
+					look.set_shader_parameter(&"noise", Vfx.noise_3d())
+					var quad := QuadMesh.new()
+					quad.size = Vector2(1.6, 0.8) * (4.0 + 2.0 * fposmod(k * 0.61, 1.0))
+					var eye := MeshInstance3D.new()
+					eye.name = "star_eye"
+					eye.mesh = quad
+					eye.material_override = look
+					eye.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					glimpse.add_child(eye)
+					# (Across the deep overhead from side to side, an arch of them, a little scattered.)
+					var wobble := Vector3(sin(k * 1.9), cos(k * 2.7), sin(k * 0.8)) * 6.0
+					eye.position = bounds.get_center() + Vector3(sin(a) * SKIRT_FAR, cos(a) * SKIRT_FAR * 0.7, 0.0) + wobble
+					looks.append(look)
+			"great_door":
+				if ResourceLoader.exists(KIT):
+					var kit := SetKit.kit(KIT)
+					var door := MeshInstance3D.new()
+					door.mesh = kit["doorway"]
+					var look := _far_ink(3.3)
+					look.render_priority = -7
+					door.material_override = look
+					door.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					door.extra_cull_margin = 60.0
+					glimpse.add_child(door)
+					door.position = _out_in_the_deep(DOOR_AT)
+					door.scale = Vector3.ONE * DOOR_SCALE
+					door.look_at(bounds.get_center(), Vector3.UP)
+					looks.append(look)
+					# Its light spilling out of it (drawn over its leaf: a glow, soft at its edges).
+					var glow := ShaderMaterial.new()
+					glow.shader = STAR
+					glow.render_priority = -6
+					var light := _flat(glow, Vector2(1.0, 1.0) * DOOR_SCALE * 1.2)
+					glimpse.add_child(light)
+					light.position = door.position + Vector3.UP * DOOR_SCALE * 0.9
+					glimpse.set_meta("light", glow)
+		glimpse.set_meta("looks", looks)
+		glimpses.append(glimpse)
+	_show_glimpses(Vector3.INF, 0.0)
+
+
+## Each glimpse forming near its spot and going away from it.
+func _show_glimpses(at: Vector3, delta: float) -> void:
+	var share := _share(at) if inside and at != Vector3.INF else -1.0
+	for glimpse in glimpses:
+		var near := share >= 0.0 and absf(share - float(glimpse.get_meta("at"))) < GLIMPSE_NEAR
+		var shown := move_toward(float(glimpse.get_meta("shown")), 1.0 if near else 0.0, GLIMPSE_EASE * delta)
+		glimpse.set_meta("shown", shown)
+		glimpse.visible = shown > 0.0
+		var eased := smoothstep(0.0, 1.0, shown)
+		for look: ShaderMaterial in glimpse.get_meta("looks"):
+			look.set_shader_parameter(&"shown", eased)
+		if glimpse.has_meta("light"):
+			(glimpse.get_meta("light") as ShaderMaterial).set_shader_parameter(&"lit", eased)
 
 
 ## The veils across the way.

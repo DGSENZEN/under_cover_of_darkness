@@ -9,7 +9,6 @@ stencil_mode read, compare_equal, 1;
 
 uniform sampler3D noise : filter_linear, repeat_enable;
 uniform sampler2D brush : hint_default_black, filter_linear_mipmap, repeat_enable;
-uniform vec3 centre;
 uniform vec3 ink : source_color = vec3(0.01, 0.009, 0.014);
 uniform vec3 seeped : source_color = vec3(0.498, 0.827, 0.416);
 uniform vec3 oxblood : source_color = vec3(0.431, 0.122, 0.102);
@@ -48,7 +47,8 @@ vec2 curtain(vec3 d, float height, float seed, float t) {
 }
 
 void fragment() {
-	vec3 d = normalize(world_pos - centre);
+	// (Looked at from wherever the eye is, as a sky at no distance at all: it never shifts as the walker goes.)
+	vec3 d = normalize(world_pos - CAMERA_POSITION_WORLD);
 	float t = TIME;
 	// (The brush sheet laid round the sphere, only to break the clouds' edges.)
 	vec2 round_uv = vec2(atan(d.z, d.x) / 6.2831853 + 0.5, asin(clamp(d.y, -1.0, 1.0)) / 3.1415927 + 0.5);

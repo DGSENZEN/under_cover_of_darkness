@@ -167,6 +167,88 @@ func _astral() -> void:
 	await _deep(passage)
 	await _gates(passage)
 	_detail(passage)
+	_vast(passage)
+	await _plane(passage)
+	await _glimpses(passage)
+
+
+## M18i: the deep vast: colossi far out in it (150 m and more), the rivers running on far past the passage's ends
+## (100 m and more from its middle).
+func _vast(passage: Node3D) -> void:
+	var wrong := []
+	var middle: Vector3 = passage.bounds.get_center()
+	var colossi: Array = passage.get("colossi") if passage.get("colossi") != null else []
+	if colossi.size() < 3:
+		wrong.append("%d colossi" % colossi.size())
+	for colossus: Node3D in colossi:
+		if colossus.global_position.distance_to(middle) < 150.0:
+			wrong.append("%s %.0f m off" % [colossus.name, colossus.global_position.distance_to(middle)])
+	var reach := 0.0
+	for river: Node3D in passage.rivers:
+		for p: Vector3 in river.get_meta("path", PackedVector3Array()):
+			reach = maxf(reach, p.distance_to(middle))
+	if reach < 100.0:
+		wrong.append("the rivers reach %.0f m" % reach)
+	_check("M18i the deep vast: colossi far out, the rivers running on far past its ends", wrong.is_empty(),
+		"%s" % [wrong.slice(0, 5)])
+
+
+## M18j: the shift of planes: the plane's own look over the screen, none of it outside, eased in inside (0.8 and more
+## within 2 s), eased out again outside (0.1 and under within 3 s); past every gap the void bled out over the world's own surfaces, not a clean rectangle.
+func _plane(passage: Node3D) -> void:
+	var wrong := []
+	var layer: CanvasLayer = passage.get("plane_shift")
+	var look: ShaderMaterial = null
+	if layer != null:
+		for rect in layer.find_children("*", "ColorRect", true, false):
+			look = (rect as ColorRect).material as ShaderMaterial
+	if look == null:
+		_check("M18j the shift of planes over the screen, eased in inside and out outside; the void bled out past every gap", false,
+			"no plane_shift layer")
+		return
+	var strength := func() -> float: return float(look.get_shader_parameter(&"strength"))
+	var y: float = passage.bounds.position.y
+	# (The checks before leave the player in the passage now and then: let the plane go first.)
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(240)
+	var before: float = strength.call()
+	await _tour([[-10.0, y, 32.6], [-10.0, y, 36.0]], true)
+	await _frames(120)
+	var within: float = strength.call()
+	await _tour([[-10.0, y, 36.0], [-10.0, y, 32.6]])
+	await _frames(180)
+	var after: float = strength.call()
+	if before > 0.05 or within < 0.8 or after > 0.1:
+		wrong.append("outside %.2f, inside %.2f, out again %.2f" % [before, within, after])
+	# Past every gap, the void bleeding out over the world's own surfaces (three and more of them a gap).
+	var bleeds: Array = passage.get("bleeds") if passage.get("bleeds") != null else []
+	for k in passage.gaps.size():
+		var own := bleeds.filter(func(b): return int(b.get_meta("gap", -1)) == k \
+			and float((b.get_active_material(0) as ShaderMaterial).get_shader_parameter(&"bleed")) > 0.0)
+		if own.size() < 3:
+			wrong.append("gap %d: %d bleeds" % [k, own.size()])
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(3)
+	_check("M18j the shift of planes over the screen, eased in inside and out outside; the void bled out past every gap",
+		wrong.is_empty(), "%s" % [wrong.slice(0, 5)])
+
+
+## M18k: glimpses from spot to spot: what the deep shows changes along the way (what is shown at a fifth of it is not
+## what is shown at four fifths).
+func _glimpses(passage: Node3D) -> void:
+	var glimpses: Array = passage.get("glimpses") if passage.get("glimpses") != null else []
+	var seen := []
+	if glimpses.size() >= 3:
+		for t in [0.15, 0.85]:
+			var main: PackedVector3Array = passage.way[0]
+			map.player.global_position = main[int(t * (main.size() - 1))] + Vector3(0.0, 1.05, 0.0)
+			await _frames(240)
+			seen.append(glimpses.filter(func(g): return float(g.get_meta("shown", 0.0)) > 0.5).map(func(g): return g.name))
+		map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+		await _frames(3)
+	_check("M18k glimpses from spot to spot: what the deep shows changes along the way",
+		glimpses.size() >= 3 and seen.size() == 2 and seen[0] != seen[1] and not seen[0].is_empty() and not seen[1].is_empty(),
+		"%d glimpses, shown %s" % [glimpses.size(), seen])
 
 
 ## M18f: the deep's eclipse far off; its rivers of the dead (one within 3-7 m of the way); its glyph constellations,
@@ -223,6 +305,11 @@ func _gates(passage: Node3D) -> void:
 		if frame_look == null or not frame_look.shader.resource_path.ends_with("astral_window.gdshader") \
 				or float(frame_look.get_shader_parameter(&"hole")) <= 0.0:
 			wrong.append("%s: no frame of void round its circle" % gate.name)
+		# An arch of floating carved stones round it, drawn in the void (astral_arch.gdshader).
+		var arch := gate.find_children("arch*", "MeshInstance3D", true, false).filter(func(m):
+			return m.material_override is ShaderMaterial and m.material_override.shader.resource_path.ends_with("astral_arch.gdshader"))
+		if arch.size() < 10:
+			wrong.append("%s: %d stones in its arch" % [gate.name, arch.size()])
 		var depths := rings.map(func(r): return snappedf(r.position.z, 0.01))
 		if depths.size() != 3 or depths[0] == depths[1] or depths[1] == depths[2] or depths[0] == depths[2]:
 			wrong.append("%s's rings at one depth" % gate.name)

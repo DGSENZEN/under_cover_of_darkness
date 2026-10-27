@@ -12,6 +12,8 @@ stencil_mode read, compare_equal, 1;
 uniform sampler3D noise : filter_linear, repeat_enable;
 uniform float seed = 0.0;
 uniform bool socket = false;
+// How much of it is there (a glimpse: 0 gone, 1 whole).
+uniform float shown = 1.0;
 uniform vec3 white : source_color = vec3(0.74, 0.68, 0.56);
 uniform vec3 vein : source_color = vec3(0.55, 0.12, 0.1);
 uniform vec3 iris : source_color = vec3(1.0, 0.6, 0.16);
@@ -58,7 +60,7 @@ void fragment() {
 	if (socket) {
 		vec4 torn = socket_crack(p);
 		ALBEDO = torn.rgb;
-		ALPHA = torn.a;
+		ALPHA = torn.a * shown;
 	} else {
 		// Its lids: open most of the time, closing slowly now and then.
 		float cycle = fract(TIME * 0.07 + seed);
@@ -112,6 +114,6 @@ void fragment() {
 		lid_col += pale * 0.08 * smoothstep(0.05, 0.0, lid_band);
 		col = mix(lid_col, col, in_almond);
 		ALBEDO = col;
-		ALPHA = max(in_almond, on_lid * smoothstep(1.0, 0.85, abs(p.x)));
+		ALPHA = max(in_almond, on_lid * smoothstep(1.0, 0.85, abs(p.x))) * shown;
 	}
 }

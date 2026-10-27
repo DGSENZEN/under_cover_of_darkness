@@ -91,9 +91,14 @@ func _astral() -> void:
 		lo = Vector2(minf(lo.x, q[0]), minf(lo.y, q[1]))
 		hi = Vector2(maxf(hi.x, q[0]), maxf(hi.y, q[1]))
 	var holes := []
+	# (The Pasaje a corridor going on past its mouth, its walls standing in from the mouth's edges by their thickness.)
+	var pasaje_walls: Dictionary = (get_node("pasaje").get_script() as GDScript).get_script_constant_map()
 	for gap: Dictionary in grey.get("gaps", []):
-		holes.append({"a": Vector2(gap["a"][0], gap["a"][1]), "b": Vector2(gap["b"][0], gap["b"][1]), "y0": gap["y0"],
-			"y1": gap["y1"]})
+		var hole := {"a": Vector2(gap["a"][0], gap["a"][1]), "b": Vector2(gap["b"][0], gap["b"][1]), "y0": gap["y0"],
+			"y1": gap["y1"]}
+		if gap.get("to", "") == "pasaje":
+			hole["inset"] = float(pasaje_walls["WALL"]) + float(pasaje_walls["FACE"])
+		holes.append(hole)
 	var floor_y: float = grey["floor"]
 	var paths := []
 	for line: Array in NORTH_WAY:

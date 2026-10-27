@@ -121,6 +121,21 @@ func _ready() -> void:
 			eye.global_transform = Transform3D(Basis.IDENTITY, from).looking_at(view[0].call(), Vector3.UP)
 			_shot(view[2])
 		eye.fov = fov
+		# The glimpses from spot to spot, the plane over the eye: the player stood at each spot (so the passage
+		# shows what it shows there), the eye beside them looking where the glimpse is.
+		var main: PackedVector3Array = passage.way[0]
+		var spots := [[0.15, Vector3(0.0, 30.0, 0.0), "13q_astral_glimpse_the_echo_overhead"],
+			[0.5, Vector3(25.0, 80.0, 5.0), "13r_astral_glimpse_the_star_skirt"],
+			[0.85, (passage.glimpses[2].get_child(0) as Node3D).global_position if passage.glimpses[2].get_child_count() > 0 else Vector3.ZERO, "13s_astral_glimpse_the_great_door"]]
+		for spot in spots:
+			var stand_at: Vector3 = main[int(spot[0] * (main.size() - 1))] + Vector3(0.0, 1.05, 0.0)
+			map.player.global_position = stand_at
+			var look_at: Vector3 = spot[1] if spot[2].ends_with("door") else stand_at + spot[1]
+			eye.global_transform = Transform3D(Basis.IDENTITY, stand_at + Vector3(0.0, 0.6, 0.0)).looking_at(look_at, Vector3.UP)
+			await _seconds(3.0)
+			_shot(spot[2])
+		map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+		await _seconds(2.0)
 	var lamp := OmniLight3D.new()
 	lamp.light_color = Color(1.0, 0.95, 0.88)
 	lamp.light_energy = 1.6

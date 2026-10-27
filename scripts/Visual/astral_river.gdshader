@@ -17,6 +17,12 @@ uniform float pace = 0.9;
 uniform float many = 0.5;
 uniform float strength = 1.0;
 
+varying vec3 world_pos;
+
+void vertex() {
+	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+
 float hash(float n) {
 	return fract(sin(n) * 43758.5453);
 }
@@ -54,7 +60,8 @@ void fragment() {
 	float bed = exp(-pow(across / (width * 0.4), 2.0));
 	col += marigold * bed * (0.04 + 0.05 * flow + 0.06 * smoothstep(0.55, 0.8, strands));
 	col += oxblood_glow * bed * 0.03;
-	// Fading in and out at its ends.
+	// Fading in and out at its ends, and into the deep's haze far off.
 	col *= smoothstep(0.0, 0.08, UV.x) * smoothstep(1.0, 0.92, UV.x);
+	col *= 1.0 - 0.85 * smoothstep(30.0, 150.0, distance(world_pos, CAMERA_POSITION_WORLD));
 	ALBEDO = col * strength;
 }
