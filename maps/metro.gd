@@ -24,8 +24,11 @@ const LABEL_RANGE := 30.0
 const SETS := {"candle_lane": ["res://maps/candle_lane.tscn", ["candle_lane", "librarian_shop"]],
 	"pasaje": ["res://maps/pasaje.tscn", ["pasaje"]]}
 const AstralPassage := preload("res://scripts/Visual/AstralPassage.gd")
-## How far into the south stretch from the Pasaje's mouth its astral passage runs (m).
-const ASTRAL_SOUTH := 22.0
+## The north astral passage's way (x, z in the map's frame, on its floor): from the market stairs' gap to the market's
+## mouth, winding; and its branch to the cistern lane's gap.
+const NORTH_WAY := [[Vector2(-10.0, 34.3), Vector2(-10.0, 36.5), Vector2(-8.2, 39.5), Vector2(-9.5, 43.0),
+	Vector2(-11.0, 46.5), Vector2(-9.0, 50.0), Vector2(-8.6, 53.0), Vector2(-9.0, 55.0)],
+	[Vector2(-9.5, 43.0), Vector2(-11.5, 43.0), Vector2(-13.9, 43.0)]]
 
 var plan: Dictionary
 var greybox: GreyboxLoader
@@ -70,30 +73,35 @@ func _sets() -> void:
 	_astral()
 
 
-## The dark stretches either side of the Pasaje, beyond the market's wards, are astral passages (AstralPassage.gd):
-## the north stretch from the market stairs to the market's mouth, and the south stretch's first ASTRAL_SOUTH metres
-## beyond its other mouth (the rest waits for the south stretch's own set).
+## The dark stretch before the Pasaje's north mouth, beyond the market's wards, is an astral passage
+## (AstralPassage.gd; docs/superpowers/specs/2026-10-26-astral-passages-design.md): from the market stairs to the
+## market's mouth, its way winding over the void (NORTH_WAY). (The south stretch's waits for the user's word on this.)
 func _astral() -> void:
 	if get_node_or_null("pasaje") == null:
 		return
-	for spec in [["astral_north", "pasaje_n", 1, 0.0], ["astral_south", "pasaje_s", -1, ASTRAL_SOUTH]]:
-		for space: Dictionary in plan["spaces"]:
-			if space["name"] != spec[1]:
-				continue
-			var lo := Vector2(INF, INF)
-			var hi := Vector2(-INF, -INF)
-			for p in space["polygon"]:
-				lo = Vector2(minf(lo.x, p[0]), minf(lo.y, p[1]))
-				hi = Vector2(maxf(hi.x, p[0]), maxf(hi.y, p[1]))
-			if spec[3] > 0.0:
-				hi.y = lo.y + spec[3]
-			var gaps := []
-			for opening: Dictionary in space.get("openings", []):
-				gaps.append([opening["at"], opening["width"]])
-			var box := AABB(Vector3(lo.x, space["floor"], lo.y), Vector3(hi.x - lo.x, space["height"], hi.y - lo.y))
-			var passage := AstralPassage.make(box, spec[2], gaps, player)
-			passage.name = spec[0]
-			add_child(passage)
+	var grey: Dictionary = {}
+	for m: Dictionary in JSON.parse_string(FileAccess.get_file_as_string(GREYBOX))["meshes"]:
+		if m["name"] == "pasaje_n":
+			grey = m
+	if grey.is_empty():
+		return
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for q in grey["polygon"]:
+		lo = Vector2(minf(lo.x, q[0]), minf(lo.y, q[1]))
+		hi = Vector2(maxf(hi.x, q[0]), maxf(hi.y, q[1]))
+	var holes := []
+	for gap: Dictionary in grey.get("gaps", []):
+		holes.append({"a": Vector2(gap["a"][0], gap["a"][1]), "b": Vector2(gap["b"][0], gap["b"][1]), "y0": gap["y0"],
+			"y1": gap["y1"]})
+	var floor_y: float = grey["floor"]
+	var paths := []
+	for line: Array in NORTH_WAY:
+		paths.append(PackedVector3Array(line.map(func(q): return Vector3(q.x, floor_y, q.y))))
+	var box := AABB(Vector3(lo.x, floor_y, lo.y), Vector3(hi.x - lo.x, grey["height"], hi.y - lo.y))
+	var passage := AstralPassage.make(box, 1, holes, player, greybox.get_node_or_null("pasaje_n"), paths)
+	passage.name = "astral_north"
+	add_child(passage)
 
 
 func _unhandled_input(event: InputEvent) -> void:

@@ -150,66 +150,73 @@ func _sets() -> void:
 
 ## The Pasaje set (docs/superpowers/plans/2026-10-26-pasaje-market.md): in its place, the greybox gone from its middle
 ## only; its seams to the lane's standard; walked from the market stairs down it into the lane.
-## M18: the dark stretches either side of the Pasaje, beyond the market's wards, are astral passages: in each its
-## skin of deep space on the walls and ceiling (cut where the corridor's own openings are), its veils across the way
-## parting round whoever walks through, its rings on the floor, its motes; all of it in its own space, nothing to walk
-## into and no light of its own.
+## M18: the north stretch before the Pasaje (pasaje_n) is an astral passage
+## (docs/superpowers/specs/2026-10-26-astral-passages-design.md).
 func _astral() -> void:
+	var passage: Node3D = map.get_node_or_null("astral_north")
+	if passage == null:
+		_check("M18a the stretch's box gone, the void behind its windows", false, "no astral_north")
+		return
+	await _void(passage)
+
+
+## M18a: the stretch's greybox unseen but still solid; windows over its walls, ceiling and floor but for its gaps (to
+## the stairs, the market, the cistern lane); the void's sky; nothing of it lit.
+func _void(passage: Node3D) -> void:
 	var wrong := []
-	for spec in [["astral_north", "pasaje_n"], ["astral_south", "pasaje_s"]]:
-		var passage: Node3D = map.get_node_or_null(spec[0])
-		if passage == null:
-			wrong.append("no %s" % spec[0])
-			continue
-		var space := _rect(spec[1])
-		for node: VisualInstance3D in passage.find_children("*", "VisualInstance3D", true, false):
-			var box: AABB = node.global_transform * node.get_aabb() if not node is Decal else \
-				AABB(node.global_position - (node as Decal).size / 2.0, (node as Decal).size)
-			if not space.grow(0.1).encloses(Rect2(box.position.x, box.position.z, box.size.x, box.size.z)):
-				wrong.append("%s %s out of %s" % [spec[0], node.name, spec[1]])
-		var skins: Array = passage.get("skins") if passage.get("skins") != null else []
-		var veils: Array = passage.get("veils") if passage.get("veils") != null else []
-		var rings: Array = passage.get("rings") if passage.get("rings") != null else []
-		if skins.is_empty() or veils.size() != 3 or rings.size() != 3 or passage.get("motes") == null:
-			wrong.append("%s: %d skins, %d veils, %d rings, motes %s" % [spec[0], skins.size(), veils.size(), rings.size(),
-				passage.get("motes")])
-		if not passage.find_children("*", "CollisionObject3D", true, false).is_empty() \
-				or not passage.find_children("*", "Light3D", true, false).is_empty():
-			wrong.append("%s solid or lit" % spec[0])
-		# (Its skin never over the corridor's openings: they stay open to the eye.)
-		for space_spec: Dictionary in map.plan["spaces"]:
-			if space_spec["name"] != spec[1]:
+	var grey: MeshInstance3D = map.greybox.get_node_or_null("pasaje_n")
+	if grey == null or grey.visible or grey.find_children("*", "CollisionShape3D", true, false).is_empty():
+		wrong.append("the greybox still seen, or gone solid")
+	var windows: Array = passage.get("windows") if passage.get("windows") != null else []
+	if passage.get("sky") == null:
+		wrong.append("no sky")
+	if not passage.find_children("*", "Light3D", true, false).is_empty():
+		wrong.append("lit")
+	var box: AABB = passage.bounds
+	# Rays out from the passage's middle line: every wall, the ceiling and the floor meet a window, but through a gap.
+	var space := get_viewport().world_3d.direct_space_state
+	var covered := 0
+	var tried := 0
+	var gaps := []
+	for space_spec: Dictionary in map.plan["spaces"]:
+		if space_spec["name"] == "pasaje_n":
+			gaps = space_spec.get("openings", [])
+	for k in 24:
+		var z := box.position.z + 1.0 + (box.size.z - 2.0) * k / 23.0
+		var from := Vector3(box.get_center().x, box.position.y + 1.6, z)
+		for to in [from + Vector3(-8.0, 0.0, 0.0), from + Vector3(8.0, 0.0, 0.0), from + Vector3(0.0, 8.0, 0.0),
+				from + Vector3(0.0, -3.0, 0.0)]:
+			var through := false
+			for gap: Dictionary in gaps:
+				var at := Vector2(gap["at"][0], gap["at"][1])
+				var half: float = float(gap["width"]) / 2.0 + 0.3
+				if absf(to.x - from.x) > 0.0 and absf(at.x - to.x) < 8.5 and absf(at.y - z) < half and \
+						signf(at.x - from.x) == signf(to.x - from.x):
+					through = true
+			if through:
 				continue
-			for opening: Dictionary in space_spec.get("openings", []):
-				var at := Vector2(opening["at"][0], opening["at"][1])
-				var half: float = float(opening["width"]) / 2.0 - 0.05
-				for skin: MeshInstance3D in skins:
-					var box: AABB = skin.global_transform * skin.get_aabb()
-					# (A wall's skin, upright: the ceiling's lies over the openings' spans on the plan, not in them.)
-					if box.size.y < 1.0:
-						continue
-					# (An opening in this wall's own plane, its span along the wall overlapping the skin's.)
-					var along_x := box.size.x > box.size.z
-					var plane := box.get_center().z if along_x else box.get_center().x
-					var in_plane := absf((at.y if along_x else at.x) - plane) < 0.2
-					var at_along := at.x if along_x else at.y
-					var lo := box.position.x if along_x else box.position.z
-					var hi := box.end.x if along_x else box.end.z
-					if in_plane and at_along + half > lo and at_along - half < hi:
-						wrong.append("%s skin over its opening to %s" % [spec[0], opening["to"]])
-		# Its veils part round the player.
-		if veils.size() == 3:
-			var veil: MeshInstance3D = veils[1]
-			map.player.global_position = veil.global_position + Vector3(0.3, 0.0, 0.0)
-			await _frames(3)
-			var look: ShaderMaterial = veil.get_surface_override_material(0) if veil.get_surface_override_material(0) \
-				else veil.mesh.surface_get_material(0)
-			var told: Vector3 = look.get_shader_parameter(&"walker") if look != null else Vector3.INF
-			if told.distance_to(map.player.global_position) > 0.2:
-				wrong.append("%s's veil not told where the player is (%s)" % [spec[0], told])
-	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
-	await _frames(3)
-	_check("M18 the dark stretches either side of the Pasaje are astral passages", wrong.is_empty(), "%s" % [wrong])
+			tried += 1
+			var hits := _windows_hit(windows, from, to)
+			if hits:
+				covered += 1
+	if tried == 0 or covered < tried:
+		wrong.append("%d of %d rays out meet a window" % [covered, tried])
+	_check("M18a the stretch's box gone, the void behind its windows", wrong.is_empty(), "%s" % [wrong])
+
+
+## Whether the ray from `from` to `to` crosses one of `windows` (their quads).
+func _windows_hit(windows: Array, from: Vector3, to: Vector3) -> bool:
+	for window: MeshInstance3D in windows:
+		var quad: QuadMesh = window.mesh
+		var local_from := window.global_transform.affine_inverse() * from
+		var local_to := window.global_transform.affine_inverse() * to
+		if signf(local_from.z) == signf(local_to.z):
+			continue
+		var t := local_from.z / (local_from.z - local_to.z)
+		var p := local_from.lerp(local_to, t)
+		if absf(p.x) <= quad.size.x / 2.0 and absf(p.y) <= quad.size.y / 2.0:
+			return true
+	return false
 
 
 ## M17: everything the Pasaje set lights, sounds and shows stands in the map's Pasaje, at its floor's level (its crowd,
