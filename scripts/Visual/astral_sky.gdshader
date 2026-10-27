@@ -27,20 +27,24 @@ float hash3(vec3 p) {
 	return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
 }
 
-// An aurora's curtain whose hem wanders round the sky at `height`, `seed` its own.
-float curtain(vec3 d, float height, float seed, float t) {
+// An aurora's curtain whose hem wanders round the sky at `height`, `seed` its own: x its light, y how far up it
+// (0 its hem, 1 its top).
+vec2 curtain(vec3 d, float height, float seed, float t) {
 	vec2 round_dir = normalize(d.xz + 0.0001);
-	float wander = texture(noise, vec3(round_dir * 1.1, seed + t * 0.006)).r;
-	float hem = height + (wander - 0.5) * 0.12;
+	// (Its folds: the hem's line bent by two scales of noise, the finer drifting along it.)
+	float fold = texture(noise, vec3(round_dir * 1.1, seed + t * 0.006)).r - 0.5;
+	float ripple = texture(noise, vec3(round_dir * 4.5 + vec2(t * 0.01, 0.0), seed + 1.7)).r - 0.5;
+	float hem = height + fold * 0.14 + ripple * 0.012;
 	float above = d.y - hem;
-	// A bright lower hem, fading softly up.
-	float hang = smoothstep(-0.008, 0.006, above) * exp(-max(above, 0.0) / 0.1);
-	// Its rays: drawn from round the sky only (not its height), so they stand straight; folding slowly, shimmering.
+	float up = clamp(above / 0.22, 0.0, 1.0);
+	// A soft hem, fading slowly up.
+	float hang = smoothstep(-0.05, 0.02, above) * exp(-max(above, 0.0) / 0.13);
+	// Its rays: drawn from round the sky only, so they stand straight; shimmering along it as light runs through.
 	float rays = texture(noise, vec3(round_dir * 4.0, seed * 2.0 + t * 0.015)).r;
-	float fine = texture(noise, vec3(round_dir * 14.0, seed * 3.0 + t * 0.05)).r;
+	float shimmer = texture(noise, vec3(round_dir * 16.0 + vec2(t * 0.04, 0.0), seed * 3.0 + t * 0.03)).r;
 	// Hung only in some quarters of the sky, not round all of it.
 	float here = smoothstep(0.45, 0.68, texture(noise, vec3(round_dir * 0.7, seed * 7.0 + t * 0.002)).r);
-	return hang * here * smoothstep(0.3, 0.8, rays) * (0.6 + 0.8 * smoothstep(0.4, 0.8, fine));
+	return vec2(hang * here * (0.25 + 0.75 * smoothstep(0.3, 0.75, rays)) * (0.7 + 0.6 * shimmer), up);
 }
 
 void fragment() {
@@ -57,17 +61,21 @@ void fragment() {
 	// Ink, deeper below, a breath of the seeped dark's green high up.
 	vec3 col = ink * (0.7 + 0.3 * smoothstep(-0.8, 0.4, d.y));
 	col += seeped * 0.012 * smoothstep(-0.1, 0.8, d.y);
-	// The clouds: the seeped dark's green, soft; oxblood where they gather deepest, and below.
-	vec3 cloud_col = mix(seeped * 0.075, oxblood * 0.22, smoothstep(0.45, 0.75, deep) * 0.8 + smoothstep(0.1, -0.6, d.y) * 0.4);
+	// The clouds: the seeped dark's green high up, greyed into the ink; oxblood where they gather deepest, and the
+	// lower the more.
+	vec3 green = mix(seeped, vec3(dot(seeped, vec3(0.333))), 0.35) * 0.06;
+	float red = clamp(smoothstep(0.45, 0.75, deep) * 0.7 + smoothstep(0.3, -0.5, d.y) * 0.6, 0.0, 1.0);
+	vec3 cloud_col = mix(green, oxblood * 0.24, red);
 	col = mix(col, cloud_col, body * 0.85);
 	// Their lit crests, faint.
-	col += mix(seeped, ward, 0.3) * 0.025 * smoothstep(0.7, 0.9, cloud);
-	// The aurora: two curtains, green at the hem going to ward-white above.
+	col += mix(seeped, ward, 0.4) * 0.02 * smoothstep(0.7, 0.9, cloud);
+	// The aurora: two curtains, ward-white at the hem, the seeped dark's green through it, an oxblood fringe at its
+	// top.
 	for (int i = 0; i < 2; i++) {
-		float height = i == 0 ? 0.32 : 0.55;
-		float hang = curtain(d, height, float(i) * 5.3, t);
-		float above = clamp((d.y - height) / 0.3, 0.0, 1.0);
-		col += mix(seeped, ward, above * 0.8 + 0.15) * hang * (i == 0 ? 0.14 : 0.08);
+		vec2 hang = curtain(d, i == 0 ? 0.32 : 0.55, float(i) * 5.3, t);
+		vec3 tint = mix(mix(mix(ward, seeped, 0.5), seeped, smoothstep(0.0, 0.2, hang.y)), oxblood * 2.0,
+			smoothstep(0.35, 0.85, hang.y));
+		col += tint * hang.x * (i == 0 ? 0.16 : 0.09);
 	}
 	// A few cold stars where the cloud is thin.
 	vec3 cell = floor(d * 170.0);

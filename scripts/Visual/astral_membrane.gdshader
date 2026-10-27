@@ -59,11 +59,16 @@ void fragment() {
 		deep += weight;
 	}
 	arms = clamp(arms, 0.0, 1.2);
-	// Its eye: ink, a tunnel going down, a faint green far in.
-	float eye = smoothstep(0.42, 0.0, r);
-	vec3 tunnel = mix(seen * 0.6, ink, eye * 0.85) + seeped * 0.06 * smoothstep(0.25, 0.0, r);
-	vec3 col = mix(tunnel, seeped * 0.25, inner * 0.35);
-	col += mix(seeped * 0.5, ward, smoothstep(0.3, 0.95, r)) * arms * (0.35 + 0.35 * near);
+	// Its eye: a tunnel going down, its walls' rings drawn inward and shrinking, ink deepening to a far point of ward
+	// light.
+	float eye = smoothstep(0.5, 0.0, r);
+	float bands = fract(lr * 1.6 + t * 0.35 + a / 6.2831853 * 0.5);
+	float walls = smoothstep(0.0, 0.08, bands) * smoothstep(0.35, 0.1, bands) * smoothstep(0.03, 0.2, r);
+	vec3 tunnel = mix(seen * 0.55, ink, eye * 0.9);
+	tunnel += mix(seeped * 0.3, ward * 0.4, smoothstep(0.1, 0.5, r)) * walls * eye * 0.6;
+	tunnel += ward * exp(-r * r / 0.002) * (0.6 + 0.4 * sin(t * 1.3));
+	vec3 col = mix(tunnel, ink, inner * 0.2);
+	col += mix(seeped * 0.35, ward, smoothstep(0.25, 0.9, r)) * arms * (0.3 + 0.35 * near);
 	// Its rim burning: a ring of fire licking out from it.
 	float flame = texture(noise, vec3(cos(a) * 2.0, sin(a) * 2.0, t * 0.35)).r;
 	float reach = 0.035 + 0.11 * smoothstep(0.35, 0.8, flame);
@@ -71,8 +76,8 @@ void fragment() {
 	float core = smoothstep(0.022, 0.0, abs(r - 1.0));
 	col = mix(col, marigold, burn * 0.85);
 	col = mix(col, pale, core * (0.6 + 0.4 * near));
-	// Outside its circle, only a shiver over what is behind it.
+	// Outside its circle and its fire, nothing (the void's frame is there).
 	float in_circle = smoothstep(1.02, 0.98, r);
 	ALBEDO = mix(seen, col, max(in_circle, burn));
-	ALPHA = clamp(in_circle * (0.55 + 0.25 * eye + 0.2 * arms) + burn * 0.9 + core + (1.0 - in_circle) * 0.06, 0.0, 1.0);
+	ALPHA = clamp(in_circle * (0.55 + 0.3 * eye + 0.2 * arms) + burn * 0.9 + core, 0.0, 1.0);
 }

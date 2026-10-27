@@ -54,8 +54,11 @@ const FEATHER_EVERY := 0.85
 const FEATHER_LENGTH := 2.2
 const RUFF := 14
 const RUFF_LENGTH := 2.0
-const PLUME := 5
-const PLUME_LENGTH := 3.2
+const PLUME := 7
+const PLUME_LENGTH := 3.4
+## Its tongue flicking out: how often (s), how long it is out (s).
+const TONGUE_EVERY := 4.5
+const TONGUE_TIME := 0.7
 ## Each eye's socket, the crack in the dark it looks through (its quad's size against the eye's).
 const SOCKET := Vector2(1.35, 1.6)
 const MEMBRANE := preload("res://scripts/Visual/astral_membrane.gdshader")
@@ -69,6 +72,8 @@ const RINGS_SHEET := "astral_rings.png"
 const RING_DEPTHS := [0.0, -0.15, 0.15]
 const RING_TURN := [0.11, -0.19, 0.07]
 const GATE_CIRCLE := 0.47
+## The void round a gate's circle starts this far out (a share of its circle's radius: past its burning rim).
+const GATE_HOLE := 1.16
 const EMBERS := 70
 const EMBER_LIFE := 1.8
 const SPIRAL_MOTES := 90
@@ -81,16 +86,18 @@ const STAR := preload("res://scripts/Visual/astral_star.gdshader")
 const ECLIPSE_FAR := 38.0
 const ECLIPSE_HIGH := 25.0
 const ECLIPSE_ROUND := 30.0
-const ECLIPSE_SIZE := 22.0
+const ECLIPSE_SIZE := 30.0
 ## The rivers of the dead: [how far under or over the floor (m), how far out east (m), how wide (m), its tilt
 ## (radians about its flow), its sway (m)]; the first under the way itself, following it.
 const RIVERS := [[-4.5, 0.0, 3.0, 0.0, 0.8], [12.0, -6.0, 4.0, 0.35, 5.0], [1.0, 16.0, 3.5, 0.8, 2.0]]
 ## The constellations: the glyphs' strokes (tools/textures/astral_glyphs.py), their size (m), how far out (m), how
-## fast the lit one brightens and the rest fade (a share a second).
+## fast the lit one brightens and the rest fade (a share a second; its threads drawn in as it does), how fast the
+## flare of its lighting fades (a share a second).
 const CONSTELLATIONS_FILE := "res://textures/painted/underground/astral_constellations.json"
-const CONSTELLATION_SIZE := 7.0
-const CONSTELLATION_OUT := 14.0
-const LIT_EASE := 1.5
+const CONSTELLATION_SIZE := 8.5
+const CONSTELLATION_OUT := 10.0
+const LIT_EASE := 0.8
+const FLARE_FADE := 1.2
 ## The warp of a crossing: how long (s). The muffle inside: the World and Ambience buses' low-pass, its cutoff inside
 ## and out (Hz), how fast it eases (a share a second, in log).
 const WARP_TIME := 0.6
@@ -283,6 +290,7 @@ func _stones() -> void:
 	look.shader = STONE
 	look.set_shader_parameter(&"atlas", SetKit.painted(["astral.png", "astral_base.png"]))
 	look.set_shader_parameter(&"noise", Vfx.noise_3d())
+	look.set_shader_parameter(&"top_y", float(way[0][0].y))
 	var k := 0
 	for line: PackedVector3Array in way:
 		for i in line.size() - 1:
@@ -408,8 +416,10 @@ func _presences() -> void:
 		look.shader = CUTOUT
 		look.render_priority = -4
 		shade.set_meta("along", float(k) / SHADE_WALKS.size() * (_span + 16.0))
-		# (Not whole: under the presence their smoke rises at, so none rises off them out there.)
+		# (Under the presence their smoke rises at, so none rises off them out there; drawn whole all the same.)
 		shade.presence = 0.7
+		look.set_shader_parameter(&"presence", 1.0)
+		look.set_shader_parameter(&"glow_strength", 0.45)
 	line.position = Vector3(bounds.end.x + SHADES_OUT, bounds.position.y, bounds.position.z - 8.0)
 	presences.append(line)
 	# The hand.
@@ -430,7 +440,10 @@ func _presences() -> void:
 	look.set_shader_parameter(&"noise", Vfx.noise_3d())
 	look.set_shader_parameter(&"cell_scale", Vector2(0.5, 0.5))
 	look.set_shader_parameter(&"cell_offset", Vector2(0.0, 0.5))
-	look.set_shader_parameter(&"presence", 0.7)
+	# (Its maker's colour, the gods' oxblood, round it.)
+	look.set_shader_parameter(&"glow", Color(0.431, 0.122, 0.102))
+	look.set_shader_parameter(&"glow_strength", 0.8)
+	look.set_shader_parameter(&"reach", 0.035)
 	palm.material_override = look
 	palm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	hand.add_child(palm)
@@ -450,6 +463,14 @@ func _drift(delta: float) -> void:
 				presence.position = middle + Vector3(cos(a) * SERPENT_ROUND, 2.0 + 4.0 * sin(a * 2.3), sin(a) * SERPENT_ROUND)
 				# (Its head leading round its circle.)
 				presence.rotation.y = -a
+				# Its tongue: every few seconds out, two flicks, and in.
+				var tongue := presence.get_node_or_null("tongue") as Node3D
+				if tongue != null:
+					var beat := fposmod(_clock, TONGUE_EVERY)
+					var out := sin(clampf(beat / TONGUE_TIME, 0.0, 1.0) * PI)
+					var flick := 0.85 + 0.15 * sin(beat * 40.0)
+					tongue.scale.z = maxf(out * flick, 0.01)
+					tongue.rotation.x = 0.15 * sin(beat * 25.0) * out
 			"eyes":
 				var home: Vector3 = presence.get_meta("home")
 				presence.position = home + Vector3(0.0, 0.6 * sin(_clock * 0.11 + home.x), 0.4 * cos(_clock * 0.07 + home.z))
@@ -505,6 +526,12 @@ func _thresholds() -> void:
 			ring.position.z = RING_DEPTHS[k]
 			ring.rotation.z = k * 0.9
 		var rim := side * GATE_CIRCLE
+		# Round its circle, the void: a window with the circle (and its burning rim) cut out of it.
+		var frame_look := ShaderMaterial.new()
+		frame_look.shader = WINDOW
+		frame_look.set_shader_parameter(&"hole", rim * GATE_HOLE)
+		frame_look.set_shader_parameter(&"size", size)
+		_gate_quad(gate, "frame", size, frame_look)
 		gate.add_child(_embers(rim))
 		gate.add_child(_spiral(rim * 0.95))
 		thresholds.append(gate)
@@ -593,6 +620,10 @@ func _glow_quad(size: float) -> QuadMesh:
 	look.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	look.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	look.vertex_color_use_as_albedo = true
+	# (Faded out close to the eye, so none passes as a ball in front of it.)
+	look.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+	look.distance_fade_min_distance = 0.4
+	look.distance_fade_max_distance = 1.6
 	var glow := GradientTexture2D.new()
 	glow.fill = GradientTexture2D.FILL_RADIAL
 	glow.fill_from = Vector2(0.5, 0.5)
@@ -673,7 +704,10 @@ func _serpent() -> Node3D:
 	_serpent_part(serpent, "coils", _coils_mesh(frames), 0, -7)
 	_serpent_part(serpent, "feathers", _feathers_mesh(frames), 1, -6)
 	# Its head: skull, jaw (hinged below its neck, a little open), fangs, eyes.
-	_serpent_part(serpent, "head", _head_mesh([0.74, 0.95, 0.74, 0.62, 0.3, 0.12], -0.1, 2.7, 0.0), 2, -5)
+	_serpent_part(serpent, "head", _head_mesh([0.74, 0.95, 0.74, 0.62, 0.3, 0.12, 0.3], -0.1, 2.7, 0.0), 2, -5)
+	var tongue := _serpent_part(serpent, "tongue", _tongue_mesh(), 5, -6)
+	tongue.position = Vector3(0.0, -0.14, 2.2)
+	tongue.scale = Vector3(1.0, 1.0, 0.01)
 	var jaw := _serpent_part(serpent, "jaw", _head_mesh([0.62, 0.72, 0.14, 0.1, 0.24, 0.1], 0.0, 2.3, 0.0), 2, -6)
 	jaw.position = Vector3(0.0, -0.28, 0.12)
 	jaw.rotation.x = 0.22
@@ -682,7 +716,7 @@ func _serpent() -> Node3D:
 	_serpent_part(jaw, "fangs_lower", _fangs_mesh([Vector3(0.26, 0.05, 1.95), Vector3(-0.26, 0.05, 1.95)], 1.0, 0.26), 3, -6)
 	for side in [1.0, -1.0]:
 		var eye := _serpent_part(serpent, "serpent_eye" if side > 0.0 else "serpent_eye_left", _dome_mesh(0.2), 4, -4)
-		eye.position = Vector3(0.5 * side, 0.36, 1.4)
+		eye.position = Vector3(0.48 * side, 0.36, 1.18)
 		eye.rotation = Vector3(-0.3, PI / 2.0 * side, 0.0)
 	return serpent
 
@@ -747,7 +781,10 @@ func _head_mesh(shape: Array, z0: float, z1: float, y: float) -> ArrayMesh:
 		var wide := lerpf(shape[0], shape[1], smoothstep(0.0, 0.3, s)) * (1.0 - 0.62 * s * s)
 		var over := lerpf(shape[2], shape[3], s) * (1.0 - 0.45 * pow(s, 1.5))
 		var under := lerpf(shape[4], shape[5], s)
-		sections.append([Vector3(0.0, y + 0.05 * s, lerpf(z0, z1, s)), Vector3(-1.0, 0.0, 0.0), Vector3.UP, wide, over, under])
+		# (Its brows: two ridges over its eyes, s 0.42 along it.)
+		var brow: float = float(shape[6]) * exp(-pow((s - 0.42) / 0.12, 2.0)) if shape.size() > 6 else 0.0
+		sections.append([Vector3(0.0, y + 0.05 * s, lerpf(z0, z1, s)), Vector3(-1.0, 0.0, 0.0), Vector3.UP, wide, over,
+			under, brow])
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	_loft(tool, sections, 18, func(_i: int) -> float: return 0.0)
@@ -783,6 +820,9 @@ func _section_point(section: Array, j: int, sides: int) -> Vector3:
 	var a := TAU * j / sides
 	var s := sin(a)
 	var height: float = section[4] if s > 0.0 else section[5]
+	# (A brow ridge either side of its top, where it has one.)
+	if s > 0.0 and section.size() > 6:
+		height *= 1.0 + float(section[6]) * exp(-pow((absf(cos(a)) - 0.5) / 0.2, 2.0))
 	return section[0] + section[1] * cos(a) * float(section[3]) + section[2] * s * height
 
 
@@ -840,23 +880,63 @@ func _feathers_mesh(frames: Array) -> ArrayMesh:
 		var out := Vector3(cos(a), sin(a) * 0.9 + 0.15, 0.0).normalized()
 		_feather(tool, out * 0.62 + Vector3(0.0, 0.0, -0.1), (out * 0.75 + Vector3(0.0, 0.0, -0.66)).normalized(),
 			RUFF_LENGTH * (0.8 + 0.3 * smoothstep(-0.3, 1.0, out.y)), 0.38, 0.004)
-	# Down its back.
+	# A crown on its head, swept back over its neck.
+	for k in 6:
+		var side := -1.0 if k % 2 == 0 else 1.0
+		var root := Vector3(side * (0.12 + 0.1 * (k / 2)), 0.6, 1.15 - 0.22 * (k / 2))
+		var dir := Vector3(side * 0.25, 0.5, -0.83).normalized()
+		_feather(tool, root, dir, 1.6 + 0.3 * (k / 2), 0.3, 0.0)
+	# Down its back: plumage in two rows a side, lying back along it, the upper row half a step on; a crest along
+	# its spine over its front half.
 	var s := 1.2
+	var step := 0
 	while s < SERPENT_LENGTH * 0.82:
 		var frame: Array = frames[roundi(s / SERPENT_LENGTH * rings)]
 		var r: float = frame[4]
+		var length := FEATHER_LENGTH * (r / 0.74) * (0.85 + 0.15 * sin(s * 1.9)) + 0.35
+		var row_angle := 70.0 if step % 2 == 0 else 35.0
 		for side in [1.0, -1.0]:
-			var radial: Vector3 = (frame[3] * cos(deg_to_rad(48.0)) + frame[2] * side * sin(deg_to_rad(48.0))).normalized()
-			var dir: Vector3 = (frame[1] * 0.8 + radial * 0.6).normalized()
-			var length := FEATHER_LENGTH * (r / 0.74) * (0.85 + 0.15 * sin(s * 1.9)) + 0.35
-			_feather(tool, frame[0] + radial * r * 0.85, dir, length, length * 0.17, s / SERPENT_LENGTH)
-		s += FEATHER_EVERY
-	# The plume at its tail.
+			var radial: Vector3 = (frame[3] * cos(deg_to_rad(row_angle)) + frame[2] * side * sin(deg_to_rad(row_angle))).normalized()
+			var dir: Vector3 = (frame[1] * 0.92 + radial * 0.38).normalized()
+			_feather(tool, frame[0] + radial * r * 0.9, dir, length, length * 0.2, s / SERPENT_LENGTH)
+		if s < SERPENT_LENGTH * 0.5 and step % 2 == 0:
+			var crest: Vector3 = (frame[1] * 0.6 + frame[3] * 0.8).normalized()
+			_feather(tool, frame[0] + frame[3] * r * 0.95, crest, length * 0.55, length * 0.16, s / SERPENT_LENGTH)
+		s += FEATHER_EVERY / 2.0
+		step += 1
+	# The plume at its tail, fanned wide and drooping.
 	var tail: Array = frames[rings]
 	for k in PLUME:
 		var spread := (k - (PLUME - 1) / 2.0) / PLUME
-		var dir: Vector3 = (tail[1] + tail[2] * spread * 1.1 + tail[3] * 0.15).normalized()
-		_feather(tool, tail[0], dir, PLUME_LENGTH * (1.0 - absf(spread) * 0.5), 0.5, 1.0)
+		var dir: Vector3 = (tail[1] + tail[2] * spread * 1.8 - tail[3] * 0.2).normalized()
+		_feather(tool, tail[0], dir, PLUME_LENGTH * (1.0 - absf(spread) * 0.4), 0.55, 1.0)
+	return tool.commit()
+
+
+## Its forked tongue, out along +z from its mouth (the node scaled along z to flick it).
+func _tongue_mesh() -> ArrayMesh:
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	tool.set_smooth_group(-1)
+	# Each line [its points ([where along it (m), its half width]), which way it forks (0 the strip, -1/1 a tine)].
+	var lines := [[[[0.0, 0.07], [0.6, 0.05], [0.75, 0.05]], 0.0]]
+	for side in [-1.0, 1.0]:
+		lines.append([[[0.75, 0.025], [1.15, 0.008]], side])
+	for line: Array in lines:
+		var points: Array = line[0]
+		var bend: float = line[1]
+		for i in points.size() - 1:
+			var a: Array = points[i]
+			var b: Array = points[i + 1]
+			var xa: float = (float(a[0]) - 0.75) * 0.3 * bend
+			var xb: float = (float(b[0]) - 0.75) * 0.3 * bend
+			var quad := [Vector3(xa - a[1], 0.0, a[0]), Vector3(xa + a[1], 0.0, a[0]), Vector3(xb + b[1], 0.0, b[0]),
+				Vector3(xa - a[1], 0.0, a[0]), Vector3(xb + b[1], 0.0, b[0]), Vector3(xb - b[1], 0.0, b[0])]
+			for order in [quad, [quad[0], quad[2], quad[1], quad[3], quad[5], quad[4]]]:
+				for v: Vector3 in order:
+					tool.set_uv(Vector2.ZERO)
+					tool.set_uv2(Vector2(v.z / 1.15, 0.5))
+					tool.add_vertex(v)
 	return tool.commit()
 
 
@@ -1132,7 +1212,7 @@ func _constellations() -> void:
 				if i > 0:
 					var from: Vector3 = points[i - 1]
 					var to: Vector3 = points[i]
-					var thread := _flat(thread_look, Vector2(from.distance_to(to), 0.25))
+					var thread := _flat(thread_look, Vector2(from.distance_to(to), 0.4))
 					thread.name = "thread%d" % m
 					group.add_child(thread)
 					thread.position = (from + to) / 2.0
@@ -1165,10 +1245,16 @@ func _light_constellations(at: Vector3, delta: float) -> void:
 		lit_constellation = int(share * constellations.size())
 	for k in constellations.size():
 		var group := constellations[k]
-		var lit := move_toward(float(group.get_meta("lit")), 1.0 if k == lit_constellation else 0.0, LIT_EASE * delta)
+		var was := float(group.get_meta("lit"))
+		var lit := move_toward(was, 1.0 if k == lit_constellation else 0.0, LIT_EASE * delta)
+		# Its lighting a moment: a flare through its stars as it starts.
+		var flare := float(group.get_meta("flare", 0.0))
+		flare = 1.0 if was == 0.0 and lit > 0.0 else move_toward(flare, 0.0, FLARE_FADE * delta)
 		group.set_meta("lit", lit)
+		group.set_meta("flare", flare)
 		for look: ShaderMaterial in group.get_meta("looks"):
 			look.set_shader_parameter(&"lit", lit)
+			look.set_shader_parameter(&"flare", flare)
 
 
 ## The veils across the way.

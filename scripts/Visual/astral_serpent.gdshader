@@ -2,8 +2,8 @@
 // the seeped dark's green its sheen), seen only through the passage's windows. Every part of it swims together: its
 // UV.x is how far along its body it is (0 its head, 1 its tail), and the swim's reach grows toward its tail. Its parts:
 // 0 its scaled body (overlapping scales, a zigzag down its back, broad plates under its belly), 1 its feathers (a quill,
-// barbs, green to oxblood, a cold edge; their own UV2), 2 its head (larger plates, a brow), 3 its fangs (old bone),
-// 4 its eyes (marigold, a slit, a glint; UV2 round the dome).
+// barbs, oxblood to green, iridescent; their own UV2), 2 its head (larger plates, brows, nostrils, its lips; UV2 along
+// and round it), 3 its fangs (old bone), 4 its eyes (marigold, a slit, a glint; UV2 round the dome), 5 its tongue.
 shader_type spatial;
 render_mode unshaded, cull_back, depth_test_disabled, depth_draw_never, fog_disabled, blend_mix;
 stencil_mode read, compare_equal, 1;
@@ -70,8 +70,18 @@ void fragment() {
 			float plate = smoothstep(0.0, 0.25, fract(UV.x * 60.0)) * smoothstep(1.0, 0.85, fract(UV.x * 60.0));
 			col = mix(col, mix(oxblood * 0.18, bone * 0.16, plate) * (0.6 + 0.4 * plate), belly);
 		} else {
-			// Its brow: a heavier ridge over its eyes.
-			col += seeped * 0.08 * smoothstep(0.08, 0.0, abs(UV2.y - 0.72)) * smoothstep(0.2, 0.5, UV2.x);
+			// Its brows catching the light over its eyes; its nostrils near its snout; the line of its lips, oxblood;
+			// its snout's plates paler.
+			float round_at = UV2.y;
+			float brow = exp(-pow((UV2.x - 0.42) / 0.1, 2.0)) * (smoothstep(0.06, 0.0, abs(round_at - 0.167))
+				+ smoothstep(0.06, 0.0, abs(round_at - 0.333)));
+			col += mix(seeped, ward, 0.3) * 0.12 * brow;
+			float nostril = smoothstep(0.035, 0.015, length(vec2((UV2.x - 0.92) * 0.6, round_at - 0.21)))
+				+ smoothstep(0.035, 0.015, length(vec2((UV2.x - 0.92) * 0.6, round_at - 0.29)));
+			col = mix(col, ink * 0.3, clamp(nostril, 0.0, 1.0));
+			float lips = smoothstep(0.025, 0.0, min(abs(round_at - 0.53), abs(round_at - 0.97))) * smoothstep(0.2, 0.35, UV2.x);
+			col = mix(col, oxblood * 0.6, lips);
+			col += bone * 0.05 * smoothstep(0.7, 1.0, UV2.x) * s.x;
 		}
 		col *= 1.0 - 0.5 * s.y;
 		col += rim_col * rim * 0.9;
@@ -89,9 +99,11 @@ void fragment() {
 		vane *= smoothstep(0.3, 0.42, ragged + (half_width - across) * 6.0);
 		float quill = smoothstep(0.025, 0.0, across);
 		float turn = pow(1.0 - clamp(abs(dot(NORMAL, VIEW)), 0.0, 1.0), 2.0);
-		col = mix(oxblood * 0.55, seeped * 0.38, smoothstep(0.05, 0.45, x)) * barbs;
-		col = mix(col, mix(seeped, ward, 0.5) * 0.6, turn * smoothstep(0.2, 0.6, x));
-		col = mix(col, ward * 0.5, smoothstep(half_width - 0.06, half_width, across) * 0.5);
+		vec3 deep_green = seeped * vec3(0.2, 0.26, 0.3);
+		col = mix(oxblood * 0.55, deep_green, smoothstep(0.05, 0.45, x)) * barbs;
+		col = mix(col, oxblood * 0.4, smoothstep(0.75, 1.0, x) * 0.6);
+		col = mix(col, mix(seeped, ward, 0.3) * 0.3, turn * smoothstep(0.2, 0.6, x) * 0.3);
+		col = mix(col, ward * 0.35, smoothstep(half_width - 0.05, half_width, across) * 0.35);
 		if (UV.x > 0.99) {
 			float o = length(vec2((x - 0.82) * 1.5, f.y - 0.5));
 			col = mix(col, marigold * 0.85, smoothstep(0.06, 0.04, o));
@@ -104,6 +116,10 @@ void fragment() {
 		}
 	} else if (part == 3) {
 		col = bone * (0.45 + 0.35 * above) + rim_col * rim * 0.5;
+	} else if (part == 5) {
+		// Its tongue: oxblood, darker down its middle, its tips black.
+		col = oxblood * (0.55 + 0.3 * above) * (0.8 + 0.2 * abs(UV2.y - 0.5) * 4.0);
+		col = mix(col, ink, smoothstep(0.75, 1.0, UV2.x));
 	} else {
 		// Its eye: marigold, a slit, a glint.
 		vec2 e = UV2 * 2.0 - 1.0;

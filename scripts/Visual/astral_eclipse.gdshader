@@ -24,21 +24,30 @@ void fragment() {
 	float a = atan(p.y, p.x);
 	// Its breath.
 	float breath = 0.85 + 0.15 * sin(TIME * 0.22);
-	float disc = 0.34;
-	// The corona's streamers: noise drawn out along the radius, climbing slowly off the rim.
+	float disc = 0.26;
+	// The inner corona: broad tongues climbing slowly off the rim.
 	float streams = texture(noise, vec3(cos(a) * 1.2, sin(a) * 1.2, r * 1.4 - TIME * 0.03)).r;
-	float fine = texture(noise, vec3(cos(a) * 3.0, sin(a) * 3.0, r * 3.0 - TIME * 0.05)).r;
-	float reach = disc + (0.18 + 0.5 * smoothstep(0.4, 0.85, streams)) * breath;
-	float corona = smoothstep(reach, disc, r) * smoothstep(disc - 0.01, disc + 0.02, r);
-	corona *= 0.6 + 0.6 * fine;
-	vec3 col = mix(oxblood, marigold, smoothstep(0.0, 0.8, corona) * smoothstep(disc + 0.25, disc, r));
-	col = mix(col, pale, smoothstep(0.85, 1.0, corona) * smoothstep(disc + 0.06, disc, r));
-	// Its rim, a thin burning line.
-	float rim = smoothstep(0.018, 0.0, abs(r - disc));
-	col += pale * rim * breath;
-	// A glow far round it.
-	float glow = smoothstep(1.0, disc, r) * 0.25;
-	float lit = max(max(corona, rim), glow);
+	float reach = disc + (0.08 + 0.22 * smoothstep(0.4, 0.85, streams)) * breath;
+	float corona = smoothstep(reach, disc, r) * smoothstep(disc - 0.01, disc + 0.015, r);
+	// The outer corona: fine streamers drawn out far along the radius (noise round it only, so they run straight
+	// out), thinning as they go, a few reaching to its edge.
+	float strands = texture(noise, vec3(cos(a) * 7.0, sin(a) * 7.0, TIME * 0.01)).r;
+	float long_ones = texture(noise, vec3(cos(a) * 2.2, sin(a) * 2.2, 3.0 + TIME * 0.006)).r;
+	float far = disc + 0.15 + 0.55 * smoothstep(0.45, 0.8, long_ones);
+	float streamer = smoothstep(0.5, 0.8, strands) * smoothstep(far, disc, r) * smoothstep(disc, disc + 0.03, r);
+	vec3 col = mix(oxblood, marigold, smoothstep(0.0, 0.8, corona) * smoothstep(disc + 0.2, disc, r));
+	col = mix(col, pale, smoothstep(0.85, 1.0, corona) * smoothstep(disc + 0.05, disc, r));
+	col = mix(col, mix(oxblood * 1.4, marigold, smoothstep(disc + 0.3, disc, r)), streamer * (1.0 - corona));
+	// Its rim, a thin burning line, and a bead of light running slowly round it.
+	float rim = smoothstep(0.012, 0.0, abs(r - disc));
+	float bead_at = TIME * 0.05;
+	float bead = exp(-pow(length(p - vec2(cos(bead_at), sin(bead_at)) * disc) / 0.035, 2.0));
+	col += pale * (rim * breath + bead * 1.5);
+	// A dim oxblood halo far round it.
+	float halo = smoothstep(1.0, disc, r);
+	halo = halo * halo * 0.3;
+	float lit = max(max(max(corona, rim), streamer * 0.8), max(halo, bead));
+	col = mix(oxblood * 0.6, col, smoothstep(0.0, 0.3, max(max(corona, rim), max(streamer, bead))));
 	ALBEDO = r < disc ? ink : col;
 	ALPHA = r < disc ? 1.0 : clamp(lit, 0.0, 1.0);
 }

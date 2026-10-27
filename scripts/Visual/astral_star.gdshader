@@ -8,6 +8,8 @@ stencil_mode read, compare_equal, 1;
 uniform vec3 ward : source_color = vec3(0.812, 0.91, 0.941);
 uniform vec3 marigold : source_color = vec3(1.0, 0.62, 0.16);
 uniform float lit = 0.0;
+// The flare of its lighting (1 as it starts, fading).
+uniform float flare = 0.0;
 uniform bool star = true;
 instance uniform float seed = 0.0;
 
@@ -25,14 +27,16 @@ void fragment() {
 	if (star) {
 		float r = length(p);
 		float core = exp(-r * r * 22.0) * 1.6;
-		float halo = exp(-r * r * 5.0) * (0.25 + 0.75 * lit);
-		// Its four-pointed glint, longer when lit.
-		float glint = (exp(-abs(p.x) * 50.0) + exp(-abs(p.y) * 50.0)) * exp(-r * (4.0 - 2.8 * lit)) * (0.3 + lit);
-		ALBEDO = mix(ward, marigold, lit * 0.2) * (core + halo + glint) * twinkle * (0.45 + 0.75 * lit);
+		float halo = exp(-r * r * 5.0) * (0.15 + 0.85 * lit + 1.5 * flare);
+		// Its four-pointed glint, longer when lit, longest in the flare of its lighting.
+		float glint = (exp(-abs(p.x) * 50.0) + exp(-abs(p.y) * 50.0)) * exp(-r * (4.0 - 2.8 * max(lit, flare))) * (0.2 + lit + flare);
+		ALBEDO = mix(ward, marigold, lit * 0.2 + flare * 0.3) * (core + halo + glint) * twinkle * (0.3 + 0.9 * lit + flare);
 	} else {
-		// A thread: a fine line along its middle, drawn as its constellation lights.
-		float line = exp(-p.y * p.y * 40.0);
-		float drawn = smoothstep(lit * 1.2, lit * 1.2 - 0.1, UV.x);
-		ALBEDO = ward * line * (0.1 + 0.8 * lit * drawn) * twinkle;
+		// A thread: a fine line along its middle, drawn in as its constellation lights, its drawing end brightest.
+		float line = exp(-p.y * p.y * 40.0) + exp(-p.y * p.y * 6.0) * 0.25 * lit;
+		float reach = lit * 1.15;
+		float drawn = smoothstep(reach, reach - 0.08, UV.x);
+		float tip = exp(-pow((UV.x - reach + 0.04) / 0.05, 2.0)) * (1.0 - lit) * 2.0;
+		ALBEDO = ward * line * (0.04 + 0.85 * lit * drawn + tip) * twinkle;
 	}
 }

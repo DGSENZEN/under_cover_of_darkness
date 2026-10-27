@@ -12,7 +12,7 @@ stencil_mode read, compare_equal, 1;
 uniform sampler3D noise : filter_linear, repeat_enable;
 uniform float seed = 0.0;
 uniform bool socket = false;
-uniform vec3 white : source_color = vec3(0.78, 0.74, 0.64);
+uniform vec3 white : source_color = vec3(0.74, 0.68, 0.56);
 uniform vec3 vein : source_color = vec3(0.55, 0.12, 0.1);
 uniform vec3 iris : source_color = vec3(1.0, 0.6, 0.16);
 uniform vec3 pale : source_color = vec3(1.0, 0.88, 0.6);
@@ -74,7 +74,13 @@ void fragment() {
 		float veins = 1.0 - smoothstep(0.0, 0.03, abs(texture(noise, vec3(p * vec2(2.5, 5.0), seed * 2.0)).r - 0.5));
 		veins *= smoothstep(0.25, 0.85, abs(p.x));
 		float shade = smoothstep(0.0, 0.35, edge.x - p.y) * smoothstep(1.0, 0.6, abs(p.x));
-		vec3 col = mix(white, vein, veins * 0.6) * (0.35 + 0.65 * shade);
+		// (Round, as an eyeball is: darker toward its corners and under its lids, a wet sheen across its top.)
+		float ball = 1.0 - smoothstep(0.2, 1.0, length(vec2(p.x, p.y * 1.4)));
+		vec3 col = mix(white, vein, veins * 0.7) * (0.2 + 0.5 * shade) * (0.55 + 0.45 * ball);
+		col += pale * 0.08 * smoothstep(0.12, 0.0, abs(p.y - edge.x * 0.55)) * ball;
+		// Its inner corner's caruncle, wet flesh.
+		float corner = smoothstep(0.16, 0.05, length(vec2((p.x + 0.86) * 0.8, p.y - 0.02)));
+		col = mix(col, mix(flesh, oxblood, 0.5) * 1.2 + pale * 0.06, corner);
 		// Its iris: fibred, paler round the pupil, a collarette, dark at its limbus.
 		float ang = atan(c.y, c.x);
 		float fibres = texture(noise, vec3(cos(ang) * 4.0, sin(ang) * 4.0, d * 3.0 + seed)).r;

@@ -1,6 +1,6 @@
-// A veil of the wards' light hung across the astral passage (scripts/Visual/AstralPassage.gd): fine threads of
-// cyan-white falling slowly, a soft breath of light behind them, frayed at its edges and foot; it parts round whoever
-// walks through (`walker`), the hole wider the nearer.
+// A veil of the wards' light hung across the astral passage (scripts/Visual/AstralPassage.gd): a few soft ribbons of
+// cyan-white swaying as silk, one now and then with a marigold thread down it, a soft breath of light behind them,
+// frayed at its edges and foot; it parts round whoever walks through (`walker`), the hole wider the nearer.
 shader_type spatial;
 render_mode unshaded, blend_add, cull_disabled, depth_draw_never, fog_disabled;
 
@@ -17,18 +17,25 @@ void vertex() {
 }
 
 void fragment() {
-	// Fine threads falling down it, each its own brightness.
-	float across = UV.x * 18.0;
-	float lane = floor(across);
-	float hash = fract(sin(lane * 12.9898) * 43758.5453);
-	float thread = smoothstep(0.5, 0.0, abs(fract(across) - 0.5 - (hash - 0.5) * 0.5));
-	thread = pow(thread, 14.0);
-	float run = texture(noise, vec3(lane * 0.37, UV.y * 0.6 - TIME * (0.02 + 0.03 * hash), hash * 4.0)).r;
-	// (Only some lanes carry a thread at a time.)
-	float light = thread * smoothstep(0.5, 0.8, run) * step(0.35, hash) * (0.4 + 0.6 * hash);
+	// A few soft ribbons hung down it, each swaying as silk in a slow draught, brighter at their folds.
+	float light = 0.0;
+	float marigold_thread = 0.0;
+	for (int i = 0; i < 5; i++) {
+		float k = float(i);
+		float hash = fract(sin(k * 12.9898 + 4.1) * 43758.5453);
+		float at = (k + 0.5) / 5.0 + (hash - 0.5) * 0.12;
+		float sway = 0.035 * sin(UV.y * (4.0 + 3.0 * hash) + TIME * (0.25 + 0.2 * hash) + k * 2.0)
+			+ 0.015 * sin(UV.y * 11.0 - TIME * 0.6 + k);
+		float w = 0.01 + 0.012 * hash;
+		float d = abs(UV.x - at - sway);
+		float ribbon = smoothstep(w, 0.0, d);
+		float fold = 0.6 + 0.4 * sin(UV.y * 9.0 + TIME * 0.5 + k * 3.0);
+		light += ribbon * ribbon * fold * (0.5 + 0.5 * hash);
+		marigold_thread += step(0.82, hash) * smoothstep(0.004, 0.0, d);
+	}
 	// A soft breath of light behind them.
 	float breath = texture(noise, vec3(UV.x * 1.2, UV.y * 0.5 - TIME * 0.01, 0.7)).r;
-	light += smoothstep(0.4, 0.8, breath) * 0.1;
+	light += smoothstep(0.4, 0.8, breath) * 0.08;
 	// Frayed at its sides and its foot, thinning up toward the ceiling.
 	float fray = texture(noise, vec3(UV.x * 6.0, UV.y * 2.0, 1.5)).r;
 	float edge = smoothstep(0.0, 0.15, UV.x) * smoothstep(1.0, 0.85, UV.x);
@@ -37,6 +44,5 @@ void fragment() {
 	// Parted round the walker: a hole where they are, opening as they near.
 	float apart = smoothstep(0.35, 1.4, distance(world_pos, walker + vec3(0.0, 0.9, 0.0)));
 	// A thread of marigold now and then through it (the city's own colour, as through every ward).
-	vec3 tint = mix(colour, warm, step(0.93, hash) * 0.7);
-	ALBEDO = tint * light * edge * foot * top * apart * strength * 0.2;
+	ALBEDO = (colour * light + warm * marigold_thread * 0.6) * edge * foot * top * apart * strength * 0.22;
 }

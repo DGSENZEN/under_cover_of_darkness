@@ -217,6 +217,12 @@ func _gates(passage: Node3D) -> void:
 				gate.find_child("vortex", true, false) != null, gate.find_child("embers", true, false) != null,
 				gate.find_child("spiral", true, false) != null])
 			continue
+		# Round its circle, the void (a window with the circle cut out of it), not the dark beyond the gap.
+		var frame := gate.find_child("frame", true, false) as MeshInstance3D
+		var frame_look := frame.material_override as ShaderMaterial if frame != null else null
+		if frame_look == null or not frame_look.shader.resource_path.ends_with("astral_window.gdshader") \
+				or float(frame_look.get_shader_parameter(&"hole")) <= 0.0:
+			wrong.append("%s: no frame of void round its circle" % gate.name)
 		var depths := rings.map(func(r): return snappedf(r.position.z, 0.01))
 		if depths.size() != 3 or depths[0] == depths[1] or depths[1] == depths[2] or depths[0] == depths[2]:
 			wrong.append("%s's rings at one depth" % gate.name)

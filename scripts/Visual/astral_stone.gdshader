@@ -14,7 +14,11 @@ uniform vec3 marigold : source_color = vec3(1.0, 0.6, 0.18);
 uniform vec3 cream : source_color = vec3(0.8, 0.72, 0.56);
 uniform vec3 terracotta : source_color = vec3(0.6, 0.3, 0.2);
 uniform vec3 grout : source_color = vec3(0.16, 0.14, 0.12);
+uniform vec3 earth_tone : source_color = vec3(0.24, 0.17, 0.12);
+uniform vec3 oxblood : source_color = vec3(0.431, 0.122, 0.102);
 uniform float dim = 0.34;
+// Its top's height (m, the way's floor).
+uniform float top_y = 0.0;
 // The chequer's tile (m).
 uniform float tile = 0.3;
 
@@ -39,11 +43,18 @@ void fragment() {
 	float luma = dot(paint, vec3(0.333));
 	tiles *= 0.65 + 0.6 * luma;
 	tiles = mix(tiles, grout, line);
-	vec3 surface = mix(paint, tiles, top) * dim;
-	// A soft ward-white rim, the top's edge catching it least.
-	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.5);
+	// Its broken sides: the stone's own paint gone to earth, darker the deeper under its top, sinking into ink.
+	float under = clamp((top_y - world_pos.y) / 0.6, 0.0, 1.0);
+	float clod = texture(noise, world_pos * 3.0).r;
+	vec3 earth = mix(paint * 0.8, earth_tone * (0.6 + 0.6 * clod), 0.55) * (1.0 - 0.85 * under);
+	vec3 surface = mix(earth, tiles, top) * dim;
+	// A soft ward-white rim on its upper edges only.
+	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.5) * (1.0 - under);
 	float cracks = texture(noise, world_pos * 1.3).r;
 	float glyph = smoothstep(0.69, 0.71, cracks) * (1.0 - smoothstep(0.71, 0.73, cracks));
 	float pulse = 0.6 + 0.4 * sin(TIME * 0.9 + world_pos.x * 1.7 + world_pos.z * 1.1);
-	ALBEDO = surface + ward * rim * 0.28 * (1.0 - top * 0.7) + marigold * glyph * top * pulse * 0.7;
+	// Where it was torn loose, deep under, a faint glow in its cracks still.
+	float torn = smoothstep(0.55, 0.75, clod) * smoothstep(0.4, 1.0, under) * (1.0 - top);
+	ALBEDO = surface + ward * rim * 0.15 * (1.0 - top * 0.7) + marigold * glyph * top * pulse * 0.7
+		+ mix(oxblood, marigold, pulse * 0.5) * torn * 0.18;
 }
