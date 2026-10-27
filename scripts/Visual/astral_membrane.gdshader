@@ -19,8 +19,13 @@ uniform float circle = 0.47;
 
 varying vec3 world_pos;
 
+// How far it leans toward the eye off its gate's plane (m), so it never fights the gate's frame.
+uniform float lean = 0.015;
+
 void vertex() {
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	vec3 eye = (inverse(MODEL_MATRIX) * vec4(CAMERA_POSITION_WORLD, 1.0)).xyz;
+	VERTEX += normalize(eye - VERTEX) * lean;
 }
 
 vec2 turned(vec2 v, float a) {

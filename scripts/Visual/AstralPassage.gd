@@ -13,6 +13,8 @@ extends Node3D
 
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const WINDOW := preload("res://scripts/Visual/astral_window.gdshader")
+## The void marked round the gates and past the gaps (what lies in its plane over it leans toward the eye).
+const MARK := preload("res://scripts/Visual/astral_mark.gdshader")
 const SKY := preload("res://scripts/Visual/astral_sky.gdshader")
 const VEIL := preload("res://scripts/Visual/astral_veil.gdshader")
 const STONE := preload("res://scripts/Visual/astral_stone.gdshader")
@@ -75,6 +77,9 @@ const GATE_CIRCLE := 0.34
 ## The void round a gate's circle starts at its rim (a share of its circle's radius), its fire burning over it; the
 ## sheet's outer ring's rim (its share of the cell).
 const GATE_HOLE := 1.0
+## How far what lies in the plane of a gate's frame or a bleed (its vortex, rings, burning edge) leans toward the eye
+## off it (m), so nothing fights the void's depth there.
+const LEAN := 0.015
 const RING_SHEET_RIM := 0.48
 const TEAR_EDGE := preload("res://scripts/Visual/astral_tear.gdshader")
 ## Each gate's arch: how far out round its circle (a share of its rim), its stones' size (along, across, deep, m), how
@@ -579,6 +584,7 @@ func _thresholds() -> void:
 		look.set_shader_parameter(&"noise", Vfx.noise_3d())
 		look.set_shader_parameter(&"size", size)
 		look.set_shader_parameter(&"circle", GATE_CIRCLE)
+		look.set_shader_parameter(&"lean", LEAN)
 		_gate_quad(gate, "vortex", size, look)
 		# Its rings, sized so the sheet's outer ring sits at its circle's rim.
 		var rim := side * GATE_CIRCLE
@@ -589,13 +595,14 @@ func _thresholds() -> void:
 			ring_look.set_shader_parameter(&"cell", float(k))
 			ring_look.set_shader_parameter(&"seed", k * 1.7 + gate.position.z)
 			ring_look.render_priority = 1
+			ring_look.set_shader_parameter(&"lean", LEAN)
 			var ring := _gate_quad(gate, "ring%d" % (k + 1), Vector2.ONE * rim / RING_SHEET_RIM, ring_look)
 			ring.position.z = RING_DEPTHS[k]
 			ring.rotation.z = k * 0.9
 		# Round its circle, the void: a window with the circle cut out of it (from inside one with the passage's own
 		# void, so the gate floats in it); past it, the void bleeding out over the world's surfaces.
 		var frame_look := ShaderMaterial.new()
-		frame_look.shader = WINDOW
+		frame_look.shader = MARK
 		frame_look.set_shader_parameter(&"noise", Vfx.noise_3d())
 		frame_look.set_shader_parameter(&"hole", rim * GATE_HOLE)
 		frame_look.set_shader_parameter(&"size", size)
@@ -611,6 +618,7 @@ func _thresholds() -> void:
 func _tear_look(params: Dictionary) -> ShaderMaterial:
 	var look := ShaderMaterial.new()
 	look.shader = TEAR_EDGE
+	look.set_shader_parameter(&"lean", LEAN)
 	look.render_priority = 2
 	look.set_shader_parameter(&"noise", Vfx.noise_3d())
 	for key in params:
@@ -674,7 +682,7 @@ func _on_line(line: PackedVector2Array, by: float) -> Vector2:
 
 
 ## The void bleeding out past gap `k` (`gap`) over the world's own surfaces beyond it, in ragged tongues spreading
-## from the gap's edges (astral_window.gdshader's bleed), burning along their edges (astral_tear.gdshader): past a
+## from the gap's edges (astral_mark.gdshader's bleed), burning along their edges (astral_tear.gdshader): past a
 ## corridor's mouth (a gap with an "inset": how far in the world's walls stand from its edges), over the corridor's
 ## floor, walls and ceiling; past a hole in a wall, over the floor below it and the wall round it.
 func _bleed(k: int, gap: Dictionary) -> void:
@@ -724,7 +732,7 @@ func _bleed(k: int, gap: Dictionary) -> void:
 	for face: Array in faces:
 		var params := {&"bleed": BLEED, &"seg_a": face[3], &"seg_b": face[4]}
 		var look := ShaderMaterial.new()
-		look.shader = WINDOW
+		look.shader = MARK
 		look.set_shader_parameter(&"noise", Vfx.noise_3d())
 		for key in params:
 			look.set_shader_parameter(key, params[key])

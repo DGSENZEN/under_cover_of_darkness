@@ -227,6 +227,13 @@ func _plane(passage: Node3D) -> void:
 			and float((b.get_active_material(0) as ShaderMaterial).get_shader_parameter(&"bleed")) > 0.0)
 		if own.size() < 3:
 			wrong.append("gap %d: %d bleeds" % [k, own.size()])
+		# (Their burning edges lie on them: each edge leans toward the eye, or the two fight.)
+		for bleed: MeshInstance3D in own:
+			var edge_look := bleed.get_active_material(0) as ShaderMaterial
+			if edge_look.shader.resource_path.ends_with("astral_tear.gdshader") \
+					and float(edge_look.get_shader_parameter(&"lean") if edge_look.get_shader_parameter(&"lean") != null else 0.0) <= 0.0:
+				wrong.append("gap %d: a burning edge lies flat on its bleed" % k)
+				break
 	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
 	await _frames(3)
 	_check("M18j the shift of planes over the screen, eased in inside and out outside; the void bled out past every gap",
@@ -302,9 +309,16 @@ func _gates(passage: Node3D) -> void:
 		# Round its circle, the void (a window with the circle cut out of it), not the dark beyond the gap.
 		var frame := gate.find_child("frame", true, false) as MeshInstance3D
 		var frame_look := frame.material_override as ShaderMaterial if frame != null else null
-		if frame_look == null or not frame_look.shader.resource_path.ends_with("astral_window.gdshader") \
+		if frame_look == null or not frame_look.shader.resource_path.ends_with("astral_mark.gdshader") \
 				or float(frame_look.get_shader_parameter(&"hole")) <= 0.0:
 			wrong.append("%s: no frame of void round its circle" % gate.name)
+		# Its vortex and rings lie in its frame's plane over it: each leans toward the eye, or they fight the frame's
+		# depth (the jitter seen walking up to it from the spawn).
+		for part: Node in [gate.find_child("vortex", true, false)] + gate.find_children("ring*", "MeshInstance3D", true, false):
+			var part_look := (part as MeshInstance3D).material_override as ShaderMaterial if part is MeshInstance3D else null
+			var lean: Variant = part_look.get_shader_parameter(&"lean") if part_look != null else null
+			if lean == null or float(lean) <= 0.0:
+				wrong.append("%s's %s lies flat on its frame" % [gate.name, part.name if part != null else "vortex"])
 		# An arch of floating carved stones round it, drawn in the void (astral_arch.gdshader).
 		var arch := gate.find_children("arch*", "MeshInstance3D", true, false).filter(func(m):
 			return m.material_override is ShaderMaterial and m.material_override.shader.resource_path.ends_with("astral_arch.gdshader"))
