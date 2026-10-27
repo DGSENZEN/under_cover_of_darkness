@@ -164,6 +164,99 @@ func _astral() -> void:
 	await _fragments(passage)
 	await _presences(passage)
 	await _thresholds(passage)
+	await _deep(passage)
+	await _gates(passage)
+	_detail(passage)
+
+
+## M18f: the deep's eclipse far off; its rivers of the dead (one within 3-7 m of the way); its glyph constellations,
+## each lit in turn as the walker goes along the way.
+func _deep(passage: Node3D) -> void:
+	var wrong := []
+	var middle: Vector3 = passage.bounds.get_center()
+	var eclipse: Node3D = passage.get("eclipse")
+	if eclipse == null or eclipse.global_position.distance_to(middle) < 25.0:
+		wrong.append("no eclipse far off")
+	var rivers: Array = passage.get("rivers") if passage.get("rivers") != null else []
+	var nearest := INF
+	for river: Node3D in rivers:
+		var path: PackedVector3Array = river.get_meta("path", PackedVector3Array())
+		for p in path:
+			for line: PackedVector3Array in passage.way:
+				for i in line.size() - 1:
+					nearest = minf(nearest, Geometry3D.get_closest_point_to_segment(p, line[i], line[i + 1]).distance_to(p))
+	if rivers.size() < 3 or nearest < 3.0 or nearest > 7.0:
+		wrong.append("%d rivers, the nearest %.1f m from the way" % [rivers.size(), nearest])
+	var stars: Array = passage.get("constellations") if passage.get("constellations") != null else []
+	if stars.size() < 4 or stars.any(func(c): return c.find_children("star*", "Node3D", true, false).size() < 3):
+		wrong.append("%d constellations" % stars.size())
+	else:
+		var lit := []
+		for t in [0.15, 0.85]:
+			var main: PackedVector3Array = passage.way[0]
+			map.player.global_position = main[int(t * (main.size() - 1))] + Vector3(0.0, 1.05, 0.0)
+			await _frames(30)
+			lit.append(passage.lit_constellation)
+		if lit[0] == lit[1] or lit[0] < 0:
+			wrong.append("the constellation lit doesn't change along the way: %s" % [lit])
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(3)
+	_check("M18f the deep's eclipse, rivers of the dead and glyph constellations", wrong.is_empty(), "%s" % [wrong])
+
+
+## M18g: each gate a ward-gate vortex: three rings of the script at different depths turning against each other, its
+## vortex, its embers burning off its rim, motes spiralling in.
+func _gates(passage: Node3D) -> void:
+	var wrong := []
+	var turned := {}
+	for gate: Node3D in passage.thresholds:
+		var rings := gate.find_children("ring*", "MeshInstance3D", true, false)
+		if rings.size() != 3 or gate.find_child("vortex", true, false) == null \
+				or gate.find_child("embers", true, false) == null or gate.find_child("spiral", true, false) == null:
+			wrong.append("%s: %d rings, vortex %s, embers %s, spiral %s" % [gate.name, rings.size(),
+				gate.find_child("vortex", true, false) != null, gate.find_child("embers", true, false) != null,
+				gate.find_child("spiral", true, false) != null])
+			continue
+		var depths := rings.map(func(r): return snappedf(r.position.z, 0.01))
+		if depths.size() != 3 or depths[0] == depths[1] or depths[1] == depths[2] or depths[0] == depths[2]:
+			wrong.append("%s's rings at one depth" % gate.name)
+		for ring: Node3D in rings:
+			turned[ring] = ring.rotation.z
+	await _frames(30)
+	var ways := {}
+	for ring: Node3D in turned:
+		var by := wrapf(ring.rotation.z - turned[ring], -PI, PI)
+		if is_zero_approx(by):
+			wrong.append("%s still" % ring.name)
+		ways[ring.get_parent()] = ways.get(ring.get_parent(), []) + [signf(by)]
+	for gate in ways:
+		if not (1.0 in ways[gate] and -1.0 in ways[gate]):
+			wrong.append("%s's rings all turn one way" % gate.name)
+	_check("M18g each gate a ward-gate vortex: three rings turning against each other, its vortex, embers, motes",
+		wrong.is_empty(), "%s" % [wrong.slice(0, 5)])
+
+
+## M18h: the serpent feathered, its head with jaws, fangs and an eye, its body swimming; each eye set in a crack in
+## the dark.
+func _detail(passage: Node3D) -> void:
+	var wrong := []
+	for presence: Node3D in passage.presences:
+		match String(presence.get_meta("kind", "")):
+			"serpent":
+				for part in ["head", "jaw", "fangs", "serpent_eye", "feathers"]:
+					if presence.find_child(part, true, false) == null:
+						wrong.append("the serpent has no %s" % part)
+				var body: MeshInstance3D = presence.find_child("coils", true, false)
+				var swim: Variant = (body.material_override as ShaderMaterial).get_shader_parameter(&"swim") \
+					if body != null and body.material_override is ShaderMaterial else null
+				if swim == null or float(swim) <= 0.0:
+					wrong.append("the serpent's body doesn't swim")
+			"eyes":
+				for eye: Node in presence.get_children():
+					if eye.name.begins_with("eye") and eye.find_child("socket", true, false) == null:
+						wrong.append("an eye with no crack round it")
+	_check("M18h the serpent feathered, jawed, fanged and swimming; each eye set in a crack in the dark",
+		wrong.is_empty(), "%s" % [wrong.slice(0, 5)])
 
 
 ## M18d: a threshold in each of the passage's gaps; walking in through the stairs' gap one crossing, the walker inside,
@@ -217,7 +310,7 @@ func _presences(passage: Node3D) -> void:
 	var wrong := []
 	var found: Array = passage.get("presences") if passage.get("presences") != null else []
 	var kinds := {}
-	var through := ["astral_ink.gdshader", "astral_eye.gdshader", "astral_cutout.gdshader"]
+	var through := ["astral_ink.gdshader", "astral_eye.gdshader", "astral_cutout.gdshader", "astral_serpent.gdshader"]
 	var was := {}
 	var watched := []
 	for presence: Node3D in found:

@@ -99,6 +99,28 @@ func _ready() -> void:
 		_look(view[0], view[1])
 		await _seconds(0.5)
 		_shot(view[2])
+	# From inside the north passage through a long lens: the serpent, its head, an eye in its crack, the lit
+	# constellation (each aimed again just before its shot: they move).
+	var passage: Node3D = map.get_node_or_null("astral_north")
+	if passage != null:
+		var stand := pasaje.to_global(Vector3(0.0, 1.65, -31.0))
+		var serpent: Node3D = passage.presences.filter(func(p): return p.get_meta("kind", "") == "serpent")[0]
+		var eyes: Node3D = passage.presences.filter(func(p): return p.get_meta("kind", "") == "eyes")[0]
+		var long := [
+			[func(): return serpent.to_global(Vector3(0.0, 0.0, -6.0)), 34.0, "13m_astral_zoom_the_serpent"],
+			[func(): return serpent.to_global(Vector3(0.0, 0.2, 1.2)), 9.0, "13n_astral_zoom_its_head"],
+			[func(): return (eyes.get_child(0) as Node3D).global_position, 8.0, "13o_astral_zoom_an_eye", -37.5],
+			[func(): return passage.constellations[2].global_position, 40.0, "13p_astral_zoom_a_constellation"],
+		]
+		# (A view's own stand along the passage, when it names one.)
+		for view in long:
+			var from: Vector3 = pasaje.to_global(Vector3(0.0, 1.65, view[3])) if view.size() > 3 else stand
+			eye.fov = view[1]
+			eye.global_transform = Transform3D(Basis.IDENTITY, from).looking_at(view[0].call(), Vector3.UP)
+			await _seconds(0.5)
+			eye.global_transform = Transform3D(Basis.IDENTITY, from).looking_at(view[0].call(), Vector3.UP)
+			_shot(view[2])
+		eye.fov = fov
 	var lamp := OmniLight3D.new()
 	lamp.light_color = Color(1.0, 0.95, 0.88)
 	lamp.light_energy = 1.6

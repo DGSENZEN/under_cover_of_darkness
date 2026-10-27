@@ -85,6 +85,37 @@ No free VFX assets; everything is drawn, modelled or shaded by us.
 - In-game stills of the north passage first: from the stairs, halfway, looking out into the void, at a threshold.
   The user's word before the south passage is built.
 
+## Round two (the user's word, Oct 26 2026, on the north passage's stills)
+
+"It needs to fit in overall with the art style and feel, it feels a tad jarring"; the gate "needs a bit more work to
+feel astral"; the aurora "doesn't feel magical and supernatural enough"; the eyes and the serpent "require more
+detail"; the buildings (the fragments) are fine; it "shouldn't feel so rough". The user chose:
+
+- **Sky:** an eclipse in the deep, rivers of the dead, and glyph constellations.
+- **Gate:** a ward-gate vortex.
+
+### What changes
+
+- **The colour rule** (the city's effects, [[vfx-aesthetic-and-pipeline]]): marigold for the dead, cyan-white #CFE8F0
+  for wards, oxblood #6E1F1A for the gods, phosphor green #7FD36A for the seeped. The deep is ink, with the seeped
+  dark's green and oxblood in its depths; the generic violet and teal go. The gate is a ward: cyan-white. The dead's
+  rivers and the eyes are marigold.
+- **The deep, smoothed:** soft painted gradients, not contour-stepped noise.
+- **The eclipse:** a black sun far off, its corona oxblood and marigold in streamers, slowly breathing. The city's
+  eclipse, seen from the other side.
+- **Rivers of the dead:** slow streams of marigold lights winding through the void toward the market, one passing a
+  few metres from the way.
+- **Glyph constellations:** stars at the invented script's strokes, joined by faint threads, each glyph lighting in
+  turn as the walker goes along the way.
+- **The gate:** three rings of the invented script at different depths, turning against each other in cyan-white,
+  round a swirling vortex with depth. Its rim is ragged and burning, marigold embers drift off it, and motes spiral
+  in.
+- **The eyes:** a fibred iris with its limbus, a veined white, a wet glint, fleshy lids that close properly, each set
+  in a crack in the dark.
+- **The serpent:** feathered: scales, a crest of feathers along its spine, a head with jaws, fangs and a marigold eye,
+  its body undulating as it swims.
+- **The way:** its stones' tops the Pasaje's own chequered tiles, torn loose; the rims softer.
+
 ## Left to the builder
 
 The fragments' and presences' exact placement and drift, the way's winding, the sky's painting, the warp's shape,
