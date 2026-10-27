@@ -6,7 +6,9 @@ extends Node
 ## loadable (P1-P4, P7), the pause menu's six words and Escape (P5), a load
 ## from the pause leaving the game unpaused (P6); the death page: Load latest
 ## loads the run's newest save (P8), restarts the map with none (P9), saving
-## is held while dead and its Load opens the Load page (P10).
+## is held while dead and its Load opens the Load page (P10); a damaged save
+## chosen from the pause brings the pause back (P11); Escape while dead opens
+## no pause over the death page (P12).
 ##   Godot --headless --fixed-fps 60 --path . res://tests/save_pages_test.tscn
 
 const SaveFiles := preload("res://scripts/Save/SaveFiles.gd")
@@ -31,7 +33,9 @@ func _ready() -> void:
 	await _p7_damaged()
 	await _p5_pause_words()
 	await _p6_load_from_the_pause()
+	await _p11_damaged_from_the_pause()
 	await _p10_dead_holds_saves()
+	await _p12_no_pause_when_dead()
 	await _p8_death_loads_latest()
 	await _p9_death_with_no_save()
 	print("\n==== RESULTS ====")
@@ -263,6 +267,39 @@ func _p9_death_with_no_save() -> void:
 			break
 	_check("P9 dying with no save in the run starts the map again", get_tree().current_scene != before and _player() != null and not _player().is_dead,
 		"same scene %s" % [get_tree().current_scene == before])
+
+
+func _p11_damaged_from_the_pause() -> void:
+	var run: String = city.run_id
+	_write(run, "named_9", &"named", 999999)
+	var path := SaveFiles.root().path_join(run).path_join("named_9.save")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	var header_only := FileAccess.open(path, FileAccess.WRITE)
+	header_only.store_buffer(bytes.slice(0, bytes.size() - 6))
+	header_only.close()
+	var hud: Node = _player().hud
+	hud.pause_game()
+	await get_tree().process_frame
+	await hud._pause._load_chosen(run, "named_9")
+	await get_tree().process_frame
+	_check("P11 a damaged save chosen from the pause brings the pause back", get_tree().paused and hud._pause.visible and hud._pause.saves_open,
+		"paused %s pause %s page %s" % [get_tree().paused, hud._pause.visible, hud._pause.saves_open])
+	hud._pause.close_saves(false)
+	hud.resume()
+	SaveFiles.delete_save(run, "named_9")
+	await get_tree().process_frame
+
+
+func _p12_no_pause_when_dead() -> void:
+	var escape := InputEventAction.new()
+	escape.action = &"ui_cancel"
+	escape.pressed = true
+	Input.parse_input_event(escape)
+	for i in 5:
+		await get_tree().process_frame
+	var hud: Node = _player().hud
+	_check("P12 Escape while dead opens no pause over the death page", not get_tree().paused and not hud._pause.visible and hud.death_page.visible,
+		"paused %s pause %s death %s" % [get_tree().paused, hud._pause.visible, hud.death_page.visible])
 
 
 func _check(test_name: String, ok: bool, detail: String) -> void:

@@ -25,6 +25,8 @@ const LAST_RUN := "last_run"
 static var _root := ""
 ## Whether the last write() ran on the main thread (the save suite checks it never does).
 static var wrote_on_main := false
+## The disk takes only half of a write (a full disk): for the suite's sake.
+static var short_write_for_test := false
 
 
 ## Where the saves are kept; a test run (a scene under res://tests/) keeps its
@@ -95,7 +97,7 @@ static func runs() -> Array[Dictionary]:
 		var created := int(file.get_value("run", "created", 0))
 		var newest := newest_save(id)
 		found.append({"id": id, "archetype": StringName(str(file.get_value("run", "archetype", ""))), "created": created,
-			"played": float(file.get_value("run", "played", 0.0)), "newest": int(newest.get("date", created))})
+			"played": float(file.get_value("run", "played", 0.0)), "newest": float(newest.get("date", created))})
 
 	found.sort_custom(func(a, b): return a["newest"] > b["newest"] if a["newest"] != b["newest"] else a["created"] > b["created"])
 	return found
@@ -161,7 +163,7 @@ static func saves(run_id: String) -> Array[Dictionary]:
 		if ok:
 			entry = header.duplicate()
 		else:
-			entry = {"slot": slot, "kind": StringName(slot.get_slice("_", 0)), "date": int(FileAccess.get_modified_time(path)), "run": run_id}
+			entry = {"slot": slot, "kind": StringName(slot.get_slice("_", 0)), "date": float(FileAccess.get_modified_time(path)), "run": run_id}
 
 		entry["path"] = path
 		var picture := folder.path_join(slot + ".png")
@@ -169,7 +171,7 @@ static func saves(run_id: String) -> Array[Dictionary]:
 		entry["readable"] = ok
 		found.append(entry)
 
-	found.sort_custom(func(a, b): return int(a["date"]) > int(b["date"]))
+	found.sort_custom(func(a, b): return float(a["date"]) > float(b["date"]))
 	return found
 
 
@@ -182,19 +184,29 @@ static func newest_save(run_id: String) -> Dictionary:
 	return {}
 
 
-## What Continue loads: the newest save of the run played last; if it has
-## none, the newest of any run; {} with none at all.
+## The newest save of the run that can be loaded: its body read whole (a
+## header can be fine over a damaged body); {} if none.
+static func newest_loadable(run_id: String) -> Dictionary:
+	for entry in saves(run_id):
+		if entry["readable"] and not read(entry["path"]).has("error"):
+			return entry
+
+	return {}
+
+
+## What Continue loads: the newest loadable save of the run played last; if
+## it has none, the newest of any run; {} with none at all.
 static func continue_target() -> Dictionary:
 	var last := last_run()
 
 	if last != "":
-		var newest := newest_save(last)
+		var newest := newest_loadable(last)
 
 		if not newest.is_empty():
 			return newest
 
 	for run in runs():
-		var newest := newest_save(run["id"])
+		var newest := newest_loadable(run["id"])
 
 		if not newest.is_empty():
 			return newest
@@ -217,7 +229,7 @@ static func next_slot(run_id: String, kind: StringName) -> String:
 		return "named_%d" % (most + 1)
 
 	var oldest := ""
-	var oldest_date := 0
+	var oldest_date := 0.0
 
 	for i in range(1, QUICK_KEEP + 1):
 		var slot := "%s_%d" % [kind, i]
@@ -227,7 +239,7 @@ static func next_slot(run_id: String, kind: StringName) -> String:
 			return slot
 
 		var header := read_header(path)
-		var date := int(header.get("date", -1)) if not header.is_empty() else -1
+		var date := float(header.get("date", -1.0)) if not header.is_empty() else -1.0
 
 		if oldest == "" or date < oldest_date:
 			oldest = slot
@@ -253,14 +265,30 @@ static func write(run_id: String, slot: String, header: Dictionary, body: Dictio
 	if file == null:
 		return FileAccess.get_open_error() if FileAccess.get_open_error() != OK else ERR_CANT_CREATE
 
-	file.store_var(header)
-	file.store_var(body)
-	error = file.get_error()
+	var stored := file.store_var(header) and file.store_var(body)
+	file.flush()
+	var written := file.get_position()
 	file.close()
 
-	if error != OK:
+	if short_write_for_test:
+		var whole := FileAccess.get_file_as_bytes(tmp)
+		var cut := FileAccess.open(tmp, FileAccess.WRITE)
+		cut.store_buffer(whole.slice(0, whole.size() / 2))
+		cut.close()
+
+	# What reached the disk is read back before it takes the old save's place:
+	# a full disk writes short, and says so nowhere else.
+	if not stored or FileAccess.get_file_as_bytes(tmp).size() != written or not _intact(tmp):
 		DirAccess.remove_absolute(tmp)
-		return error
+		return ERR_FILE_CANT_WRITE
+
+	# A run deleted while it was played comes back with its next save.
+	if not FileAccess.file_exists(folder.path_join(RUN_FILE)):
+		var run_file := ConfigFile.new()
+		run_file.set_value("run", "archetype", String(header.get("archetype", "")))
+		run_file.set_value("run", "created", int(header.get("date", Time.get_unix_time_from_system())))
+		run_file.set_value("run", "played", float(header.get("played", 0.0)))
+		run_file.save(folder.path_join(RUN_FILE))
 
 	error = DirAccess.rename_absolute(tmp, folder.path_join(slot + ".save"))
 
@@ -275,6 +303,22 @@ static func write(run_id: String, slot: String, header: Dictionary, body: Dictio
 
 	set_last_run(run_id)
 	return OK
+
+
+## Whether the file at `path` holds a whole header and body (whatever their
+## version).
+static func _intact(path: String) -> bool:
+	var file := FileAccess.open(path, FileAccess.READ)
+
+	if file == null or file.get_length() < 8:
+		return false
+
+	var header: Variant = file.get_var()
+
+	if not (header is Dictionary) or file.get_position() >= file.get_length():
+		return false
+
+	return file.get_var() is Dictionary
 
 
 ## A save's header alone ({} when it cannot be read).

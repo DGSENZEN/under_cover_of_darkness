@@ -1,7 +1,10 @@
 extends Node
 ## The save files on disk (the save and load spec, sections 1 and 8): runs,
 ## the slots and their rotation, writing through a .tmp, headers read alone,
-## deleting, Continue's choice, unreadable and newer saves (F1-F13).
+## deleting, Continue's choice, unreadable and newer saves (F1-F13); a write
+## that comes up short leaves the old save (F14); Continue passes over a save
+## whose body is damaged (F15); saves a moment apart keep their order (F16);
+## a run deleted while played comes back with its next save (F17).
 ##   Godot --headless --fixed-fps 60 --path . res://tests/save_files_test.tscn
 
 const SaveFiles := preload("res://scripts/Save/SaveFiles.gd")
@@ -29,6 +32,10 @@ func _ready() -> void:
 	_f11_newer_version()
 	_f12_runs_apart()
 	_f13_version_one()
+	_f14_short_write()
+	_f15_damaged_body()
+	_f16_same_second()
+	_f17_run_deleted_mid_play()
 	_wipe()
 	print("\n==== RESULTS ====")
 
@@ -239,6 +246,61 @@ func _f13_version_one() -> void:
 
 	var back := SaveFiles.read(V1_FIXTURE)
 	_check("F13 version 1 reads", not back.has("error") and back["header"]["version"] == 1 and back["body"]["saveables"]["a/b"]["open"] == true, str(back))
+
+
+func _f14_short_write() -> void:
+	_wipe()
+	var id := SaveFiles.new_run(&"derive")
+	var slot := _save(id, &"named", 100, {"first": true})
+	var path := SaveFiles.root().path_join(id).path_join(slot + ".save")
+	var before := FileAccess.get_file_as_bytes(path)
+	# The disk takes half of what was written (a full disk).
+	SaveFiles.short_write_for_test = true
+	var error := SaveFiles.write(id, slot, _header(id, slot, &"named", 200), {"second": PackedByteArray([1, 2, 3]).duplicate(), "pad": "x".repeat(4000)}, _picture())
+	SaveFiles.short_write_for_test = false
+	_check("F14 a write that comes up short leaves the old save whole", error != OK and FileAccess.get_file_as_bytes(path) == before, "%s" % error)
+
+
+func _f15_damaged_body() -> void:
+	_wipe()
+	var id := SaveFiles.new_run(&"derive")
+	_save(id, &"named", 100, {"good": true})
+	var bad := _save(id, &"named", 200, {"pad": "x".repeat(4000)})
+	var path := SaveFiles.root().path_join(id).path_join(bad + ".save")
+	var bytes := FileAccess.get_file_as_bytes(path)
+	# The header whole, the body cut off.
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_buffer(bytes.slice(0, bytes.size() - 2000))
+	file.close()
+	SaveFiles.set_last_run(id)
+	var target := SaveFiles.continue_target()
+	_check("F15 Continue passes over a save whose body is damaged", target.get("slot") == "named_1", str(target.get("slot")))
+
+
+func _f16_same_second() -> void:
+	_wipe()
+	var id := SaveFiles.new_run(&"derive")
+
+	for date in [100.1, 100.4, 100.7, 100.9]:
+		_save(id, &"quick", 0, {"at": date})
+		var slot: String = SaveFiles.saves(id).filter(func(s): return s["date"] == 0)[0]["slot"]
+		var header := _header(id, slot, &"quick", 0)
+		header["date"] = date
+		SaveFiles.write(id, slot, header, {"at": date}, null)
+
+	var dates := SaveFiles.saves(id).map(func(s): return s["date"])
+	_check("F16 saves a moment apart keep their order; the oldest is the one written over", dates == [100.9, 100.7, 100.4], str(dates))
+
+
+func _f17_run_deleted_mid_play() -> void:
+	_wipe()
+	var id := SaveFiles.new_run(&"factotum")
+	_save(id, &"quick", 100)
+	SaveFiles.delete_run(id)
+	_save(id, &"quick", 200)
+	var runs := SaveFiles.runs()
+	_check("F17 a run deleted while played comes back with its next save", runs.size() == 1 and runs[0]["id"] == id and runs[0]["archetype"] == &"derive",
+		str(runs))
 
 
 func _check(test_name: String, ok: bool, detail: String) -> void:

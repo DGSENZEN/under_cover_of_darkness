@@ -70,7 +70,7 @@ func _process(_delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _in_game_map():
+	if not _in_game_map() or covered():
 		return
 
 	if InputMap.has_action(&"quick_save") and event.is_action_pressed(&"quick_save"):
@@ -199,7 +199,7 @@ func _city() -> Node:
 ## loading, under the loading cover, while dead or talking, nor with no
 ## player in play.
 func can_save() -> bool:
-	if not _holds.is_empty() or loading or get_tree().root.get_node_or_null("ArtLoading") != null:
+	if not _holds.is_empty() or loading or covered():
 		return false
 
 	var player := _player()
@@ -209,6 +209,11 @@ func can_save() -> bool:
 
 	var frob: Variant = player.get("frob")
 	return not (frob != null and is_instance_valid(frob) and frob.has_method("talking") and frob.talking() != null)
+
+
+## A loading cover is up (a load's, or one on its way to another scene).
+func covered() -> bool:
+	return not get_tree().get_nodes_in_group(&"loading_cover").is_empty()
 
 
 func hold(reason: StringName) -> void:
@@ -279,6 +284,13 @@ func request_save(kind: StringName, named := "", slot := "") -> void:
 ## thread; says how it went.
 func _save_now(kind: StringName, named: String, slot: String) -> void:
 	_saving = true
+	var city := _city()
+
+	# A game begun without New Game (a map run on its own): a run of its own
+	# now, before the city's memory is gathered, and nothing of it forgotten.
+	if city != null and city.run_id == "":
+		_start_run(city.archetype)
+
 	var body := gather()
 
 	if body.is_empty():
@@ -287,17 +299,12 @@ func _save_now(kind: StringName, named: String, slot: String) -> void:
 		saved.emit("", slot, ERR_INVALID_DATA)
 		return
 
-	var city := _city()
-
-	if city != null and city.run_id == "":
-		begin_run(city.archetype)
-
 	var run_id: String = city.run_id if city != null else ""
 	var into := slot if slot != "" else SaveFiles.next_slot(run_id, kind)
 	var scene := get_tree().current_scene
 	var header := {"version": SaveMigrations.CURRENT, "run": run_id, "slot": into, "kind": kind, "name": named, "map": scene.scene_file_path,
 		"place": SaveWords.PLACES.get(scene.scene_file_path, SaveWords.SOMEWHERE), "archetype": city.archetype if city != null else &"",
-		"date": int(Time.get_unix_time_from_system()), "played": city.played if city != null else 0.0}
+		"date": Time.get_unix_time_from_system(), "played": city.played if city != null else 0.0}
 	var picture := await _picture()
 	var played: float = header["played"]
 	_task = WorkerThreadPool.add_task(func():
@@ -360,24 +367,28 @@ func _note(text: String) -> void:
 
 ## Loads the run's newest quicksave (nothing while a load is under way).
 func quickload() -> Error:
-	if loading:
+	if loading or covered():
 		return ERR_BUSY
 
 	var city := _city()
 	var run_id: String = city.run_id if city != null and city.run_id != "" else SaveFiles.last_run()
 	var quick := SaveFiles.saves(run_id).filter(func(s): return s["kind"] == &"quick" and s["readable"])
 
-	if quick.is_empty():
-		_note(SaveWords.NOTHING_TO_LOAD)
-		return ERR_DOES_NOT_EXIST
+	# The newest that reads whole (a damaged one is passed over).
+	for entry in quick:
+		var error: Error = await load_slot(run_id, entry["slot"])
 
-	return await load_slot(run_id, quick[0]["slot"])
+		if error != ERR_FILE_CORRUPT:
+			return error
+
+	_note(SaveWords.NOTHING_TO_LOAD)
+	return ERR_DOES_NOT_EXIST
 
 
 ## Loads a save: read, then its map built under the loading cover and the
 ## save set on it before the game plays on (unpaused, the pause gone).
 func load_slot(run_id: String, slot: String) -> Error:
-	if loading:
+	if loading or covered():
 		return ERR_BUSY
 
 	var read := SaveFiles.read(SaveFiles.root().path_join(run_id).path_join(slot + ".save"))
@@ -504,11 +515,21 @@ func apply_pending(scene: Node) -> Error:
 ## A new playthrough as `archetype`: a run of its own on disk, the city's
 ## memory begun again.
 func begin_run(archetype: StringName) -> String:
-	var id := SaveFiles.new_run(archetype)
 	var city := _city()
 
 	if city != null:
 		city.new_game()
+
+	_waiting.clear()
+	return _start_run(archetype)
+
+
+## A run on disk for the game being played, as `archetype`; returns its id.
+func _start_run(archetype: StringName) -> String:
+	var id := SaveFiles.new_run(archetype)
+	var city := _city()
+
+	if city != null:
 		city.run_id = id
 		city.archetype = archetype
 

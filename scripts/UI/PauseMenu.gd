@@ -429,7 +429,12 @@ func _load_chosen(run_id: String, slot: String) -> void:
 		return
 	close_saves(false)
 	set_open(false)
-	save.load_slot(run_id, slot)
+	var error: Error = await save.load_slot(run_id, slot)
+	# Not loaded (damaged, refused): the game is still paused, so the pause
+	# comes back, on its Load page.
+	if error != OK and get_tree() != null and get_tree().paused:
+		set_open(true)
+		open_saves(&"load")
 
 ## A slot chosen on the Save page: written (the picture is the frame from
 ## the pause's opening), then the page shows it.

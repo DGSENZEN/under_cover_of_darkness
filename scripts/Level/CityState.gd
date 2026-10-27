@@ -81,7 +81,10 @@ func save_state() -> Dictionary:
 
 ## Back as a save had it.
 func load_state(state: Dictionary) -> void:
-	run_id = String(state.get("run", ""))
+	# (A save from before its game had a run keeps the run it is loaded into.)
+	if String(state.get("run", "")) != "":
+		run_id = String(state["run"])
+
 	played = float(state.get("played", 0.0))
 	archetype = StringName(state.get("archetype", &""))
 	districts = (state.get("districts", {}) as Dictionary).duplicate(true)

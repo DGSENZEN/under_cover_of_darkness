@@ -12,6 +12,8 @@ var _root: Control
 static func open(tree: SceneTree) -> CanvasLayer:
 	var screen: CanvasLayer = (load("res://scripts/UI/ArtLoadingScreen.gd") as GDScript).new()
 	screen.name = "ArtLoading"
+	# (However many are up, and whatever Godot names a second one.)
+	screen.add_to_group(&"loading_cover")
 	tree.root.add_child(screen)
 	return screen
 

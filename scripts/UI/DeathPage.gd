@@ -81,7 +81,7 @@ func _activate(index: int) -> void:
 ## The run's newest save; with none, the map from the start.
 func load_latest() -> void:
 	var city := get_node_or_null("/root/CityState")
-	var newest := SaveFiles.newest_save(city.run_id) if city != null and city.run_id != "" else {}
+	var newest := SaveFiles.newest_loadable(city.run_id) if city != null and city.run_id != "" else {}
 
 	if newest.is_empty():
 		get_tree().reload_current_scene()

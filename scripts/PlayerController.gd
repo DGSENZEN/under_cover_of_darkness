@@ -726,9 +726,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		set_legacy_feel(not legacy_feel)
 		get_viewport().set_input_as_handled()
 
-	elif event.is_action_pressed("ui_cancel"):
+	elif event.is_action_pressed("ui_cancel") and not is_dead:
 		# Esc pauses the game and lets the mouse go; the HUD's pause screen
-		# takes it back on a click.
+		# takes it back on a click. (Dead, the death page is up instead.)
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 		if hud != null:

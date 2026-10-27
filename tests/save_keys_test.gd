@@ -1,6 +1,8 @@
 extends Node
 ## Quicksave, quickload and the autosave on arriving, in the real Metro (the
-## save and load spec, sections 2 and 4; K1-K8). It changes the scene, so it
+## save and load spec, sections 2 and 4; K1-K8); a first save in a game begun
+## without New Game keeps what the city remembers (K9); quickload does
+## nothing under a cover that is not a load (K10). It changes the scene, so it
 ## hands the scene a stand-in first and stays under the root itself.
 ##   Godot --headless --fixed-fps 60 --path . res://tests/save_keys_test.tscn
 
@@ -34,6 +36,8 @@ func _ready() -> void:
 	await _k4_quickload(run)
 	await _k5_one_load(run)
 	await _k7_after_a_load(run)
+	await _k9_first_save_with_no_run()
+	await _k10_no_load_under_another_cover()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -94,8 +98,8 @@ func _k3_autosave_on_arrival(run: String) -> void:
 
 func _k1_quicksave(run: String) -> void:
 	_press(&"quick_save")
-	var wrote: bool = await _until(func(): return _kinds(run, &"quick").size() == 1)
 	var hud: Node = _player().hud
+	var wrote: bool = await _until(func(): return _kinds(run, &"quick").size() == 1 and hud._caption.text == SaveWords.SAVED)
 	var picture: String = _kinds(run, &"quick")[0]["picture"] if wrote else ""
 	# (Headless there is nothing drawn to take a picture of.)
 	var pictured := picture != "" or DisplayServer.get_name() == "headless"
@@ -136,12 +140,19 @@ func _k6_failure(run: String) -> void:
 	var before := FileAccess.get_file_as_bytes(folder.path_join(other + ".save"))
 	DirAccess.make_dir_recursive_absolute(folder.path_join(slot + ".tmp"))
 	var outcome := [null]
-	save.saved.connect(func(_r, _s, error): outcome[0] = error, CONNECT_ONE_SHOT)
+	var wrote_slot := [""]
+	# (Only this save's outcome: an earlier one may still be finishing.)
+	var heard := func(_r, written, error):
+		if written == slot:
+			outcome[0] = error
+			wrote_slot[0] = written
+	save.saved.connect(heard)
 	_press(&"quick_save")
 	await _until(func(): return outcome[0] != null)
 	DirAccess.remove_absolute(folder.path_join(slot + ".tmp"))
+	save.saved.disconnect(heard)
 	_check("K6 a save that cannot be written says so and harms nothing", outcome[0] != null and outcome[0] != OK and _player().hud._caption.text == SaveWords.FAILED
-		and FileAccess.get_file_as_bytes(folder.path_join(other + ".save")) == before, "%s '%s'" % [outcome[0], _player().hud._caption.text])
+		and FileAccess.get_file_as_bytes(folder.path_join(other + ".save")) == before, "%s '%s' blocked %s wrote %s" % [outcome[0], _player().hud._caption.text, slot, wrote_slot[0]])
 
 
 func _k4_quickload(run: String) -> void:
@@ -177,6 +188,38 @@ func _k7_after_a_load(run: String) -> void:
 	var later: bool = await _until(func(): return _kinds(run, &"named").size() > named)
 	_check("K7 no autosave after a load; a save asked for mid-load waits for it", no_autosave and not early and later,
 		"autosaves %d->%d early %s later %s" % [autos, _kinds(run, &"auto").size(), early, later])
+
+
+func _k9_first_save_with_no_run() -> void:
+	await _until(func(): return get_tree().root.get_node_or_null("ArtLoading") == null)
+	# Played straight from the editor: no run, but the city remembers.
+	city.run_id = ""
+	city.people.set_flag("curandera", "asked_book")
+	var runs_before := SaveFiles.runs().size()
+	_press(&"quick_save")
+	var wrote: bool = await _until(func(): return city.run_id != "" and _kinds(city.run_id, &"quick").size() == 1)
+	var body: Dictionary = SaveFiles.read(_kinds(city.run_id, &"quick")[0]["path"])["body"] if wrote else {}
+	_check("K9 a first save with no run makes one run and forgets nothing", wrote and SaveFiles.runs().size() == runs_before + 1
+		and city.people.said.get("curandera", []).has("asked_book") and body.get("city", {}).get("run") == city.run_id,
+		"wrote %s runs %d->%d remembers %s saved run '%s'" % [wrote, runs_before, SaveFiles.runs().size(), city.people.said.get("curandera", []),
+		body.get("city", {}).get("run", "")])
+
+
+func _k10_no_load_under_another_cover() -> void:
+	await _until(func(): return get_tree().root.get_node_or_null("ArtLoading") == null)
+	covers = 0
+	# Out to the main menu (the pause's Main menu), F9 pressed on the way.
+	var cover: CanvasLayer = ArtLoading.open(get_tree())
+	cover.change_to("res://main_menu.tscn")
+	await get_tree().process_frame
+	save.quickload()
+	var at_menu := func() -> bool:
+		var scene := get_tree().current_scene
+		return scene != null and scene.scene_file_path == "res://main_menu.tscn" and get_tree().root.get_node_or_null("ArtLoading") == null
+	await _until(at_menu, 900)
+	await _until(func(): return false, 60)
+	_check("K10 quickload does nothing under the cover to the menu", covers == 1 and not save.loading and save.pending.is_empty()
+		and get_tree().current_scene.scene_file_path == "res://main_menu.tscn", "%d covers, at %s" % [covers, get_tree().current_scene.scene_file_path])
 
 
 func _check(test_name: String, ok: bool, detail: String) -> void:
