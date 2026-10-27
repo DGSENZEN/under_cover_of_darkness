@@ -45,7 +45,8 @@ void fragment() {
 	float grain = texture(noise, world_pos * 2.5).r;
 	float chips = texture(noise, world_pos * 9.0).r;
 	vec3 col = mix(ink, stone * (0.5 + 0.6 * grain), 0.3 + 0.3 * chips);
-	col += mix(oxblood, marigold, 0.35) * to_fire * 0.18;
+	// (Only its face toward the gate's fire takes a little of it.)
+	col += mix(oxblood, marigold, 0.35) * pow(to_fire, 3.0) * 0.12;
 	// Its glyph, on its faces toward either side of the gate (its local z).
 	float glyph = 0.0;
 	if (chequer && local_n.y > 0.85) {
@@ -61,15 +62,16 @@ void fragment() {
 		vec2 uv = local.xy * vec2(1.6, 1.6) + 0.5;
 		float a = place * 6.2831853;
 		vec2 at = vec2(0.5 + cos(a) * 0.44, 0.5 + sin(a) * 0.44);
-		vec2 sample_at = at + (uv - 0.5) * 0.08;
+		vec2 sample_at = at + (uv - 0.5) * 0.11;
 		if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
 			glyph = texture(rings, vec2(sample_at.x / 3.0, sample_at.y)).a;
 		}
 	}
 	float pulse = pow(0.5 + 0.5 * sin(TIME * 1.1 - place * 12.0), 6.0);
 	vec3 glow = keystone ? marigold : ward;
-	col = mix(col, ink, glyph * 0.5);
-	col += glow * glyph * (0.25 + 0.6 * pulse);
+	// (Cut in: a dark groove, the light deep in it only where the stroke is thickest.)
+	col = mix(col, ink * 0.5, smoothstep(0.1, 0.5, glyph) * 0.8);
+	col += glow * smoothstep(0.55, 0.95, glyph) * (0.18 + 0.5 * pulse);
 	// A cold rim from the deep.
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
 	col += ward * rim * 0.2;

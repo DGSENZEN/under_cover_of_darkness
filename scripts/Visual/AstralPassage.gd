@@ -11,6 +11,7 @@ extends Node3D
 ## Set up by `make` (maps/metro.gd), in the map's frame.
 
 const Layers := preload("res://scripts/Visual/Layers.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const WINDOW := preload("res://scripts/Visual/astral_window.gdshader")
 ## The void marked round the gates and past the gaps (what lies in its plane over it leans toward the eye).
 const MARK := preload("res://scripts/Visual/astral_mark.gdshader")
@@ -144,6 +145,26 @@ const SKIRT_FAR := 120.0
 const SKIRT_SPAN := 150.0
 const DOOR_SCALE := 26.0
 const DOOR_AT := Vector3(170.0, 60.0, 9.0)
+## Its sound (tools/prepare_sfx.py --astral), on Sfx's Astral bus: its drone (loud as it is inside, dB; how loud near
+## a gate outside, dB, within how far, m); the deep's swells (how often, s; how loud, dB); each
+## gate's call (how often, s; how loud, dB; heard how far, m); a crossing's breath (dB); the dead whispering from the
+## river under the way near the walker (how often, s; how loud, dB; how far along from them, m); the embers' crackle at
+## each gate's rim (how often, s; how loud, dB).
+const DRONE := "res://audio/ambience/astral_drone.wav"
+const DRONE_DB := -30.0
+const DRONE_NEAR_DB := -43.0
+const DRONE_NEAR := 7.0
+const SWELL_EVERY := Vector2(9.0, 16.0)
+const SWELL_DB := -32.0
+const CALL_EVERY := Vector2(10.0, 18.0)
+const CALL_DB := -27.0
+const CALL_REACH := 26.0
+const CROSS_DB := -32.0
+const WHISPER_EVERY := Vector2(3.5, 8.0)
+const WHISPER_DB := -19.0
+const WHISPER_ALONG := 7.0
+const EMBER_EVERY := Vector2(0.6, 1.8)
+const EMBER_DB := -33.0
 ## The plane over the eye: its canvas layer (under the HUD), how fast it eases in inside and out outside (a share a
 ## second), how long the breath of a crossing takes to fall away (s). The muffle inside: the World and Ambience buses'
 ## low-pass, its cutoff inside and out (Hz), how fast it eases (a share a second, in log).
@@ -190,6 +211,16 @@ var bleeds: Array[MeshInstance3D] = []
 var plane_shift: CanvasLayer
 ## What of its stretch's greybox lies past its box (a stretch running on beyond it, unbuilt), still drawn; null if none.
 var rest: MeshInstance3D
+## Its sound: its drone; how many crossings have sounded their breath, how many whispers have been said.
+var drone: AudioStreamPlayer
+var crossings_sounded := 0
+var whispers_said := 0
+var _sounds: Node3D
+var _flat_players: Array[AudioStreamPlayer] = []
+var _whisper: AudioStreamPlayer3D
+## (Its own dice, so the seeded suites' draws stay as they were.)
+var _dice := RandomNumberGenerator.new()
+var _next := {}
 ## The glimpses from spot to spot (each its meta "at" and "shown", 0..1).
 var glimpses: Array[Node3D] = []
 ## Which constellation is lit (the one beside the walker along the passage); -1 with the walker outside.
@@ -243,6 +274,7 @@ func _ready() -> void:
 	_motes()
 	_glimpses()
 	_plane()
+	_sound()
 	# (Held on the way after the walker has moved this frame.)
 	process_physics_priority = 10
 
@@ -336,6 +368,7 @@ func _process(delta: float) -> void:
 		_warp()
 	_muffle(delta)
 	_ease_plane(delta)
+	_hear(at, delta)
 
 
 ## The walker held on the way: off it by more than HALF_WAY inside the passage, set back to its edge, their going
@@ -704,7 +737,7 @@ func _arch(gate: Node3D, rim: float, size: Vector2, sheet: Texture2D) -> void:
 		look.set_shader_parameter(&"gate_at", gate.global_position)
 		look.set_shader_parameter(&"place", s)
 		look.set_shader_parameter(&"keystone", keystone)
-		look.set_shader_parameter(&"stone", Color(0.12, 0.1, 0.09).lerp(Color(0.16, 0.13, 0.11), fposmod(k * 0.37, 1.0)))
+		look.set_shader_parameter(&"stone", Color(0.09, 0.085, 0.1).lerp(Color(0.13, 0.12, 0.13), fposmod(k * 0.37, 1.0)))
 		var stone := MeshInstance3D.new()
 		stone.name = "arch%d" % k
 		stone.mesh = box
@@ -941,9 +974,116 @@ func _plane() -> void:
 	plane_shift.add_child(rect)
 
 
-## The crossing of a threshold: the breath of the shift of planes.
+## The crossing of a threshold: the breath of the shift of planes, heard.
 func _warp() -> void:
 	_shift = 1.0
+	if _say_flat(&"astral_cross", CROSS_DB):
+		crossings_sounded += 1
+
+
+## Its sound's players: the drone (eased by _hear), two for the deep's swells and the crossings, the whisper (moved to
+## the river under the walker before each), and at each gate its call and its embers.
+func _sound() -> void:
+	_dice.seed = 1939 + int(bounds.position.z)
+	_sounds = Node3D.new()
+	_sounds.name = "sounds"
+	add_child(_sounds)
+	drone = AudioStreamPlayer.new()
+	drone.name = "drone"
+	drone.bus = Sfx.BUS_ASTRAL
+	drone.stream = load(DRONE) if ResourceLoader.exists(DRONE) else null
+	drone.volume_db = -80.0
+	_sounds.add_child(drone)
+	if drone.stream != null:
+		drone.play()
+	for k in 2:
+		var flat := AudioStreamPlayer.new()
+		flat.bus = Sfx.BUS_ASTRAL
+		_sounds.add_child(flat)
+		_flat_players.append(flat)
+	_whisper = _player_3d(_sounds, "whisper", WHISPER_DB, 3.0, 22.0)
+	for gate in thresholds:
+		_player_3d(gate, "call", CALL_DB, 4.0, CALL_REACH).stream = _take(&"astral_call")
+		_player_3d(gate, "embers_sound", EMBER_DB, 1.5, 9.0)
+	_next = {"swell": _dice.randf_range(2.0, SWELL_EVERY.x), "call": _dice.randf_range(1.0, CALL_EVERY.x),
+		"whisper": _dice.randf_range(1.0, WHISPER_EVERY.x), "ember": 0.0}
+
+
+func _player_3d(parent: Node3D, name: String, db: float, unit: float, reach: float) -> AudioStreamPlayer3D:
+	var player := AudioStreamPlayer3D.new()
+	player.name = name
+	player.bus = Sfx.BUS_ASTRAL
+	player.volume_db = db
+	player.unit_size = unit
+	player.max_distance = reach
+	player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+	parent.add_child(player)
+	return player
+
+
+## A take of `sound`, by its own dice (null if it has none).
+func _take(sound: StringName) -> AudioStream:
+	var takes := Sfx.takes(sound)
+	return takes[_dice.randi() % takes.size()] if not takes.is_empty() else null
+
+
+## `sound` played flat on the Astral bus at `db`, on whichever of its two players is free; whether it played.
+func _say_flat(sound: StringName, db: float) -> bool:
+	var stream := _take(sound)
+	if stream == null or _flat_players.is_empty():
+		return false
+	var player := _flat_players[0] if not _flat_players[0].playing else _flat_players[1]
+	player.stream = stream
+	player.volume_db = db + _dice.randf_range(-1.0, 1.0)
+	player.pitch_scale = _dice.randf_range(0.96, 1.04)
+	player.play()
+	return true
+
+
+## Its sound this frame: the drone up as the plane comes over the walker, faint near a gate outside; while they are
+## inside, the deep's swells far off and the dead whispering from below; each gate calling now and then, its embers.
+func _hear(at: Vector3, delta: float) -> void:
+	if drone == null:
+		return
+	var near := 0.0
+	for gate in thresholds:
+		near = maxf(near, 1.0 - smoothstep(1.0, DRONE_NEAR, gate.global_position.distance_to(at)))
+	var amount := db_to_linear(DRONE_DB) * smoothstep(0.0, 1.0, _plane_in) + db_to_linear(DRONE_NEAR_DB) * near
+	drone.volume_db = linear_to_db(maxf(amount, 0.0001))
+	for key in _next:
+		_next[key] = float(_next[key]) - delta
+	if inside and _next["swell"] <= 0.0:
+		_next["swell"] = _dice.randf_range(SWELL_EVERY.x, SWELL_EVERY.y)
+		_say_flat(&"astral_swell", SWELL_DB)
+	if inside and _next["whisper"] <= 0.0 and not rivers.is_empty():
+		_next["whisper"] = _dice.randf_range(WHISPER_EVERY.x, WHISPER_EVERY.y)
+		var path: PackedVector3Array = rivers[0].get_meta("path")
+		var from := at + Vector3(0.0, 0.0, _dice.randf_range(-WHISPER_ALONG, WHISPER_ALONG))
+		var best := path[0]
+		for p in path:
+			if Vector2(p.x - from.x, p.z - from.z).length() < Vector2(best.x - from.x, best.z - from.z).length():
+				best = p
+		_whisper.stream = _take(&"astral_whisper")
+		if _whisper.stream != null:
+			_whisper.global_position = best
+			_whisper.pitch_scale = _dice.randf_range(0.92, 1.06)
+			_whisper.play()
+			whispers_said += 1
+	if _next["call"] <= 0.0:
+		_next["call"] = _dice.randf_range(CALL_EVERY.x, CALL_EVERY.y)
+		var gate: Node3D = thresholds[_dice.randi() % thresholds.size()] if not thresholds.is_empty() else null
+		var call := gate.get_node_or_null("call") as AudioStreamPlayer3D if gate != null else null
+		# (Only a gate within its reach of the walker calls: none calling to no one.)
+		if call != null and gate.global_position.distance_to(at) < CALL_REACH:
+			call.stream = _take(&"astral_call")
+			call.play()
+	if _next["ember"] <= 0.0:
+		_next["ember"] = _dice.randf_range(EMBER_EVERY.x, EMBER_EVERY.y)
+		for gate in thresholds:
+			var embers := gate.get_node_or_null("embers_sound") as AudioStreamPlayer3D
+			if embers != null and gate.global_position.distance_to(at) < 9.0 and _dice.randf() < 0.6:
+				embers.stream = _take(&"crackle" if _dice.randf() < 0.7 else &"coal_pop")
+				embers.play()
 
 
 ## The plane eased in while the walker is inside, out while not; the crossing's breath falling away.

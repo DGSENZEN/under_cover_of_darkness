@@ -28,6 +28,8 @@ const BUS_MUSIC := &"Music"
 const BUS_AMBIENCE := &"Ambience"
 ## The ánimas' voices (Animas.gd): a long dark tail of their own, then the room's (sent to World).
 const BUS_SOULS := &"Souls"
+## The astral passages' own sounds (AstralPassage.gd): under Master, its own vast reverb.
+const BUS_ASTRAL := &"Astral"
 ## Played on the Music bus rather than your Body's.
 const MUSICAL := [&"sting_suspicious", &"sting_combat", &"sting_escalate", &"sting_goal"]
 ## The room: [room size, damping, wet, spread, hi-pass] for each "acoustics".
@@ -552,7 +554,7 @@ static func _ensure_limiter() -> void:
 ## close), Music and Ambience (each pressed down a little while the World is
 ## loud: the fight comes first).
 static func _ensure_buses() -> void:
-	for bus in [BUS_WORLD, BUS_FAR, BUS_BODY, BUS_MUSIC, BUS_AMBIENCE, BUS_SOULS]:
+	for bus in [BUS_WORLD, BUS_FAR, BUS_BODY, BUS_MUSIC, BUS_AMBIENCE, BUS_SOULS, BUS_ASTRAL]:
 		if AudioServer.get_bus_index(bus) >= 0:
 			continue
 
@@ -603,6 +605,19 @@ static func _ensure_buses() -> void:
 				beyond.dry = 0.8
 				beyond.wet = 0.42
 				AudioServer.add_bus_effect(index, beyond)
+			BUS_ASTRAL:
+				# The astral deep's: no room at all, the vastest tail, late and dark; not the world's (the passages
+				# muffle the world, never their own deep).
+				var deep := AudioEffectReverb.new()
+				deep.room_size = 0.95
+				deep.damping = 0.45
+				deep.spread = 1.0
+				deep.hipass = 0.2
+				deep.predelay_msec = 110.0
+				deep.predelay_feedback = 0.45
+				deep.dry = 0.7
+				deep.wet = 0.55
+				AudioServer.add_bus_effect(index, deep)
 
 	set_acoustics("stone")
 

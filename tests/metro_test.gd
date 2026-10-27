@@ -91,10 +91,49 @@ func _run() -> void:
 	_check("M5 the pixel grid is off", Retro.virtual_height == 0, "virtual_height %d" % Retro.virtual_height)
 
 	await _sets()
+	await _judder()
 
 	# M6 nothing reported an error
 	await _frames(2)
 	_check("M6 no engine errors", errors.lines.is_empty(), "%s" % [errors.lines.slice(0, 4)])
+
+
+## M20: nothing seen judders: the project interpolates physics, so a visual drawn interpolated but moved between
+## physics ticks (in _process) stutters against the interpolated camera. With the physics at 20 ticks a second under
+## 60 frames, no visible interpolated visual may move on a frame with no tick before it, wherever the player stands
+## (the Pasaje, the candle lane, both astral passages). (tests/diag_judder.tscn names them all.)
+func _judder() -> void:
+	var found := {}
+	var ticks_were := Engine.physics_ticks_per_second
+	Engine.physics_ticks_per_second = 20
+	for spot in [Vector3(-9.0, -11.0, 70.0), Vector3(-2.0, -11.0, 75.45), Vector3(19.0, -11.0, 78.0),
+			Vector3(-10.0, -11.0, 40.0), Vector3(-9.0, -11.0, 105.0)]:
+		map.player.global_position = spot + Vector3(0.0, 1.05, 0.0)
+		await _frames(30)
+		var was := {}
+		for node: Node in map.find_children("*", "VisualInstance3D", true, false):
+			was[node] = (node as Node3D).global_transform
+		var ticks := Engine.get_physics_frames()
+		for i in 60:
+			await get_tree().process_frame
+			var ticked := Engine.get_physics_frames() != ticks
+			ticks = Engine.get_physics_frames()
+			for key in was.keys():
+				# (Some go while watched: a crowd's shade leaving, a spark.)
+				if not is_instance_valid(key):
+					was.erase(key)
+					continue
+				var node := key as Node3D
+				var now := node.global_transform
+				if not ticked and node.is_visible_in_tree() and node.is_physics_interpolated_and_enabled() \
+						and not now.is_equal_approx(was[node]):
+					found[String(map.get_path_to(node))] = true
+				was[node] = now
+	Engine.physics_ticks_per_second = ticks_were
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(10)
+	_check("M20 nothing seen judders: no interpolated visual moved between physics ticks", found.is_empty(),
+		"%d: %s" % [found.size(), found.keys().slice(0, 6)])
 
 
 ## The candle lane set into the map (docs/superpowers/plans/2026-10-23-candle-lane.md, Task 9): in its place, the
@@ -171,7 +210,49 @@ func _astral() -> void:
 	_smooth(passage)
 	await _plane(passage)
 	await _glimpses(passage)
+	await _sounds(passage)
 	await _south()
+
+
+## M18m: the passage's sound, on its own Astral bus (never the world's, which it muffles): its drone silent away from
+## it (-60 dB and under) and up near its full inside (within 4 dB of its level, eased in within 3 s); each gate's call on that
+## bus; a crossing sounding its breath; the dead whispering from below within 10 s inside.
+func _sounds(passage: Node3D) -> void:
+	var wrong := []
+	# (The game's bus, as Sfx makes it when it first plays: a headless run may not have it, and a player names a bus
+	# that is not there as Master.)
+	if AudioServer.get_bus_index(&"Astral") < 0:
+		AudioServer.add_bus()
+		AudioServer.set_bus_name(AudioServer.bus_count - 1, &"Astral")
+	var drone: AudioStreamPlayer = passage.get("drone")
+	if drone == null or drone.stream == null or drone.bus != &"Astral":
+		_check("M18m the passage's sound: its drone, its gates' calls, a crossing's breath, the dead whispering", false,
+			"no drone on the Astral bus")
+		return
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(200)
+	var away := drone.volume_db
+	var y: float = passage.bounds.position.y
+	var was_crossed: int = passage.crossings_sounded
+	var was_said: int = passage.whispers_said
+	await _tour([[-10.0, y, 32.6], [-10.0, y, 36.0]], true)
+	await _frames(180)
+	var within := drone.volume_db
+	if away > -60.0 or within < float(passage.DRONE_DB) - 4.0 or not drone.playing:
+		wrong.append("drone away %.1f dB, inside %.1f dB, playing %s" % [away, within, drone.playing])
+	if passage.crossings_sounded <= was_crossed:
+		wrong.append("the crossing unheard")
+	await _frames(420)
+	if passage.whispers_said <= was_said:
+		wrong.append("no whisper in 10 s inside")
+	for gate: Node3D in passage.thresholds:
+		var call := gate.find_child("call", true, false) as AudioStreamPlayer3D
+		if call == null or call.bus != &"Astral" or call.stream == null:
+			wrong.append("%s calls not on the Astral bus" % gate.name)
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(3)
+	_check("M18m the passage's sound: its drone, its gates' calls, a crossing's breath, the dead whispering",
+		wrong.is_empty(), "%s" % [wrong.slice(0, 5)])
 
 
 ## M19: the south stretch's first 22 m beyond the Pasaje's south mouth (pasaje_s, z 95-117) an astral passage too: its

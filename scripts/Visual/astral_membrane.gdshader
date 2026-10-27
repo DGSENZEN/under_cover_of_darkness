@@ -55,9 +55,11 @@ void fragment() {
 		float k = float(i);
 		float pace = (0.18 + 0.1 * k) * (i == 1 ? -1.0 : 1.0);
 		float s = a / 6.2831853 * (3.0 + k) + lr * (1.1 + 0.35 * k) + t * pace;
-		float arm = smoothstep(0.32, 0.0, abs(fract(s) - 0.5));
-		float broken = texture(noise, vec3(q * (1.5 + k), t * 0.03 + k * 3.1)).r;
-		arm *= smoothstep(0.3, 0.7, broken);
+		// (A fine thread of light, a soft glow round it, broken into running dashes.)
+		float d = abs(fract(s) - 0.5);
+		float arm = smoothstep(0.04, 0.0, d) + smoothstep(0.11, 0.0, d) * 0.15;
+		float broken = texture(noise, vec3(q * (2.5 + k), t * 0.05 + k * 3.1)).r;
+		arm *= smoothstep(0.35, 0.6, broken);
 		// (The farther layers dimmer, smaller toward its eye.)
 		float weight = (1.0 - 0.3 * k) * smoothstep(1.02, 0.6 - 0.15 * k, r);
 		arms += arm * weight;
@@ -73,7 +75,7 @@ void fragment() {
 	tunnel += mix(seeped * 0.3, ward * 0.4, smoothstep(0.1, 0.5, r)) * walls * eye * 0.6;
 	tunnel += ward * exp(-r * r / 0.002) * (0.6 + 0.4 * sin(t * 1.3));
 	vec3 col = mix(tunnel, ink, inner * 0.2);
-	col += mix(seeped * 0.35, ward, smoothstep(0.25, 0.9, r)) * arms * (0.3 + 0.35 * near);
+	col += mix(seeped * 0.6, ward, smoothstep(0.2, 0.8, r)) * arms * (0.55 + 0.45 * near);
 	// Its rim burning: a ring of fire licking out from it.
 	float flame = texture(noise, vec3(cos(a) * 2.0, sin(a) * 2.0, t * 0.35)).r;
 	float reach = 0.035 + 0.11 * smoothstep(0.35, 0.8, flame);
@@ -84,5 +86,5 @@ void fragment() {
 	// Outside its circle and its fire, nothing (the void's frame is there).
 	float in_circle = smoothstep(1.02, 0.98, r);
 	ALBEDO = mix(seen, col, max(in_circle, burn));
-	ALPHA = clamp(in_circle * (0.55 + 0.3 * eye + 0.2 * arms) + burn * 0.9 + core, 0.0, 1.0);
+	ALPHA = clamp(in_circle * (0.4 + 0.35 * eye + 0.35 * arms) + burn * 0.9 + core, 0.0, 1.0);
 }
