@@ -15,8 +15,12 @@ const LORE := "THE ECLIPSE OF 1923\nMexico City was changed by the Eclipse and t
 @export var music_score := MenuMusic.SCORE_JSON
 signal selection_changed(index: int)
 
-const NAMES := ["New Game", "Continue", "Settings", "Lore", "Quit"]
-const COLOURS := [Color("ef774c"), Color("67c9ed"), Color("929fdb"), Color("efa25e"), Color("b9b0a2")]
+## The words by what they do (an index each). Load came last, so it keeps the
+## last index; ROWS is where each reads, top to bottom.
+const NAMES := ["New Game", "Continue", "Settings", "Lore", "Quit", "Load"]
+const ROWS := [0, 1, 3, 4, 5, 2]
+const LOAD := 5
+const COLOURS := [Color("ef774c"), Color("67c9ed"), Color("929fdb"), Color("efa25e"), Color("b9b0a2"), Color("67c9ed")]
 const GOLD := Color("d9b46a")
 const WORD_X := 72.0
 const WORD_TOP := 400.0
@@ -115,8 +119,9 @@ func _ready() -> void:
 	_design.add_child(washes)
 	for i in range(NAMES.size()):
 		var word := MenuWord.new()
-		word.configure(NAMES[i], i, COLOURS[i])
-		word.position = Vector2(WORD_X, WORD_TOP + i * WORD_GAP - 26)
+		# (Load wears Continue's painting until it has its own.)
+		word.configure(NAMES[i], i, COLOURS[i], 1 if i == LOAD else -1)
+		word.position = Vector2(WORD_X, WORD_TOP + ROWS[i] * WORD_GAP - 26)
 		word.size = Vector2(420, 52)
 		word.chosen.connect(select)
 		word.pressed.connect(_activate.bind(i))
@@ -125,14 +130,17 @@ func _ready() -> void:
 		if word.wash:
 			washes.add_child(word.wash)
 			word.place_wash()
-	for i in range(words.size()):
-		words[i].focus_neighbor_top = words[maxi(i - 1, 0)].get_path()
-		words[i].focus_neighbor_bottom = words[mini(i + 1, words.size() - 1)].get_path()
-		words[i].focus_neighbor_left = words[i].get_path()
-		words[i].focus_neighbor_right = words[i].get_path()
+	var reading: Array[MenuWord] = words.duplicate()
+	reading.sort_custom(func(a, b): return ROWS[a.index] < ROWS[b.index])
+	for row in range(reading.size()):
+		reading[row].focus_neighbor_top = reading[maxi(row - 1, 0)].get_path()
+		reading[row].focus_neighbor_bottom = reading[mini(row + 1, reading.size() - 1)].get_path()
+		reading[row].focus_neighbor_left = reading[row].get_path()
+		reading[row].focus_neighbor_right = reading[row].get_path()
 	pages = MenuPages.new()
 	pages.build(_font, LORE)
 	pages.back.pressed.connect(close_page)
+	pages.saves.load_chosen.connect(_load_chosen)
 	_design.add_child(pages)
 	_build_confirm()
 	archetypes = ArchetypeScreen.new()
@@ -203,10 +211,14 @@ func _start_music() -> void:
 	music.score_json_path = music_score
 	get_tree().root.add_child.call_deferred(music)
 
+## Whose sounds and painting a word has (Load: Continue's, until its own).
+static func _look(index: int) -> int:
+	return 1 if index == LOAD else index
+
 func _sound_choice(index: int) -> void:
 	if is_instance_valid(music):
-		music.set_selected(index)
-		music.hover(index)
+		music.set_selected(_look(index))
+		music.hover(_look(index))
 		music.note_input()
 
 func _exit_tree() -> void:
@@ -227,13 +239,27 @@ func _activate(index: int) -> void:
 		open_quit_confirm()
 		return
 	if is_instance_valid(music):
-		music.press(index)
+		music.press(_look(index))
 	if index == 0:
 		open_archetypes()
 	elif index == 1 and not SaveFiles.continue_target().is_empty():
 		_continue()
 	else:
 		open_page(index)
+
+## A save chosen on the Load page: loaded as Continue loads.
+func _load_chosen(run_id: String, slot: String) -> void:
+	if _transitioning:
+		return
+	_transitioning = true
+	if is_instance_valid(music):
+		music.start_game()
+	var error: Error = await continue_game.call({"run": run_id, "slot": slot})
+	if error != OK:
+		_transitioning = false
+		_start_music()
+		close_page()
+		open_page(1, SaveWords.LOAD_FAILED)
 
 ## Continue: the newest save of the run played last, loaded as New Game
 ## starts a game (the song finishing under the loading cover).
@@ -338,7 +364,7 @@ func open_page(index: int, message := "") -> void:
 	page_open = index
 	_page_turn += 1
 	var turn := _page_turn
-	band.open_page(index)
+	band.open_page(_look(index))
 	for word in words:
 		word.focus_mode = Control.FOCUS_NONE
 		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -348,7 +374,7 @@ func open_page(index: int, message := "") -> void:
 		if word.wash:
 			word.wash.fade()
 	if is_instance_valid(music) and index > 0:
-		music.set_state([MenuMusic.State.BROWSING, MenuMusic.State.CONTINUE, MenuMusic.State.SETTINGS, MenuMusic.State.LORE][index])
+		music.set_state([MenuMusic.State.BROWSING, MenuMusic.State.CONTINUE, MenuMusic.State.SETTINGS, MenuMusic.State.LORE][_look(index)])
 	await get_tree().create_timer(MenuMotion.ANSWER).timeout
 	if turn == _page_turn and page_open == index:
 		pages.show_page(index, NAMES[index], COLOURS[index], message)

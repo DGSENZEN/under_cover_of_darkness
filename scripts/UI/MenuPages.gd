@@ -14,6 +14,8 @@ var title_label: Label
 var body_label: Label
 ## The settings book, and its master volume slider (the first row).
 var settings: SettingsPage
+## The Load page (SavePage), on the Load word's page.
+var saves: SavePage
 var volume: HSlider
 var back: MenuWord
 var _scrim: TextureRect
@@ -91,6 +93,10 @@ func build(font: Font, lore: String) -> void:
 	settings = SettingsPage.new()
 	column.add_child(settings)
 	settings.build()
+	saves = SavePage.new()
+	saves.custom_minimum_size = SavePage.AREA
+	column.add_child(saves)
+	saves.hide()
 	volume = settings.row_for("audio/master_volume").slider
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -118,6 +124,10 @@ func show_page(index: int, title: String, colour: Color, message := "") -> void:
 		body_label.text = ""
 	body_label.visible = not body_label.text.is_empty()
 	settings.visible = index == 2
+	saves.visible = index == MainMenu.LOAD
+	if saves.visible:
+		var city := get_node_or_null("/root/CityState")
+		saves.open(&"load", city.run_id if city != null else "")
 	_column.position.y = SETTINGS_TOP if index == 2 else AREA.position.y
 	_scrim.visible = index != 2
 	_book_scrim.visible = index == 2

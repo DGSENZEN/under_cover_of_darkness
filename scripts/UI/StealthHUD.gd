@@ -1809,9 +1809,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-## The player paused (Esc): the tree stops and the pause menu opens.
+## The player paused (Esc): the tree stops and the pause menu opens. The
+## frame on screen as it does is kept, for a save made from the pause
+## (SaveGame.paused_frame): the last frame drawn, so with the HUD on it, but
+## nothing of the pause.
 func pause_game() -> void:
 	get_tree().paused = true
+	var save := get_node_or_null("/root/SaveGame")
+
+	if save != null and DisplayServer.get_name() != "headless":
+		save.paused_frame = get_viewport().get_texture().get_image()
+
 	_pause.set_open(true)
 
 

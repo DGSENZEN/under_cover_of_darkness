@@ -8,7 +8,12 @@ extends Control
 const DESIGN := Vector2(1600, 900)
 ## The painting behind the paused game; the frozen frame dimmed until it exists.
 const BACKDROP := "res://assets/ui/main_menu/pause.webp"
-const NAMES := ["Resume", "Settings", "Main menu", "Quit"]
+## The words by what they do (an index each); ORDER is how they read, top to
+## bottom. Save and Load came after the rest, so they keep the last indices.
+const NAMES := ["Resume", "Settings", "Main menu", "Quit", "Save", "Load"]
+const ORDER := [0, 4, 5, 1, 2, 3]
+const SAVE := 4
+const LOAD := 5
 const QUESTIONS := {2: "Main menu?", 3: "Quit?"}
 const MAIN_MENU := "res://main_menu.tscn"
 const ArtLoading := preload("res://scripts/UI/ArtLoadingScreen.gd")
@@ -23,6 +28,10 @@ signal resume_requested
 var words: Array[MenuWord] = []
 var selected := -1
 var settings_open := false
+## The Save or Load page (SavePage) is open over the painting.
+var saves_open := false
+var saves: SavePage
+var _saves_panel: Control
 ## The word whose confirm is open (2 Main menu, 3 Quit), or -1.
 var asking := -1
 var settings: SettingsPage
@@ -67,19 +76,22 @@ func _ready() -> void:
 	_design.add_child(_hairline(Vector2(74, 238), Vector2(230, 1.5)))
 	for i in range(NAMES.size()):
 		var word := MenuWord.new()
-		word.configure(NAMES[i], 10 + i, MainMenu.COLOURS[i])
-		word.position = Vector2(MainMenu.WORD_X, MainMenu.WORD_TOP + i * MainMenu.WORD_GAP - 26)
+		# (Save and Load in Continue's colour.)
+		word.configure(NAMES[i], 10 + i, MainMenu.COLOURS[i if i < 4 else 1])
+		word.position = Vector2(MainMenu.WORD_X, MainMenu.WORD_TOP + ORDER.find(i) * MainMenu.WORD_GAP - 26)
 		word.size = Vector2(420, 52)
 		word.chosen.connect(func(_index): select(i))
 		word.pressed.connect(_activate.bind(i))
 		_design.add_child(word)
 		words.append(word)
-	for i in range(words.size()):
-		words[i].focus_neighbor_top = words[maxi(i - 1, 0)].get_path()
-		words[i].focus_neighbor_bottom = words[mini(i + 1, words.size() - 1)].get_path()
-		words[i].focus_neighbor_left = words[i].get_path()
-		words[i].focus_neighbor_right = words[i].get_path()
+	for row in range(ORDER.size()):
+		var word := words[ORDER[row]]
+		word.focus_neighbor_top = words[ORDER[maxi(row - 1, 0)]].get_path()
+		word.focus_neighbor_bottom = words[ORDER[mini(row + 1, ORDER.size() - 1)]].get_path()
+		word.focus_neighbor_left = word.get_path()
+		word.focus_neighbor_right = word.get_path()
 	_build_settings()
+	_build_saves()
 	_build_confirm()
 	get_viewport().size_changed.connect(_layout)
 	_layout()
@@ -92,6 +104,7 @@ func set_open(on: bool) -> void:
 	visible = on
 	if on:
 		close_settings(false)
+		close_saves(false)
 		close_confirm(false)
 		selected = -1
 		for word in words:
@@ -112,13 +125,17 @@ func back() -> void:
 		return
 	if asking >= 0:
 		close_confirm()
+	elif saves_open and saves.is_asking():
+		saves.answer(false)
+	elif saves_open:
+		close_saves()
 	elif settings_open:
 		close_settings()
 	else:
 		resume_requested.emit()
 
 func select(index: int) -> void:
-	if index == selected or index < 0 or index >= words.size() or settings_open or asking >= 0:
+	if index == selected or index < 0 or index >= words.size() or settings_open or saves_open or asking >= 0:
 		return
 	selected = index
 	for word in words:
@@ -132,7 +149,7 @@ func menu_rect() -> Rect2:
 	return top.merge(words[-1].get_global_rect())
 
 func _activate(index: int) -> void:
-	if _pressing or settings_open or asking >= 0:
+	if _pressing or settings_open or saves_open or asking >= 0:
 		return
 	_pressing = true
 	words[index].press_in()
@@ -145,6 +162,10 @@ func _activate(index: int) -> void:
 			resume_requested.emit()
 		1:
 			open_settings()
+		SAVE:
+			open_saves(&"save")
+		LOAD:
+			open_saves(&"load")
 		_:
 			open_confirm(index)
 
@@ -160,6 +181,30 @@ func open_settings() -> void:
 	_settings_panel.modulate.a = 0.0
 	MenuMotion.tween(_settings_panel).tween_property(_settings_panel, "modulate:a", 1.0, MenuMotion.ANSWER)
 	settings.focus_first()
+
+## The Save or Load page (`mode` &"save" or &"load") over the painting.
+func open_saves(mode: StringName) -> void:
+	saves_open = true
+	var at := SAVE if mode == &"save" else LOAD
+	for word in words:
+		word.focus_mode = Control.FOCUS_NONE
+		word.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		word.set_page_dim(word != words[at])
+	var city := get_node_or_null("/root/CityState")
+	saves.open(mode, city.run_id if city != null else "")
+	_saves_panel.show()
+	_saves_panel.modulate.a = 0.0
+	MenuMotion.tween(_saves_panel).tween_property(_saves_panel, "modulate:a", 1.0, MenuMotion.ANSWER)
+	saves.focus_first()
+
+func close_saves(focus := true) -> void:
+	var was := SAVE if saves != null and saves.mode == &"save" else LOAD
+	saves_open = false
+	if _saves_panel:
+		_saves_panel.hide()
+	_restore_words()
+	if focus and visible:
+		words[was].grab_focus()
 
 func close_settings(focus := true) -> void:
 	settings.end_capture()
@@ -364,6 +409,37 @@ func _build_settings() -> void:
 
 ## "Main menu?" or "Quit?" beside its word, in the book's style: No is
 ## ready, Yes leaves.
+## The Save and Load pages, where the settings book sits.
+func _build_saves() -> void:
+	_saves_panel = Control.new()
+	_saves_panel.name = "Saves"
+	_saves_panel.position = Vector2(620, 220)
+	_saves_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_design.add_child(_saves_panel)
+	saves = SavePage.new()
+	_saves_panel.add_child(saves)
+	saves.load_chosen.connect(_load_chosen)
+	saves.save_chosen.connect(_save_chosen)
+	_saves_panel.hide()
+
+## A save chosen on the Load page: the game goes to it.
+func _load_chosen(run_id: String, slot: String) -> void:
+	var save := get_node_or_null("/root/SaveGame")
+	if save == null:
+		return
+	close_saves(false)
+	set_open(false)
+	save.load_slot(run_id, slot)
+
+## A slot chosen on the Save page: written (the picture is the frame from
+## the pause's opening), then the page shows it.
+func _save_chosen(slot: String) -> void:
+	var save := get_node_or_null("/root/SaveGame")
+	if save == null:
+		return
+	save.saved.connect(func(_run, _slot, _error): if saves_open: saves.open(&"save", saves.open_run), CONNECT_ONE_SHOT)
+	save.request_save(&"named", "", slot)
+
 func _build_confirm() -> void:
 	_confirm = Control.new()
 	_confirm.name = "Confirm"

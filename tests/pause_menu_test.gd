@@ -40,7 +40,9 @@ func _ready() -> void:
 	get_tree().paused = true
 	menu.set_open(true)
 	await wait(0.3)
-	check(menu.visible and menu.words.map(func(w): return w.text) == ["Resume", "Settings", "Main menu", "Quit"], "paused: the four words")
+	var reading: Array = menu.words.duplicate()
+	reading.sort_custom(func(a, b): return a.position.y < b.position.y)
+	check(menu.visible and reading.map(func(w): return w.text) == ["Resume", "Save", "Load", "Settings", "Main menu", "Quit"], "paused: the six words")
 	check(menu.selected == 0 and menu.words[0].has_focus(), "Resume is ready")
 	var shown := get_viewport().get_visible_rect()
 	check(shown.encloses(menu.menu_rect()) and menu.menu_rect().position.x < shown.size.x * 0.3, "the words sit on the screen's left, like the main menu's")

@@ -64,7 +64,9 @@ func _ready() -> void:
 	check(MenuType.title().get_font_name().contains("Poiret") and MenuType.choice().get_font_name().contains("Cormorant SC") and MenuType.body().get_font_name().contains("Cormorant Garamond") and MenuType.body_italic().get_font_style() & TextServer.FONT_ITALIC, "the bundled typefaces load")
 
 	# Task 1: the word column and one selection path.
-	check(menu.words.size() == 5 and menu.words.map(func(w): return w.text) == ["New Game", "Continue", "Settings", "Lore", "Quit"], "five words in reading order")
+	var reading: Array = menu.words.duplicate()
+	reading.sort_custom(func(a, b): return a.position.y < b.position.y)
+	check(menu.words.size() == 6 and reading.map(func(w): return w.text) == ["New Game", "Continue", "Load", "Settings", "Lore", "Quit"], "six words in reading order")
 	var title_labels: Array = menu._design.get_children().filter(func(n): return n is Label)
 	check(title_labels.size() == 2 and title_labels.all(func(l): return l.get_theme_font("font").get_font_name().contains("Poiret")), "the title is set in deco capitals")
 	check(menu._design.get_node_or_null("Hairline") is TextureRect, "a gold hairline under the title")

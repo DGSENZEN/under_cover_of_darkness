@@ -2,7 +2,8 @@ extends Node
 ## The main menu and the saves (the save and load spec, section 1): New Game
 ## begins a run as the archetype chosen (M1); Continue loads the newest save
 ## of the run played last (M2), or says there is none, and a double press
-## loads once (M3).
+## loads once (M3); its Load word opens the Load page, and a save chosen there
+## loads (M4).
 ##   Godot --headless --fixed-fps 60 --path . res://tests/save_menu_test.tscn
 
 const SaveFiles := preload("res://scripts/Save/SaveFiles.gd")
@@ -19,6 +20,7 @@ func _ready() -> void:
 	await _m3_no_save()
 	await _m1_new_game_begins_a_run()
 	await _m2_continue_loads()
+	await _m4_load_page()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -100,6 +102,26 @@ func _m2_continue_loads() -> void:
 	menu.words[1].pressed.emit()
 	await _wait(MenuMotion.PRESS + 0.3)
 	_check("M2 Continue loads the newest save of the last run, once", asked == [[run, "named_1"]], str(asked))
+	menu.queue_free()
+	await get_tree().process_frame
+
+
+func _m4_load_page() -> void:
+	var menu := await _menu()
+	var order: Array = menu.words.duplicate()
+	order.sort_custom(func(a, b): return a.position.y < b.position.y)
+	var shown: Array = order.map(func(w): return w.text)
+	var asked: Array = []
+	menu.continue_game = func(target): asked.append([target["run"], target["slot"]]); return OK
+	menu.words[MainMenu.LOAD].pressed.emit()
+	await _wait(MenuMotion.PRESS + MenuMotion.ANSWER + 0.3)
+	var page: SavePage = menu.pages.saves
+	var opened: bool = menu.page_open == MainMenu.LOAD and page.visible and page.mode == &"load"
+	var run: String = SaveFiles.runs()[0]["id"]
+	page.row_for(run, "quick_1").pressed.emit()
+	_check("M4 the menu reads New Game, Continue, Load, Settings, Lore, Quit; Load lists the saves and loads the one chosen",
+		shown == ["New Game", "Continue", "Load", "Settings", "Lore", "Quit"] and opened and asked == [[run, "quick_1"]] and menu.words[MainMenu.LOAD].wash != null,
+		"%s opened %s asked %s" % [shown, opened, asked])
 	menu.queue_free()
 	await get_tree().process_frame
 

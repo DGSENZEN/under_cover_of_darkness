@@ -46,11 +46,21 @@ var _waiting: Array[Dictionary] = []
 var _saving := false
 ## The scene now came in by a load (no autosave for arriving in it).
 var _arrived_by_load := false
+## The write under way on a worker thread (-1: none).
+var _task := -1
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	get_tree().scene_changed.connect(_on_scene_changed)
+
+
+## Quitting mid-write: the write finishes first (a thread cut off as the
+## engine stops takes the game down with it).
+func _exit_tree() -> void:
+	if _task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_task)
+		_task = -1
 
 
 func _process(_delta: float) -> void:
@@ -290,7 +300,7 @@ func _save_now(kind: StringName, named: String, slot: String) -> void:
 		"date": int(Time.get_unix_time_from_system()), "played": city.played if city != null else 0.0}
 	var picture := await _picture()
 	var played: float = header["played"]
-	WorkerThreadPool.add_task(func():
+	_task = WorkerThreadPool.add_task(func():
 		var error := SaveFiles.write(run_id, into, header, body, picture)
 		SaveFiles.set_played(run_id, played)
 		_written.call_deferred(run_id, into, kind, error))
@@ -298,6 +308,10 @@ func _save_now(kind: StringName, named: String, slot: String) -> void:
 
 func _written(run_id: String, slot: String, kind: StringName, error: Error) -> void:
 	_saving = false
+
+	if _task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_task)
+		_task = -1
 
 	if error != OK:
 		_note(SaveWords.FAILED)

@@ -26,7 +26,8 @@ var wash: MenuWash
 var _style: StyleBoxEmpty
 var _motion: Tween
 
-func configure(caption: String, at_index: int, tint: Color) -> void:
+## `look`: whose painting it wears (another word's index), when not its own.
+func configure(caption: String, at_index: int, tint: Color, look := -1) -> void:
 	index = at_index
 	colour = tint
 	text = caption
@@ -44,11 +45,12 @@ func configure(caption: String, at_index: int, tint: Color) -> void:
 	_style = StyleBoxEmpty.new()
 	for state in ["normal", "hover", "pressed", "focus", "hover_pressed"]:
 		add_theme_stylebox_override(state, _style)
-	if index >= 0 and index < MenuWash.FACE.size():
+	var art := look if look >= 0 else index
+	if art >= 0 and art < MenuWash.FACE.size():
 		# The menu puts the wash on a layer behind every word (place_wash).
 		wash = MenuWash.new()
 		wash.name = "Wash%d" % index
-		wash.configure(index)
+		wash.configure(art)
 	mouse_entered.connect(func(): chosen.emit(index))
 	focus_entered.connect(func(): chosen.emit(index))
 	modulate = Color(INK, DIM)
