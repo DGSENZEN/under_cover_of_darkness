@@ -89,6 +89,8 @@ const ARCH_OUT := 1.24
 const ARCH_STONE := Vector3(0.36, 0.34, 0.5)
 const ARCH_EVERY := 0.44
 const ARCH_FLOAT := 0.035
+## How thick the unseen jambs closing a gap beside its arch are (m).
+const JAMB_DEPTH := 0.3
 ## The void bleeding out past its gaps: how far its tongues reach (m), how far off the world's surfaces (m, clear of
 ## them).
 const BLEED := 1.6
@@ -190,6 +192,8 @@ var colossi: Array[Node3D] = []
 var bleeds: Array[MeshInstance3D] = []
 ## The plane over the eye (astral_plane.gdshader).
 var plane_shift: CanvasLayer
+## What of its stretch's greybox lies past its box (a stretch running on beyond it, unbuilt), still drawn; null if none.
+var rest: MeshInstance3D
 ## The glimpses from spot to spot (each its meta "at" and "shown", 0..1).
 var glimpses: Array[Node3D] = []
 ## Which constellation is lit (the one beside the walker along the passage); -1 with the walker outside.
@@ -202,6 +206,7 @@ var inside := false
 
 var _mouth: Vector3
 var _away: Vector3
+var _stone_look: ShaderMaterial
 var _span: float
 var _clock := 0.0
 
@@ -226,6 +231,7 @@ func _ready() -> void:
 	_away = Vector3(0.0, 0.0, -float(mouth_end))
 	if greybox != null:
 		greybox.visible = false
+		rest = _rest_of(greybox)
 	_windows()
 	_sky()
 	_eclipse()
@@ -243,6 +249,55 @@ func _ready() -> void:
 	_plane()
 	# (Held on the way after the walker has moved this frame.)
 	process_physics_priority = 10
+
+
+## What of `grey`'s mesh lies past its box along z (its triangles cut at the box's ends), drawn as `grey` was, in its
+## place; null if nothing does.
+func _rest_of(grey: MeshInstance3D) -> MeshInstance3D:
+	if grey.mesh == null or grey.mesh.get_surface_count() == 0:
+		return null
+	var arrays := grey.mesh.surface_get_arrays(0)
+	var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var to_box := grey.global_transform
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var kept := 0
+	for i in range(0, points.size() - 2, 3):
+		var tri := [to_box * points[i], to_box * points[i + 1], to_box * points[i + 2]]
+		# (Each side of the box's z-span: what lies before its near end, what lies past its far end.)
+		for side in [[bounds.position.z, false], [bounds.end.z, true]]:
+			var piece := _cut(tri, side[0], side[1])
+			for j in range(1, piece.size() - 1):
+				for v: Vector3 in [piece[0], piece[j], piece[j + 1]]:
+					tool.set_normal(to_box.basis * normals[i])
+					tool.add_vertex(to_box.affine_inverse() * v)
+				kept += 1
+	if kept == 0:
+		return null
+	var piece := MeshInstance3D.new()
+	piece.name = "rest_of_" + String(grey.name)
+	piece.mesh = tool.commit()
+	piece.material_override = grey.material_override
+	add_child(piece)
+	piece.global_transform = grey.global_transform
+	return piece
+
+
+## The part of the polygon `poly` (world points) on one side of the plane z = `at` (past it if `past`, else before it).
+func _cut(poly: Array, at: float, past: bool) -> Array:
+	var out := []
+	for i in poly.size():
+		var p: Vector3 = poly[i]
+		var q: Vector3 = poly[(i + 1) % poly.size()]
+		# (A hair's tolerance: what lies on the plane itself is not past it, nor before it.)
+		var p_in := p.z > at + 0.001 if past else p.z < at - 0.001
+		var q_in := q.z > at + 0.001 if past else q.z < at - 0.001
+		if p_in:
+			out.append(p)
+		if p_in != q_in and absf(q.z - p.z) > 0.0001:
+			out.append(p.lerp(q, (at - p.z) / (q.z - p.z)))
+	return out
 
 
 ## How strongly it shows `t` (share from the market's mouth) along.
@@ -362,6 +417,9 @@ func _stones() -> void:
 	look.set_shader_parameter(&"atlas", SetKit.painted(["astral.png", "astral_base.png"]))
 	look.set_shader_parameter(&"noise", Vfx.noise_3d())
 	look.set_shader_parameter(&"top_y", float(way[0][0].y))
+	# (Held here as well, so it outlives every stone when the passage is freed: freed with the last of them, the
+	# renderer still asks after it.)
+	_stone_look = look
 	var k := 0
 	for line: PackedVector3Array in way:
 		for i in line.size() - 1:
@@ -608,6 +666,7 @@ func _thresholds() -> void:
 		frame_look.set_shader_parameter(&"size", size)
 		_gate_quad(gate, "frame", size, frame_look)
 		_arch(gate, rim, size, sheet)
+		_jambs(gate, rim, size)
 		gate.add_child(_embers(rim))
 		gate.add_child(_spiral(rim * 0.95))
 		thresholds.append(gate)
@@ -669,6 +728,25 @@ func _arch(gate: Node3D, rim: float, size: Vector2, sheet: Texture2D) -> void:
 		stone.rotation.x = sin(k * 1.7) * 0.06
 		stone.set_meta("home", stone.position)
 		stone.set_meta("phase", k * 0.9)
+
+
+## Unseen jambs closing a gate's gap (`size`) either side of its arch (round its circle, `rim` m round), so the way in
+## is only through the arch: never through the void beside it (and shoved onto the way after).
+func _jambs(gate: Node3D, rim: float, size: Vector2) -> void:
+	var opening := rim * ARCH_OUT - ARCH_STONE.y / 2.0
+	var side := size.x / 2.0 - opening
+	if side <= 0.01:
+		return
+	var body := StaticBody3D.new()
+	body.name = "jambs"
+	gate.add_child(body)
+	for which in [-1.0, 1.0]:
+		var box := BoxShape3D.new()
+		box.size = Vector3(side, size.y, JAMB_DEPTH)
+		var shape := CollisionShape3D.new()
+		shape.shape = box
+		body.add_child(shape)
+		shape.position.x = which * (opening + side / 2.0)
 
 
 ## The point `by` m along `line`.
@@ -892,10 +970,27 @@ func _ease_plane(delta: float) -> void:
 
 
 var _muffles: Array[AudioEffectLowPassFilter] = []
+## The passages the walker is in now, and the one passage that eases the shared muffle each frame (the buses' filters
+## are one for all of them: two easing them toward their own ends would fight).
+static var _within := {}
+static var _easer: Node
 
 
-## Inside, the world's sound eased dull; outside, eased back (its low-pass on World and Ambience, added once).
+func _exit_tree() -> void:
+	_within.erase(get_instance_id())
+
+
+## Inside any passage, the world's sound eased dull; outside them all, eased back (the low-pass on World and Ambience,
+## added once, shared).
 func _muffle(delta: float) -> void:
+	if inside:
+		_within[get_instance_id()] = true
+	else:
+		_within.erase(get_instance_id())
+	if _easer == null or not is_instance_valid(_easer):
+		_easer = self
+	if _easer != self:
+		return
 	if _muffles.is_empty():
 		for name in MUFFLE_BUSES:
 			var bus := AudioServer.get_bus_index(name)
@@ -912,7 +1007,7 @@ func _muffle(delta: float) -> void:
 				found.cutoff_hz = MUFFLE.y
 				AudioServer.add_bus_effect(bus, found)
 			_muffles.append(found)
-	var target := MUFFLE.x if inside else MUFFLE.y
+	var target := MUFFLE.x if not _within.is_empty() else MUFFLE.y
 	for filter in _muffles:
 		var log_now := log(filter.cutoff_hz)
 		filter.cutoff_hz = exp(lerpf(log_now, log(target), clampf(MUFFLE_EASE * delta, 0.0, 1.0)))

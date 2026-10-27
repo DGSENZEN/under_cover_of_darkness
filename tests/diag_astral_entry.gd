@@ -10,6 +10,8 @@ const WALKS := [
 	[Vector2(-10.0, 26.0), Vector2(-10.0, 35.4), PI, "stairs_in"],
 	[Vector2(-9.0, 57.0), Vector2(-9.0, 53.4), 0.0, "mouth_in"],
 	[Vector2(-9.0, 53.4), Vector2(-9.0, 57.0), PI, "mouth_out"],
+	[Vector2(-12.5, 88.0), Vector2(-12.0, 97.0), PI, "south_in"],
+	[Vector2(-9.0, 124.0), Vector2(-9.0, 114.0), 0.0, "south_back"],
 ]
 const STEP := 0.15
 

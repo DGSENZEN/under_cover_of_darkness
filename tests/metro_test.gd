@@ -170,6 +170,55 @@ func _astral() -> void:
 	_vast(passage)
 	await _plane(passage)
 	await _glimpses(passage)
+	await _south()
+
+
+## M19: the south stretch's first 22 m beyond the Pasaje's south mouth (pasaje_s, z 95-117) an astral passage too: its
+## box gone (the rest of pasaje_s, past it, still there to be seen and walked), the void behind its windows; its way
+## walked from the Pasaje through both its gates and on along pasaje_s to the tianguis lane; a gate and the void bled
+## out past each of its gaps.
+func _south() -> void:
+	var passage: Node3D = map.get_node_or_null("astral_south")
+	if passage == null:
+		_check("M19a the south stretch's first 22 m an astral passage, the rest of pasaje_s still there", false, "no astral_south")
+		return
+	var wrong := []
+	var box: AABB = passage.bounds
+	if absf(box.position.z - 95.0) > 0.05 or absf(box.end.z - 117.0) > 0.05 or absf(box.position.x + 14.0) > 0.05 \
+			or absf(box.end.x + 4.0) > 0.05:
+		wrong.append("its box %s" % box)
+	var grey: MeshInstance3D = map.greybox.get_node_or_null("pasaje_s")
+	if grey == null or grey.visible or grey.find_children("*", "CollisionShape3D", true, false).is_empty():
+		wrong.append("pasaje_s's greybox still seen whole, or gone solid")
+	var rest: MeshInstance3D = passage.get("rest")
+	if rest == null or not rest.is_visible_in_tree() or rest.mesh == null:
+		wrong.append("nothing of pasaje_s left past it")
+	else:
+		var seen: AABB = rest.global_transform * rest.get_aabb()
+		if seen.position.z < 117.0 - 0.02 or seen.end.z < 149.0:
+			wrong.append("pasaje_s's rest from z %.2f to %.2f" % [seen.position.z, seen.end.z])
+	if passage.get("sky") == null or (passage.get("windows") as Array).size() < 4:
+		wrong.append("no void behind windows")
+	_check("M19a the south stretch's first 22 m an astral passage, the rest of pasaje_s still there", wrong.is_empty(),
+		"%s" % [wrong])
+	var y := box.position.y
+	# (From beside the kiosk island, in through the mouth's arch, along the way's own bends.)
+	var walk := await _tour([[-12.5, y, 93.4], [-11.0, y, 94.4], [-9.2, y, 95.0], [-9.0, y, 96.5], [-9.0, y, 98.0],
+		[-8.8, y, 100.5], [-7.6, y, 104.0],
+		[-9.5, y, 107.5], [-10.8, y, 111.0], [-9.0, y, 114.0], [-9.0, y, 116.4], [-9.0, y, 119.0], [-6.0, y, 122.5],
+		[-2.0, y, 122.5]], true)
+	_check("M19b the south passage walked from the Pasaje through both its gates and on to the tianguis lane", walk["ok"],
+		"%s" % [walk])
+	var gates_wrong := []
+	if passage.thresholds.size() != 2 or passage.gaps.size() != 2:
+		gates_wrong.append("%d gates for %d gaps" % [passage.thresholds.size(), passage.gaps.size()])
+	for k in passage.gaps.size():
+		if passage.bleeds.filter(func(b): return int(b.get_meta("gap", -1)) == k).size() < 3:
+			gates_wrong.append("gap %d not bled past" % k)
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(3)
+	_check("M19c a gate in each of the south passage's gaps, the void bled out past each", gates_wrong.is_empty(),
+		"%s" % [gates_wrong])
 
 
 ## M18i: the deep vast: colossi far out in it (150 m and more), the rivers running on far past the passage's ends
@@ -319,6 +368,17 @@ func _gates(passage: Node3D) -> void:
 			var lean: Variant = part_look.get_shader_parameter(&"lean") if part_look != null else null
 			if lean == null or float(lean) <= 0.0:
 				wrong.append("%s's %s lies flat on its frame" % [gate.name, part.name if part != null else "vortex"])
+		# The way in only through its arch: unseen jambs closing the gap either side of it (or a walker could step in
+		# through the void beside it and be shoved onto the way), the opening between them wide enough to walk (1.1 m).
+		var jambs := gate.find_child("jambs", true, false) as StaticBody3D
+		if jambs == null:
+			wrong.append("%s: nothing closing its gap beside its arch" % gate.name)
+		else:
+			var inner := INF
+			for shape: CollisionShape3D in jambs.find_children("*", "CollisionShape3D", true, false):
+				inner = minf(inner, absf(shape.position.x) - (shape.shape as BoxShape3D).size.x / 2.0)
+			if inner * 2.0 < 1.1:
+				wrong.append("%s: its arch's opening %.2f m" % [gate.name, inner * 2.0])
 		# An arch of floating carved stones round it, drawn in the void (astral_arch.gdshader).
 		var arch := gate.find_children("arch*", "MeshInstance3D", true, false).filter(func(m):
 			return m.material_override is ShaderMaterial and m.material_override.shader.resource_path.ends_with("astral_arch.gdshader"))
