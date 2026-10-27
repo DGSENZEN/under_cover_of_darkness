@@ -208,6 +208,7 @@ func _astral() -> void:
 	_detail(passage)
 	_vast(passage)
 	_smooth(passage)
+	await _deep_world(passage)
 	await _plane(passage)
 	await _glimpses(passage)
 	await _sounds(passage)
@@ -324,6 +325,54 @@ func _vast(passage: Node3D) -> void:
 		"%s" % [wrong.slice(0, 5)])
 
 
+## M18n: the deep its own world, drawn with depth: a SubViewport of its own world and camera (the camera matched to the
+## one drawing, its place and its field of view, every frame), a real sky behind it all; all that floats in the deep
+## (fragments, presences, colossi, rivers, constellations, glimpses, the eclipse, the gates' arches) inside it, none
+## of it drawn without the depth test or read off a stencil (so nothing in it draws over what is in front of it, and
+## nothing pops as it turns); the windows showing its picture. (The jitter and the popping the user saw.)
+func _deep_world(passage: Node3D) -> void:
+	var wrong := []
+	var deep: SubViewport = passage.get("deep")
+	var eye: Camera3D = passage.get("deep_eye")
+	if deep == null or not deep.own_world_3d or eye == null or not deep.is_ancestor_of(eye):
+		_check("M18n the deep its own world, drawn with depth, the windows showing its picture", false, "no deep world")
+		return
+	var sky_node: WorldEnvironment = null
+	for child in deep.get_children():
+		if child is WorldEnvironment:
+			sky_node = child
+	var env: Environment = sky_node.environment if sky_node != null else null
+	if env == null or env.background_mode != Environment.BG_SKY or env.sky == null:
+		wrong.append("no sky behind the deep")
+	var floating: Array = passage.fragments + passage.presences + passage.colossi + passage.rivers + passage.constellations \
+		+ passage.glimpses + [passage.eclipse]
+	for gate: Node3D in passage.thresholds:
+		floating.append(gate.get_meta("arch", null))
+	for node in floating:
+		if node == null or not deep.is_ancestor_of(node):
+			wrong.append("%s not in the deep" % (node.name if node != null else "an arch"))
+	for drawn: Node in deep.find_children("*", "GeometryInstance3D", true, false):
+		var look := (drawn as GeometryInstance3D).material_override as ShaderMaterial
+		if look == null and drawn is MeshInstance3D and (drawn as MeshInstance3D).mesh != null:
+			look = (drawn as MeshInstance3D).get_active_material(0) as ShaderMaterial
+		if look != null and look.shader != null and (look.shader.code.find("depth_test_disabled") >= 0 \
+				or look.shader.code.find("stencil_mode") >= 0):
+			wrong.append("%s drawn without depth" % drawn.name)
+			break
+	var window: MeshInstance3D = passage.windows[0] if not passage.windows.is_empty() else null
+	var window_look := window.get_active_material(0) as ShaderMaterial if window != null else null
+	if window_look == null or not window_look.get_shader_parameter(&"deep") is ViewportTexture:
+		wrong.append("the windows not showing the deep")
+	# Its camera the one drawing, this frame.
+	await _frames(2)
+	var drawing := get_viewport().get_camera_3d()
+	if drawing != null and (not eye.global_transform.origin.is_equal_approx(drawing.get_global_transform_interpolated().origin)
+			or absf(eye.fov - drawing.fov) > 0.01):
+		wrong.append("its eye not the camera's: %s against %s" % [eye.global_transform.origin, drawing.global_transform.origin])
+	_check("M18n the deep its own world, drawn with depth, the windows showing its picture", wrong.is_empty(),
+		"%s" % [wrong.slice(0, 5)])
+
+
 ## M18l: what the passage moves every frame (its gates' rings and arch stones, its fragments, its presences, its
 ## colossi) moves without physics interpolation: moved outside the physics step, interpolated it judders (the jitter
 ## seen at the gates).
@@ -331,7 +380,7 @@ func _smooth(passage: Node3D) -> void:
 	var judder := []
 	var moving: Array = passage.fragments + passage.presences + passage.colossi
 	for gate: Node3D in passage.thresholds:
-		moving += gate.find_children("ring*", "Node3D", true, false) + gate.find_children("arch*", "Node3D", true, false)
+		moving += gate.find_children("ring*", "Node3D", true, false) + (gate.get_meta("arch", gate) as Node3D).find_children("arch*", "Node3D", true, false)
 	for node: Node3D in moving:
 		if node.is_physics_interpolated():
 			judder.append(node.name)
@@ -477,7 +526,7 @@ func _gates(passage: Node3D) -> void:
 			if inner * 2.0 < 1.1:
 				wrong.append("%s: its arch's opening %.2f m" % [gate.name, inner * 2.0])
 		# An arch of floating carved stones round it, drawn in the void (astral_arch.gdshader).
-		var arch := gate.find_children("arch*", "MeshInstance3D", true, false).filter(func(m):
+		var arch := (gate.get_meta("arch", gate) as Node3D).find_children("arch*", "MeshInstance3D", true, false).filter(func(m):
 			return m.material_override is ShaderMaterial and m.material_override.shader.resource_path.ends_with("astral_arch.gdshader"))
 		if arch.size() < 10:
 			wrong.append("%s: %d stones in its arch" % [gate.name, arch.size()])

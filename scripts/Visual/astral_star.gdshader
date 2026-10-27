@@ -2,8 +2,7 @@
 // glow growing as its constellation is lit (`lit`), a thread only a faint line until then; seen only through the
 // passage's windows. A star turns to whoever looks (`star`); a thread lies as it was laid.
 shader_type spatial;
-render_mode unshaded, cull_disabled, depth_test_disabled, depth_draw_never, fog_disabled, blend_add;
-stencil_mode read, compare_equal, 1;
+render_mode unshaded, cull_disabled, depth_draw_never, fog_disabled, blend_add;
 
 uniform vec3 ward : source_color = vec3(0.812, 0.91, 0.941);
 uniform vec3 marigold : source_color = vec3(1.0, 0.62, 0.16);

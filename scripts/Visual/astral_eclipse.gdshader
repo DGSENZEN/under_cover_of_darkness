@@ -2,8 +2,7 @@
 // sun, its rim a thin burning line, its corona oxblood and marigold in streamers that climb slowly off it, the whole
 // breathing; turned to whoever looks, seen only through the passage's windows.
 shader_type spatial;
-render_mode unshaded, cull_disabled, depth_test_disabled, depth_draw_never, fog_disabled, blend_mix;
-stencil_mode read, compare_equal, 1;
+render_mode unshaded, cull_disabled, depth_draw_never, fog_disabled, blend_mix;
 
 uniform sampler3D noise : filter_linear, repeat_enable;
 uniform vec3 ink : source_color = vec3(0.004, 0.003, 0.006);

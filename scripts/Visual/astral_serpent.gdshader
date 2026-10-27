@@ -5,8 +5,7 @@
 // barbs, oxblood to green, iridescent; their own UV2), 2 its head (larger plates, brows, nostrils, its lips; UV2 along
 // and round it), 3 its fangs (old bone), 4 its eyes (marigold, a slit, a glint; UV2 round the dome), 5 its tongue.
 shader_type spatial;
-render_mode unshaded, cull_back, depth_test_disabled, depth_draw_never, fog_disabled, blend_mix;
-stencil_mode read, compare_equal, 1;
+render_mode unshaded, cull_back, fog_disabled;
 
 uniform sampler3D noise : filter_linear, repeat_enable;
 uniform int part = 0;

@@ -1,11 +1,10 @@
-// The void's sky (scripts/Visual/AstralPassage.gd), seen only through the astral passage's windows: the deep in the
-// city's own colours (the effects' rule: phosphor green the seeped, oxblood the gods, cyan-white the wards, marigold
-// the dead). Ink, deeper below; its clouds the seeped dark's green in soft, slow gradients with oxblood in their depths,
-// their edges only a little broken by the user's brush sheets, as paint is; an aurora hung high through it, a curtain
-// with a bright lower hem and soft rays fading up, green going to ward-white, slowly folding; a few cold stars.
-shader_type spatial;
-render_mode unshaded, cull_disabled, depth_test_disabled, depth_draw_never, fog_disabled, blend_mix;
-stencil_mode read, compare_equal, 1;
+// The deep's sky (scripts/Visual/AstralPassage.gd: the sky of the deep's own world, seen through the passage's
+// windows): the deep in the city's own colours (the effects' rule: phosphor green the seeped, oxblood the gods,
+// cyan-white the wards, marigold the dead). Ink, deeper below; its clouds the seeped dark's green in soft, slow
+// gradients with oxblood in their depths, their edges only a little broken by the user's brush sheets, as paint is; an
+// aurora hung high through it, a curtain with a bright lower hem and soft rays fading up, green going to ward-white,
+// slowly folding; a few cold stars. At no distance, behind all of the deep.
+shader_type sky;
 
 uniform sampler3D noise : filter_linear, repeat_enable;
 uniform sampler2D brush : hint_default_black, filter_linear_mipmap, repeat_enable;
@@ -13,12 +12,6 @@ uniform vec3 ink : source_color = vec3(0.01, 0.009, 0.014);
 uniform vec3 seeped : source_color = vec3(0.498, 0.827, 0.416);
 uniform vec3 oxblood : source_color = vec3(0.431, 0.122, 0.102);
 uniform vec3 ward : source_color = vec3(0.812, 0.91, 0.941);
-
-varying vec3 world_pos;
-
-void vertex() {
-	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-}
 
 float hash3(vec3 p) {
 	p = fract(p * 0.3183099 + 0.1);
@@ -46,9 +39,8 @@ vec2 curtain(vec3 d, float height, float seed, float t) {
 	return vec2(hang * here * (0.25 + 0.75 * smoothstep(0.3, 0.75, rays)) * (0.7 + 0.6 * shimmer), up);
 }
 
-void fragment() {
-	// (Looked at from wherever the eye is, as a sky at no distance at all: it never shifts as the walker goes.)
-	vec3 d = normalize(world_pos - CAMERA_POSITION_WORLD);
+void sky() {
+	vec3 d = EYEDIR;
 	float t = TIME;
 	// (The brush sheet laid round the sphere, only to break the clouds' edges.)
 	vec2 round_uv = vec2(atan(d.z, d.x) / 6.2831853 + 0.5, asin(clamp(d.y, -1.0, 1.0)) / 3.1415927 + 0.5);
@@ -82,5 +74,5 @@ void fragment() {
 	float h = hash3(cell);
 	float twinkle = 0.55 + 0.45 * sin(t * (0.6 + h * 2.0) + h * 30.0);
 	col += ward * step(0.992, h) * smoothstep(0.45, 0.0, length(fract(d * 170.0) - 0.5)) * twinkle * (1.0 - body);
-	ALBEDO = col;
+	COLOR = col;
 }

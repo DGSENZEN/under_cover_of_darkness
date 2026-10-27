@@ -3,8 +3,7 @@
 // lights, each a round glow with a tail drawn out behind it, many and faint at its edges, the stream thick at its
 // middle; seen only through the passage's windows.
 shader_type spatial;
-render_mode unshaded, cull_disabled, depth_test_disabled, depth_draw_never, fog_disabled, blend_add;
-stencil_mode read, compare_equal, 1;
+render_mode unshaded, cull_disabled, depth_draw_never, fog_disabled, blend_add;
 
 uniform sampler3D noise : filter_linear, repeat_enable;
 uniform vec3 marigold : source_color = vec3(1.0, 0.62, 0.16);

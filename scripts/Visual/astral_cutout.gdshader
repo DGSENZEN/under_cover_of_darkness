@@ -5,8 +5,7 @@
 // to), with a fine line of it where the smoke meets the dark. Seen only through the passage's windows. Its uniforms
 // are the shade cut-out's, so a Silhouette shows its cells and walks its loop on it (`presence` only fades it here).
 shader_type spatial;
-render_mode unshaded, cull_disabled, depth_test_disabled, depth_draw_never, fog_disabled, blend_mix;
-stencil_mode read, compare_equal, 1;
+render_mode unshaded, cull_disabled, depth_draw_never, fog_disabled, blend_mix;
 
 uniform sampler2D sheet : filter_linear, repeat_disable;
 uniform vec2 cell_scale = vec2(0.25, 0.5);

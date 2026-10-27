@@ -1,11 +1,10 @@
 // A stone of a ward-gate's arch (scripts/Visual/AstralPassage.gd): a carved block of the city's dark stone floating
-// with its fellows round the gate's circle, drawn in the void (over its frame, not cut by it). Lit from the gate's fire
+// with its fellows round the gate's circle, in the deep's own world (seen through the gate's frame). Lit from the gate's fire
 // on its inner face, a cold rim from the deep; on its face toward either side one of the script's glyphs (a cell of
 // astral_rings.png) cut into it, glowing ward cyan-white and pulsing round the arch in turn; its keystone's glyph
 // marigold. Seen only where the void is.
 shader_type spatial;
-render_mode unshaded, cull_back, depth_test_disabled, depth_draw_never, fog_disabled, blend_mix;
-stencil_mode read, compare_equal, 1;
+render_mode unshaded, cull_back, fog_disabled;
 
 uniform sampler2D rings : filter_linear_mipmap, repeat_disable;
 uniform sampler3D noise : filter_linear, repeat_enable;
@@ -76,5 +75,4 @@ void fragment() {
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
 	col += ward * rim * 0.2;
 	ALBEDO = col;
-	ALPHA = 1.0;
 }

@@ -3,8 +3,7 @@
 // (astral_rings.png) carved round and round, their cuts glowing faint marigold on the side the eclipse lights; its rim
 // catching the eclipse; all of it half lost in the deep's haze. Seen only through the passage's windows.
 shader_type spatial;
-render_mode unshaded, cull_back, depth_test_disabled, depth_draw_never, fog_disabled, blend_mix;
-stencil_mode read, compare_equal, 1;
+render_mode unshaded, cull_back, fog_disabled;
 
 uniform sampler2D rings : filter_linear_mipmap, repeat_disable;
 uniform sampler3D noise : filter_linear, repeat_enable;
@@ -60,5 +59,4 @@ void fragment() {
 	col += mix(oxblood, marigold, lit) * rim * 0.6;
 	float far = smoothstep(150.0, 700.0, distance(world_pos, CAMERA_POSITION_WORLD));
 	ALBEDO = mix(col, haze, far * 0.7);
-	ALPHA = 1.0;
 }

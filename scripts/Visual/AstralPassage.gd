@@ -177,8 +177,10 @@ const MUFFLE := Vector2(900.0, 20000.0)
 const MUFFLE_EASE := 2.5
 ## How far below the floor the floor's window lies (the way's stones over it hide it), and the walls' windows reach.
 const BELOW := 0.6
-## The sky's sphere round the passage's middle (m); the brush sheet breaking its clouds.
-const SKY_RADIUS := 45.0
+## How near the camera must be to the passage for its deep to be drawn (m out from its box); the brush sheet breaking
+## its sky's clouds.
+const DEEP_SEEN := 30.0
+const DEEP_SCALE := 0.75
 const BRUSH := "res://textures/brushes/brush_02.png"
 ## The motes drifting toward the market: how many, how long each lives (s), their pace (m/s).
 const MOTES := 180
@@ -196,7 +198,13 @@ var greybox: MeshInstance3D
 var way: Array = []
 ## Its pieces.
 var windows: Array[MeshInstance3D] = []
-var sky: MeshInstance3D
+## The deep: a world of its own (a SubViewport), drawn by its own eye matched each frame to the camera drawing, with
+## real depth, its sky a real sky; the windows show its picture. All that floats in it is under `_deep`.
+var deep: SubViewport
+var deep_eye: Camera3D
+var _deep: Node3D
+var _on_screen: VisibleOnScreenNotifier3D
+var sky: Sky
 var stones: Array[MeshInstance3D] = []
 var fragments: Array[Node3D] = []
 var presences: Array[Node3D] = []
@@ -260,8 +268,8 @@ func _ready() -> void:
 	if greybox != null:
 		greybox.visible = false
 		rest = _rest_of(greybox)
+	_make_deep()
 	_windows()
-	_sky()
 	_eclipse()
 	_colossi()
 	_rivers()
@@ -330,6 +338,7 @@ func _cut(poly: Array, at: float, past: bool) -> Array:
 
 func _process(delta: float) -> void:
 	_clock += delta
+	_follow()
 	for piece in fragments:
 		piece.rotate(piece.get_meta("axis"), deg_to_rad(float(piece.get_meta("turn"))) * delta)
 		var home: Vector3 = piece.get_meta("home")
@@ -344,7 +353,7 @@ func _process(delta: float) -> void:
 			if ring != null:
 				ring.rotation.z = wrapf(ring.rotation.z + float(RING_TURN[k]) * delta, -PI, PI)
 		# Its arch's stones floating, each on its own slow breath.
-		for stone: Node in gate.get_children():
+		for stone: Node in (gate.get_meta("arch", gate) as Node3D).get_children():
 			if stone.has_meta("home"):
 				var home: Vector3 = stone.get_meta("home")
 				var phase: float = stone.get_meta("phase")
@@ -494,7 +503,7 @@ func _fragments() -> void:
 		piece.mesh = kit[kind]
 		piece.material_override = look
 		piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(piece)
+		_deep.add_child(piece)
 		piece.position = at
 		piece.rotation = Vector3(rng.randf() * TAU, rng.randf() * TAU, rng.randf() * TAU)
 		piece.scale = Vector3.ONE * rng.randf_range(FRAGMENT_SIZE.x, FRAGMENT_SIZE.y)
@@ -518,7 +527,7 @@ func _presences() -> void:
 		cluster.name = "eyes"
 		cluster.set_meta("kind", "eyes")
 		cluster.set_meta("home", middle + EYES[k][0])
-		add_child(cluster)
+		_deep.add_child(cluster)
 		cluster.position = middle + EYES[k][0]
 		for j in int(EYES[k][1]):
 			var look := ShaderMaterial.new()
@@ -557,7 +566,7 @@ func _presences() -> void:
 	var line := Node3D.new()
 	line.name = "shades"
 	line.set_meta("kind", "shades")
-	add_child(line)
+	_deep.add_child(line)
 	for k in SHADE_WALKS.size():
 		var shade: MeshInstance3D = Silhouette.make_loop(SHADE_WALKS[k])
 		if shade == null:
@@ -577,7 +586,7 @@ func _presences() -> void:
 	var hand := Node3D.new()
 	hand.name = "hand"
 	hand.set_meta("kind", "hand")
-	add_child(hand)
+	_deep.add_child(hand)
 	var sheet := SetKit.painted(["pasaje_marks.png"], SetKit.ATLAS_DIR, true)
 	var palm := MeshInstance3D.new()
 	palm.name = "palm"
@@ -683,6 +692,7 @@ func _thresholds() -> void:
 		# void, so the gate floats in it); past it, the void bleeding out over the world's surfaces.
 		var frame_look := ShaderMaterial.new()
 		frame_look.shader = MARK
+		frame_look.set_shader_parameter(&"deep", deep.get_texture())
 		frame_look.set_shader_parameter(&"noise", Vfx.noise_3d())
 		frame_look.set_shader_parameter(&"hole", rim * GATE_HOLE)
 		frame_look.set_shader_parameter(&"size", size)
@@ -708,8 +718,14 @@ func _tear_look(params: Dictionary) -> ShaderMaterial:
 
 
 ## The arch round a gate's circle (`rim` m round, in its gap `size`): carved stones floating apart, up its jambs from
-## the floor and over its top, a keystone at its crown; drawn in the void (astral_arch.gdshader).
+## the floor and over its top, a keystone at its crown; in the deep (astral_arch.gdshader), held where the gate stands
+## (the gate's meta "arch").
 func _arch(gate: Node3D, rim: float, size: Vector2, sheet: Texture2D) -> void:
+	var holder := Node3D.new()
+	holder.name = "arch_of_" + String(gate.name)
+	_deep.add_child(holder)
+	holder.global_transform = gate.global_transform
+	gate.set_meta("arch", holder)
 	var out := rim * ARCH_OUT
 	var base := -size.y / 2.0 + ARCH_STONE.y / 2.0
 	# Its line: up the left jamb, over the top, down the right (in the gate's face, x-y).
@@ -743,7 +759,7 @@ func _arch(gate: Node3D, rim: float, size: Vector2, sheet: Texture2D) -> void:
 		stone.mesh = box
 		stone.material_override = look
 		stone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		gate.add_child(stone)
+		holder.add_child(stone)
 		# (Each a little apart from its fellows and turned, floating.)
 		stone.position = Vector3(at.x, at.y, 0.0)
 		stone.rotation.z = atan2(ahead.y, ahead.x) + sin(k * 2.3) * 0.08
@@ -833,6 +849,7 @@ func _bleed(k: int, gap: Dictionary) -> void:
 		var params := {&"bleed": BLEED, &"seg_a": face[3], &"seg_b": face[4]}
 		var look := ShaderMaterial.new()
 		look.shader = MARK
+		look.set_shader_parameter(&"deep", deep.get_texture())
 		look.set_shader_parameter(&"noise", Vfx.noise_3d())
 		for key in params:
 			look.set_shader_parameter(key, params[key])
@@ -1149,7 +1166,7 @@ func _serpent() -> Node3D:
 	var serpent := Node3D.new()
 	serpent.name = "serpent"
 	serpent.set_meta("kind", "serpent")
-	add_child(serpent)
+	_deep.add_child(serpent)
 	var frames := _serpent_frames()
 	_serpent_part(serpent, "coils", _coils_mesh(frames), 0, -7)
 	_serpent_part(serpent, "feathers", _feathers_mesh(frames), 1, -6)
@@ -1417,6 +1434,7 @@ func _feather(tool: SurfaceTool, root: Vector3, dir: Vector3, length: float, wid
 func _windows() -> void:
 	var look := ShaderMaterial.new()
 	look.shader = WINDOW
+	look.set_shader_parameter(&"deep", deep.get_texture())
 	var low := bounds.position.y - BELOW
 	var high := bounds.end.y
 	var x0 := bounds.position.x
@@ -1478,28 +1496,73 @@ func _plain(look: Material, size: Vector2) -> MeshInstance3D:
 	return piece
 
 
-## The void's sky: a sphere round the passage, painted inside, drawn first of the void.
-func _sky() -> void:
+## The deep's world: its SubViewport (sized as the screen), its eye, its root, and its sky (astral_sky.gdshader, a sky
+## shader: behind all of it, at no distance); nothing in it lit (all of it unshaded), nothing graded twice (its own
+## picture linear, the Metro's grade laid over it once, on the windows).
+func _make_deep() -> void:
+	deep = SubViewport.new()
+	deep.name = "deep"
+	deep.own_world_3d = true
+	deep.use_hdr_2d = true
+	# (Drawn at three quarters and filtered up: it is soft and dark, and that halves what its sky costs.)
+	deep.scaling_3d_scale = DEEP_SCALE
+	deep.msaa_3d = get_viewport().msaa_3d
+	deep.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	deep.size = Vector2i(get_viewport().get_visible_rect().size)
+	add_child(deep)
 	var look := ShaderMaterial.new()
 	look.shader = SKY
-	look.render_priority = -10
 	look.set_shader_parameter(&"noise", Vfx.noise_3d())
 	# (The user's brush sheets, when they are here: kept out of the repository.)
 	if ResourceLoader.exists(BRUSH):
 		look.set_shader_parameter(&"brush", load(BRUSH))
-	var sphere := SphereMesh.new()
-	sphere.radius = SKY_RADIUS
-	sphere.height = SKY_RADIUS * 2.0
-	sphere.radial_segments = 48
-	sphere.rings = 24
-	sky = MeshInstance3D.new()
-	sky.name = "sky"
-	sky.mesh = sphere
-	sky.set_surface_override_material(0, look)
-	sky.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	sky.extra_cull_margin = SKY_RADIUS
-	add_child(sky)
-	sky.position = bounds.get_center()
+	sky = Sky.new()
+	sky.sky_material = look
+	sky.radiance_size = Sky.RADIANCE_SIZE_32
+	var env := Environment.new()
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_DISABLED
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	var world := WorldEnvironment.new()
+	world.name = "deep_sky"
+	world.environment = env
+	deep.add_child(world)
+	deep_eye = Camera3D.new()
+	deep_eye.name = "deep_eye"
+	deep_eye.far = 4000.0
+	# (A SubViewport's world starts its own: what its eye and its pieces are moved by each frame must say so again.)
+	deep_eye.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	deep.add_child(deep_eye)
+	deep_eye.current = true
+	_deep = Node3D.new()
+	_deep.name = "deep_world"
+	_deep.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	deep.add_child(_deep)
+	# (Whether its box, its windows' and its bleeds' with it, is in the camera's view at all.)
+	_on_screen = VisibleOnScreenNotifier3D.new()
+	_on_screen.name = "on_screen"
+	add_child(_on_screen)
+	_on_screen.aabb = bounds.grow(BLEED * 2.0)
+
+
+## The deep's eye the camera drawing (where it is drawn this frame, its field of view, its near and far), its picture
+## the screen's size; drawn only while the passage is near enough to be seen.
+func _follow() -> void:
+	var drawing := get_viewport().get_camera_3d()
+	if drawing == null or deep == null:
+		return
+	deep_eye.global_transform = drawing.get_global_transform_interpolated()
+	deep_eye.fov = drawing.fov
+	deep_eye.near = drawing.near
+	deep_eye.keep_aspect = drawing.keep_aspect
+	var want := Vector2i(get_viewport().get_visible_rect().size)
+	if deep.size != want:
+		deep.size = want
+	var box := bounds.grow(DEEP_SEEN)
+	var seen := box.has_point(deep_eye.global_position) and (_on_screen == null or _on_screen.is_on_screen())
+	deep.render_target_update_mode = SubViewport.UPDATE_ALWAYS if seen else SubViewport.UPDATE_DISABLED
 
 
 ## The eclipse, high ahead toward the market and a little west, far off in the deep.
@@ -1516,7 +1579,7 @@ func _eclipse() -> void:
 	eclipse.material_override = look
 	eclipse.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	eclipse.extra_cull_margin = ECLIPSE_SIZE
-	add_child(eclipse)
+	_deep.add_child(eclipse)
 	var high := deg_to_rad(ECLIPSE_HIGH)
 	var round_by := deg_to_rad(ECLIPSE_ROUND)
 	var ahead := Vector3(-sin(round_by), 0.0, cos(round_by) * float(mouth_end))
@@ -1554,7 +1617,7 @@ func _colossi() -> void:
 	stone.material_override = look
 	stone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	stone.extra_cull_margin = SUN_STONE.x * 2.0
-	add_child(stone)
+	_deep.add_child(stone)
 	stone.position = _out_in_the_deep(SUN_STONE_AT)
 	stone.rotation = Vector3(1.15, 0.4, 0.25)
 	stone.set_meta("turn", Vector3(0.0, 0.012, 0.0))
@@ -1564,7 +1627,7 @@ func _colossi() -> void:
 		var kit := SetKit.kit(KIT)
 		var city := Node3D.new()
 		city.name = "hanging_city"
-		add_child(city)
+		_deep.add_child(city)
 		city.position = _out_in_the_deep(CITY_AT)
 		city.rotation = Vector3(0.0, 0.3, PI)
 		var plan := [["arch", Vector3(0, 0, 0)], ["doorway", Vector3(30, 4, -10)], ["stairs", Vector3(-28, 0, 12)],
@@ -1600,7 +1663,7 @@ func _colossi() -> void:
 	stair.material_override = _far_ink(7.7)
 	stair.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	stair.extra_cull_margin = 200.0
-	add_child(stair)
+	_deep.add_child(stair)
 	stair.position = _out_in_the_deep(STAIR_AT)
 	stair.set_meta("turn", Vector3(0.0, -0.01, 0.0))
 	colossi.append(stair)
@@ -1659,7 +1722,7 @@ func _rivers() -> void:
 		river.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		river.extra_cull_margin = 4.0
 		river.set_meta("path", points)
-		add_child(river)
+		_deep.add_child(river)
 		rivers.append(river)
 
 
@@ -1718,7 +1781,7 @@ func _constellations() -> void:
 	for k in glyphs.size():
 		var group := Node3D.new()
 		group.name = "constellation"
-		add_child(group)
+		_deep.add_child(group)
 		var z := far_z + float(mouth_end) * (k + 0.5) / glyphs.size() * _span
 		var at: Vector3
 		var up := Vector3.UP
@@ -1817,7 +1880,7 @@ func _glimpses() -> void:
 		glimpse.name = spec[0]
 		glimpse.set_meta("at", spec[1])
 		glimpse.set_meta("shown", 0.0)
-		add_child(glimpse)
+		_deep.add_child(glimpse)
 		var looks := []
 		match String(spec[0]):
 			"echo":

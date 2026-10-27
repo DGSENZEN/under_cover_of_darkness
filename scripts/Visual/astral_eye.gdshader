@@ -6,8 +6,7 @@
 // a torn almond of ink round it, its edges burning faint oxblood with a marigold hairline, fine fractures running out.
 // Seen only through the passage's windows.
 shader_type spatial;
-render_mode unshaded, cull_disabled, depth_test_disabled, depth_draw_never, fog_disabled, blend_mix;
-stencil_mode read, compare_equal, 1;
+render_mode unshaded, cull_disabled, depth_draw_never, fog_disabled, blend_mix;
 
 uniform sampler3D noise : filter_linear, repeat_enable;
 uniform float seed = 0.0;

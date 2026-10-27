@@ -2,8 +2,7 @@
 // astral passage's windows: inked nearly black, a rim of cold teal and marigold catching an unseen light, the city's
 // glyphs flickering over it now and then.
 shader_type spatial;
-render_mode unshaded, cull_back, depth_test_disabled, depth_draw_never, fog_disabled, blend_mix;
-stencil_mode read, compare_equal, 1;
+render_mode unshaded, cull_back, fog_disabled;
 
 uniform sampler3D noise : filter_linear, repeat_enable;
 uniform vec3 ink : source_color = vec3(0.018, 0.014, 0.026);
