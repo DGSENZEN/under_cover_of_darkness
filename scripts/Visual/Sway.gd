@@ -23,6 +23,8 @@ var _phase := 0.0
 
 
 func _init() -> void:
+	# (Swung each frame, not in the physics step: drawn interpolated it would judder.)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_seeded()
 
 

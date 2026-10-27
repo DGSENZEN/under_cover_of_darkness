@@ -112,6 +112,8 @@ var _wisp_material: ShaderMaterial
 
 
 func _ready() -> void:
+	# (Its smoke and its cut-out moved each frame, not in the physics step: drawn interpolated they would judder.)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	if character != "":
 		dialogue = DialogueBook.character(character)
 	elif type_id != "":

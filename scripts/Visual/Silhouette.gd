@@ -62,6 +62,11 @@ var _cols := 1.0
 var _col := 0.0
 
 
+func _init() -> void:
+	# (Walked and turned each frame, not in the physics step: drawn interpolated it would judder.)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+
+
 ## A still cut-out of `pose` (its name on the poses' sheet), facing left (or, `mirror`ed, right) seen from its +Z side;
 ## null if the sheet has no such pose.
 static func make(pose: String, mirror := false) -> MeshInstance3D:

@@ -22,6 +22,8 @@ func _ready() -> void:
 	eye = Camera3D.new()
 	eye.fov = 75.0
 	eye.far = 4000.0
+	# (Moved each frame, not in the physics step: drawn interpolated the whole film judders.)
+	eye.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(eye)
 	var layer := CanvasLayer.new()
 	layer.layer = 100

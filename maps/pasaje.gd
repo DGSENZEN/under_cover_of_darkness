@@ -663,6 +663,8 @@ func _overhead() -> void:
 	lit.emission_energy_multiplier = 3.0
 	var root := Node3D.new()
 	root.name = "overhead"
+	# (Its signs swung each frame, not in the physics step: drawn interpolated they would judder.)
+	root.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(root)
 	for spec in GIRDER_SIGNS:
 		overhead.append(SetKit.place(root, kit["drop_rod"], look, "drop_rod", Vector3(spec[1], GIRDER_FOOT, spec[2]), 0.0, false))

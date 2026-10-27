@@ -39,6 +39,8 @@ var _blink := 0.0
 
 
 func _ready() -> void:
+	# (Moved each frame, not in the physics step: drawn interpolated they would judder.)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_rng.seed = seed
 	_next = _rng.randf_range(SHUT_FOR.x, SHUT_FOR.y)
 	_blink_in = _rng.randf_range(BLINK_EVERY.x, BLINK_EVERY.y)
