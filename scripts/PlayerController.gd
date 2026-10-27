@@ -1688,7 +1688,14 @@ func _die() -> void:
 		# the pause screen.
 		await get_tree().create_timer(2.0, false).timeout
 
-		if is_inside_tree():
+		if not is_inside_tree():
+			return
+
+		# The HUD asks what now (load, or leave); without one (a gym run
+		# headless), the map starts again.
+		if hud != null and is_instance_valid(hud) and hud.has_method("show_death_page"):
+			hud.show_death_page()
+		else:
 			get_tree().reload_current_scene()
 
 

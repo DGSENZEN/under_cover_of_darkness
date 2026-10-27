@@ -150,6 +150,8 @@ var _last_real := -1.0
 var _fade: ColorRect
 var _death: Label
 var _pause: PauseMenu
+## After death: Load latest, Load, Main menu (the player shows it, reload_on_death).
+var death_page: DeathPage
 var _scan_timer := 0.0
 var _listening := {}
 ## When a sting last played, so being noticed never becomes a racket.
@@ -805,6 +807,13 @@ func _build_pause() -> void:
 	_pause = PauseMenu.new()
 	layer.add_child(_pause)
 	_pause.resume_requested.connect(resume)
+	death_page = DeathPage.new()
+	layer.add_child(death_page)
+
+
+## The player is dead and has fallen: what now (DeathPage).
+func show_death_page() -> void:
+	death_page.open()
 
 
 func _label(font_size: int, colour: Color, align: HorizontalAlignment) -> Label:

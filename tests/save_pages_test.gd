@@ -4,7 +4,9 @@ extends Node
 ## saves newest first, loading one, deleting after asking, the Save page's
 ## new save and overwriting after asking, a damaged save shown but not
 ## loadable (P1-P4, P7), the pause menu's six words and Escape (P5), a load
-## from the pause leaving the game unpaused (P6).
+## from the pause leaving the game unpaused (P6); the death page: Load latest
+## loads the run's newest save (P8), restarts the map with none (P9), saving
+## is held while dead and its Load opens the Load page (P10).
 ##   Godot --headless --fixed-fps 60 --path . res://tests/save_pages_test.tscn
 
 const SaveFiles := preload("res://scripts/Save/SaveFiles.gd")
@@ -29,6 +31,9 @@ func _ready() -> void:
 	await _p7_damaged()
 	await _p5_pause_words()
 	await _p6_load_from_the_pause()
+	await _p10_dead_holds_saves()
+	await _p8_death_loads_latest()
+	await _p9_death_with_no_save()
 	print("\n==== RESULTS ====")
 
 	for line in results:
@@ -201,6 +206,63 @@ func _p6_load_from_the_pause() -> void:
 	var hud: Node = get_tree().get_first_node_in_group(&"player").hud
 	_check("P6 a load from the pause leaves the game playing", error == OK and not get_tree().paused and not save.loading and not hud._pause.visible,
 		"%s paused %s pause %s" % [error, get_tree().paused, hud._pause.visible])
+
+
+func _player() -> Node:
+	return get_tree().get_first_node_in_group(&"player")
+
+
+func _die() -> void:
+	_player().take_damage(10000.0, null)
+	for i in 160:
+		await get_tree().process_frame
+
+
+func _p10_dead_holds_saves() -> void:
+	await _die()
+	var hud: Node = _player().hud
+	var run: String = city.run_id
+	var named := SaveFiles.saves(run).filter(func(s): return s["kind"] == &"named").size()
+	save.request_save(&"named")
+	for i in 30:
+		await get_tree().process_frame
+	var held := SaveFiles.saves(run).filter(func(s): return s["kind"] == &"named").size() == named
+	var page: Node = hud.death_page
+	page.words[1].pressed.emit()
+	await get_tree().create_timer(MenuMotion.PRESS + 0.2).timeout
+	_check("P10 dead: a save waits; the death page's Load opens the Load page", held and page.visible and page.saves.visible and page.saves.mode == &"load",
+		"held %s page %s list %s" % [held, page.visible, page.saves.visible])
+	page.close_saves()
+	# (Nothing to save once dead: the request is let go.)
+	save._waiting.clear()
+
+
+func _p8_death_loads_latest() -> void:
+	var run: String = city.run_id
+	var newest: Dictionary = SaveFiles.newest_save(run)
+	var at: Vector3 = (SaveFiles.read(newest["path"])["body"]["player"]["place"]["transform"] as Transform3D).origin
+	var page: Node = _player().hud.death_page
+	page.words[0].pressed.emit()
+	for i in 600:
+		await get_tree().process_frame
+		if not save.loading and _player() != null and not _player().is_dead and get_tree().root.get_node_or_null("ArtLoading") == null:
+			break
+	_check("P8 the death page's Load latest loads the run's newest save", _player() != null and not _player().is_dead and _player().global_position.distance_to(at) < 0.1,
+		"%s / %s" % [_player().global_position if _player() else null, at])
+
+
+func _p9_death_with_no_save() -> void:
+	save.begin_run(&"factotum")
+	var before := get_tree().current_scene
+	await _die()
+	var page: Node = _player().hud.death_page
+	page.words[0].pressed.emit()
+	for i in 300:
+		await get_tree().process_frame
+		if get_tree().current_scene != before and get_tree().current_scene != null and _player() != null and not _player().is_dead:
+			break
+	_check("P9 dying with no save in the run starts the map again", get_tree().current_scene != before and _player() != null and not _player().is_dead,
+		"same scene %s" % [get_tree().current_scene == before])
 
 
 func _check(test_name: String, ok: bool, detail: String) -> void:
