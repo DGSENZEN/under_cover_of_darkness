@@ -22,6 +22,10 @@ const STONES := ["way_stone_a", "way_stone_b", "way_stone_c"]
 ## How far apart the way's stones lie along it (m); how far from its line the walker may go (m: the way 1.5 m wide
 ## with the walker's own half metre either side); the landings across its ends' gaps.
 const STONE_EVERY := 1.1
+## How far under the floor a stone's top may sit (m: the highest first) and how far apart overlapping stones' tops
+## must be (m).
+const STONE_LEVELS := [0.0, 0.035, 0.07, 0.105, 0.14]
+const STONE_APART := 0.03
 const HALF_WAY := 0.75
 const INK := preload("res://scripts/Visual/astral_ink.gdshader")
 ## The city's fragments drifting in the void: the kit's pieces, how many float, how far out past the walls, the
@@ -463,8 +467,27 @@ func _stones() -> void:
 					fposmod(k * 2.39, TAU), false)
 				stone.material_override = look
 				stone.scale = Vector3(1.0 + 0.12 * sin(k * 1.7), 1.0, 0.9 + 0.1 * cos(k * 2.3))
+				_settle(stone)
 				stones.append(stone)
 				k += 1
+
+
+## A stone's top set at the highest of STONE_LEVELS (m under the floor) that keeps it STONE_APART from the top of
+## every stone it overlaps: tops in one plane fight for the same pixels where they overlap.
+func _settle(stone: MeshInstance3D) -> void:
+	var floor_y := stone.position.y
+	var box: AABB = stone.transform * stone.get_aabb()
+	var taken := []
+	for other in stones:
+		var near: AABB = other.transform * other.get_aabb()
+		if box.position.x < near.end.x and near.position.x < box.end.x and box.position.z < near.end.z \
+				and near.position.z < box.end.z:
+			taken.append(other.position.y)
+	for level: float in STONE_LEVELS:
+		if taken.all(func(y): return absf(y - (floor_y - level)) >= STONE_APART):
+			stone.position.y = floor_y - level
+			return
+	stone.position.y = floor_y - STONE_LEVELS[-1]
 
 
 ## The city's fragments, out in the void past its walls, its ceiling and below its floor, each its own size, turning

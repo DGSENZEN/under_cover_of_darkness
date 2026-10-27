@@ -207,6 +207,7 @@ func _astral() -> void:
 	await _gates(passage)
 	_detail(passage)
 	_vast(passage)
+	_tops(passage)
 	_smooth(passage)
 	await _deep_world(passage)
 	await _plane(passage)
@@ -323,6 +324,29 @@ func _vast(passage: Node3D) -> void:
 		wrong.append("the rivers reach %.0f m" % reach)
 	_check("M18i the deep vast: colossi far out, the rivers running on far past its ends", wrong.is_empty(),
 		"%s" % [wrong.slice(0, 5)])
+
+
+## M18o: no two of the way's stones that overlap have their tops in one plane (3 cm apart at the least, the kit's
+## layered-faces gate): tops in one plane fight for the same pixels where they overlap (the user saw them "mesh with
+## each other incorrectly"). And none sits more than 15 cm under the floor (the walker stands on the floor).
+func _tops(passage: Node3D) -> void:
+	var wrong := []
+	var stones: Array = passage.stones
+	var floor_y: float = passage.bounds.position.y
+	for i in stones.size():
+		var a: MeshInstance3D = stones[i]
+		var box_a: AABB = a.global_transform * a.get_aabb()
+		if a.global_position.y > floor_y + 0.001 or a.global_position.y < floor_y - 0.15:
+			wrong.append("%s's top at %.3f" % [a.name, a.global_position.y - floor_y])
+		for j in range(i + 1, stones.size()):
+			var b: MeshInstance3D = stones[j]
+			var box_b: AABB = b.global_transform * b.get_aabb()
+			var over := box_a.position.x < box_b.end.x and box_b.position.x < box_a.end.x \
+				and box_a.position.z < box_b.end.z and box_b.position.z < box_a.end.z
+			if over and absf(a.global_position.y - b.global_position.y) < 0.03:
+				wrong.append("%s and %s" % [a.name, b.name])
+	_check("M18o the way's overlapping stones' tops 3 cm apart and more, none sunk", wrong.is_empty(),
+		"%d: %s" % [wrong.size(), wrong.slice(0, 5)])
 
 
 ## M18n: the deep its own world, drawn with depth: a SubViewport of its own world and camera (the camera matched to the
