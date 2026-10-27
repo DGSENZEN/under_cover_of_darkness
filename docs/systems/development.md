@@ -12,6 +12,8 @@ GODOT=godot bash tools/run_suites.sh tests/water_geometry_test.tscn tests/swim_p
 python3 tools/docs/build_reference.py --check
 ```
 
+**Assets git does not carry.** The PS2 textures (`textures/ps2`), the brush sheets (`textures/brushes`) and the talk box paintings (`assets/ui/talk/<character>/`) are kept out of this public repository (their licences are not recorded), so a fresh checkout or worktree has none. `python3 -I tools/local_assets.py` keeps one store of the newest copies inside `.git/local-assets/` (shared by every worktree, never committed): `pull` fills this checkout (`pull --all` every worktree), `push` adds what this checkout has new, `status` lists what is missing, `install-hook` fills each new worktree as `git worktree add` makes it. `--sources` adds the texture tools' source packs and scans.
+
 Platform-specific executable defaults live in the wrappers; use the environment overrides on another machine. Optional generated source textures, recordings and build outputs can be ignored by Git; the authoritative source/recipe and [credits](../../CREDITS.md) determine how to regenerate and redistribute them.
 
 ## Map ownership
