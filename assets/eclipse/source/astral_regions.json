@@ -1,8 +1,12 @@
 {
  "slots": [
   "stone",
-  "stone_old"
+  "stone_old",
+  "iron",
+  "wood",
+  "brass",
+  "cloth"
  ],
  "atlas_px": 2048,
- "px_per_m": 395.59
+ "px_per_m": 146.55
 }

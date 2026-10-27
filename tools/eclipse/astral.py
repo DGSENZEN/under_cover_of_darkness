@@ -18,11 +18,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import common  # noqa: E402
 import underground_shapes  # noqa: E402
-from underground_shapes import smooth_object, turned  # noqa: E402
+from underground_shapes import box, pipe, smooth_object, turned  # noqa: E402
 
 NAME = "astral"
 ATLAS = 2048
-SLOTS = ["stone", "stone_old"]
+SLOTS = ["stone", "stone_old", "iron", "wood", "brass", "cloth"]
 
 rng = random.Random(1937)
 
@@ -46,8 +46,83 @@ def _stone(radius, sides, deep):
     return made
 
 
-PIECES = [(n, _stone(*STONES[n])) for n in STONES]
-BUDGET = {name: 1500 for name, _ in PIECES}
+# --- the city's fragments, drifting in the void (drawn in its ink: their shapes count, not their paint) ----------
+
+def arch(m):
+    """An arch torn from a street: its two piers, its ring of voussoirs, its keystone; the left pier broken short."""
+    for x, top in ((-1.45, 2.2), (1.45, 2.9)):
+        box(m, (x - 0.28, -0.28, 0.0), (x + 0.28, 0.28, top), "stone_old", r=0.02)
+    ring = [(1.45 * math.cos(a), 0.0, 2.9 + 1.45 * math.sin(a)) for a in [math.pi * k / 16 for k in range(17)]]
+    pipe(m, ring, 0.24, 4, "stone")
+    box(m, (-0.18, -0.3, 4.2), (0.18, 0.3, 4.62), "stone_old", r=0.02)
+
+
+def stairs(m):
+    """A run of a stair's steps on their stringer, broken off at both ends."""
+    for k in range(8):
+        width = 1.6 - (0.5 if k in (0, 7) else 0.0)
+        box(m, (-width / 2, k * 0.3, k * 0.18), (width / 2, k * 0.3 + 0.34, k * 0.18 + 0.18), "stone", r=0.0)
+    pipe(m, [(0.85, -0.1, -0.15), (0.85, 2.5, 1.35)], 0.07, 4, "iron")
+
+
+def doorway(m):
+    """A doorway, its frame and lintel, its door ajar on its hinges, its knocker."""
+    for x in (-0.62, 0.62):
+        box(m, (x - 0.12, -0.12, 0.0), (x + 0.12, 0.12, 2.3), "wood", r=0.0)
+    box(m, (-0.74, -0.14, 2.3), (0.74, 0.14, 2.52), "wood", r=0.0)
+    # (Its door swung half open from its left jamb.)
+    swing = math.radians(38.0)
+    w = 1.0
+    cx, cy = -0.5 + w / 2 * math.cos(swing), w / 2 * math.sin(swing)
+    box(m, (cx - w / 2, cy - 0.035, 0.05), (cx + w / 2, cy + 0.035, 2.25), "wood", r=0.0, turn=(0.0, 0.0, swing))
+    turned(m, [(0.06, -0.01), (0.06, 0.03)], 8, "iron",
+           at=(cx + 0.3 * math.cos(swing), cy + 0.3 * math.sin(swing) - 0.07, 1.2), lean=math.pi / 2,
+           towards=swing - math.pi / 2)
+
+
+def lamp_post(m):
+    """A street's lamp post: its foot, its post, its arm, its lantern."""
+    turned(m, [(0.22, 0.0), (0.2, 0.25), (0.1, 0.4)], 8, "iron")
+    pipe(m, [(0.0, 0.0, 0.35), (0.0, 0.0, 3.2)], 0.07, 8, "iron")
+    pipe(m, [(0.0, 0.0, 3.0), (0.45, 0.0, 3.25), (0.75, 0.0, 3.2)], 0.035, 6, "iron")
+    turned(m, [(0.06, 2.75), (0.18, 2.85), (0.16, 3.1), (0.05, 3.18)], 6, "brass", at=(0.75, 0.0, 0.0))
+
+
+def bell(m):
+    """A chapel's bell on its yoke, its clapper hanging."""
+    turned(m, [(0.62, -0.95), (0.58, -0.85), (0.4, -0.45), (0.34, -0.1), (0.22, 0.0)], 14, "brass")
+    box(m, (-0.55, -0.12, 0.0), (0.55, 0.12, 0.22), "wood", r=0.0)
+    pipe(m, [(0.0, 0.0, -0.1), (0.0, 0.0, -0.76)], 0.035, 6, "iron")
+    turned(m, [(0.06, -0.88), (0.09, -0.8), (0.05, -0.74)], 8, "iron")
+
+
+def tile_slab(m):
+    """A slab of the Pasaje's chequered tiles coming apart: its tiles lifting off one another, turned a little."""
+    for i in range(3):
+        for j in range(3):
+            lift = 0.06 * (i + j) + 0.04 * ((i * 7 + j * 3) % 4)
+            turn = (0.06 * (i - 1), 0.05 * (j - 1), 0.1 * ((i + 2 * j) % 3 - 1))
+            x, y = (i - 1) * 0.66, (j - 1) * 0.66
+            box(m, (x - 0.3, y - 0.3, lift), (x + 0.3, y + 0.3, lift + 0.1), "stone" if (i + j) % 2 else "stone_old",
+                r=0.0, turn=turn)
+
+
+def stall_frame(m):
+    """A market stall's frame, its cover torn away but a flap: four pipe posts, its rails, the flap hanging."""
+    for x in (-0.95, 0.95):
+        for y in (0.0, 1.3):
+            pipe(m, [(x, y, 0.0), (x, y, 2.3 if y < 0.5 else 2.0)], 0.03, 6, "iron")
+        pipe(m, [(x, 0.0, 2.3), (x, 1.3, 2.0)], 0.03, 6, "iron")
+    for y, z in ((0.0, 2.3), (1.3, 2.0)):
+        pipe(m, [(-0.95, y, z), (0.95, y, z)], 0.03, 6, "iron")
+    box(m, (-0.9, 1.26, 1.3), (-0.2, 1.3, 1.94), "cloth", r=0.0)
+
+
+FRAGMENTS = {"arch": arch, "stairs": stairs, "doorway": doorway, "lamp_post": lamp_post, "bell": bell,
+             "tile_slab": tile_slab, "stall_frame": stall_frame}
+
+PIECES = [(n, _stone(*STONES[n])) for n in STONES] + list(FRAGMENTS.items())
+BUDGET = {name: 2000 for name, _ in PIECES}
 SLIVER = {name: 0.004 for name in BUDGET}
 
 

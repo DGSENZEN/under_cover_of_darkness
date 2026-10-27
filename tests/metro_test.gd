@@ -11,6 +11,8 @@ const MAP := preload("res://maps/metro.tscn")
 const REACHED := 0.6
 ## Frames a leg may take before it counts as stuck.
 const LEG_FRAMES := 900
+## How far under the floor an astral passage's floor window lies (AstralPassage.BELOW).
+const BELOW_FLOOR := 0.6
 
 
 ## Every error the engine reports while the suite runs (M6).
@@ -159,6 +161,40 @@ func _astral() -> void:
 		return
 	await _void(passage)
 	await _way(passage)
+	await _fragments(passage)
+
+
+## M18c: the city's fragments float in the void (more than 3 m outside the passage), drawn in its ink (seen only
+## through its windows), turning as they drift.
+func _fragments(passage: Node3D) -> void:
+	var wrong := []
+	var pieces: Array = passage.get("fragments") if passage.get("fragments") != null else []
+	if pieces.size() < 12:
+		wrong.append("%d fragments" % pieces.size())
+	var kinds := {}
+	var box: AABB = passage.bounds
+	var was := {}
+	for piece: Node3D in pieces:
+		kinds[piece.get_meta("kind", "")] = true
+		var at := piece.global_position
+		var outside := maxf(maxf(box.position.x - at.x, at.x - box.end.x), maxf(maxf(box.position.y - BELOW_FLOOR - at.y,
+			at.y - box.end.y), maxf(box.position.z - at.z, at.z - box.end.z)))
+		if outside < 3.0:
+			wrong.append("%s %.1f m out" % [piece.get_meta("kind", ""), outside])
+		for mesh: MeshInstance3D in [piece] + piece.find_children("*", "MeshInstance3D", true, false) as Array:
+			if mesh is MeshInstance3D:
+				var look: Material = mesh.material_override
+				if not (look is ShaderMaterial and (look as ShaderMaterial).shader.resource_path.ends_with("astral_ink.gdshader")):
+					wrong.append("%s not in ink" % piece.get_meta("kind", ""))
+		was[piece] = piece.global_transform.basis
+	await _frames(30)
+	var turning := pieces.filter(func(p): return not p.global_transform.basis.is_equal_approx(was[p]))
+	if turning.size() < pieces.size():
+		wrong.append("%d of %d turning" % [turning.size(), pieces.size()])
+	if kinds.size() < 7:
+		wrong.append("%d kinds: %s" % [kinds.size(), kinds.keys()])
+	_check("M18c the city's fragments float in the void, in its ink, turning as they drift", wrong.is_empty(),
+		"%s" % [wrong])
 
 
 ## M18b: the way walked from the stairs to the market's mouth, and along its branch to the cistern lane; walked off

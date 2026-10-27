@@ -19,6 +19,15 @@ const STONES := ["way_stone_a", "way_stone_b", "way_stone_c"]
 ## with the walker's own half metre either side); the landings across its ends' gaps.
 const STONE_EVERY := 1.1
 const HALF_WAY := 0.75
+const INK := preload("res://scripts/Visual/astral_ink.gdshader")
+## The city's fragments drifting in the void: the kit's pieces, how many float, how far out past the walls, the
+## ceiling and the floor (m), how big, how fast each turns (degrees a second) and bobs (m, Hz).
+const FRAGMENT_KINDS := ["arch", "stairs", "doorway", "lamp_post", "bell", "tile_slab", "stall_frame"]
+const FRAGMENTS := 22
+const FRAGMENT_OUT := Vector2(4.0, 30.0)
+const FRAGMENT_SIZE := Vector2(1.0, 2.2)
+const FRAGMENT_TURN := Vector2(0.5, 3.0)
+const FRAGMENT_BOB := Vector2(0.25, 0.08)
 ## How far below the floor the floor's window lies (the way's stones over it hide it), and the walls' windows reach.
 const BELOW := 0.6
 ## The sky's sphere round the passage's middle (m).
@@ -55,6 +64,7 @@ var inside := false
 var _mouth: Vector3
 var _away: Vector3
 var _span: float
+var _clock := 0.0
 
 
 ## An astral passage over the corridor `box`, its market's mouth at its `end` (1: its high z end), its windows cut
@@ -81,6 +91,7 @@ func _ready() -> void:
 	_sky()
 	_landings()
 	_stones()
+	_fragments()
 	_veils()
 	_motes()
 	# (Held on the way after the walker has moved this frame.)
@@ -92,7 +103,12 @@ func grown(t: float) -> float:
 	return smoothstep(1.0, 0.55, t) * (0.45 + 0.55 * smoothstep(0.0, 0.18, t))
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_clock += delta
+	for piece in fragments:
+		piece.rotate(piece.get_meta("axis"), deg_to_rad(float(piece.get_meta("turn"))) * delta)
+		var home: Vector3 = piece.get_meta("home")
+		piece.position.y = home.y + FRAGMENT_BOB.x * sin(TAU * FRAGMENT_BOB.y * _clock + float(piece.get_meta("phase")))
 	if walker == null or not is_instance_valid(walker):
 		return
 	var at := walker.global_position
@@ -181,6 +197,54 @@ func _stones() -> void:
 				stone.scale = Vector3(1.0 + 0.12 * sin(k * 1.7), 1.0, 0.9 + 0.1 * cos(k * 2.3))
 				stones.append(stone)
 				k += 1
+
+
+## The city's fragments, out in the void past its walls, its ceiling and below its floor, each its own size, turning
+## slowly about its own axis and bobbing; drawn in the void's ink (seen only through the windows).
+func _fragments() -> void:
+	if not ResourceLoader.exists(KIT):
+		return
+	var kit := SetKit.kit(KIT)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1938 + int(bounds.position.z)
+	var middle := bounds.get_center()
+	for k in FRAGMENTS:
+		var kind: String = FRAGMENT_KINDS[k % FRAGMENT_KINDS.size()]
+		if not kit.has(kind):
+			continue
+		var look := ShaderMaterial.new()
+		look.shader = INK
+		look.render_priority = -5
+		look.set_shader_parameter(&"noise", Vfx.noise_3d())
+		look.set_shader_parameter(&"flicker_seed", rng.randf() * 10.0)
+		# (Out past one side, the ceiling or under the floor, along the passage and a little beyond its ends.)
+		var out := rng.randf_range(FRAGMENT_OUT.x, FRAGMENT_OUT.y)
+		var along := rng.randf_range(bounds.position.z - 4.0, bounds.end.z + 4.0)
+		var at: Vector3
+		match k % 4:
+			0:
+				at = Vector3(bounds.position.x - out, middle.y + rng.randf_range(-6.0, 6.0), along)
+			1:
+				at = Vector3(bounds.end.x + out, middle.y + rng.randf_range(-6.0, 6.0), along)
+			2:
+				at = Vector3(middle.x + rng.randf_range(-8.0, 8.0), bounds.end.y + 3.5 + out * 0.4, along)
+			_:
+				at = Vector3(middle.x + rng.randf_range(-8.0, 8.0), bounds.position.y - BELOW - 3.5 - out * 0.4, along)
+		var piece := MeshInstance3D.new()
+		piece.name = "fragment_" + kind
+		piece.mesh = kit[kind]
+		piece.material_override = look
+		piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(piece)
+		piece.position = at
+		piece.rotation = Vector3(rng.randf() * TAU, rng.randf() * TAU, rng.randf() * TAU)
+		piece.scale = Vector3.ONE * rng.randf_range(FRAGMENT_SIZE.x, FRAGMENT_SIZE.y)
+		piece.set_meta("kind", kind)
+		piece.set_meta("home", at)
+		piece.set_meta("axis", Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized())
+		piece.set_meta("turn", rng.randf_range(FRAGMENT_TURN.x, FRAGMENT_TURN.y))
+		piece.set_meta("phase", rng.randf() * TAU)
+		fragments.append(piece)
 
 
 ## The windows where its walls, ceiling and floor were: each wall cut round its gaps (a run either side, a lintel over),
