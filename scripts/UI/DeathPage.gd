@@ -32,8 +32,9 @@ func _ready() -> void:
 
 	for i in names.size():
 		var word := MenuWord.new()
-		# (Continue's colour and painting for the loads, Quit's for the way out.)
-		word.configure(names[i], 20 + i, MainMenu.COLOURS[1] if i < 2 else MainMenu.COLOURS[4], 1 if i < 2 else -1)
+		# (Continue's colour for the loads, Quit's for the way out; no
+		# paintings: this page puts none behind its words.)
+		word.configure(names[i], 20 + i, MainMenu.COLOURS[1] if i < 2 else MainMenu.COLOURS[4])
 		word.position = Vector2(MainMenu.WORD_X, MainMenu.WORD_TOP + i * MainMenu.WORD_GAP - 26)
 		word.size = Vector2(420, 52)
 		word.pressed.connect(_activate.bind(i))
