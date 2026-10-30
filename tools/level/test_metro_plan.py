@@ -295,6 +295,17 @@ class MetroPlan(unittest.TestCase):
         self.assertEqual(at["motorman_ofrenda"], [42.0, -14.0, -12.8])
         self.assertEqual(at["seeping_track"], [-40.0, -15.2, 0.0])
 
+    def test_the_track_steps_keep_out_of_the_trains_way(self):
+        # (docs/superpowers/plans/2026-10-30-metro-station.md, Task 3: down a notch the track takes out of each
+        # platform's far end, alongside its edge: all of it outside the MP-68's envelope, |z| 4.3...6.9.)
+        for name, sz in (("track_steps_n", -1), ("track_steps_s", 1)):
+            (x0, y0, z0), (x1, y1, z1) = next(m for m in DATA["routes"] if m["name"] == name)["points"]
+            self.assertEqual((y0, y1), (-14.0, -15.2), name)
+            self.assertEqual(z0, z1, name)
+            # (Its width, 2.4 m, outside the platform's edge at |z| 7.)
+            self.assertGreaterEqual(sz * z0 - 1.2, 7.0, name)
+            self.assertTrue(43.0 <= abs(x0) < abs(x1) <= 50.0, (name, x0, x1))
+
     def test_the_lane_opens_wide_on_the_pasaje(self):
         for name, other in (("candle_lane", "pasaje"), ("pasaje", "candle_lane")):
             o = next(o for o in _space(name)["openings"] if o["to"] == other)

@@ -22,7 +22,10 @@ const LABEL_RANGE := 30.0
 ## The built sets standing in for their spaces' greybox: {set: [its scene, the spaces whose greybox it takes over]}.
 ## Each is set in with standalone off (no stubs of its own; the map's player) at its PLAN_ORIGIN.
 const SETS := {"candle_lane": ["res://maps/candle_lane.tscn", ["candle_lane", "librarian_shop"]],
-	"pasaje": ["res://maps/pasaje.tscn", ["pasaje"]]}
+	"pasaje": ["res://maps/pasaje.tscn", ["pasaje"]],
+	# (Its SPACES and ROUTES_TAKEN; M21 holds the two the same.)
+	"metro_station": ["res://maps/metro_station.tscn", ["hall", "stairs_n", "stairs_s", "platform_n", "platform_s", "track",
+		"track_notch_n", "track_notch_s", "stairs_n_flight", "stairs_s_flight", "track_steps_n", "track_steps_s"]]}
 
 var plan: Dictionary
 var greybox: GreyboxLoader

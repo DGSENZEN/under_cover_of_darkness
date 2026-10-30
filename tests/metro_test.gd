@@ -184,6 +184,55 @@ func _sets() -> void:
 	await _pasaje_in_place()
 	_one_crowd()
 	_pasaje_shows()
+	await _station()
+
+
+## The station set (docs/superpowers/plans/2026-10-30-metro-station.md, Task 3).
+## M21: in its place, the greybox gone from its spaces and their flights only (the corridors, the market stairs and
+## the siding still there).
+## M22: walked from the arrival up the north stairwell into the hall, through the west bank's free lane out into the
+## west corridor; across the paid hall out into the east corridor; down into the market stairs; down the south
+## stairwell onto the south platform.
+## M23: out of the pit: from the bed up each track's steps onto its platform.
+func _station() -> void:
+	var station: Node3D = map.get_node_or_null("metro_station")
+	if station == null:
+		_check("M21 the station in its place, the greybox gone from its spaces only", false, "no metro_station")
+		return
+	var taken: Array = station.SPACES + station.ROUTES_TAKEN
+	var left: Array = map.greybox.get_children().map(func(n): return String(n.name))
+	var gone := taken.filter(func(n): return left.has(n))
+	var kept := ["corridor_w", "corridor_e", "market_stairs", "siding"].filter(func(n): return not left.has(n))
+	# (Its seams to the lane's standard, as the Pasaje's: none of it in the map's other spaces, no face flush with a
+	# greybox wall's.)
+	var meshes: Array = station.find_children("*", "MeshInstance3D", true, false).filter(func(m):
+		return m.is_visible_in_tree() and m.mesh != null)
+	var into := _intrusions(meshes, map.SETS["metro_station"][1])
+	var flush := _flush(meshes.filter(func(m): return m.mesh is BoxMesh or m.has_meta("built")))
+	_check("M21 the station in its place, the greybox gone from its spaces only, its seams clean",
+		station.position.is_equal_approx(station.PLAN_ORIGIN) and gone.is_empty() and kept.is_empty() \
+			and into.is_empty() and flush.is_empty() and map.SETS["metro_station"][1] == taken,
+		"at %s; still greybox %s; gone too %s; into %s; flush %s" % [station.position, gone, kept, into.slice(0, 4),
+			flush.slice(0, 4)])
+
+	var west := await _tour([[0, -14, -9], [-2, -14, -13], [-2, -14, -29.2], [-6, -14, -29.2], [-6, -14, -28.5],
+		[-6, -8, -14], [-6, -8, -12.5], [-10, -8, -2], [-18, -8, -2], [-32, -8, 0]], true)
+	var east := await _tour([[-10, -8, 2], [10, -8, 2], [18, -8, 2], [32, -8, 0]], true)
+	var market := await _tour([[-6, -8, 4], [-10, -8, 12.5], [-10, -8, 14], [-10, -8.6, 16]], true)
+	var south := await _tour([[2, -8, 6], [6, -8, 12.5], [6, -8, 14], [6, -14, 28.5], [6, -14, 29.2], [2, -14, 29.2],
+		[2, -14, 13], [2, -14, 10]], true)
+	_check("M22 walked from the arrival up into the hall, out into both corridors and the market stairs, down onto the south platform",
+		west["ok"] and east["ok"] and market["ok"] and south["ok"],
+		"west %s east %s market %s south %s" % [west, east, market, south])
+
+	var north_up := await _tour([[-20, -15.2, -2.5], [49, -15.2, -2.5], [49, -15.2, -8.3], [48.5, -15.2, -8.3],
+		[42.5, -14, -8.3], [40, -14, -10]], true)
+	var south_up := await _tour([[20, -15.2, 2.5], [-49, -15.2, 2.5], [-49, -15.2, 8.3], [-48.5, -15.2, 8.3],
+		[-42.5, -14, 8.3], [-40, -14, 10]], true)
+	_check("M23 out of the pit: from the bed up each track's steps onto its platform", north_up["ok"] and south_up["ok"],
+		"north %s south %s" % [north_up, south_up])
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(10)
 
 
 ## The Pasaje set (docs/superpowers/plans/2026-10-26-pasaje-market.md): in its place, the greybox gone from its middle
@@ -375,7 +424,11 @@ func _set_in_place(lane: Node3D) -> void:
 			up = up.get_parent()
 		if drawn_in_world:
 			continue
+		# (Where it is drawn: a mesh's middle, not its origin, which a piece turning on a pivot at its middle swings
+		# round it (the shop's armillary).)
 		var at: Vector3 = (node as Node3D).global_position
+		if node is GeometryInstance3D:
+			at = ((node as Node3D).global_transform * (node as GeometryInstance3D).get_aabb()).get_center()
 		var flat := Vector2(at.x, at.z)
 		# (A pocket's sounds may come from the map's Pasaje or chapel beyond its ends.)
 		var spaces: Array = own + ([_rect("pasaje"), _rect("chapel")] if node.has_meta("pocket") else [])
