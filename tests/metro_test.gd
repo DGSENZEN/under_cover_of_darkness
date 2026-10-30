@@ -208,6 +208,10 @@ func _astral() -> void:
 	_detail(passage)
 	_vast(passage)
 	_tops(passage)
+	_sealed(passage)
+	_sealed(map.get_node("astral_south"))
+	_bleeds_meet(passage)
+	_bleeds_meet(map.get_node("astral_south"))
 	_smooth(passage)
 	await _deep_world(passage)
 	await _plane(passage)
@@ -324,6 +328,70 @@ func _vast(passage: Node3D) -> void:
 		wrong.append("the rivers reach %.0f m" % reach)
 	_check("M18i the deep vast: colossi far out, the rivers running on far past its ends", wrong.is_empty(),
 		"%s" % [wrong.slice(0, 5)])
+
+
+## M18p: no window of a passage fights a world surface in its plane: where a face of the map (2 cm or less off a
+## window's plane, parallel to it, over it) is seen, the window is not drawn: one-sided, facing into the passage, the
+## face's front away from it. (From the market stairs the north passage's end window and the stairs' own end wall,
+## both at z 34, fought pixel by pixel: the user saw the entry "jittering and disintegrating".)
+func _sealed(passage: Node3D) -> void:
+	var wrong := []
+	var grown: AABB = passage.bounds.grow(0.1)
+	grown.position.y -= BELOW_FLOOR
+	grown.size.y += BELOW_FLOOR
+	var faces := []
+	for node in map.find_children("*", "MeshInstance3D", true, false):
+		var mesh_node := node as MeshInstance3D
+		if mesh_node.mesh == null or not mesh_node.is_visible_in_tree() or passage.is_ancestor_of(mesh_node) \
+				or not (mesh_node.global_transform * mesh_node.get_aabb()).intersects(grown):
+			continue
+		var tris := mesh_node.mesh.get_faces()
+		for i in range(0, tris.size(), 3):
+			var p: Vector3 = mesh_node.global_transform * tris[i]
+			var q: Vector3 = mesh_node.global_transform * tris[i + 1]
+			var r: Vector3 = mesh_node.global_transform * tris[i + 2]
+			# (The way it faces: Godot's front faces wind clockwise.)
+			var n := (r - p).cross(q - p)
+			if n.length() > 0.0001 and grown.has_point((p + q + r) / 3.0):
+				faces.append([(p + q + r) / 3.0, n.normalized(), mesh_node.name])
+	for window: MeshInstance3D in passage.windows:
+		var front := window.global_basis.z.normalized()
+		var half: Vector2 = (window.mesh as QuadMesh).size / 2.0
+		var look := window.get_active_material(0) as ShaderMaterial
+		var one_sided := look != null and look.shader.code.contains("cull_back")
+		var inward := front.dot(passage.bounds.get_center() - window.global_position) > 0.0
+		for face: Array in faces:
+			var n: Vector3 = face[1]
+			var at: Vector3 = window.global_transform.affine_inverse() * face[0]
+			if absf(n.dot(front)) < 0.999 or absf(at.z) > 0.02 or absf(at.x) > half.x or absf(at.y) > half.y:
+				continue
+			if not (one_sided and inward and n.dot(front) < 0.0):
+				wrong.append("%s at %s against %s" % [window.name, face[0].snapped(Vector3.ONE * 0.01), face[2]])
+	_check("M18p %s: no window fights a world surface in its plane" % passage.name, wrong.is_empty(),
+		"%d: %s" % [wrong.size(), wrong.slice(0, 12)])
+
+
+## M18q: past a hole in a wall, the void's bleed reaches a little into the gap over its edges (8 cm at the least), so
+## from an angle no sliver of the wall shows between it (3 cm off the wall) and the gate's own void in the gap (the
+## user saw a dark line round the north entry's gate).
+func _bleeds_meet(passage: Node3D) -> void:
+	var wrong := []
+	for piece: MeshInstance3D in passage.bleeds:
+		var k: int = piece.get_meta("gap")
+		var gap: Dictionary = passage.gaps[k]
+		var look := piece.get_active_material(0) as ShaderMaterial
+		if gap.has("inset") or look == null or look.shader.resource_path.get_file() != "astral_mark.gdshader":
+			continue
+		var edge: Vector3 = (look.get_shader_parameter(&"seg_a") + look.get_shader_parameter(&"seg_b")) / 2.0
+		var front := piece.global_basis.z.normalized()
+		var to_middle: Vector3 = passage.thresholds[k].global_position - edge
+		to_middle -= front * to_middle.dot(front)
+		var at := piece.global_transform.affine_inverse() * (edge + to_middle.normalized() * 0.08)
+		var half: Vector2 = (piece.mesh as QuadMesh).size / 2.0
+		if absf(at.x) > half.x or absf(at.y) > half.y:
+			wrong.append("%s at %s" % [piece.name, edge.snapped(Vector3.ONE * 0.01)])
+	_check("M18q %s: the bleed past each hole in a wall overlaps the gap's edges" % passage.name, wrong.is_empty(),
+		"%d: %s" % [wrong.size(), wrong.slice(0, 8)])
 
 
 ## M18o: no two of the way's stones that overlap have their tops in one plane (3 cm apart at the least, the kit's

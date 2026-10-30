@@ -25,7 +25,20 @@ func _ready() -> void:
 	await _frames(60)
 	var player: Node3D = map.player
 	var floor_y: float = map.get_node("astral_north").bounds.position.y
+	# (`-- --walk=<name>` steps through only that walk; `--hide=<name>` hides the passages' nodes of that name, to
+	# see which of them a fault is in.)
+	var only := ""
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--walk="):
+			only = arg.trim_prefix("--walk=")
+		if arg.begins_with("--hide="):
+			for passage in ["astral_north", "astral_south"]:
+				for node in map.get_node(passage).find_children(arg.trim_prefix("--hide=") + "*", "", true, false):
+					node.visible = false
+					print("hid ", node.get_path())
 	for walk in WALKS:
+		if only != "" and walk[3] != only:
+			continue
 		var from: Vector2 = walk[0]
 		var to: Vector2 = walk[1]
 		var steps := int(from.distance_to(to) / STEP)

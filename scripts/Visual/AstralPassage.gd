@@ -98,6 +98,9 @@ const JAMB_DEPTH := 0.3
 ## them).
 const BLEED := 1.6
 const BLEED_OFF := 0.03
+## How far past a hole's edges into the gap its bleed reaches (m): it stands off the wall, so from an angle the wall
+## would show between it and the gate's void in the gap.
+const BLEED_INTO := 0.12
 const EMBERS := 70
 const EMBER_LIFE := 1.8
 const SPIRAL_MOTES := 90
@@ -861,15 +864,17 @@ func _bleed(k: int, gap: Dictionary) -> void:
 		var b := Vector3(b2.x, 0.0, b2.y) + out * BLEED_OFF
 		var width := a.distance_to(b)
 		var mid := (a + b) / 2.0
-		# The floor below it.
-		faces.append([mid + Vector3(0.0, y0 + BLEED_OFF, 0.0) + out * reach / 2.0, along * (width + reach * 2.0),
-			out * reach, Vector3(a.x, y0, a.z), Vector3(b.x, y0, b.z)])
-		# The wall round it: either side of it and over it.
+		# The floor below it, and the wall round it: either side of it and over it (each reaching BLEED_INTO past the
+		# gap's edge into it).
+		var into := BLEED_INTO
+		faces.append([mid + Vector3(0.0, y0 + BLEED_OFF, 0.0) + out * (reach - into) / 2.0,
+			along * (width + reach * 2.0), out * (reach + into), Vector3(a.x, y0, a.z), Vector3(b.x, y0, b.z)])
 		for side in [[a, -along], [b, along]]:
 			var edge: Vector3 = side[0]
-			faces.append([edge + side[1] * reach / 2.0 + Vector3(0.0, y0 + (h + reach) / 2.0, 0.0), along * reach,
-				Vector3.UP * (h + reach), edge + Vector3(0.0, y0, 0.0), edge + Vector3(0.0, y1, 0.0)])
-		faces.append([mid + Vector3(0.0, y1 + reach / 2.0, 0.0), along * width, Vector3.UP * reach,
+			faces.append([edge + side[1] * (reach - into) / 2.0 + Vector3(0.0, y0 + (h + reach) / 2.0, 0.0),
+				along * (reach + into), Vector3.UP * (h + reach), edge + Vector3(0.0, y0, 0.0),
+				edge + Vector3(0.0, y1, 0.0)])
+		faces.append([mid + Vector3(0.0, y1 + (reach - into) / 2.0, 0.0), along * width, Vector3.UP * (reach + into),
 			a + Vector3(0.0, y1, 0.0), b + Vector3(0.0, y1, 0.0)])
 	for face: Array in faces:
 		var params := {&"bleed": BLEED, &"seg_a": face[3], &"seg_b": face[4]}
@@ -1545,7 +1550,7 @@ func _make_deep() -> void:
 	deep.scaling_3d_scale = DEEP_SCALE
 	deep.msaa_3d = get_viewport().msaa_3d
 	deep.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	deep.size = Vector2i(get_viewport().get_visible_rect().size)
+	deep.size = _screen_pixels()
 	add_child(deep)
 	var look := ShaderMaterial.new()
 	look.shader = SKY
@@ -1594,6 +1599,15 @@ func _make_deep() -> void:
 	_on_screen.aabb = bounds.grow(BLEED * 2.0)
 
 
+## The screen's own pixels (not the HUD's units, which the project's stretch scales to the window): the deep drawn as
+## sharp as the world it is seen in.
+func _screen_pixels() -> Vector2i:
+	var screen := get_viewport()
+	if screen is Window:
+		return (screen as Window).size
+	return (screen as SubViewport).size
+
+
 ## The deep's eye the camera drawing (where it is drawn this frame, its field of view, its near and far), its picture
 ## the screen's size; drawn only while the passage is near enough to be seen.
 func _follow() -> void:
@@ -1604,7 +1618,7 @@ func _follow() -> void:
 	deep_eye.fov = drawing.fov
 	deep_eye.near = drawing.near
 	deep_eye.keep_aspect = drawing.keep_aspect
-	var want := Vector2i(get_viewport().get_visible_rect().size)
+	var want := _screen_pixels()
 	if deep.size != want:
 		deep.size = want
 	var box := bounds.grow(DEEP_SEEN)
