@@ -74,6 +74,10 @@ FLIGHT = 2.4
 TREAD = 0.4
 RISE = 0.17
 RAIL = 1.0
+# A guard rail's top rail and mid rail over the floor (m).
+GUARD = (1.0, 0.5)
+# A parapet's cap stone: its width (over the 0.3 m wall and its 4 cm faces either side, proud of them) and depth (m).
+CAP = (0.42, 0.06)
 # The openings' linings: [width, height, depth] (maps/metro_station.gd picks one per gap); its lining's thickness and
 # its architrave's width and how proud.
 REVEALS = [(3.0, 3.0, 0.6), (3.0, 3.0, 0.31), (4.0, 3.0, 0.31), (2.0, 6.7, 0.3)]
@@ -288,6 +292,27 @@ def tread(m):
     box(m, (-h, 0.0, -RISE), (h, 0.05, 0.0), "steel", r=0.0)
 
 
+def guard_rail(m):
+    """A run of guard rail round a drop: an iron post at its start, a brass top rail and an iron mid rail along it."""
+    top, mid = GUARD
+    pipe(m, [(0.0, 0.0, 0.0), (0.0, 0.0, top)], 0.02, 6, "iron")
+    pipe(m, [(0.0, 0.0, top), (RAIL, 0.0, top)], 0.025, 8, "brass")
+    pipe(m, [(0.0, 0.0, mid), (RAIL, 0.0, mid)], 0.015, 6, "iron")
+
+
+def guard_post(m):
+    """A guard rail's last post, closing its last run: iron, a brass knob over it."""
+    pipe(m, [(0.0, 0.0, 0.0), (0.0, 0.0, GUARD[0] - 0.02)], 0.02, 6, "iron")
+    pipe(m, [(0.0, 0.0, GUARD[0] - 0.02), (0.0, 0.0, GUARD[0] + 0.025)], 0.03, 8, "brass")
+
+
+def parapet_cap(m):
+    """The stone over a parapet: 1 m along x, centred across y over the wall and the pit faces either side of it, a
+    little proud of them, its top at z = 0."""
+    w, d = CAP
+    box(m, (0.0, -w / 2, -d), (1.0, w / 2, 0.0), "stone_old", r=0.01)
+
+
 def handrail(m):
     """A run of handrail: a brass tube 0.9 m up, a post at its start."""
     pipe(m, [(0.0, 0.0, 0.9), (RAIL, 0.0, 0.9)], 0.025, 8, "brass")
@@ -364,6 +389,7 @@ PIECES += [("plaster_sheet", plaster_sheet), ("lining", lining), ("sill", sill),
            ("floor_slab_b", _slab(False)), ("floor_slab_c", _slab(True)), ("coping", coping),
            ("column_hall", column_hall), ("column_track", column_track), ("coffer", coffer),
            ("ceiling_panel", ceiling_panel), ("strip_fitting", strip_fitting), ("tread", tread), ("handrail", handrail),
+           ("guard_rail", guard_rail), ("guard_post", guard_post), ("parapet_cap", parapet_cap),
            ("portal_mouth", _portal(MOUTH)), ("portal_tunnel", _portal(TUNNEL)), ("sign_board", sign_board),
            ("line_map", line_map)]
 PIECES += [(reveal_name(*r), _reveal(*r)) for r in REVEALS]

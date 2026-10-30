@@ -28,6 +28,10 @@ NOTCH = (7.0, 2.6)
 STEPS_RUN = 5.0
 # How much of the notch's side opens onto the bed, at the steps' foot (m).
 FOOT = 2.0
+# The parapet walling the rest of that side from the track, up to the platform's floor (m).
+PARAPET = PLATFORM - TRACK
+# The set's walls' thickness (maps/metro_station.gd's WALL; m).
+WALL = 0.3
 # The kiosks' centres on the plaza (the Zócalo plan's).
 KIOSK = (90.0, 98.0)
 
@@ -47,29 +51,47 @@ def lay(P):
             openings=[{"to": "track", "at": (-50 + edge / 2, -7), "width": edge, "height": PLATFORM_HEIGHT},
                       {"to": "track_notch_n", "at": (x_n, -7 - NOTCH[1] / 2), "width": NOTCH[1],
                        "height": PLATFORM_HEIGHT},
+                      {"to": "track_notch_n", "at": (x_n + NOTCH[0] / 2, -7 - NOTCH[1]), "width": NOTCH[0],
+                       "height": PLATFORM_HEIGHT},
                       {"to": "stairs_n", "at": (-2, -14)}])
     P.space("track_notch_n", rect(x_n, -7 - NOTCH[1], 50, -7), floor=TRACK, height=TRACK_HEIGHT, layer=1,
             openings=[{"to": "track", "at": (50 - FOOT / 2, -7), "width": FOOT, "height": TRACK_HEIGHT},
+                      {"to": "track", "at": (x_n + (NOTCH[0] - FOOT) / 2, -7), "width": NOTCH[0] - FOOT,
+                       "sill": PARAPET, "height": PLATFORM_HEIGHT},
                       {"to": "platform_n", "at": (x_n, -7 - NOTCH[1] / 2), "width": NOTCH[1],
+                       "height": PLATFORM_HEIGHT},
+                      {"to": "platform_n", "at": (x_n + NOTCH[0] / 2, -7 - NOTCH[1]), "width": NOTCH[0],
                        "height": PLATFORM_HEIGHT}])
     P.space("track", rect(-50, -7, 50, 7), floor=TRACK, height=TRACK_HEIGHT, layer=1,
             openings=[{"to": "platform_n", "at": (-50 + edge / 2, -7), "width": edge, "height": PLATFORM_HEIGHT},
                       {"to": "track_notch_n", "at": (50 - FOOT / 2, -7), "width": FOOT, "height": TRACK_HEIGHT},
+                      {"to": "track_notch_n", "at": (x_n + (NOTCH[0] - FOOT) / 2, -7), "width": NOTCH[0] - FOOT,
+                       "sill": PARAPET, "height": PLATFORM_HEIGHT},
                       {"to": "platform_s", "at": (50 - edge / 2, 7), "width": edge, "height": PLATFORM_HEIGHT},
                       {"to": "track_notch_s", "at": (-50 + FOOT / 2, 7), "width": FOOT, "height": TRACK_HEIGHT},
+                      {"to": "track_notch_s", "at": (x_s - (NOTCH[0] - FOOT) / 2, 7), "width": NOTCH[0] - FOOT,
+                       "sill": PARAPET, "height": PLATFORM_HEIGHT},
                       {"to": "siding", "at": (-50, 0)}, {"to": "temple_tunnel", "at": (50, 0)}])
     P.space("track_notch_s", rect(-50, 7, x_s, 7 + NOTCH[1]), floor=TRACK, height=TRACK_HEIGHT, layer=1,
             openings=[{"to": "track", "at": (-50 + FOOT / 2, 7), "width": FOOT, "height": TRACK_HEIGHT},
+                      {"to": "track", "at": (x_s - (NOTCH[0] - FOOT) / 2, 7), "width": NOTCH[0] - FOOT,
+                       "sill": PARAPET, "height": PLATFORM_HEIGHT},
                       {"to": "platform_s", "at": (x_s, 7 + NOTCH[1] / 2), "width": NOTCH[1],
+                       "height": PLATFORM_HEIGHT},
+                      {"to": "platform_s", "at": (x_s - NOTCH[0] / 2, 7 + NOTCH[1]), "width": NOTCH[0],
                        "height": PLATFORM_HEIGHT}])
     P.space("platform_s", [(-50, 7 + NOTCH[1]), (x_s, 7 + NOTCH[1]), (x_s, 7), (50, 7), (50, 14), (-50, 14)],
             floor=PLATFORM, height=PLATFORM_HEIGHT, layer=1,
             openings=[{"to": "track", "at": (50 - edge / 2, 7), "width": edge, "height": PLATFORM_HEIGHT},
                       {"to": "track_notch_s", "at": (x_s, 7 + NOTCH[1] / 2), "width": NOTCH[1],
                        "height": PLATFORM_HEIGHT},
+                      {"to": "track_notch_s", "at": (x_s - NOTCH[0] / 2, 7 + NOTCH[1]), "width": NOTCH[0],
+                       "height": PLATFORM_HEIGHT},
                       {"to": "stairs_s", "at": (2, 14)}])
-    # (Down the notch from the platform, walled from the track alongside them, onto the bed at their foot.)
-    mid = 7 + NOTCH[1] / 2
+    # (Down the notch from the platform, a parapet between them and the track, onto the bed at their foot; the
+    # notch open over the platform's floor, railed.)
+    # (Centred in the clear between the parapet and the rim: the set builds the parapet WALL thick.)
+    mid = 7 + WALL + (NOTCH[1] - WALL) / 2
     P.route("track_steps_n", "stair", [(x_n, PLATFORM, -mid), (x_n + STEPS_RUN, TRACK, -mid)])
     P.route("track_steps_s", "stair", [(x_s, PLATFORM, mid), (x_s - STEPS_RUN, TRACK, mid)])
 

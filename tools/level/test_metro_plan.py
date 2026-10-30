@@ -20,6 +20,7 @@ import greybox  # noqa: E402
 import plan  # noqa: E402
 import plan_check  # noqa: E402
 from metro import places, walk  # noqa: E402
+from metro import station as city_metro_station  # noqa: E402
 
 DATA = city_metro.plan()
 # The Zócalo plan's crypt (x -50..10, z -250..-160) and kiosks.
@@ -302,9 +303,38 @@ class MetroPlan(unittest.TestCase):
             (x0, y0, z0), (x1, y1, z1) = next(m for m in DATA["routes"] if m["name"] == name)["points"]
             self.assertEqual((y0, y1), (-14.0, -15.2), name)
             self.assertEqual(z0, z1, name)
-            # (Its width, 2.4 m, outside the platform's edge at |z| 7.)
-            self.assertGreaterEqual(sz * z0 - 1.2, 7.0, name)
+            # (Its width, 1.8 m (the set's staff stair), clear of the parapet at |z| 7.3 and of the rim at 9.6.)
+            self.assertGreaterEqual(sz * z0 - 0.9, 7.3, name)
+            self.assertLessEqual(sz * z0 + 0.9, 9.6, name)
             self.assertTrue(43.0 <= abs(x0) < abs(x1) <= 50.0, (name, x0, x1))
+
+    def test_the_track_steps_are_a_cut_open_over_the_platform(self):
+        # (The user, Oct 30: open with rails, not walled to the ceiling.) Each notch opens on its platform along its whole
+        # long side over the platform's floor, and on the track over a parapet the platform's height (but at the steps'
+        # foot, open to the bed).
+        box = greybox.build(DATA)
+        for notch, platform, sz in (("track_notch_n", "platform_n", -1), ("track_notch_s", "platform_s", 1)):
+            s = _space(notch)
+            xs = sorted({p[0] for p in s["polygon"]})
+            inner = sz * (7 + city_metro_station.NOTCH[1])
+            rise = _space(platform)["floor"] - s["floor"]
+            walls = [f for f in next(m for m in box["meshes"] if m["name"] == notch)["faces"] if abs(f["normal"][1]) < 0.01]
+
+            def walled(x, y, z):
+                return any(abs(sum(f["normal"][k] * (p - f["points"][0][k]) for k, p in enumerate((x, y, z)))) < 1e-6
+                           and min(q[0] for q in f["points"]) - 1e-6 <= x <= max(q[0] for q in f["points"]) + 1e-6
+                           and min(q[1] for q in f["points"]) - 1e-6 <= y <= max(q[1] for q in f["points"]) + 1e-6
+                           and min(q[2] for q in f["points"]) - 1e-6 <= z <= max(q[2] for q in f["points"]) + 1e-6
+                           for f in walls)
+
+            for x in (xs[0] + 1.0, (xs[0] + xs[1]) / 2, xs[1] - 1.0):
+                self.assertFalse(walled(x, s["floor"] + rise + 1.0, inner), (notch, "platform side", x))
+                self.assertTrue(walled(x, s["floor"] + rise - 0.5, inner), (notch, "under the platform", x))
+            # (Over the parapet, along the track, away from the steps' foot.)
+            foot_x = xs[1] - city_metro_station.FOOT if sz < 0 else xs[0] + city_metro_station.FOOT
+            for x in ((xs[0] + 1.0, foot_x - 1.0) if sz < 0 else (foot_x + 1.0, xs[1] - 1.0)):
+                self.assertFalse(walled(x, s["floor"] + rise + 1.0, sz * 7), (notch, "over the parapet", x))
+                self.assertTrue(walled(x, s["floor"] + rise - 0.5, sz * 7), (notch, "the parapet", x))
 
     def test_the_lane_opens_wide_on_the_pasaje(self):
         for name, other in (("candle_lane", "pasaje"), ("pasaje", "candle_lane")):

@@ -22,6 +22,10 @@ const TRACKS_Z := [-5.6, 5.6]
 const PAD_TOP := -1.0
 const CAR := Vector2(2.6, 3.6)
 const EDGE_Z := 7.0
+## The track steps' cut into each platform's far end: how far in from the edge, and how much of its side by the track
+## opens onto the bed at the steps' foot (m; the plan's NOTCH and FOOT).
+const CUT_DEEP := 2.6
+const FOOT := 2.0
 ## The shell's walls, slabs and seams (m): its walls stand inside its spaces, ending SEAM short of every plane they
 ## meet, as the Pasaje's do.
 const WALL := 0.3
@@ -29,6 +33,8 @@ const SLAB := 0.25
 const SEAM := 0.01
 ## A flight's width and its ramp's depth (m; the greybox's stair).
 const FLIGHT_WIDTH := 2.4
+## The track steps' flights: a staff stair, clear of the parapet and the rim either side of it in its cut (m).
+const TRACK_STEPS_WIDTH := 1.8
 const FLIGHT_DEPTH := 0.3
 ## Each track's mouth at either end (m: across, up from the bed), how far it runs on into the dark to its black cap;
 ## the centre's tunnel (the siding's west, the walkers' way east: the greybox's own tunnels go on from it).
@@ -58,7 +64,7 @@ var dressing: Node3D
 var columns: Array[Node3D] = []
 ## Its own light (the dressing's fluorescents; the big pieces' brass lamps join them).
 var lights: Array[Light3D] = []
-## Its flights' ramps: [their ends, as built]; the ramps themselves.
+## Its flights' ramps: [their ends, as built, and their width]; the ramps themselves.
 var ramps: Array = []
 var ramp_boxes: Array[MeshInstance3D] = []
 ## Its walls' bare ends ({at, out (x, z: the way it faces), inward, y0, y1, key (its opening's, "" at an open corner)})
@@ -253,7 +259,7 @@ func _wall(name: String, a: Vector2, b: Vector2, turning: float, floor_y: float,
 			if float(piece[3]) < top - 0.01 and float(piece[2]) <= floor_y + 0.01:
 				_lips.append([p0, p1, float(piece[3])])
 			# Its bare ends and underside, where nothing round it covers them: a run's end at an opening's side (as high
-			# as the opening), or at a corner whose wall is open (its whole height); a lintel's underside over its
+			# as the opening, or the run if it is lower: a parapet), or at a corner whose wall is open (its whole height); a lintel's underside over its
 			# opening.
 			var s0: float = piece[0]
 			var s1: float = piece[1]
@@ -262,10 +268,10 @@ func _wall(name: String, a: Vector2, b: Vector2, turning: float, floor_y: float,
 					var key := _key(a + along * (float(hole[0]) + float(hole[1])) / 2.0)
 					if absf(float(hole[1]) - s0) < 0.02:
 						ends.append({"at": p0, "out": -along, "inward": inward, "y0": float(hole[2]),
-							"y1": minf(float(hole[3]), top), "key": key, "space": name})
+							"y1": minf(float(hole[3]), float(piece[3])), "key": key, "space": name})
 					if absf(float(hole[0]) - s1) < 0.02:
 						ends.append({"at": p1, "out": along, "inward": inward, "y0": float(hole[2]),
-							"y1": minf(float(hole[3]), top), "key": key, "space": name})
+							"y1": minf(float(hole[3]), float(piece[3])), "key": key, "space": name})
 				if open_before and s0 <= SEAM + 0.01:
 					ends.append({"at": p0, "out": -along, "inward": inward, "y0": floor_y, "y1": float(piece[3]), "key": "", "space": name})
 				if open_after and s1 >= length - SEAM - 0.01:
@@ -305,12 +311,13 @@ func _flights() -> void:
 				high += Vector3(low.x - high.x, 0.0, low.z - high.z).normalized() * (WALL + SEAM)
 		a = low if rising else high
 		b = high if rising else low
-		ramps.append([a, b])
+		var width := TRACK_STEPS_WIDTH if name.begins_with("track_steps") else FLIGHT_WIDTH
+		ramps.append([a, b, width])
 		var run := b - a
 		var ramp := MeshInstance3D.new()
 		ramp.name = name
 		var box := BoxMesh.new()
-		box.size = Vector3(FLIGHT_WIDTH, FLIGHT_DEPTH, run.length())
+		box.size = Vector3(width, FLIGHT_DEPTH, run.length())
 		box.material = _plain
 		ramp.mesh = box
 		add_child(ramp)

@@ -108,7 +108,8 @@ class Plan:
     def space(self, name, polygon, floor, height, openings=(), interior=False, layer=None):
         """An underground space; `layer` 1-3 says which of a map's layers it
         belongs to (the Metro: station, market, old), None for none. An
-        opening may say how tall its gap is (`height`, else the greybox's)."""
+        opening may say how tall its gap is (`height`, else the greybox's) and
+        how far over the floor it starts (`sill`: a parapet under it)."""
         if layer not in (None, 1, 2, 3):
             raise ValueError("no layer %r: %s" % (layer, name))
 
@@ -117,6 +118,9 @@ class Plan:
 
             if "height" in o:
                 out["height"] = float(o["height"])
+
+            if "sill" in o:
+                out["sill"] = float(o["sill"])
 
             return out
 

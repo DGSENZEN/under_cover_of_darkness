@@ -2661,6 +2661,27 @@ class StationShell(unittest.TestCase):
         hit = _hit(o, (c - b + 0.003, 0.3, -1.0), (0.0, 0.0, 1.0))
         self.assertGreater(hit.z, -d + 0.005, "the beam's arris at the recess")
 
+    def test_a_guard_rail_guards_a_drop(self):
+        # (Round the track steps' cut: a top rail a metre up, a mid rail under it so no one slips between, a post at a
+        # run's start; the end post closes the last run.)
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("guard_rail")
+        self.assertAlmostEqual(x1 - x0, self.kit.RAIL, delta=0.06)
+        self.assertAlmostEqual(z0, 0.0, delta=0.001)
+        self.assertAlmostEqual(z1, self.kit.GUARD[0] + 0.025, delta=0.003)
+        o = self.objects["guard_rail"]
+        for z in self.kit.GUARD:
+            hit = _hit(o, (self.kit.RAIL / 2, -1.0, z), (0.0, 1.0, 0.0))
+            self.assertIsNotNone(hit, z)
+        _, _, (pz0, pz1) = self._extent("guard_post")
+        self.assertAlmostEqual(pz1, z1, delta=0.01)
+
+    def test_the_parapets_cap_covers_its_faces(self):
+        # (Its stone over the parapet's top and the pit faces either side of it, a little proud, its top the floor's.)
+        _, (y0, y1), (z0, z1) = self._extent("parapet_cap")
+        self.assertGreaterEqual(y1 - y0 + 1e-6, self.kit.CAP[0])
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(z1 - z0, self.kit.CAP[1], delta=0.001)
+
     def test_the_plaster_ceilings_panels_meet(self):
         # (A plastered ceiling has no joints: a gap between two panels let the light on what lies above through, a
         # dashed hairline across the ceiling at a distance.)

@@ -71,7 +71,11 @@ func _shell() -> void:
 			var run: Array = _edge_of(record["polygon"], a, b)
 			for side in [a - along * 0.5, b + along * 0.5]:
 				var s: Vector2 = side
-				if not run.is_empty() and Geometry2D.get_closest_point_to_segment(s, run[0], run[1]).distance_to(s) < 0.01:
+				# (Unless another of its gaps goes on there at that height: two gaps meeting end to end.)
+				var in_next: bool = (record["gaps"] as Array).any(func(g): return g != gap \
+					and Geometry2D.get_closest_point_to_segment(s, Vector2(g["a"][0], g["a"][1]),
+						Vector2(g["b"][0], g["b"][1])).distance_to(s) < 0.01 and y >= float(g["y0"]) and y <= float(g["y1"]))
+				if not in_next and not run.is_empty() and Geometry2D.get_closest_point_to_segment(s, run[0], run[1]).distance_to(s) < 0.01:
 					var hit := _ray(Vector3(s.x - out.x, y, s.y - out.y), Vector3(s.x + out.x * 1.5, y, s.y + out.y * 1.5))
 					if Vector2(hit.x, hit.z).distance_to(s) > 0.35:
 						wrong.append("%s beside its gap to %s open" % [name, gap["to"]])
@@ -241,6 +245,79 @@ func _dressed() -> void:
 				wrong_notch.append("%s %s: %s, wanted %s" % [face["space"], at.snapped(Vector3.ONE * 0.1), kinds, want[1]])
 	_check("S4g the track steps' walls the platform's over its floor", notch_faces > 0 and wrong_notch.is_empty(),
 		"%d faces; %s" % [notch_faces, wrong_notch.slice(0, 6)])
+
+	# S4h: each cut the track steps go down is guarded where it lies open over its drop: a guard rail along its rim on
+	# the platform and along its parapet, every metre of them; the parapet capped; the rim coped (the yellow line round
+	# the drop).
+	# S4i: nothing stands over the parapet but its rail (no wall's end lined up to the ceiling there).
+	var unguarded := []
+	var over_parapet := []
+	for notch: String in ["track_notch_n", "track_notch_s"]:
+		var sz := -1.0 if notch == "track_notch_n" else 1.0
+		var xs := []
+		for q in station.spaces()[notch]["polygon"]:
+			xs.append(float(q[0]))
+		var x0: float = xs.min()
+		var x1: float = xs.max()
+		var rim_z: float = sz * (float(station.EDGE_Z) + float(station.CUT_DEEP))
+		var parapet_z: float = sz * (float(station.EDGE_Z) + float(station.WALL) / 2.0)
+		# (The parapet runs from the head to the steps' foot, the last 2 m open onto the bed.)
+		var p0 := x0 if sz < 0.0 else x0 + float(station.FOOT)
+		var p1 := x1 - float(station.FOOT) if sz < 0.0 else x1
+		var x := x0 + 0.5
+		while x < x1:
+			var rim := Vector3(x, platform + 1.0, rim_z + sz * 0.1)
+			if not _kinds_at(drawn, rim).has("guard_rail"):
+				unguarded.append("%s rail on the rim %s" % [notch, rim.snapped(Vector3.ONE * 0.1)])
+			var coped := Vector3(x, platform + 0.005, rim_z + sz * 0.3)
+			if not _kinds_at(drawn, coped).has("coping"):
+				unguarded.append("%s rim uncoped %s" % [notch, coped.snapped(Vector3.ONE * 0.1)])
+			if x > p0 + 0.2 and x < p1 - 0.2:
+				var rail := Vector3(x, platform + 1.0, parapet_z)
+				if not _kinds_at(drawn, rail).has("guard_rail"):
+					unguarded.append("%s rail on the parapet %s" % [notch, rail.snapped(Vector3.ONE * 0.1)])
+				var cap := Vector3(x, platform + 0.005, parapet_z)
+				if not _kinds_at(drawn, cap).has("parapet_cap"):
+					unguarded.append("%s parapet uncapped %s" % [notch, cap.snapped(Vector3.ONE * 0.1)])
+				for y in [platform + 1.6, platform + 3.0]:
+					var above := Vector3(x, y, parapet_z)
+					if not _kinds_at(drawn, above).is_empty():
+						over_parapet.append("%s %s: %s" % [notch, above.snapped(Vector3.ONE * 0.1), _kinds_at(drawn, above)])
+			x += 1.0
+		# (Its end at the steps' foot: lined only as high as it stands.)
+		var end_x := p1 + 0.02 if sz < 0.0 else p0 - 0.02
+		for y in [platform + 1.6, platform + 3.0]:
+			var above_end := Vector3(end_x, y, parapet_z)
+			if not _kinds_at(drawn, above_end).is_empty():
+				over_parapet.append("%s end %s: %s" % [notch, above_end.snapped(Vector3.ONE * 0.1), _kinds_at(drawn, above_end)])
+	# S4j: the track steps stand clear of their cut's walls (the parapet's face toward them, the pit's face under the
+	# rim), their handrails clear of the guard rails over them.
+	var crowded := []
+	for ramp: MeshInstance3D in station.ramp_boxes:
+		if not String(ramp.name).begins_with("track_steps"):
+			continue
+		var sz := -1.0 if ramp.name == "track_steps_n" else 1.0
+		var half: float = (ramp.mesh as BoxMesh).size.x / 2.0
+		var across := absf(ramp.transform.origin.z)
+		var inner := across - half
+		var outer := across + half
+		var parapet_face: float = float(station.EDGE_Z) + float(station.WALL) + 0.04
+		var rim_face: float = float(station.EDGE_Z) + float(station.CUT_DEEP) - 0.04
+		if inner < parapet_face + 0.1 or outer > rim_face - 0.1:
+			crowded.append("%s spans |z| %.2f..%.2f, the cut's clear %.2f..%.2f" % [ramp.name, inner, outer, parapet_face,
+				rim_face])
+		for box: Dictionary in drawn["boxes"]:
+			if box["kind"] != "handrail" or absf((box["aabb"] as AABB).get_center().x - ramp.transform.origin.x) > 3.0:
+				continue
+			var z := absf((box["aabb"] as AABB).get_center().z)
+			if absf(z - across) < 2.0 and (absf(z - float(station.EDGE_Z) - float(station.WALL) / 2.0) < 0.3 \
+					or absf(z - float(station.EDGE_Z) - float(station.CUT_DEEP) - 0.1) < 0.3):
+				crowded.append("%s handrail at |z| %.2f on a guard rail's line" % [ramp.name, z])
+				break
+	_check("S4j the track steps clear of their cut's walls and rails", crowded.is_empty(), "%s" % [crowded])
+	_check("S4h the track steps' cut railed, its parapet capped, its rim coped", unguarded.is_empty(),
+		"%s" % [unguarded.slice(0, 6)])
+	_check("S4i nothing over the parapet but its rail", over_parapet.is_empty(), "%s" % [over_parapet.slice(0, 6)])
 
 
 ## Task 6: the station's light.

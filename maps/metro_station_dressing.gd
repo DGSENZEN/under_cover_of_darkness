@@ -28,6 +28,8 @@ const TREAD := 0.4
 const RISE := 0.17
 const FLIGHT := 2.4
 const RAIL := 1.0
+## A cut's rim rail stands this far back from its edge, on the copings (m).
+const RIM_BACK := 0.1
 const MAP_WIDE := 2.4
 ## How far the floors' slabs stand over the shell's floor, and the ceilings' panels under its ceiling (m): the shell's
 ## boxes kept, seen in the joints between them, never in their planes.
@@ -85,6 +87,7 @@ static func dress(station) -> void:
 	_ceilings(station, batches)
 	_columns(station, root, batches)
 	_flights(station, batches)
+	_cuts(station, batches)
 	var revealed := _openings(station, batches)
 	_linings(station, batches, revealed)
 	_bed(station, batches)
@@ -164,10 +167,10 @@ static func _floors(station, batches: Dictionary) -> void:
 			var hi := box.position + size / 2.0
 			var top := hi.y
 			if space.begins_with("platform"):
-				var edge: float = station.EDGE_Z
-				# (The edge the cell meets: its high side on the north platform, its low on the south.)
+				# (The edge the cell meets: its high side on the north platform, its low on the south; coped where the
+				# drop lies beyond it, the track's or the track steps' cut.)
 				var north := space == "platform_n"
-				var at_edge := absf((hi.z if north else lo.z) - (-edge if north else edge)) < 0.03
+				var at_edge := _over_drop(station, Vector2((lo.x + hi.x) / 2.0, hi.z + 0.05 if north else lo.z - 0.05))
 				if at_edge:
 					var count := maxi(1, roundi((hi.x - lo.x) / PANEL))
 					var sx := (hi.x - lo.x) / (count * PANEL)
@@ -253,6 +256,54 @@ static func _columns(station, root: Node3D, batches: Dictionary) -> void:
 		station.columns.append(body)
 
 
+## Whether `at` (plan x, z) lies over a drop off a platform: the track's, or a cut for the track steps.
+static func _over_drop(station, at: Vector2) -> bool:
+	for name: String in ["track", "track_notch_n", "track_notch_s"]:
+		var outline := PackedVector2Array()
+		for q in station.spaces()[name]["polygon"]:
+			outline.append(Vector2(q[0], q[1]))
+		if Geometry2D.is_point_in_polygon(at, outline):
+			return true
+	return false
+
+
+## The track steps' cuts in the platforms' far ends, guarded where they lie open over their drop: a guard rail along
+## the rim on the platform (on its copings, a little back from the edge) and along the parapet between the steps and the
+## track, from the head to the steps' foot; the parapet capped with a stone over its top and its faces.
+static func _cuts(station, batches: Dictionary) -> void:
+	var wall: float = station.WALL
+	for notch: String in ["track_notch_n", "track_notch_s"]:
+		var sz := -1.0 if notch == "track_notch_n" else 1.0
+		var floor_y: float = station.spaces()["platform_n" if sz < 0.0 else "platform_s"]["floor"]
+		var xs := []
+		for q in station.spaces()[notch]["polygon"]:
+			xs.append(float(q[0]))
+		var x0: float = xs.min()
+		var x1: float = xs.max()
+		var rim_z := sz * (float(station.EDGE_Z) + float(station.CUT_DEEP) + RIM_BACK)
+		var parapet_z := sz * (float(station.EDGE_Z) + wall / 2.0)
+		# (The rim's rail from the head's corner to the end wall's tiles; the parapet's from the head to its end at the
+		# steps' foot.)
+		var far := 50.0 - wall - FACE - 0.03
+		var rim_run := [x0 + 0.05, far] if sz < 0.0 else [-far, x1 - 0.05]
+		var foot := x1 - float(station.FOOT) if sz < 0.0 else x0 + float(station.FOOT)
+		var parapet_run := [x0 + 0.05, foot - 0.05] if sz < 0.0 else [foot + 0.05, x1 - 0.05]
+		for run: Array in [[rim_run, rim_z], [parapet_run, parapet_z]]:
+			var a: float = run[0][0]
+			var b: float = run[0][1]
+			var count := maxi(1, roundi((b - a) / RAIL))
+			var sx := (b - a) / (count * RAIL)
+			for k in count:
+				_add(batches, "guard_rail@cuts", Transform3D(Basis.from_scale(Vector3(sx, 1.0, 1.0)),
+					Vector3(a + k * RAIL * sx, floor_y + LAID, run[1])))
+			_add(batches, "guard_post@cuts", Transform3D(Basis.IDENTITY, Vector3(b, floor_y + LAID, run[1])))
+		# (The cap over the whole parapet, its end's lining too.)
+		var c0 := x0 if sz < 0.0 else foot - REVEAL_LINING
+		var c1 := foot + REVEAL_LINING if sz < 0.0 else x1
+		_add(batches, "parapet_cap@cuts", Transform3D(Basis.from_scale(Vector3(c1 - c0, 1.0, 1.0)),
+			Vector3(c0, floor_y + LAID, parapet_z)))
+
+
 ## Each flight's treads over its ramp (each half a rise proud of it at its nose, half sunk at its back) and a handrail
 ## either side.
 static func _flights(station, batches: Dictionary) -> void:
@@ -267,7 +318,8 @@ static func _flights(station, batches: Dictionary) -> void:
 		var step := rise / count
 		var up := flat / run
 		var back := -up
-		var basis := Basis(Vector3.UP.cross(back), Vector3.UP, back) * Basis.from_scale(Vector3((FLIGHT - 0.02) / FLIGHT,
+		var wide: float = ends[2] if ends.size() > 2 else FLIGHT
+		var basis := Basis(Vector3.UP.cross(back), Vector3.UP, back) * Basis.from_scale(Vector3((wide - 0.02) / FLIGHT,
 			step / RISE, depth / TREAD))
 		for k in count:
 			var nose := low + up * (k * depth) + Vector3.UP * ((k + 0.5) * step)
@@ -277,7 +329,7 @@ static func _flights(station, batches: Dictionary) -> void:
 		var sections := ceili(length / RAIL)
 		var slope := (high - low) / sections
 		for side in [-1.0, 1.0]:
-			var offset: Vector3 = across * side * (FLIGHT / 2.0 - 0.05)
+			var offset: Vector3 = across * side * (wide / 2.0 - 0.05)
 			for k in sections:
 				var x_axis := slope
 				var z_axis := x_axis.cross(Vector3.UP).normalized()
