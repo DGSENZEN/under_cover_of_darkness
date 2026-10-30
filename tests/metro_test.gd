@@ -214,6 +214,8 @@ func _astral() -> void:
 	_bleeds_meet(map.get_node("astral_south"))
 	await _arch_seals(passage)
 	await _arch_seals(map.get_node("astral_south"))
+	_arch_carvings(passage)
+	_arch_carvings(map.get_node("astral_south"))
 	_smooth(passage)
 	await _deep_world(passage)
 	await _plane(passage)
@@ -494,6 +496,56 @@ func _arch_seals(passage: Node3D) -> void:
 		await _frames(7)
 	_check("M18r %s: the portal never drawn through its arch's stones" % passage.name, wrong.is_empty(),
 		"%d: %s" % [wrong.size(), wrong.slice(0, 5)])
+
+
+## M18s: the arch's stones carved in the ward-tongue, never the portal's script pasted on them (the user: "you
+## basically just pasted the portal art glyphs into the stones, when they should be their own"; "the glyphs need to
+## make sense, they need to be part of a magical language in itself"; docs/superpowers/specs/2026-10-29-ward-tongue.md):
+## their look reads nothing of the rings' sheet; each stone one glyph (its frame, root and marks); one keystone, at
+## the crown, the seal (the eclipse, no other stone's root); each half from its foot up reading the passage's ward
+## (AstralPassage.WARD, an arch too small dropping words from its feet, one too big repeating its first at them), so
+## the arch reads the same from either side.
+func _arch_carvings(passage: Node3D) -> void:
+	var wrong := []
+	var arch_code := (load("res://scripts/Visual/astral_arch.gdshader") as Shader).code
+	if arch_code.contains("rings"):
+		wrong.append("the arch's look reads the rings' sheet")
+	var ward: Array = passage.WARD
+	var seal: Array = passage.WARD_SEAL
+	for gate: Node3D in passage.thresholds:
+		var glyphs := []
+		var keys := []
+		for stone: Node in (gate.get_meta("arch", gate) as Node3D).get_children():
+			var look := (stone as MeshInstance3D).material_override as ShaderMaterial if stone is MeshInstance3D else null
+			if look == null:
+				continue
+			var glyph := []
+			for key in [&"ward_frame", &"ward_root", &"ward_dots", &"ward_bar", &"ward_hook"]:
+				glyph.append(look.get_shader_parameter(key))
+			if glyph.has(null):
+				wrong.append("%s/%s: no glyph of its own" % [gate.name, stone.name])
+				glyph = []
+			if look.get_shader_parameter(&"keystone"):
+				keys.append(glyphs.size())
+			glyphs.append(glyph)
+		var n := glyphs.size()
+		if keys != [n / 2] or n % 2 == 0:
+			wrong.append("%s: keystones at %s of %d stones" % [gate.name, keys, n])
+			continue
+		if glyphs[n / 2] != seal:
+			wrong.append("%s: its keystone %s, not the seal" % [gate.name, glyphs[n / 2]])
+		for i in n:
+			if i != n / 2 and not glyphs[i].is_empty() and int(glyphs[i][1]) == int(seal[1]):
+				wrong.append("%s: stone %d carries the seal's root" % [gate.name, i])
+			if glyphs[i] != glyphs[n - 1 - i]:
+				wrong.append("%s: stones %d and %d not alike (it reads differently from either side)" % [gate.name, i, n - 1 - i])
+		# (From the crown down its left half: the ward's last word first.)
+		for j in n / 2:
+			var want: Array = ward[ward.size() - 1 - j] if j < ward.size() else ward[0]
+			if glyphs[n / 2 - 1 - j] != want:
+				wrong.append("%s: stone %d %s, the ward has %s" % [gate.name, n / 2 - 1 - j, glyphs[n / 2 - 1 - j], want])
+	_check("M18s %s: the arch's stones carved in the ward-tongue, reading its ward" % passage.name, wrong.is_empty(),
+		"%d: %s" % [wrong.size(), wrong.slice(0, 6)])
 
 
 ## M18l: what the passage moves every frame (its gates' rings and arch stones, its fragments, its presences, its

@@ -91,6 +91,24 @@ const ARCH := preload("res://scripts/Visual/astral_arch.gdshader")
 const ARCH_OUT := 1.24
 const ARCH_STONE := Vector3(0.36, 0.34, 0.5)
 const ARCH_EVERY := 0.44
+## The ward its arches read in the ward-tongue (docs/superpowers/specs/2026-10-29-ward-tongue.md: Claude's draft, the
+## user's to rewrite), each half from its foot up to the crown, a glyph a stone: [its frame (0 round: a power or name,
+## 1 stepped: an act, 2 cut-cornered: a place), its root (0 the dead, 1 the living, 2 the deep, 3 fire, 4 water,
+## 5 stone, 6 sight, 7 passage, 8 binding, 9 the eclipse), its dots (how much), its bar (not), its hook (toward)].
+## "Here, on stone, bound fast and unseen: no living one passes into the deep; all the dead go through, by the eaten
+## sun."
+const WARD := [
+	[2, 5, 0, false, false],
+	[1, 8, 2, false, false],
+	[1, 6, 0, true, false],
+	[0, 1, 0, true, false],
+	[1, 7, 0, false, false],
+	[2, 2, 0, false, true],
+	[0, 0, 3, false, false],
+	[1, 7, 0, false, true],
+]
+## Its keystone: the seal the ward is bound in, by the eaten sun.
+const WARD_SEAL := [0, 9, 0, false, false]
 const ARCH_FLOAT := 0.035
 ## How thick the unseen jambs closing a gap beside its arch are (m).
 const JAMB_DEPTH := 0.3
@@ -729,7 +747,7 @@ func _thresholds() -> void:
 		frame_look.set_shader_parameter(&"hole", rim * GATE_HOLE)
 		frame_look.set_shader_parameter(&"size", size)
 		_gate_quad(gate, "frame", size, frame_look)
-		_arch(gate, rim, size, sheet)
+		_arch(gate, rim, size)
 		_jambs(gate, rim, size)
 		gate.add_child(_embers(rim))
 		gate.add_child(_spiral(rim * 0.95))
@@ -754,7 +772,7 @@ func _tear_look(params: Dictionary) -> ShaderMaterial:
 ## (the gate's meta "arch"). Each with its stand-in in the world (its meta "seal", under the gate's "seals") where it
 ## floats: solid, drawn with depth, showing the deep's picture (the stone itself), so the gate's vortex, rings and
 ## embers behind it are hidden by it, never drawn through it.
-func _arch(gate: Node3D, rim: float, size: Vector2, sheet: Texture2D) -> void:
+func _arch(gate: Node3D, rim: float, size: Vector2) -> void:
 	var holder := Node3D.new()
 	holder.name = "arch_of_" + String(gate.name)
 	_deep.add_child(holder)
@@ -778,22 +796,32 @@ func _arch(gate: Node3D, rim: float, size: Vector2, sheet: Texture2D) -> void:
 	var total := 0.0
 	for i in line.size() - 1:
 		total += line[i].distance_to(line[i + 1])
+	# (An odd number of stones, so one keystone stands at its crown: an even number had two side by side.)
 	var count := int(total / ARCH_EVERY)
+	count += count % 2
 	for k in count + 1:
 		var s := float(k) / count
 		var at := _on_line(line, s * total)
 		var ahead := (_on_line(line, minf(s * total + 0.05, total)) - _on_line(line, maxf(s * total - 0.05, 0.0))).normalized()
-		var keystone := absf(s - 0.5) < 0.5 / count
+		var keystone := k == count / 2
+		# Its glyph: the ward read from either foot up to the crown (its last word by the keystone), the keystone the
+		# seal; a short arch dropping words from its feet, a long one carrying the first again at them.
+		var from_crown := absi(k - count / 2) - 1
+		var glyph: Array = WARD_SEAL if keystone else (WARD[WARD.size() - 1 - from_crown] if from_crown < WARD.size() else WARD[0])
 		var box := BoxMesh.new()
 		box.size = ARCH_STONE * (1.35 if keystone else 1.0)
 		var look := ShaderMaterial.new()
 		look.shader = ARCH
 		look.render_priority = -3
-		look.set_shader_parameter(&"rings", sheet)
 		look.set_shader_parameter(&"noise", Vfx.noise_3d())
 		look.set_shader_parameter(&"gate_at", gate.global_position)
 		look.set_shader_parameter(&"place", s)
 		look.set_shader_parameter(&"keystone", keystone)
+		look.set_shader_parameter(&"ward_frame", glyph[0])
+		look.set_shader_parameter(&"ward_root", glyph[1])
+		look.set_shader_parameter(&"ward_dots", glyph[2])
+		look.set_shader_parameter(&"ward_bar", glyph[3])
+		look.set_shader_parameter(&"ward_hook", glyph[4])
 		look.set_shader_parameter(&"stone", Color(0.09, 0.085, 0.1).lerp(Color(0.13, 0.12, 0.13), fposmod(k * 0.37, 1.0)))
 		var stone := MeshInstance3D.new()
 		stone.name = "arch%d" % k

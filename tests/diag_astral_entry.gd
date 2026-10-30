@@ -28,6 +28,7 @@ func _ready() -> void:
 	# (`-- --walk=<name>` steps through only that walk; `--hide=<name>` hides the passages' nodes of that name, to
 	# see which of them a fault is in.)
 	var only := ""
+	var moving := OS.get_cmdline_user_args().has("--moving")
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--walk="):
 			only = arg.trim_prefix("--walk=")
@@ -49,6 +50,12 @@ func _ready() -> void:
 			var at := from.lerp(to, float(k) / steps)
 			player.global_position = Vector3(at.x, floor_y + 1.05, at.y)
 			player.rotation.y = walk[2]
+			if moving:
+				# (A step a frame, turning as it goes, each frame caught as it is drawn: as a player walks it.)
+				player.rotation.y += 0.35 * sin(k * 0.21)
+				await RenderingServer.frame_post_draw
+				get_viewport().get_texture().get_image().save_png(ProjectSettings.globalize_path(OUT + "%s_moving_%02d.png" % [walk[3], k]))
+				continue
 			await _frames(4)
 			_shot("%s_%02d" % [walk[3], k])
 	get_tree().quit(0)
