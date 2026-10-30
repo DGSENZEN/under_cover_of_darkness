@@ -18,6 +18,7 @@ func _ready() -> void:
 	_shell()
 	await _walked()
 	_mouths()
+	_dressed()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -118,6 +119,98 @@ func _mouths() -> void:
 			if absf(hit.x) < 60.0 or absf(hit.x) > 63.0:
 				wrong.append("track at z %.1f, end %d: met at x %.2f" % [track_z, end, hit.x])
 	_check("S3 the tunnel mouths run on into the dark", wrong.is_empty(), "%s" % [wrong])
+
+
+## Task 4: the shell dressed.
+## S4: every run of wall the shell stands in its spaces dressed, tiled or plastered, every 1.2 m along it from a metre
+## up to near its top (a run under 0.25 m, a jamb its reveal covers, excepted): sampled just in front of its face
+## against where the dressing is drawn.
+## S4b: no word on it: no Label3D or Decal under the set (its signs' faces are the kit's blank `sign` slot).
+## S4c: nothing hung over a walk lower than 2.4 m over its floor.
+func _dressed() -> void:
+	var drawn := _drawn()
+	var bare := []
+	var faces: Array = station.get("faces") if station.get("faces") != null else []
+	for face: Dictionary in faces:
+		var a: Vector2 = face["a"]
+		var b: Vector2 = face["b"]
+		var length := a.distance_to(b)
+		if length < 0.25:
+			continue
+		var along := (b - a) / length
+		var inward: Vector2 = face["inward"]
+		var s := minf(0.6, length / 2.0)
+		while s < length:
+			for y in [float(face["y0"]) + 1.0, float(face["y1"]) - 0.3]:
+				var p := a + along * s + inward * 0.03
+				var at := Vector3(p.x, y, p.y)
+				if not _covered(drawn, at):
+					bare.append("%s %s" % [face["space"], at.snapped(Vector3.ONE * 0.1)])
+			s += 1.2
+	_check("S4 tiled to every gap and corner, no run of wall left bare", not faces.is_empty() and bare.is_empty(),
+		"%d faces; %d bare: %s" % [faces.size(), bare.size(), bare.slice(0, 6)])
+
+	# (The player's own, standing in it when it stands alone, are not the set's.)
+	var words: Array = (station.find_children("*", "Label3D", true, false) + station.find_children("*", "Decal", true, false)) \
+		.filter(func(n): return not station.player.is_ancestor_of(n))
+	_check("S4b no word on it", words.is_empty(), "%s" % [words.slice(0, 4)])
+
+	var low := []
+	var floors := {}
+	for name: String in station.spaces():
+		floors[name] = station.spaces()[name]
+	for box: Dictionary in drawn["boxes"]:
+		if not box["kind"] in ["sign_board", "strip_fitting", "coffer", "ceiling_panel", "line_map"]:
+			continue
+		var aabb: AABB = box["aabb"]
+		if box["kind"] == "line_map":
+			continue
+		var under := _floor_under(Vector3(aabb.get_center().x, aabb.position.y, aabb.get_center().z))
+		if aabb.position.y - under < 2.4:
+			low.append("%s at %s, %.2f over its floor" % [box["kind"], aabb.get_center().snapped(Vector3.ONE * 0.1),
+				aabb.position.y - under])
+	_check("S4c over the walks, nothing lower than 2.4 m", low.is_empty(), "%s" % [low.slice(0, 5)])
+
+
+## Where the set's dressing is drawn: {"boxes": [{kind, aabb}] in its frame, "grid": {cell: [box indices]}}, its
+## MultiMeshes' instances each its own box.
+func _drawn() -> Dictionary:
+	var boxes := []
+	var grid := {}
+	for node in station.find_children("*", "MultiMeshInstance3D", true, false):
+		var many := (node as MultiMeshInstance3D).multimesh
+		if many == null or many.mesh == null:
+			continue
+		var local := many.mesh.get_aabb()
+		var to_set := station.global_transform.affine_inverse() * (node as Node3D).global_transform
+		# (Its instances' transforms as the dressing laid them: a headless run's renderer keeps none.)
+		var laid: Array = node.get_meta("transforms", [])
+		for i in laid.size():
+			var aabb: AABB = to_set * (laid[i] as Transform3D) * local
+			boxes.append({"kind": node.get_meta("kind", String(node.name)), "aabb": aabb})
+			var lo := (aabb.position / 2.0).floor()
+			var hi := (aabb.end / 2.0).floor()
+			for x in range(lo.x, hi.x + 1):
+				for y in range(lo.y, hi.y + 1):
+					for z in range(lo.z, hi.z + 1):
+						var key := Vector3i(x, y, z)
+						if not grid.has(key):
+							grid[key] = []
+						grid[key].append(boxes.size() - 1)
+	return {"boxes": boxes, "grid": grid}
+
+
+func _covered(drawn: Dictionary, at: Vector3) -> bool:
+	for i in drawn["grid"].get(Vector3i((at / 2.0).floor()), []):
+		if (drawn["boxes"][i]["aabb"] as AABB).grow(0.01).has_point(at):
+			return true
+	return false
+
+
+## The floor under `at` (the shell's), its height; -INF if none.
+func _floor_under(at: Vector3) -> float:
+	var hit := _ray(at, at - Vector3(0.0, 20.0, 0.0))
+	return hit.y if hit != at - Vector3(0.0, 20.0, 0.0) else -INF
 
 
 ## The edge of `outline` that the run `a`-`b` lies on ([its two ends]; empty if none).

@@ -9,6 +9,7 @@ extends Node3D
 
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const PLAYER := preload("res://Player.tscn")
+const StationDressing := preload("res://maps/metro_station_dressing.gd")
 
 const PLAN_ORIGIN := Vector3(0.0, -14.0, 0.0)
 const GREYBOX := "res://assets/eclipse/metro/greybox.json"
@@ -49,6 +50,17 @@ var _dark: StandardMaterial3D
 var _lips: Array = []
 ## The greybox's other spaces' outlines (x, z), read once.
 var _others: Array[PackedVector2Array] = []
+## Each face of wall it stands toward a room: {a, b (x, z: its run on the face's plane), inward (x, z: toward the
+## room), y0, y1, floor, space, box (the shell's box)}.
+var faces: Array = []
+## Its dressing (station_shell's pieces and the Metro's own, in MultiMeshes by kind) and the columns it stands.
+var dressing: Node3D
+var columns: Array[Node3D] = []
+## Its flights' ramps: [their ends, as built].
+var ramps: Array = []
+## Where its slabs and ceilings are: {space: [its cells (x, z)]} (the shell's floors and ceilings, by space).
+var _floor_boxes := {}
+var _ceiling_boxes := {}
 
 
 func _ready() -> void:
@@ -60,6 +72,7 @@ func _ready() -> void:
 	_shell()
 	_flights()
 	_mouths()
+	StationDressing.dress(self)
 	if standalone:
 		_environment()
 	if host_player != null:
@@ -118,8 +131,15 @@ func _shell() -> void:
 				c0.y + _seam(Vector2(c0.x, c0.y), Vector2(c1.x, c0.y), Vector2.UP))
 			var hi := Vector3(c1.x - _seam(Vector2(c1.x, c0.y), Vector2(c1.x, c1.y), Vector2.RIGHT), 0.0,
 				c1.y - _seam(Vector2(c0.x, c1.y), Vector2(c1.x, c1.y), Vector2.DOWN))
-			shell.append(_box(Vector3(lo.x, floor_y - SLAB, lo.z), Vector3(hi.x, floor_y, hi.z), name + "_floor"))
-			shell.append(_box(Vector3(lo.x, top, lo.z), Vector3(hi.x, top + SLAB, hi.z), name + "_ceiling"))
+			var under := _box(Vector3(lo.x, floor_y - SLAB, lo.z), Vector3(hi.x, floor_y, hi.z), name + "_floor")
+			var over := _box(Vector3(lo.x, top, lo.z), Vector3(hi.x, top + SLAB, hi.z), name + "_ceiling")
+			shell.append(under)
+			shell.append(over)
+			if not _floor_boxes.has(name):
+				_floor_boxes[name] = []
+				_ceiling_boxes[name] = []
+			_floor_boxes[name].append(under)
+			_ceiling_boxes[name].append(over)
 		var outline: Array = record["polygon"]
 		var turning := _turning(outline)
 		for i in outline.size():
@@ -182,6 +202,9 @@ func _wall(name: String, a: Vector2, b: Vector2, turning: float, floor_y: float,
 		# (Where the track meets a notch of its own, the notch walls the run: the track's would stand in the trains'
 		# way.)
 		if name == "track" and _on_notch((p0 + p1) / 2.0, records):
+			# (Its face toward the track dressed all the same.)
+			faces.append({"a": p0, "b": p1, "inward": inward, "y0": float(piece[2]), "y1": float(piece[3]), "floor": floor_y,
+				"space": name, "box": null})
 			continue
 		var lo := Vector3(minf(p0.x, p1.x), piece[2], minf(p0.y, p1.y))
 		var hi := Vector3(maxf(p0.x, p1.x), piece[3], maxf(p0.y, p1.y))
@@ -198,9 +221,15 @@ func _wall(name: String, a: Vector2, b: Vector2, turning: float, floor_y: float,
 		var out_hi := Vector3(maxf(outside_lo.x, outside_hi.x), hi.y - SLAB, maxf(outside_lo.z, outside_hi.z))
 		# (Under a neighbour's floor and clear of every space: outside, so its face is the space's own edge.)
 		if float(piece[3]) < top - 0.01 and _clear(AABB(out_lo, out_hi - out_lo), records):
-			shell.append(_box(out_lo, out_hi, name + "_wall"))
+			var under := _box(out_lo, out_hi, name + "_wall")
+			shell.append(under)
+			faces.append({"a": p0, "b": p1, "inward": inward, "y0": float(piece[2]), "y1": float(piece[3]), "floor": floor_y,
+				"space": name, "box": under})
 		else:
-			shell.append(_box(box_lo, box_hi, name + "_wall"))
+			var wall := _box(box_lo, box_hi, name + "_wall")
+			shell.append(wall)
+			faces.append({"a": p0 + inward * WALL, "b": p1 + inward * WALL, "inward": inward, "y0": float(piece[2]),
+				"y1": float(piece[3]), "floor": floor_y, "space": name, "box": wall})
 			# (Under a door above the floor: a lip a flight arriving there must climb onto.)
 			if float(piece[3]) < top - 0.01 and float(piece[2]) <= floor_y + 0.01:
 				_lips.append([p0, p1, float(piece[3])])
@@ -236,6 +265,7 @@ func _flights() -> void:
 				high += Vector3(low.x - high.x, 0.0, low.z - high.z).normalized() * (WALL + SEAM)
 		a = low if rising else high
 		b = high if rising else low
+		ramps.append([a, b])
 		var run := b - a
 		var ramp := MeshInstance3D.new()
 		ramp.name = name

@@ -2595,6 +2595,55 @@ class PasajeOverhead(unittest.TestCase):
         self.assertTrue(z0 < -0.02 and z1 < 0.06, (z0, z1))
 
 
+class StationShell(unittest.TestCase):
+    """The station's shell dressed (tools/eclipse/station_shell.py; docs/superpowers/plans/2026-10-30-metro-station.md
+    Task 4): every piece closed, in budget, through the gate; the walls at their heights, the coping's top the floor's
+    with the yellow line let into it, a tread's top at its step."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_shell
+        cls.kit = station_shell
+        station_shell.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_the_walls_stand_their_heights(self):
+        for h, height in self.kit.HEIGHTS.items():
+            for n in ("wall_" + h, "wall_%s_worn" % h):
+                (x0, x1), _, (z0, z1) = self._extent(n)
+                self.assertAlmostEqual(z1, height, delta=0.01, msg=n)
+                self.assertAlmostEqual(x1 - x0, self.kit.PANEL, delta=0.01, msg=n)
+
+    def test_the_coping_is_the_floor_with_its_line_let_in(self):
+        o = self.objects["coping"]
+        _, (y0, y1), (z0, z1) = self._extent("coping")
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(y1 - y0, self.kit.COPING, delta=0.01)
+        yellow = [o.data.materials[p.material_index].name == "paint_yellow" for p in o.data.polygons]
+        line = [o.matrix_world @ o.data.vertices[v].co for p, y in zip(o.data.polygons, yellow) if y for v in p.vertices]
+        self.assertTrue(line and all(self.kit.LINE[0] - 0.001 <= v.y <= self.kit.LINE[1] + 0.001 and v.z <= 0.0
+                                     for v in line))
+
+    def test_a_tread_tops_its_step(self):
+        _, (y0, y1), (z0, z1) = self._extent("tread")
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(z1 - z0, self.kit.RISE, delta=0.001)
+        self.assertAlmostEqual(y1 - y0, self.kit.TREAD, delta=0.001)
+
+
 class YourShapes(unittest.TestCase):
     """The user's shapes kept through a kit's rebuild (tools/eclipse/your_shapes.py; docs/superpowers/plans/
     2026-10-30-metro-station.md Task 2): a vertex the user moved in a piece's .blend survives the next build; an
