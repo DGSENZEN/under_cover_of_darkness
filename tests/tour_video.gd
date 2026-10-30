@@ -1,7 +1,7 @@
 extends Node3D
-## A filmed tour of the Metro as it stands, for the user: the north astral passage walked along
-## its way, the Pasaje, into the candle lane to the librarian's desk, the south passage. Shots joined by soft fades;
-## the player carried along each so the passages answer (the plane's look, the glimpses, the muffle). No HUD. Recorded
+## A filmed tour of the Metro as it stands, for the user: down the north corridor from the market stairs, the Pasaje,
+## into the candle lane to the librarian's desk, out of the market's south mouth. Shots joined by soft fades; the
+## player carried along each so the places answer. No HUD. Recorded
 ## by Godot's movie maker, in the game's time:
 ##   Godot --path . --write-movie <out>.avi --fixed-fps 30 --resolution 1920x1080 res://tests/tour_video.tscn
 const MAP := preload("res://maps/metro.tscn")
@@ -39,24 +39,17 @@ func _ready() -> void:
 	# (The player carried along unseen: the eye is theirs.)
 	for part: Node in map.player.find_children("*", "VisualInstance3D", true, false):
 		(part as VisualInstance3D).visible = false
-	var north: Array = map.NORTH_WAY[0]
-	var south: Array = map.SOUTH_WAY[0]
-	# The north passage: from the market stairs in through its gate, along its way to the market.
-	await _shot(_along(north, Vector2(-10.0, 30.5), Vector2(-9.0, 58.5)), 20.0)
+	# The north corridor: from the market stairs along it to the market.
+	await _shot(_along([Vector2(-10.0, 36.0), Vector2(-9.0, 46.0)], Vector2(-10.0, 30.5), Vector2(-9.0, 58.5)), 14.0)
 	# The Pasaje: down the market among its stalls and its shades.
 	await _shot([[_at(-9.0, 57.5), _at(-9.5, 72.0, -0.3)], [_at(-8.0, 64.0), _at(-12.0, 70.0, -0.2)],
 		[_at(-7.0, 71.0), _at(-1.0, 75.4, -0.1)]], 11.0)
 	# Into the candle lane, to the librarian's desk.
 	await _shot([[_at(-6.5, 75.45), _at(4.0, 75.45, -0.2)], [_at(4.0, 75.4), _at(14.0, 75.0, -0.1)],
 		[_at(14.0, 75.0), _at(19.0, 78.0, -0.3)], [_at(19.0, 76.0), _at(19.0, 84.0, -0.4)]], 13.0)
-	# The south passage: from the kiosk island in through the market's south mouth, along its way.
-	# (Down the kiosk island's west side, then in through the arch.)
+	# Out of the market's south mouth: down the kiosk island's west side, then on into the south corridor.
 	await _shot([[_at(-11.8, 86.0), _at(-11.0, 95.0, 0.2)], [_at(-11.8, 93.0), _at(-9.2, 97.0, 0.2)]]
-		+ _along(south, Vector2(-9.4, 94.6), Vector2(-9.0, 119.0), true), 20.0)
-	# The deep over it: the eclipse, the aurora, the colossi.
-	var mid: Vector3 = _at(-9.0, 106.0)
-	await _shot([[mid, mid + Vector3(-6.0, 4.0, -20.0)], [mid, mid + Vector3(8.0, 12.0, -14.0)],
-		[mid, mid + Vector3(14.0, 3.0, 4.0)]], 9.0)
+		+ _along([Vector2(-9.0, 104.0)], Vector2(-9.4, 97.0), Vector2(-9.0, 112.0)), 10.0)
 	get_tree().quit(0)
 
 

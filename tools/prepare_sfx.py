@@ -59,10 +59,6 @@ only the Underground's layers (LAYER_LOOPS, BEDS, LAYER_SHOTS: neon, pipes, book
 
 only the ánimas' voices (SOULS);
 
-    python3 tools/prepare_sfx.py --astral
-
-only the astral passages' sounds (ASTRAL_DRONE, ASTRAL);
-
     python3 tools/prepare_sfx.py --weather
 
 only the weather's loops (WEATHER_LOOPS: the NOX Essentials' rain and wind,
@@ -512,33 +508,6 @@ SOULS = [
 ]
 # Each breathes in rather than starting on its growl (s), and dies out (s).
 SOUL_FADE = (0.08, 0.35)
-# The astral passages (docs/superpowers/specs/2026-10-26-astral-passages-design.md; AstralPassage.gd), every one cut
-# from the approved packs, all taken down and darkened: the deep's drone (NOX Sound's eerie drone loop, whole, its
-# loop closed again after the drop); and its one-shots, several takes a group matched in loudness: the deep's slow
-# swells (FilmCow's "sound from space" and its darkest "space presence"), each gate's low call (FilmCow's darkest
-# "space horn"s), the breath of a crossing (mixkit's reverse cinematic impact), the dead whispering from the rivers
-# (sonniss's ghost whisper, flanged as the ánimas' voices are). (group, source, pitch, low-pass Hz, high-pass Hz,
-# flanger: (delay ms, sweep Hz, mix %) or None, breathing in (s), dying out (s))
-NOX_SAMPLES = os.path.expanduser("~/Downloads/Essentials_Series_NOX_SOUND/Sample_A_Sound_Effect/")
-ASTRAL_DRONE = ("astral_drone", NOX_SAMPLES + "Atmosphere_Drone_Hum_Eerie_Loop_Stereo.wav", 0.88, 3200, 35)
-ASTRAL_FILMCOW = os.path.expanduser("~/Downloads/FilmCow Designed SFX/")
-ASTRAL_WHISPER = os.path.expanduser("~/Downloads/AUCOD Web SFX/voices/sonniss/"
-                                    "CREATURE GHOST Male, Whisper, Breathe, Language, Short, DRY 01.wav")
-ASTRAL = [
-    ("astral_swell", ASTRAL_FILMCOW + "sound from space 2.wav", 0.75, 2400, 40, None, 1.2, 2.5),
-    ("astral_swell", ASTRAL_FILMCOW + "sound from space 3.wav", 0.72, 2200, 40, None, 1.2, 2.5),
-    ("astral_swell", ASTRAL_FILMCOW + "space presence 3.wav", 0.70, 2200, 40, None, 1.2, 2.5),
-    ("astral_swell", ASTRAL_FILMCOW + "space presence 6.wav", 0.70, 2000, 40, None, 1.2, 2.5),
-    ("astral_call", ASTRAL_FILMCOW + "space horn 2.wav", 0.82, 2200, 50, None, 0.4, 1.5),
-    ("astral_call", ASTRAL_FILMCOW + "space horn 4.wav", 0.80, 2000, 50, None, 0.4, 1.5),
-    ("astral_call", ASTRAL_FILMCOW + "space horn 6.wav", 0.85, 2400, 50, None, 0.4, 1.5),
-    ("astral_cross", W("mixkit/1469_reverse_cinematic_impact_trailer.wav"), 0.85, 3200, 60, None, 0.01, 0.4),
-    ("astral_cross", W("mixkit/1469_reverse_cinematic_impact_trailer.wav"), 0.75, 2600, 60, None, 0.01, 0.4),
-    ("astral_whisper", ASTRAL_WHISPER, 0.66, 2600, 90, (3.0, 0.20, 40), 0.06, 0.3),
-    ("astral_whisper", ASTRAL_WHISPER, 0.74, 3000, 90, (2.5, 0.28, 40), 0.06, 0.3),
-    ("astral_whisper", ASTRAL_WHISPER, 0.82, 3300, 90, (3.5, 0.16, 35), 0.06, 0.3),
-    ("astral_whisper", ASTRAL_WHISPER, 0.90, 3600, 90, (2.0, 0.33, 35), 0.06, 0.3),
-]
 # The Underground's layers (docs/superpowers/specs/2026-10-24-underground-sound-layers-design.md): the neon's buzz,
 # the pipes, the librarian's books; every one cut from the approved packs and the user's two Sonic book takes.
 # A loop here is layers of recordings laid together (source, gain dB, high-pass, low-pass, pitch) and closed
@@ -1291,49 +1260,6 @@ def prepare_score(only=None):
         print("%-18s loop, %.3f s (%.2f bars), %.1f LUFS" % (name, len(x) / RATE, len(x) / RATE / BAR, loudness_stereo(x)))
 
 
-def prepare_astral():
-    """The astral passages' sounds (ASTRAL_DRONE to audio/ambience/, ASTRAL to audio/sfx/): taken down and darkened,
-    the drone's loop closed again after the drop, each group's takes matched in loudness."""
-    name, source, pitch, lowpass, highpass = ASTRAL_DRONE
-    # (Resampled first: asetrate takes the rate it is given as the recording's.)
-    x = decode_filtered(source, 0.0, 1e9, ["aresample=%d" % RATE] + _filters(lowpass, pitch, highpass))
-    n = int(1.5 * RATE)
-    t = np.linspace(0.0, np.pi * 0.5, n)
-    x[:n] = x[-n:] * np.cos(t) + x[:n] * np.sin(t)
-    x = peak_normalise(x[:-n], -3.0)
-    write_wav(os.path.join(AMBIENCE_OUT, name + ".wav"), x)
-    importer = os.path.join(AMBIENCE_OUT, name + ".wav.import")
-
-    if not os.path.exists(importer):
-        with open(importer, "w") as out:
-            out.write(FIRE_IMPORT.format(name=name))
-
-    print("%-14s loop, %.1f s, %.1f LUFS" % (name, len(x) / RATE, loudness(x)))
-    groups = {}
-
-    for group, source, pitch, lowpass, highpass, flanger, fade_in, fade_out in ASTRAL:
-        filters = ["aresample=%d" % RATE] + _filters(lowpass, pitch, highpass)
-
-        if flanger is not None:
-            delay, speed, mix = flanger
-            filters.append("flanger=delay=%.1f:depth=%.1f:regen=-4:width=%d:speed=%.2f:shape=sinusoidal:interp=quadratic"
-                           % (delay, delay * 0.8, mix, speed))
-
-        x = decode_filtered(source, None, None, filters)
-        x = fade(x, fade_in, min(fade_out, 0.5 * len(x) / RATE))
-        x *= 10 ** (PEAK_LIMIT_DB / 20) / max(np.abs(x).max(), 1e-9)
-        groups.setdefault(group, []).append([x, loudness(x)])
-
-    for group, members in groups.items():
-        level = min(m[1] for m in members)
-
-        for k, (x, own) in enumerate(members, start=1):
-            write_wav(os.path.join(OUT, "%s_%d.wav" % (group, k)), x * 10 ** ((level - own) / 20))
-
-        print("%-14s %d file(s), %.1f LUFS, %.2f-%.2f s" % (group, len(members), level,
-              min(len(m[0]) for m in members) / RATE, max(len(m[0]) for m in members) / RATE))
-
-
 def main():
     only = None
     args = []
@@ -1353,9 +1279,6 @@ def main():
             return
         elif a == "--souls":
             prepare_souls()
-            return
-        elif a == "--astral":
-            prepare_astral()
             return
         elif a == "--weather":
             prepare_fire_loops(WEATHER_LOOPS, WEATHER_OUT, "weather", "weather loop")

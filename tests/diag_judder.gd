@@ -2,8 +2,8 @@ extends Node3D
 ## Diagnostic: what in the Metro judders. The project interpolates physics, so whatever is drawn interpolated but moved
 ## between physics ticks (in _process) stutters against the interpolated camera. With the physics at 20 ticks a
 ## second under 60 frames, every interpolated visual whose transform changes on a frame with no tick before it is
-## named, grouped by the script that owns it. The player is carried through the Pasaje, the candle lane and both astral
-## passages so all of it wakes. Headless:
+## named, grouped by the script that owns it. The player is carried through the Pasaje, the candle lane and the
+## corridors either side of the Pasaje so all of it wakes. Headless:
 ##   Godot --headless --path . --fixed-fps 60 res://tests/diag_judder.tscn
 const MAP := preload("res://maps/metro.tscn")
 const SPOTS := [Vector3(-9.0, -11.0, 70.0), Vector3(-9.0, -11.0, 60.0), Vector3(-2.0, -11.0, 75.45),

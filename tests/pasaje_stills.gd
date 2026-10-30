@@ -49,17 +49,6 @@ const VIEWS := [
 	[Vector3(0.0, 1.65, 11.5), Vector3(0.0, 1.5, 17.2), "12a_the_kiosk"],
 	[Vector3(-1.4, 1.65, 14.4), Vector3(0.2, 1.2, 17.0), "12b_the_kiosk_close"],
 	[Vector3(-3.0, 1.65, 19.4), Vector3(0.0, 1.4, 17.4), "12c_behind_the_kiosk"],
-	[Vector3(-1.0, 1.65, -40.0), Vector3(0.0, 1.6, -20.0), "13a_astral_north_from_the_stairs"],
-	[Vector3(0.0, 1.65, -32.0), Vector3(0.0, 1.8, -20.0), "13b_astral_north_halfway"],
-	[Vector3(-1.0, 1.65, -30.0), Vector3(-5.0, 2.4, -27.0), "13c_astral_north_its_wall"],
-	[Vector3(0.5, 1.65, -31.0), Vector3(14.0, 0.5, -28.0), "13f_astral_north_looking_east"],
-	[Vector3(-0.5, 1.65, -31.0), Vector3(-14.0, 7.0, -33.0), "13g_astral_north_looking_west_up"],
-	[Vector3(0.5, 1.65, -27.0), Vector3(2.0, -12.0, -24.0), "13h_astral_north_looking_down"],
-	[Vector3(0.0, 1.65, -23.5), Vector3(0.0, 1.6, -14.0), "13j_astral_the_markets_threshold"],
-	[Vector3(-1.0, 1.65, -37.0), Vector3(-1.0, 1.4, -46.0), "13k_astral_the_stairs_threshold"],
-	[Vector3(0.0, 1.65, -14.0), Vector3(0.0, 1.6, -32.0), "13l_astral_from_the_market"],
-	[Vector3(0.0, 1.65, 23.0), Vector3(0.0, 1.6, 40.0), "13d_astral_south_going_on"],
-	[Vector3(0.0, 1.65, 36.0), Vector3(0.0, 1.6, 15.0), "13e_astral_south_coming_back"],
 ]
 ## The close views lit: [eye, looks at, name].
 const CLOSE := [
@@ -99,44 +88,6 @@ func _ready() -> void:
 		_look(view[0], view[1])
 		await _seconds(0.5)
 		_shot(view[2])
-	# From inside the north passage through a long lens: the serpent, its head, an eye in its crack, the lit
-	# constellation (each aimed again just before its shot: they move).
-	var passage: Node3D = map.get_node_or_null("astral_north")
-	if passage != null:
-		var stand := pasaje.to_global(Vector3(0.0, 1.65, -31.0))
-		var serpent: Node3D = passage.presences.filter(func(p): return p.get_meta("kind", "") == "serpent")[0]
-		var eyes: Node3D = passage.presences.filter(func(p): return p.get_meta("kind", "") == "eyes")[0]
-		var long := [
-			[func(): return serpent.to_global(Vector3(0.0, 0.0, -6.0)), 34.0, "13m_astral_zoom_the_serpent"],
-			[func(): return serpent.to_global(Vector3(0.0, 0.2, 1.2)), 9.0, "13n_astral_zoom_its_head"],
-			[func(): return serpent.to_global(Vector3(0.6, 0.34, 0.95)), 2.6, "13t_astral_zoom_the_serpents_eye"],
-			[func(): return (eyes.get_child(0) as Node3D).global_position, 8.0, "13o_astral_zoom_an_eye", -37.5],
-			[func(): return passage.constellations[2].global_position, 40.0, "13p_astral_zoom_a_constellation"],
-		]
-		# (A view's own stand along the passage, when it names one.)
-		for view in long:
-			var from: Vector3 = pasaje.to_global(Vector3(0.0, 1.65, view[3])) if view.size() > 3 else stand
-			eye.fov = view[1]
-			eye.global_transform = Transform3D(Basis.IDENTITY, from).looking_at(view[0].call(), Vector3.UP)
-			await _seconds(0.5)
-			eye.global_transform = Transform3D(Basis.IDENTITY, from).looking_at(view[0].call(), Vector3.UP)
-			_shot(view[2])
-		eye.fov = fov
-		# The glimpses from spot to spot, the plane over the eye: the player stood at each spot (so the passage
-		# shows what it shows there), the eye beside them looking where the glimpse is.
-		var main: PackedVector3Array = passage.way[0]
-		var spots := [[0.15, Vector3(0.0, 30.0, 0.0), "13q_astral_glimpse_the_echo_overhead"],
-			[0.5, Vector3(25.0, 80.0, 5.0), "13r_astral_glimpse_the_star_skirt"],
-			[0.85, (passage.glimpses[2].get_child(0) as Node3D).global_position if passage.glimpses[2].get_child_count() > 0 else Vector3.ZERO, "13s_astral_glimpse_the_great_door"]]
-		for spot in spots:
-			var stand_at: Vector3 = main[int(spot[0] * (main.size() - 1))] + Vector3(0.0, 1.05, 0.0)
-			map.player.global_position = stand_at
-			var look_at: Vector3 = spot[1] if spot[2].ends_with("door") else stand_at + spot[1]
-			eye.global_transform = Transform3D(Basis.IDENTITY, stand_at + Vector3(0.0, 0.6, 0.0)).looking_at(look_at, Vector3.UP)
-			await _seconds(3.0)
-			_shot(spot[2])
-		map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
-		await _seconds(2.0)
 	var lamp := OmniLight3D.new()
 	lamp.light_color = Color(1.0, 0.95, 0.88)
 	lamp.light_energy = 1.6
@@ -146,16 +97,7 @@ func _ready() -> void:
 		_look(view[0], view[1])
 		await _seconds(0.5)
 		_shot(view[2])
-	# In the north astral passage through the player's own camera, its hands up: the void behind them, never over them.
 	lamp.queue_free()
-	var player: Node3D = map.player
-	player.global_position = pasaje.to_global(Vector3(-1.0, 1.05, -37.5))
-	player.rotation.y = PI
-	var own: Array = player.find_children("*", "Camera3D", true, false)
-	if not own.is_empty():
-		(own[0] as Camera3D).make_current()
-		await _seconds(1.5)
-		_shot("13i_astral_through_your_own_eyes")
 	get_tree().quit(0)
 
 
