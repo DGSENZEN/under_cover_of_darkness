@@ -40,6 +40,13 @@ const FLIGHT_DEPTH := 0.3
 ## the centre's tunnel (the siding's west, the walkers' way east: the greybox's own tunnels go on from it).
 const MOUTH := Vector2(3.0, 4.6)
 const DARK_RUN := 12.0
+## The MP-68's running pads either side of a track's centre (m: centred out, wide); its guide bars' faces out from the
+## centre; the kerb between the tracks behind the bar (out from the centre, to, its guard board's top over PAD_TOP).
+const PAD := Vector2(1.0, 0.3)
+const GUIDE_FACE := 1.31
+const KERB := Vector3(1.36, 1.61, 0.3)
+## The drain's trench down the track's middle under the column row (m: wide, deep).
+const DRAIN := Vector2(0.4, 0.15)
 const TUNNEL := Vector2(3.0, 3.0)
 
 @export var standalone := true
@@ -73,6 +80,10 @@ var ends: Array = []
 var heads: Array = []
 ## Each track's mouth's run, for the dressing: [its x from, x to, z, its bed, its roof].
 var mouth_runs: Array = []
+## The track's solid stand-ins, which the dressing lays its track over and hides: each track's two pads, the kerbs
+## between the tracks; the trench's grating's footing.
+var pads: Array[MeshInstance3D] = []
+var kerbs: Array[MeshInstance3D] = []
 ## Where its slabs and ceilings are: {space: [its cells (x, z)]} (the shell's floors and ceilings, by space).
 var _floor_boxes := {}
 var _ceiling_boxes := {}
@@ -87,6 +98,7 @@ func _ready() -> void:
 	_shell()
 	_flights()
 	_mouths()
+	_track()
 	StationDressing.dress(self)
 	if standalone:
 		_environment()
@@ -146,15 +158,26 @@ func _shell() -> void:
 				c0.y + _seam(Vector2(c0.x, c0.y), Vector2(c1.x, c0.y), Vector2.UP))
 			var hi := Vector3(c1.x - _seam(Vector2(c1.x, c0.y), Vector2(c1.x, c1.y), Vector2.RIGHT), 0.0,
 				c1.y - _seam(Vector2(c0.x, c1.y), Vector2(c1.x, c1.y), Vector2.DOWN))
-			var under := _box(Vector3(lo.x, floor_y - SLAB, lo.z), Vector3(hi.x, floor_y, hi.z), name + "_floor")
 			var over := _box(Vector3(lo.x, top, lo.z), Vector3(hi.x, top + SLAB, hi.z), name + "_ceiling")
-			shell.append(under)
 			shell.append(over)
 			if not _floor_boxes.has(name):
 				_floor_boxes[name] = []
 				_ceiling_boxes[name] = []
-			_floor_boxes[name].append(under)
 			_ceiling_boxes[name].append(over)
+			# (The track's floor three slabs, the drain's trench cut down its middle.)
+			var floors := [[lo.z, hi.z, floor_y]]
+			if name == "track":
+				floors = [[lo.z, -DRAIN.x / 2.0, floor_y], [-DRAIN.x / 2.0, DRAIN.x / 2.0, floor_y - DRAIN.y],
+					[DRAIN.x / 2.0, hi.z, floor_y]]
+			for part: Array in floors:
+				var under := _box(Vector3(lo.x, floor_y - SLAB, part[0]), Vector3(hi.x, part[2], part[1]), name + "_floor")
+				shell.append(under)
+				_floor_boxes[name].append(under)
+				if part[2] < floor_y:
+					under.set_meta("trench", true)
+					# (Its grating stood on: solid to the bed's top.)
+					(under.get_child(0).get_child(0) as CollisionShape3D).shape.size.y = SLAB
+					(under.get_child(0) as Node3D).position.y = (SLAB - (float(part[2]) - floor_y + SLAB)) / 2.0
 		var outline: Array = record["polygon"]
 		var turning := _turning(outline)
 		var edges := []
@@ -328,6 +351,28 @@ func _flights() -> void:
 		_solid(ramp, box.size)
 		shell.append(ramp)
 		ramp_boxes.append(ramp)
+
+
+## The track laid for the MP-68: each track's two running pads, from one mouth's cap to the other's, their tops at
+## PAD_TOP; between the tracks, the kerb each track's guide bar is bolted to, from the end wall to the crossing at the
+## track steps' foot (none at the crossing: the staff walk over there). Solid boxes the dressing lays its track over.
+func _track() -> void:
+	var reach := 50.0 + DARK_RUN
+	for z: float in TRACKS_Z:
+		var bed := -1.2
+		for side in [-1.0, 1.0]:
+			var mid: float = z + side * PAD.x
+			pads.append(_box(Vector3(-reach, bed, mid - PAD.y / 2.0), Vector3(reach, PAD_TOP, mid + PAD.y / 2.0), "pad"))
+		# (The kerb on the side toward the other track; the crossing at the end the track's steps come down at.)
+		var toward := -signf(z)
+		var crossing_east := z < 0.0
+		var x0 := -50.0 + WALL if crossing_east else -50.0 + FOOT
+		var x1 := 50.0 - FOOT if crossing_east else 50.0 - WALL
+		var k0: float = z + toward * KERB.x
+		var k1: float = z + toward * KERB.y
+		kerbs.append(_box(Vector3(x0, bed, minf(k0, k1)), Vector3(x1, PAD_TOP + KERB.z, maxf(k0, k1)), "kerb"))
+	for box: MeshInstance3D in pads + kerbs:
+		shell.append(box)
 
 
 ## Each track's mouth at either end running on DARK_RUN into the dark to a black cap: its floor, its roof, its sides.

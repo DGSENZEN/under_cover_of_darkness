@@ -1,0 +1,14 @@
+{
+ "slots": [
+  "cement",
+  "cement_cast",
+  "stone",
+  "rubber",
+  "steel",
+  "iron",
+  "wood",
+  "soot_black"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 282.03
+}

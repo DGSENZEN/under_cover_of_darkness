@@ -13,6 +13,7 @@ const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 
 const SHELL_KIT := "res://assets/eclipse/kit/station_shell.glb"
+const TRACK_KIT := "res://assets/eclipse/kit/station_track.glb"
 const WALLS_KIT := "res://assets/eclipse/kit/underground_walls.glb"
 ## station_shell's measures (tools/eclipse/station_shell.py): a panel's width, the tiled panels' height, the tiles' face
 ## off the wall, a floor slab's and a ceiling panel's side, the coping's reach, a coffer's side, a pit face's height, a
@@ -28,6 +29,11 @@ const TREAD := 0.4
 const RISE := 0.17
 const FLIGHT := 2.4
 const RAIL := 1.0
+## The track kit's module along x, a guide bar's flare, the drain's piece and its stop (m; station_track.py's).
+const TRACK_MODULE := 10.0
+const FLARE := 0.4
+const DRAIN_LONG := 1.2
+const DRAIN_STOP := 0.1
 ## A cut's rim rail stands this far back from its edge, on the copings (m).
 const RIM_BACK := 0.1
 const MAP_WIDE := 2.4
@@ -97,6 +103,7 @@ static func dress(station) -> void:
 		var kind := key.get_slice("@", 0)
 		if kit.has(kind):
 			_many(root, key, kind, kit[kind], look, batches[key])
+	_track(station, root)
 	_tablets(station, root)
 	_light(station, root)
 	_shell_layers(station)
@@ -466,6 +473,9 @@ static func _linings(station, batches: Dictionary, revealed: Dictionary) -> void
 static func _bed(station, batches: Dictionary) -> void:
 	for space: String in ["track", "track_notch_n", "track_notch_s"]:
 		for box: MeshInstance3D in station._floor_boxes.get(space, []):
+			# (The drain's trench: the track's kit lays the drain in it.)
+			if box.has_meta("trench"):
+				continue
 			var size: Vector3 = (box.mesh as BoxMesh).size
 			var lo := box.position - size / 2.0
 			var hi := box.position + size / 2.0
@@ -477,6 +487,87 @@ static func _bed(station, batches: Dictionary) -> void:
 				for j in nz:
 					_add(batches, "bed_slab@" + space, Transform3D(Basis.from_scale(Vector3(sx, 1.0, sz)),
 						Vector3(lo.x + (i + 0.5) * MODULE * sx, hi.y + LAID, lo.z + (j + 0.5) * MODULE * sz)))
+
+
+## The track laid for the MP-68 (the station_track kit, its own atlas) over the set's solid stand-ins, which it hides:
+## each track's modules from one mouth's cap to the other; its guide bars either side, bolted to the pit's face and the
+## mouths' walls on the outside and to the kerb under its guard board between the tracks, each run ending in a flare at
+## the crossing where the track steps come down; the drain along the trench down the middle, stopped at its ends.
+static func _track(station, root: Node3D) -> void:
+	if not ResourceLoader.exists(TRACK_KIT):
+		return
+	var kit := SetKit.kit(TRACK_KIT)
+	var look := Painterly.material(SetKit.painted(["station_track.png", "station_track_base.png"]), &"bespoke")
+	_plainly_lit(look)
+	var batches := {}
+	var reach: float = 50.0 + float(station.DARK_RUN)
+	for z: float in station.TRACKS_Z:
+		var count := roundi(2.0 * reach / TRACK_MODULE)
+		var sx := 2.0 * reach / (count * TRACK_MODULE)
+		for k in count:
+			_add(batches, "track_bed@track", Transform3D(Basis.from_scale(Vector3(sx, 1.0, 1.0)),
+				Vector3(-reach + k * TRACK_MODULE * sx, float(station.PAD_TOP), z)))
+		# (The crossing: the north track's at its east end, the south's at its west, where their steps come down; the
+		# flare on the station's side of it reaching out into it, the mouth's inside the mouth.)
+		var east := z < 0.0
+		var c0: float = 50.0 - float(station.FOOT) if east else -50.0
+		var c1: float = 50.0 if east else -50.0 + float(station.FOOT)
+		var runs := [[-reach, c0 + (FLARE if east else 0.0)], [c1 - (0.0 if east else FLARE), reach]]
+		for out in [signf(z), -signf(z)]:
+			var face: float = z + out * float(station.GUIDE_FACE)
+			_guide(batches, "guide_bar", runs[0][0], runs[0][1], station.PAD_TOP, face, out, false, true)
+			_guide(batches, "guide_bar", runs[1][0], runs[1][1], station.PAD_TOP, face, out, true, false)
+		# (The kerb under its guard board, between the tracks, along the set's.)
+		var kerb: MeshInstance3D = station.kerbs[station.TRACKS_Z.find(z)]
+		var size: Vector3 = (kerb.mesh as BoxMesh).size
+		_guide(batches, "guide_kerb", kerb.position.x - size.x / 2.0, kerb.position.x + size.x / 2.0, station.PAD_TOP,
+			z - signf(z) * float(station.GUIDE_FACE), -signf(z), false, false)
+	for box: MeshInstance3D in station._floor_boxes.get("track", []):
+		if not box.has_meta("trench"):
+			continue
+		var size: Vector3 = (box.mesh as BoxMesh).size
+		var x0 := box.position.x - size.x / 2.0
+		var x1 := box.position.x + size.x / 2.0
+		var top: float = station.spaces()["track"]["floor"] + LAID
+		_add(batches, "drain_end@track", Transform3D(Basis.IDENTITY, Vector3(x0, top, 0.0)))
+		_add(batches, "drain_end@track", Transform3D(Basis(Vector3.UP, PI), Vector3(x1, top, 0.0)))
+		var run := x1 - x0 - 2.0 * DRAIN_STOP
+		var pieces := maxi(1, roundi(run / DRAIN_LONG))
+		var sx := run / (pieces * DRAIN_LONG)
+		for k in pieces:
+			_add(batches, "drain@track", Transform3D(Basis.from_scale(Vector3(sx, 1.0, 1.0)),
+				Vector3(x0 + DRAIN_STOP + k * DRAIN_LONG * sx, top, 0.0)))
+	for key: String in batches:
+		var kind := key.get_slice("@", 0)
+		if kit.has(kind):
+			_many(root, key, kind, kit[kind], look, batches[key])
+	for box: MeshInstance3D in station.pads + station.kerbs:
+		box.visible = false
+
+
+## A run of `kind` (the guide bar's metre, or the kerb's) along x from `a` to `b` over the pads' tops at `y`, its face at
+## `face` (z), turned to stand
+## out from the car toward `out` (the kit's +y is Godot's -z: as laid, toward -z); a guide bar's run ending in a flare at
+## its low end, its high end, or neither.
+static func _guide(batches: Dictionary, kind: String, a: float, b: float, y: float, face: float, out: float,
+		flare_lo: bool, flare_hi: bool) -> void:
+	var turned := out > 0.0
+	var basis := Basis(Vector3.UP, PI) if turned else Basis.IDENTITY
+	var from := a + (FLARE if flare_lo else 0.0)
+	var to := b - (FLARE if flare_hi else 0.0)
+	var count := maxi(1, roundi((to - from) / 1.0))
+	var sx := (to - from) / count
+	for k in count:
+		# (Turned, a piece runs back along -x from its origin: its origin at its high end.)
+		var x := from + k * sx + (sx if turned else 0.0)
+		_add(batches, kind + "@track", Transform3D(basis * Basis.from_scale(Vector3(sx, 1.0, 1.0)), Vector3(x, y, face)))
+	# (The flares: guide_flare turns away at its +x end, guide_flare_l at its origin.)
+	if flare_hi:
+		_add(batches, ("guide_flare_l" if turned else "guide_flare") + "@track",
+			Transform3D(basis, Vector3(b if turned else b - FLARE, y, face)))
+	if flare_lo:
+		_add(batches, ("guide_flare" if turned else "guide_flare_l") + "@track",
+			Transform3D(basis, Vector3(a + FLARE if turned else a, y, face)))
 
 
 ## Each track's mouth's run into the dark: concrete on its two sides and under its roof, slabs on its bed, to its cap.

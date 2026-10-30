@@ -2705,6 +2705,96 @@ class StationShell(unittest.TestCase):
         self.assertAlmostEqual(y1 - y0, self.kit.TREAD, delta=0.001)
 
 
+class StationTrack(unittest.TestCase):
+    """The track laid for the MP-68 (tools/eclipse/station_track.py; docs/superpowers/plans/2026-10-30-metro-station.md
+    Task 5): every piece closed, in budget, through the gate; the running pads' tops at the module's z = 0, nothing of
+    the bed over them; the guide bar's pieces all behind their contact face (y >= 0), the car's side of it clear; the
+    drain's grating flush with the bed's top and its channel deep under it."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_track
+        cls.kit = station_track
+        station_track.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_the_pads_carry_the_car_and_nothing_stands_over_them(self):
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("track_bed")
+        self.assertAlmostEqual(x1 - x0, self.kit.MODULE, delta=0.001)
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(y1, self.kit.PAD_FROM + self.kit.PAD_WIDE / 2, delta=0.001)
+        o = self.objects["track_bed"]
+        for y in (-self.kit.PAD_FROM, self.kit.PAD_FROM):
+            for x in (0.3, 5.0, 9.7):
+                # (Its worn band a millimetre under its edges.)
+                self.assertAlmostEqual(_hit(o, (x, y, 1.0), (0.0, 0.0, -1.0)).z, 0.0, delta=0.0015, msg=(x, y))
+        # (The safety rails under the pads' tops: the tyres ride the pads.)
+        hit = _hit(o, (5.0, self.kit.GAUGE / 2, 1.0), (0.0, 0.0, -1.0))
+        self.assertTrue(-0.06 < hit.z < -0.01, hit.z)
+
+    def test_the_tyres_wear_the_pads_black(self):
+        # (Where the tyres run, a band down each pad's middle worn black, a hair under its edges; the sleepers a darker
+        # stone than the bed's cement; the safety rails dark iron, never the fittings' steel.)
+        o = self.objects["track_bed"]
+        tree = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get())
+
+        def slot_under(x, y):
+            found = tree.ray_cast(Vector((x, y, 1.0)), Vector((0.0, 0.0, -1.0)), 5.0)
+            return o.data.materials[o.data.polygons[found[2]].material_index].name
+
+        for y in (-self.kit.PAD_FROM, self.kit.PAD_FROM):
+            self.assertEqual(slot_under(5.0, y), "rubber", y)
+            self.assertEqual(slot_under(5.0, y + self.kit.PAD_WIDE / 2 - 0.02), "cement", y)
+        self.assertEqual(slot_under(5.5, 0.0), "stone")
+        self.assertEqual(slot_under(5.0, self.kit.GAUGE / 2), "iron")
+
+    def test_the_guide_bar_keeps_behind_its_face(self):
+        for n in ("guide_bar", "guide_flare", "guide_kerb"):
+            (_, _), (y0, _), _ = self._extent(n)
+            self.assertGreaterEqual(y0, -0.0005, n)
+        o = self.objects["guide_bar"]
+        hit = _hit(o, (0.3, -1.0, self.kit.BAR[1]), (0.0, 1.0, 0.0))
+        self.assertAlmostEqual(hit.y, 0.0, delta=0.001)
+        # (The flare turns away from the car: its far end's face further back than its near end's.)
+        f = self.objects["guide_flare"]
+        near = _hit(f, (0.02, -1.0, self.kit.BAR[1]), (0.0, 1.0, 0.0))
+        far = _hit(f, (self.kit.FLARE[0] - 0.05, -1.0, self.kit.BAR[1]), (0.0, 1.0, 0.0))
+        self.assertLess(near.y, 0.01)
+        self.assertGreater(far.y, self.kit.FLARE[1] * 0.7)
+
+    def test_the_drain_is_flush_and_deep(self):
+        _, (y0, y1), (z0, z1) = self._extent("drain")
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(y1 - y0, self.kit.DRAIN[0], delta=0.001)
+        o = self.objects["drain"]
+        # (Between two of its grating's bars a ray falls to the channel's floor; on a bar it stops at the bed's top.)
+        hits = [_hit(o, (x / 100.0, 0.0, 1.0), (0.0, 0.0, -1.0)).z for x in range(2, 118, 1)]
+        self.assertAlmostEqual(max(hits), 0.0, delta=0.001)
+        self.assertLess(min(hits), -self.kit.DRAIN[1] + 0.03)
+
+    def test_the_drains_end_is_stopped_flush(self):
+        # (Where the trench meets the walkers' tunnels, a cast stop closes the channel, its top the bed's.)
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("drain_end")
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(y1 - y0, self.kit.DRAIN[0], delta=0.001)
+        o = self.objects["drain_end"]
+        for y in (-0.15, 0.0, 0.15):
+            self.assertAlmostEqual(_hit(o, ((x0 + x1) / 2, y, 1.0), (0.0, 0.0, -1.0)).z, 0.0, delta=0.001, msg=y)
+
+
 class YourShapes(unittest.TestCase):
     """The user's shapes kept through a kit's rebuild (tools/eclipse/your_shapes.py; docs/superpowers/plans/
     2026-10-30-metro-station.md Task 2): a vertex the user moved in a piece's .blend survives the next build; an

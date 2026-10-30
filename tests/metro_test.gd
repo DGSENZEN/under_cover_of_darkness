@@ -232,6 +232,39 @@ func _station() -> void:
 		[-42.5, -14, 8.3], [-40, -14, 10]], true)
 	_check("M23 out of the pit: from the bed up each track's steps onto its platform", north_up["ok"] and south_up["ok"],
 		"north %s south %s" % [north_up, south_up])
+	# M24: nothing inside the car's envelope: no face the set draws (its meshes, each of its many pieces where it laid
+	# them) and no light inside the box CAR wide by CAR.y tall over PAD_TOP, centred on each track, over x -50...50.
+	var envelopes := []
+	for z: float in station.TRACKS_Z:
+		envelopes.append(AABB(Vector3(-50.0, float(station.PAD_TOP) + 0.01, z - station.CAR.x / 2.0 + 0.001),
+			Vector3(100.0, station.CAR.y - 0.01, station.CAR.x - 0.002)))
+	var inside := []
+	for node in station.find_children("*", "GeometryInstance3D", true, false):
+		if not (node as Node3D).is_visible_in_tree():
+			continue
+		var to_set: Transform3D = station.global_transform.affine_inverse() * (node as Node3D).global_transform
+		# ([its mesh, where it is laid in the set's frame], each instance of many its own.)
+		var drawn := []
+		if node is MultiMeshInstance3D:
+			var many := (node as MultiMeshInstance3D).multimesh
+			if many == null or many.mesh == null:
+				continue
+			for t: Transform3D in node.get_meta("transforms", []):
+				drawn.append([many.mesh, to_set * t])
+		elif node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+			drawn.append([(node as MeshInstance3D).mesh, to_set])
+		for piece: Array in drawn:
+			var aabb: AABB = piece[1] * (piece[0] as Mesh).get_aabb()
+			for envelope: AABB in envelopes:
+				# (Its box first; then its faces, a frame round an opening only boxing the opening.)
+				if envelope.intersects(aabb) and _faces_inside(piece[0], piece[1], envelope):
+					inside.append("%s %s" % [node.name, aabb.get_center().snapped(Vector3.ONE * 0.1)])
+	for light: Node in map.find_children("*", "Light3D", true, false):
+		var at: Vector3 = station.to_local((light as Node3D).global_position)
+		for envelope: AABB in envelopes:
+			if envelope.has_point(at):
+				inside.append("light %s %s" % [light.name, at.snapped(Vector3.ONE * 0.1)])
+	_check("M24 nothing inside the car's envelope", inside.is_empty(), "%d: %s" % [inside.size(), inside.slice(0, 6)])
 	# M25: the station lit by its own fittings: no plan lamp (the map's sodium glow at each sign and scene) stands in
 	# its spaces.
 	var in_station := []
@@ -255,6 +288,26 @@ func _station() -> void:
 		through.slice(0, 6)])
 	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
 	await _frames(10)
+
+
+## Whether any face of `mesh`, laid by `at`, keeps an area inside `box` (each triangle clipped by its six planes).
+func _faces_inside(mesh: Mesh, at: Transform3D, box: AABB) -> bool:
+	var planes := [Plane(Vector3.RIGHT, box.end.x), Plane(Vector3.LEFT, -box.position.x), Plane(Vector3.UP, box.end.y),
+		Plane(Vector3.DOWN, -box.position.y), Plane(Vector3.BACK, box.end.z), Plane(Vector3.FORWARD, -box.position.z)]
+	var faces := mesh.get_faces()
+	for i in range(0, faces.size(), 3):
+		var kept := PackedVector3Array([at * faces[i], at * faces[i + 1], at * faces[i + 2]])
+		for plane: Plane in planes:
+			kept = Geometry3D.clip_polygon(kept, plane)
+			if kept.size() < 3:
+				break
+		if kept.size() >= 3:
+			var area := 0.0
+			for k in range(1, kept.size() - 1):
+				area += (kept[k] - kept[0]).cross(kept[k + 1] - kept[0]).length() / 2.0
+			if area > 1e-6:
+				return true
+	return false
 
 
 ## The Pasaje set (docs/superpowers/plans/2026-10-26-pasaje-market.md): in its place, the greybox gone from its middle

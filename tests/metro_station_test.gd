@@ -5,6 +5,8 @@ extends Node3D
 
 const STATION := preload("res://maps/metro_station.tscn")
 const Layers := preload("res://scripts/Visual/Layers.gd")
+## The MP-68's running pads, centred this far either side of a track's centre (m).
+const PAD_FROM_CENTRE := 1.0
 
 var results: Array[String] = []
 var failures := 0
@@ -19,12 +21,29 @@ func _ready() -> void:
 	_shell()
 	await _walked()
 	_mouths()
+	_track()
 	_dressed()
 	_lit()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
 	get_tree().quit(1 if failures > 0 else 0)
+
+
+## Task 5: the track laid for the MP-68.
+## S5: two tracks laid end to end: for each track, both its running pads' tops at PAD_TOP (± 1 cm) at every metre of x
+## from -50 to 50, found by a ray down onto them (what a foot or a tyre stands on).
+func _track() -> void:
+	var wrong := []
+	for z: float in station.TRACKS_Z:
+		for side in [-1.0, 1.0]:
+			var pad_z: float = z + side * PAD_FROM_CENTRE
+			for x in range(-50, 51):
+				var at := Vector3(float(x), float(station.PAD_TOP) + 2.0, pad_z)
+				var top := _ray(at, at + Vector3(0.0, -3.0, 0.0)).y
+				if absf(top - float(station.PAD_TOP)) > 0.01:
+					wrong.append("pad at x %d, z %.1f: %.2f" % [x, pad_z, top])
+	_check("S5 two tracks laid end to end", wrong.is_empty(), "%d: %s" % [wrong.size(), wrong.slice(0, 6)])
 
 
 ## S1: the shell at the plan's measure: its floors, its ceilings, and every gap of its spaces open (a ray through its
