@@ -286,6 +286,15 @@ class MetroPlan(unittest.TestCase):
         self.assertTrue(middle)
         self.assertEqual([s for s in middle if s not in trades], [])
 
+    def test_the_station_scenes_stand_at_their_causes(self):
+        # (docs/superpowers/plans/2026-10-30-metro-station.md, Task 1: the west bank's fused half, the east
+        # taquillas, the ofrenda beside the relief cabin, the vault's seepage reaching the rails.)
+        at = {m["name"]: m["at"] for m in DATA["landmarks"]}
+        self.assertEqual(at["jammed_turnstiles"], [-14.0, -8.0, -2.0])
+        self.assertEqual(at["ticket_booth"], [20.0, -8.0, -13.0])
+        self.assertEqual(at["motorman_ofrenda"], [42.0, -14.0, -12.8])
+        self.assertEqual(at["seeping_track"], [-40.0, -15.2, 0.0])
+
     def test_the_lane_opens_wide_on_the_pasaje(self):
         for name, other in (("candle_lane", "pasaje"), ("pasaje", "candle_lane")):
             o = next(o for o in _space(name)["openings"] if o["to"] == other)

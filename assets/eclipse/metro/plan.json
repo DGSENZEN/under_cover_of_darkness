@@ -2834,9 +2834,9 @@
    "name": "ticket_booth",
    "kind": "character_place",
    "at": [
-    14.0,
+    20.0,
     -8.0,
-    -10.0
+    -13.0
    ],
    "props": {
     "who": "ticket_seller"
@@ -2978,9 +2978,9 @@
    "name": "jammed_turnstiles",
    "kind": "scene",
    "at": [
-    0.0,
+    -14.0,
     -8.0,
-    -4.0
+    -2.0
    ],
    "props": {
     "scene": "jammed_turnstiles",
@@ -3017,9 +3017,9 @@
    "name": "motorman_ofrenda",
    "kind": "scene",
    "at": [
-    44.0,
+    42.0,
     -14.0,
-    -12.0
+    -12.8
    ],
    "props": {
     "scene": "motorman_ofrenda",

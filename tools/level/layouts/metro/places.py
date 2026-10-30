@@ -23,7 +23,7 @@ SIGNS = [
 
 # Character places: (name, x, y, z, who).
 PLACES = [
-    ("ticket_booth", 14, HALL, -10, "ticket_seller"),
+    ("ticket_booth", 20, HALL, -13, "ticket_seller"),
     ("news_stand", -60, HALL, -2, "newspaper_seller"),
     ("stranded_car_cab", -112, TRACK, 3, "motorman"),
     ("herb_counter", -36, MARKET, 84, "stall_keeper"),
@@ -39,13 +39,13 @@ PLACES = [
 
 # Scenes: (name, x, y, z, cause).
 SCENES = [
-    ("jammed_turnstiles", 0, HALL, -4,
+    ("jammed_turnstiles", -14, HALL, -2,
      "the Light Company's surge on the Eclipse's first night fused the turnstiles open; nobody has paid since"),
     ("layered_posters", -90, HALL, -40,
      "seventy years of bills pasted over each other along the exit; the Eclipse's notices are the newest layer"),
     ("stalls_swallow_exit", -90, HALL, 84,
      "the puesteros crept up from the Pasaje until the south-west exit stair became half market"),
-    ("motorman_ofrenda", 44, PLATFORM, -12,
+    ("motorman_ofrenda", 42, PLATFORM, -12.8,
      "an ofrenda for the motorman lost the night the lines stopped"),
     ("seeping_track", -40, TRACK, 0,
      "the colonial drain under the track overflows when it rains; the rails stand in water"),
