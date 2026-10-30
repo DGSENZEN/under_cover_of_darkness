@@ -251,6 +251,8 @@ var inside := false
 var _mouth: Vector3
 var _away: Vector3
 var _stone_look: ShaderMaterial
+## The arch stones' stand-ins' look: the deep's picture (astral_window.gdshader).
+var _seal_look: ShaderMaterial
 var _span: float
 var _clock := 0.0
 
@@ -369,6 +371,7 @@ func _process(delta: float) -> void:
 				var phase: float = stone.get_meta("phase")
 				(stone as Node3D).position = home + Vector3(home.x, home.y, 0.0).normalized() * ARCH_FLOAT * sin(_clock * 0.7 + phase) \
 					+ Vector3(0.0, 0.0, ARCH_FLOAT * sin(_clock * 0.5 + phase * 1.3))
+				(stone.get_meta("seal") as Node3D).transform = (stone as Node3D).transform
 	if walker == null or not is_instance_valid(walker):
 		return
 	var at := walker.global_position
@@ -748,13 +751,22 @@ func _tear_look(params: Dictionary) -> ShaderMaterial:
 
 ## The arch round a gate's circle (`rim` m round, in its gap `size`): carved stones floating apart, up its jambs from
 ## the floor and over its top, a keystone at its crown; in the deep (astral_arch.gdshader), held where the gate stands
-## (the gate's meta "arch").
+## (the gate's meta "arch"). Each with its stand-in in the world (its meta "seal", under the gate's "seals") where it
+## floats: solid, drawn with depth, showing the deep's picture (the stone itself), so the gate's vortex, rings and
+## embers behind it are hidden by it, never drawn through it.
 func _arch(gate: Node3D, rim: float, size: Vector2, sheet: Texture2D) -> void:
 	var holder := Node3D.new()
 	holder.name = "arch_of_" + String(gate.name)
 	_deep.add_child(holder)
 	holder.global_transform = gate.global_transform
 	gate.set_meta("arch", holder)
+	var seals := Node3D.new()
+	seals.name = "seals"
+	gate.add_child(seals)
+	if _seal_look == null:
+		_seal_look = ShaderMaterial.new()
+		_seal_look.shader = WINDOW
+		_seal_look.set_shader_parameter(&"deep", deep.get_texture())
 	var out := rim * ARCH_OUT
 	var base := -size.y / 2.0 + ARCH_STONE.y / 2.0
 	# Its line: up the left jamb, over the top, down the right (in the gate's face, x-y).
@@ -795,6 +807,14 @@ func _arch(gate: Node3D, rim: float, size: Vector2, sheet: Texture2D) -> void:
 		stone.rotation.x = sin(k * 1.7) * 0.06
 		stone.set_meta("home", stone.position)
 		stone.set_meta("phase", k * 0.9)
+		var seal := MeshInstance3D.new()
+		seal.name = stone.name
+		seal.mesh = box
+		seal.material_override = _seal_look
+		seal.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		seals.add_child(seal)
+		seal.transform = stone.transform
+		stone.set_meta("seal", seal)
 
 
 ## Unseen jambs closing a gate's gap (`size`) either side of its arch (round its circle, `rim` m round), so the way in

@@ -212,6 +212,8 @@ func _astral() -> void:
 	_sealed(map.get_node("astral_south"))
 	_bleeds_meet(passage)
 	_bleeds_meet(map.get_node("astral_south"))
+	await _arch_seals(passage)
+	await _arch_seals(map.get_node("astral_south"))
 	_smooth(passage)
 	await _deep_world(passage)
 	await _plane(passage)
@@ -463,6 +465,35 @@ func _deep_world(passage: Node3D) -> void:
 		wrong.append("its eye not the camera's: %s against %s" % [eye.global_transform.origin, drawing.global_transform.origin])
 	_check("M18n the deep its own world, drawn with depth, the windows showing its picture", wrong.is_empty(),
 		"%s" % [wrong.slice(0, 5)])
+
+
+## M18r: the portal never drawn through its arch's stones: each stone (in the deep) has a solid stand-in in the world
+## where it floats, the same size, moving with it, drawn opaque with depth and showing the deep's picture (the stone
+## itself), so the gate's vortex, rings and embers behind a stone are hidden by it (the user saw "the portal rendered
+## through the stones").
+func _arch_seals(passage: Node3D) -> void:
+	var wrong := []
+	for k in 2:
+		for gate: Node3D in passage.thresholds:
+			var deep: SubViewport = passage.deep
+			for stone: Node in (gate.get_meta("arch", gate) as Node3D).get_children():
+				if not stone is MeshInstance3D:
+					continue
+				var seal := (stone.get_meta("seal") if stone.has_meta("seal") else null) as MeshInstance3D
+				if seal == null or deep.is_ancestor_of(seal) or not seal.is_visible_in_tree():
+					wrong.append("%s/%s: no stand-in in the world" % [gate.name, stone.name])
+					continue
+				var look := seal.get_active_material(0) as ShaderMaterial
+				var code: String = look.shader.code if look != null and look.shader != null else ""
+				if code.contains("blend_") or code.contains("depth_draw_never") or code.contains("depth_test_disabled") \
+						or not look.get_shader_parameter(&"deep") is ViewportTexture:
+					wrong.append("%s/%s: its stand-in not solid or not the deep's picture" % [gate.name, stone.name])
+				if not seal.global_transform.is_equal_approx((stone as Node3D).global_transform) \
+						or not (seal.mesh as BoxMesh).size.is_equal_approx(((stone as MeshInstance3D).mesh as BoxMesh).size):
+					wrong.append("%s/%s: its stand-in not where it floats" % [gate.name, stone.name])
+		await _frames(7)
+	_check("M18r %s: the portal never drawn through its arch's stones" % passage.name, wrong.is_empty(),
+		"%d: %s" % [wrong.size(), wrong.slice(0, 5)])
 
 
 ## M18l: what the passage moves every frame (its gates' rings and arch stones, its fragments, its presences, its
