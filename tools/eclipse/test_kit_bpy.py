@@ -2595,6 +2595,87 @@ class PasajeOverhead(unittest.TestCase):
         self.assertTrue(z0 < -0.02 and z1 < 0.06, (z0, z1))
 
 
+class YourShapes(unittest.TestCase):
+    """The user's shapes kept through a kit's rebuild (tools/eclipse/your_shapes.py; docs/superpowers/plans/
+    2026-10-30-metro-station.md Task 2): a vertex the user moved in a piece's .blend survives the next build; an
+    untouched piece writes nothing; a kept shape still meets the gate; a shape for a piece no longer built is reported,
+    never lost. Built in a folder of its own, never the repository's."""
+
+    KIT = "yours_test"
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        import common
+        import your_shapes
+        self.common, self.yours = common, your_shapes
+        self.folder = Path(tempfile.mkdtemp())
+        self.kept = (common.SOURCE, your_shapes.YOURS)
+        common.SOURCE = self.folder / "source"
+        your_shapes.YOURS = self.folder / "yours"
+
+    def tearDown(self):
+        import shutil
+        self.common.SOURCE, self.yours.YOURS = self.kept
+        shutil.rmtree(self.folder, ignore_errors=True)
+
+    def _build(self):
+        """The test kit: a box and a cylinder, side by side, built and exported."""
+        self.common.reset()
+        bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, 0.0, 0.5))
+        box = bpy.context.active_object
+        box.name = "box"
+        bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.4, depth=1.0, location=(2.0, 0.0, 0.5))
+        bpy.context.active_object.name = "drum"
+        for o in bpy.context.scene.objects:
+            o.data.materials.append(self.common.slot("stone_step"))
+        self.common.export_piece(self.KIT, 256, ["stone_step"], out=self.folder / "kit", sets_each=True)
+        return {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _top(self, o):
+        return max((o.matrix_world @ v.co).z for v in o.data.vertices)
+
+    def test_a_moved_vertex_survives_the_next_build(self):
+        objects = self._build()
+        drum = sorted(round(v.co.z, 4) for v in objects["drum"].data.vertices)
+        top = max(objects["box"].data.vertices, key=lambda v: (v.co.z, v.co.x, v.co.y))
+        top.co.z += 0.05
+        self.assertEqual(self.yours.harvest(list(objects.values()), self.KIT), ["box"])
+        objects = self._build()
+        self.assertAlmostEqual(self._top(objects["box"]), 1.05, delta=0.001)
+        self.assertEqual(sorted(round(v.co.z, 4) for v in objects["drum"].data.vertices), drum)
+
+    def test_an_untouched_piece_writes_nothing(self):
+        objects = self._build()
+        self.assertEqual(self.yours.harvest(list(objects.values()), self.KIT), [])
+        self._build()
+        self.assertFalse((self.yours.YOURS / self.KIT).exists() and any((self.yours.YOURS / self.KIT).iterdir()))
+
+    def test_a_kept_shape_still_meets_the_gate(self):
+        objects = self._build()
+        # (A second lid laid 1 cm over its top, a layered face: the gate catches it on the next build.)
+        work = bmesh.new()
+        work.from_mesh(objects["box"].data)
+        work.faces.ensure_lookup_table()
+        lid = max(work.faces, key=lambda f: f.calc_center_median().z)
+        copy = bmesh.ops.duplicate(work, geom=[lid])["geom"]
+        bmesh.ops.translate(work, vec=(0.0, 0.0, 0.01), verts=[g for g in copy if isinstance(g, bmesh.types.BMVert)])
+        work.to_mesh(objects["box"].data)
+        work.free()
+        self.yours.harvest(list(objects.values()), self.KIT)
+        with self.assertRaises(SystemExit):
+            self._build()
+
+    def test_a_shape_for_a_piece_no_longer_built_is_reported_not_lost(self):
+        objects = self._build()
+        objects["box"].data.vertices[0].co.z -= 0.05
+        self.yours.harvest(list(objects.values()), self.KIT)
+        (self.yours.YOURS / self.KIT / "box.npz").rename(self.yours.YOURS / self.KIT / "gone.npz")
+        objects = self._build()
+        self.assertEqual(self.yours.keep(list(objects.values()), self.KIT), [])
+        self.assertTrue((self.yours.YOURS / self.KIT / "gone.npz").exists())
+
+
 if __name__ == "__main__":
     # (`-- Class` or `-- Class.test_name` after Blender's own arguments runs just those.)
     chosen = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []

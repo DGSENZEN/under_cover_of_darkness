@@ -29,6 +29,7 @@ SOURCE = ROOT / "assets" / "eclipse" / "source"
 sys.path.insert(0, str(HERE))
 
 import gate  # noqa: E402
+import your_shapes  # noqa: E402
 
 # Viewport colours for the joint renders, by slot (not the game's look).
 SHOW = {
@@ -950,6 +951,11 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
     SOURCE.mkdir(parents=True, exist_ok=True)
     (SOURCE / ".gdignore").touch()
     objects = meshes()
+    # The user's shapes in place of the generated ones (your_shapes.py), before anything is unwrapped or gated.
+    if weather is not None and (your_shapes.YOURS / name).exists():
+        sys.exit("%s: shapes of yours kept for a weathered piece, which the build densifies: not kept" % name)
+    for kept in your_shapes.keep(objects, name):
+        print("%s: %s is yours" % (name, kept))
 
     if sets_each:
         gate_sets = [[o.name] for o in objects]
@@ -1017,6 +1023,8 @@ def export_piece(name, atlas_px, slots, merge=None, gate_sets=None, share=None, 
     if wicks:
         (SOURCE / (name + "_wicks.json")).write_text(json.dumps(wicks, indent=1))
     bpy.context.preferences.filepaths.save_version = 0   # no .blend1 beside it
+    # (Each piece's shape as built, so the next harvest knows the user's from it.)
+    your_shapes.stamp(meshes())
     bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE / (name + ".blend")))
 
     # Alternatives for one place (a stone or a steel column) are never seen
