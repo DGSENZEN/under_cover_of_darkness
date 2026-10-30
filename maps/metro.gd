@@ -9,6 +9,7 @@ extends Node3D
 
 const PLAYER := preload("res://Player.tscn")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 const PLAN := "res://assets/eclipse/metro/plan.json"
 const GREYBOX := "res://assets/eclipse/metro/greybox.json"
 ## A sodium work lamp (about 2000 K).
@@ -67,6 +68,20 @@ func _sets() -> void:
 	var pasaje := get_node_or_null("pasaje")
 	if lane != null and pasaje != null:
 		pasaje.draught = lane.draught_now
+	_station_lit_alone()
+
+
+## The station lights itself, each of its levels by its own lamps, and its floors and walls stop no shadowless light:
+## the map's fixed lights beyond it (the vaults' sodium lamp under its platforms) leave its levels' layers out. (What
+## the player carries, and what effects throw, light it as they light anything.)
+func _station_lit_alone() -> void:
+	var station := get_node_or_null("metro_station")
+	if station == null:
+		return
+	var levels := Layers.STATION_HALL | Layers.STATION_STAIRS | Layers.STATION_BELOW
+	for light: Node in find_children("*", "Light3D", true, false):
+		if not station.is_ancestor_of(light) and not player.is_ancestor_of(light):
+			(light as Light3D).light_cull_mask &= ~levels
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -96,6 +111,9 @@ func _lights() -> void:
 	add_child(world)
 
 	for m in landmarks("sign") + landmarks("scene"):
+		# (The station lights itself, by its own fittings: no sodium glow in its spaces.)
+		if _in_station(Vector3(m["at"][0], m["at"][1] + LAMP_HEIGHT, m["at"][2])):
+			continue
 		var lamp := OmniLight3D.new()
 		lamp.name = "lamp_" + String(m["name"])
 		lamp.light_color = SODIUM
@@ -105,6 +123,20 @@ func _lights() -> void:
 		lamp.position = Vector3(m["at"][0], m["at"][1] + LAMP_HEIGHT, m["at"][2])
 		add_child(lamp)
 		lamps.append(lamp)
+
+
+## Whether `at` stands in one of the station set's spaces.
+func _in_station(at: Vector3) -> bool:
+	for s in plan["spaces"]:
+		if not s["name"] in SETS["metro_station"][1]:
+			continue
+		var outline := PackedVector2Array()
+		for q in s["polygon"]:
+			outline.append(Vector2(q[0], q[1]))
+		if Geometry2D.is_point_in_polygon(Vector2(at.x, at.z), outline) and at.y >= float(s["floor"]) - 0.01 \
+				and at.y <= float(s["floor"]) + float(s["height"]) + 0.01:
+			return true
+	return false
 
 
 ## The labels (F1): every space's name and layer at its middle, every scene

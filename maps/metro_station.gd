@@ -56,8 +56,17 @@ var faces: Array = []
 ## Its dressing (station_shell's pieces and the Metro's own, in MultiMeshes by kind) and the columns it stands.
 var dressing: Node3D
 var columns: Array[Node3D] = []
-## Its flights' ramps: [their ends, as built].
+## Its own light (the dressing's fluorescents; the big pieces' brass lamps join them).
+var lights: Array[Light3D] = []
+## Its flights' ramps: [their ends, as built]; the ramps themselves.
 var ramps: Array = []
+var ramp_boxes: Array[MeshInstance3D] = []
+## Its walls' bare ends ({at, out (x, z: the way it faces), inward, y0, y1, key (its opening's, "" at an open corner)})
+## and its lintels' undersides ({from, to, y, inward, key}): the dressing lines them where no reveal does.
+var ends: Array = []
+var heads: Array = []
+## Each track's mouth's run, for the dressing: [its x from, x to, z, its bed, its roof].
+var mouth_runs: Array = []
 ## Where its slabs and ceilings are: {space: [its cells (x, z)]} (the shell's floors and ceilings, by space).
 var _floor_boxes := {}
 var _ceiling_boxes := {}
@@ -142,6 +151,7 @@ func _shell() -> void:
 			_ceiling_boxes[name].append(over)
 		var outline: Array = record["polygon"]
 		var turning := _turning(outline)
+		var edges := []
 		for i in outline.size():
 			var a := Vector2(outline[i][0], outline[i][1])
 			var b := Vector2(outline[(i + 1) % outline.size()][0], outline[(i + 1) % outline.size()][1])
@@ -155,7 +165,16 @@ func _shell() -> void:
 					holes.append([minf(s0, s1), maxf(s0, s1), gap["y0"], gap["y1"]])
 			if name == "track" and absf(a.x - b.x) < 0.01:
 				holes += _end_holes(a, b, floor_y)
-			_wall(name, a, b, turning, floor_y, top, holes, records)
+			# (Open: a gap its whole length and height, no wall at all.)
+			var open := holes.any(func(h): return h[0] <= 0.05 and h[1] >= a.distance_to(b) - 0.05 \
+				and float(h[2]) <= floor_y + 0.01 and float(h[3]) >= top - 0.01)
+			edges.append([a, b, holes, open])
+		for i in edges.size():
+			var edge: Array = edges[i]
+			# (Its ends bare where the wall round the corner is open.)
+			var open_before: bool = edges[(i - 1 + edges.size()) % edges.size()][3]
+			var open_after: bool = edges[(i + 1) % edges.size()][3]
+			_wall(name, edge[0], edge[1], turning, floor_y, top, edge[2], records, open_before, open_after)
 
 
 ## The track's ends cut: each track's mouth and the centre's tunnel, as [from, to (m along the edge), y0, y1].
@@ -175,7 +194,7 @@ func _end_holes(a: Vector2, b: Vector2, floor_y: float) -> Array:
 ## space (its outline turning `turning`), but where a piece stands wholly under the floor of what lies beyond (a
 ## platform's edge face under the platform), outside, clear of every space.
 func _wall(name: String, a: Vector2, b: Vector2, turning: float, floor_y: float, top: float, holes: Array,
-		records: Dictionary) -> void:
+		records: Dictionary, open_before := false, open_after := false) -> void:
 	var length := a.distance_to(b)
 	var along := (b - a) / length
 	# (Inward: the outline's left when it turns counter-clockwise.)
@@ -233,6 +252,27 @@ func _wall(name: String, a: Vector2, b: Vector2, turning: float, floor_y: float,
 			# (Under a door above the floor: a lip a flight arriving there must climb onto.)
 			if float(piece[3]) < top - 0.01 and float(piece[2]) <= floor_y + 0.01:
 				_lips.append([p0, p1, float(piece[3])])
+			# Its bare ends and underside, where nothing round it covers them: a run's end at an opening's side (as high
+			# as the opening), or at a corner whose wall is open (its whole height); a lintel's underside over its
+			# opening.
+			var s0: float = piece[0]
+			var s1: float = piece[1]
+			if float(piece[2]) <= floor_y + 0.01:
+				for hole: Array in holes:
+					var key := _key(a + along * (float(hole[0]) + float(hole[1])) / 2.0)
+					if absf(float(hole[1]) - s0) < 0.02:
+						ends.append({"at": p0, "out": -along, "inward": inward, "y0": float(hole[2]),
+							"y1": minf(float(hole[3]), top), "key": key, "space": name})
+					if absf(float(hole[0]) - s1) < 0.02:
+						ends.append({"at": p1, "out": along, "inward": inward, "y0": float(hole[2]),
+							"y1": minf(float(hole[3]), top), "key": key, "space": name})
+				if open_before and s0 <= SEAM + 0.01:
+					ends.append({"at": p0, "out": -along, "inward": inward, "y0": floor_y, "y1": float(piece[3]), "key": "", "space": name})
+				if open_after and s1 >= length - SEAM - 0.01:
+					ends.append({"at": p1, "out": along, "inward": inward, "y0": floor_y, "y1": float(piece[3]), "key": "", "space": name})
+			else:
+				heads.append({"from": p0, "to": p1, "y": float(piece[2]), "inward": inward,
+					"key": _key((p0 + p1) / 2.0), "space": name})
 
 
 ## Whether `box` stands clear of every space's volume (bar a hair at their edges).
@@ -280,6 +320,7 @@ func _flights() -> void:
 		ramp.transform = Transform3D(Basis(side, up, forward), (a + b) / 2.0 - up * FLIGHT_DEPTH / 2.0)
 		_solid(ramp, box.size)
 		shell.append(ramp)
+		ramp_boxes.append(ramp)
 
 
 ## Each track's mouth at either end running on DARK_RUN into the dark to a black cap: its floor, its roof, its sides.
@@ -293,6 +334,7 @@ func _mouths() -> void:
 			var half := MOUTH.x / 2.0
 			var bed := -1.2
 			var roof := bed + MOUTH.y
+			mouth_runs.append([lo_x, hi_x, z, bed, roof])
 			shell.append(_box(Vector3(lo_x, bed - SLAB, z - half), Vector3(hi_x, bed, z + half), "mouth_floor"))
 			shell.append(_box(Vector3(lo_x, roof, z - half - WALL), Vector3(hi_x, roof + SLAB, z + half + WALL), "mouth_roof"))
 			for side in [-1.0, 1.0]:
@@ -360,6 +402,11 @@ func _seam(a: Vector2, b: Vector2, out: Vector2) -> float:
 			if Geometry2D.is_point_in_polygon(p, polygon):
 				return SEAM
 	return 0.0
+
+
+## An opening's key: its middle on its wall's line, to a decimetre (as the dressing names the doors it reveals).
+static func _key(p: Vector2) -> String:
+	return "%.1f,%.1f" % [p.x, p.y]
 
 
 ## Whether `p` lies on a notch's outline.

@@ -7,6 +7,7 @@ extends Node3D
 ##   Godot --headless --fixed-fps 60 --path . res://tests/metro_test.tscn
 
 const MAP := preload("res://maps/metro.tscn")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 ## How near a waypoint counts as reached (m, across).
 const REACHED := 0.6
 ## Frames a leg may take before it counts as stuck.
@@ -231,6 +232,27 @@ func _station() -> void:
 		[-42.5, -14, 8.3], [-40, -14, 10]], true)
 	_check("M23 out of the pit: from the bed up each track's steps onto its platform", north_up["ok"] and south_up["ok"],
 		"north %s south %s" % [north_up, south_up])
+	# M25: the station lit by its own fittings: no plan lamp (the map's sodium glow at each sign and scene) stands in
+	# its spaces.
+	var in_station := []
+	for lamp: OmniLight3D in map.lamps:
+		var p := lamp.global_position
+		for s in map.plan["spaces"]:
+			if s["name"] in station.SPACES and Geometry2D.is_point_in_polygon(Vector2(p.x, p.z), _poly(s["polygon"])) \
+					and p.y >= float(s["floor"]) - 0.01 and p.y <= float(s["floor"]) + float(s["height"]) + 0.01:
+				in_station.append("%s in %s" % [lamp.name, s["name"]])
+	_check("M25 the station lit by its own fittings, no plan lamp in its spaces", in_station.is_empty(), "%s" % [in_station])
+	# M26: and no light of the map's beyond it reaches it through its walls or floors: none but its own lights its
+	# levels' layers (the vaults' sodium lamp under the platforms turned their pit faces red).
+	var station_layers: int = Layers.STATION_HALL | Layers.STATION_STAIRS | Layers.STATION_BELOW
+	var through := []
+	for light: Node in map.find_children("*", "Light3D", true, false):
+		# (The player's own, which go where they go, light it as they light anything.)
+		if not station.is_ancestor_of(light) and not map.player.is_ancestor_of(light) \
+				and (light as Light3D).light_cull_mask & station_layers != 0:
+			through.append(String(light.name))
+	_check("M26 no light beyond the station lights it through its walls", through.is_empty(), "%d: %s" % [through.size(),
+		through.slice(0, 6)])
 	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
 	await _frames(10)
 

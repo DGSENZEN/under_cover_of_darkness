@@ -45,6 +45,12 @@ const PAINTED_FLOOR := 1 << 7
 ## Paper pasted on a wall (layer 9): the Pasaje's bills, which soot laid on the wall after them lands on too (the
 ## giant hand's), and the paint sprayed before them does not.
 const PASTED := 1 << 8
+## The Metro station's levels (layers 10-12; maps/metro_station_dressing.gd): its hall, its stairwells, and below them
+## its platforms, track and tunnels' mouths. The hall stands over the platforms, a slab between, and its lights have no
+## shadows: each light lights only its own level's layer (and the world's movers), never through a floor.
+const STATION_HALL := 1 << 9
+const STATION_STAIRS := 1 << 10
+const STATION_BELOW := 1 << 11
 ## A fixture's glowing parts (a pitch head, coals, horn panes): they shine by
 ## their own glow, and a burner's light (a hand's breadth away) would blow
 ## them out, so burners leave this layer unlit.

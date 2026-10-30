@@ -2637,6 +2637,46 @@ class StationShell(unittest.TestCase):
         self.assertTrue(line and all(self.kit.LINE[0] - 0.001 <= v.y <= self.kit.LINE[1] + 0.001 and v.z <= 0.0
                                      for v in line))
 
+    def test_no_joint_runs_straight_up_a_panel_edge(self):
+        # (The panel's every other course ends flush at both its edges, a cut tile's half: the next panel makes it
+        # whole.)
+        for n in ("wall_low", "wall_low_worn"):
+            vs = _world(self.objects[n])
+            for k, (z0, z1, _, _) in enumerate(self.kit.underground_walls.COURSES):
+                if k % 2 == 0:
+                    continue
+                mid = (z0 + z1) / 2
+                at_edge = [v for v in vs if abs(v[2] - mid) < (z1 - z0) / 2 and v[1] < -self.kit.MORTAR + 0.001]
+                self.assertTrue(any(abs(v[0]) < 1e-4 for v in at_edge), (n, k, "left"))
+                self.assertTrue(any(abs(v[0] - self.kit.PANEL) < 1e-4 for v in at_edge), (n, k, "right"))
+
+    def test_neighbouring_coffers_meet_in_one_flat_soffit(self):
+        # (A beam is two coffers' halves: rounded where they meet, the two made a groove down its middle that caught
+        # the tubes' light, a hairline down every beam. Square there; the arris kept where the beam meets the recess.)
+        o = self.objects["coffer"]
+        c, b, d = self.kit.COFFER / 2, self.kit.BEAM, self.kit.COFFER_DEPTH
+        for x, y in ((c - 0.003, 0.3), (-c + 0.003, 0.3), (0.3, c - 0.003), (0.3, -c + 0.003)):
+            hit = _hit(o, (x, y, -1.0), (0.0, 0.0, 1.0))
+            self.assertAlmostEqual(hit.z, -d, delta=0.001, msg=(x, y))
+        hit = _hit(o, (c - b + 0.003, 0.3, -1.0), (0.0, 0.0, 1.0))
+        self.assertGreater(hit.z, -d + 0.005, "the beam's arris at the recess")
+
+    def test_the_plaster_ceilings_panels_meet(self):
+        # (A plastered ceiling has no joints: a gap between two panels let the light on what lies above through, a
+        # dashed hairline across the ceiling at a distance.)
+        (x0, x1), (y0, y1), _ = self._extent("ceiling_panel")
+        self.assertAlmostEqual(x1 - x0, self.kit.MODULE, delta=0.0002)
+        self.assertAlmostEqual(y1 - y0, self.kit.MODULE, delta=0.0002)
+
+    def test_the_upright_cement_is_cast_not_the_tracks(self):
+        # (The shared grimy cement read as camouflage at arm's length, a door's jamb or the walls down the track steps:
+        # every upright face of the station's is cast, calm; only the track's bed underfoot keeps the grime.)
+        for n in ["lining", "pit_face", "column_track", "portal_mouth", "portal_tunnel"] + \
+                [self.kit.reveal_name(*r) for r in self.kit.REVEALS]:
+            self.assertNotIn("cement", {m.name for m in self.objects[n].data.materials}, n)
+            self.assertIn("cement_cast", {m.name for m in self.objects[n].data.materials}, n)
+        self.assertIn("cement", {m.name for m in self.objects["bed_slab"].data.materials})
+
     def test_a_tread_tops_its_step(self):
         _, (y0, y1), (z0, z1) = self._extent("tread")
         self.assertAlmostEqual(z1, 0.0, delta=0.001)

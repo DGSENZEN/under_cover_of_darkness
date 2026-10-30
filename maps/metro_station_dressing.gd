@@ -10,6 +10,7 @@ extends RefCounted
 ## LAID off them.
 
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 
 const SHELL_KIT := "res://assets/eclipse/kit/station_shell.glb"
 const WALLS_KIT := "res://assets/eclipse/kit/underground_walls.glb"
@@ -17,7 +18,7 @@ const WALLS_KIT := "res://assets/eclipse/kit/underground_walls.glb"
 ## off the wall, a floor slab's and a ceiling panel's side, the coping's reach, a coffer's side, a pit face's height, a
 ## tread's depth and rise and a flight's width, a handrail's run, the line map's width.
 const PANEL := 1.2
-const TILED := 2.5
+const TILED := 2.42
 const FACE := 0.067
 const MODULE := 1.2
 const COPING := 0.6
@@ -31,6 +32,9 @@ const MAP_WIDE := 2.4
 ## How far the floors' slabs stand over the shell's floor, and the ceilings' panels under its ceiling (m): the shell's
 ## boxes kept, seen in the joints between them, never in their planes.
 const LAID := 0.01
+## A door's threshold stands this proud of the floors either side (m); a reveal's lining's thickness (m).
+const SILL_PROUD := 0.004
+const REVEAL_LINING := 0.05
 ## The doors' reveals the kit has ([width, height, depth]).
 const REVEALS := [[3.0, 3.0, 0.6], [3.0, 3.0, 0.31], [4.0, 3.0, 0.31]]
 ## The hall's columns (x, z): two rows clear of the ways across it (the corridors' mouths to the banks at x ±14, the
@@ -51,6 +55,18 @@ const TABLETS_X := [-40.0, -24.0, -8.0, 8.0, 24.0, 40.0]
 const TABLET_FOOT := 1.65
 ## A hanging sign: how far in front of the gap it names (m).
 const SIGN_OUT := 1.5
+## Its light (the 1969 fittings' cool fluorescent): the hall's grid under its coffers, a lamp over each platform's
+## strip every 15 m, three down each stairwell; how bright, how far each reaches; the tubes' own glow.
+const FLUO := Color(0.86, 0.97, 0.92)
+const HALL_LAMPS_X := [-24.0, -12.0, 0.0, 12.0, 24.0]
+const HALL_LAMPS_Z := [-7.0, 0.0, 7.0]
+const HALL_LAMP := Vector2(1.5, 13.0)
+const PLATFORM_LAMPS_X := [-45.0, -30.0, -15.0, 0.0, 15.0, 30.0, 45.0]
+const PLATFORM_LAMP := Vector2(2.4, 12.0)
+const STAIR_LAMPS := [Vector3(-4.0, 3.5, -27.0), Vector3(-4.0, 3.5, -19.0), Vector3(-4.0, 9.5, -17.0),
+	Vector3(4.0, 3.5, 27.0), Vector3(4.0, 3.5, 19.0), Vector3(4.0, 9.5, 17.0)]
+const STAIR_LAMP := Vector2(1.2, 9.0)
+const TUBE_GLOW := 2.5
 
 
 static func dress(station) -> void:
@@ -62,19 +78,25 @@ static func dress(station) -> void:
 	station.dressing = root
 	var kit := SetKit.kit(SHELL_KIT)
 	var look := Painterly.material(SetKit.painted(["station_shell.png", "station_shell_base.png"]), &"bespoke")
+	_plainly_lit(look)
 	var batches := {}
 	_walls(station, batches)
 	_floors(station, batches)
 	_ceilings(station, batches)
 	_columns(station, root, batches)
 	_flights(station, batches)
-	_openings(station, batches)
+	var revealed := _openings(station, batches)
+	_linings(station, batches, revealed)
+	_bed(station, batches)
+	_mouth_runs(station, batches)
 	_signs(station, batches)
 	for key: String in batches:
 		var kind := key.get_slice("@", 0)
 		if kit.has(kind):
 			_many(root, key, kind, kit[kind], look, batches[key])
 	_tablets(station, root)
+	_light(station, root)
+	_shell_layers(station)
 
 
 ## Each face of wall: tiled panels to just over their cap and plaster above (only plaster over a door); in the track's
@@ -97,19 +119,27 @@ static func _walls(station, batches: Dictionary) -> void:
 		var y1: float = face["y1"]
 		var space: String = face["space"]
 		var concrete := space.begins_with("track")
+		# (The track steps' walls stand over the platform: the pit's concrete under its floor, its tiles and plaster
+		# over it.)
+		var platform: float = station.spaces()["platform_n"]["floor"]
+		var tiled_from: float = platform if space.begins_with("track_notch") else float(face["floor"])
 		var basis := Basis(along3, Vector3.UP, in3)
 		for k in count:
 			var foot := start + along * (k * PANEL * sx)
 			var at := Vector3(foot.x, 0.0, foot.y)
-			if concrete:
-				_rows(batches, "pit_face@" + space, basis, at, sx, y0, y1, PIT)
-				continue
 			var y := y0
-			if y0 <= float(face["floor"]) + 0.01 and y1 - y0 >= TILED:
+			if concrete:
+				var pit_top := y1 if not space.begins_with("track_notch") else minf(y1, platform)
+				if pit_top - y0 > 0.01:
+					_rows(batches, "pit_face@" + space, basis, at, sx, y0, pit_top, PIT)
+				if pit_top >= y1 - 0.01:
+					continue
+				y = pit_top
+			if y <= tiled_from + 0.01 and y1 - y >= TILED:
 				var worn := _hash(foot.x * 1.37 + foot.y * 2.11) > 0.8
 				_add(batches, ("wall_low_worn@" if worn else "wall_low@") + space,
-					Transform3D(basis * Basis.from_scale(Vector3(sx, 1.0, 1.0)), at + Vector3.UP * y0))
-				y = y0 + TILED
+					Transform3D(basis * Basis.from_scale(Vector3(sx, 1.0, 1.0)), at + Vector3.UP * y))
+				y += TILED
 			if y1 - y > 0.01:
 				_rows(batches, "plaster_sheet@" + space, basis, at, sx, y, y1, 1.0)
 		if face["box"] != null:
@@ -210,7 +240,7 @@ static func _columns(station, root: Node3D, batches: Dictionary) -> void:
 	for spec: Array in places:
 		var at: Vector3 = spec[1]
 		var size: Vector2 = spec[2]
-		_add(batches, spec[0] + "@columns", Transform3D(Basis.IDENTITY, at))
+		_add(batches, spec[0] + ("@hall" if spec[0] == "column_hall" else "@track"), Transform3D(Basis.IDENTITY, at))
 		var body := StaticBody3D.new()
 		body.name = spec[0]
 		var shape := CollisionShape3D.new()
@@ -252,12 +282,45 @@ static func _flights(station, batches: Dictionary) -> void:
 				var x_axis := slope
 				var z_axis := x_axis.cross(Vector3.UP).normalized()
 				_add(batches, "handrail@flights", Transform3D(Basis(x_axis, Vector3.UP, z_axis), low + offset + slope * k))
+			# (Its last post, at the top, the rail's end over it.)
+			var heading := Vector3(up.x, 0.0, up.z).normalized()
+			_add(batches, "rail_post@flights", Transform3D(Basis(heading, Vector3.UP, heading.cross(Vector3.UP)),
+				high + offset))
+	# Each ramp clad under its treads: cement boards along its two sides and its underside, a hair off them.
+	for ramp: MeshInstance3D in station.ramp_boxes:
+		var size: Vector3 = (ramp.mesh as BoxMesh).size
+		var basis: Basis = ramp.transform.basis
+		var centre: Vector3 = ramp.transform.origin
+		var side := basis.x
+		var up := basis.y
+		var forward := basis.z
+		var sections := maxi(1, roundi(size.z / 1.0))
+		var step := forward * (size.z / sections)
+		var start := centre - forward * size.z / 2.0
+		for k in sections:
+			var at := start + step * k
+			# (Its two sides, facing out from it, their foot along its underside.)
+			for s in [-1.0, 1.0]:
+				var out: Vector3 = side * s
+				var foot := at + out * (size.x / 2.0 + 0.001) - up * size.y / 2.0
+				var x_axis := step if step.cross(up).dot(out) > 0.0 else -step
+				var origin := foot if x_axis == step else foot + step
+				_add(batches, "lining@ramps", Transform3D(Basis(x_axis, up * size.y, out), origin))
+			# (Its underside, facing down.)
+			var down := -up
+			var corner := at - up * (size.y / 2.0 + 0.001) - side * size.x / 2.0
+			var across := side * size.x
+			var x_axis := step if step.cross(across).dot(down) > 0.0 else -step
+			var origin := corner if x_axis == step else corner + step
+			_add(batches, "lining@ramps", Transform3D(Basis(x_axis, across, down), origin))
+		ramp.visible = false
 
 
 ## Each door's cement reveal (a door between two of its spaces once), and the tunnels' portals at the track's ends.
-static func _openings(station, batches: Dictionary) -> void:
+static func _openings(station, batches: Dictionary) -> Dictionary:
 	var records: Dictionary = station.spaces()
 	var done := {}
+	var revealed := {}
 	for space: String in records:
 		var record: Dictionary = records[space]
 		var floor_y: float = record["floor"]
@@ -286,8 +349,14 @@ static func _openings(station, batches: Dictionary) -> void:
 				continue
 			var face: Vector2 = mid + inward * float(station.WALL)
 			var in3 := Vector3(inward.x, 0.0, inward.y)
-			_add(batches, kind + "@doors", Transform3D(Basis(Vector3.UP.cross(in3), Vector3.UP, in3),
-				Vector3(face.x, float(gap["y0"]), face.y)))
+			var basis := Basis(Vector3.UP.cross(in3), Vector3.UP, in3)
+			_add(batches, kind + "@doors", Transform3D(basis, Vector3(face.x, float(gap["y0"]), face.y)))
+			revealed[key] = true
+			# Its threshold: a stone across its floor through the wall's depth, a little proud of the floors either
+			# side (never in their plane), its front at this room's face.
+			var wide := a.distance_to(b) - 2.0 * REVEAL_LINING
+			var start := Vector3(face.x, float(gap["y0"]) + LAID + SILL_PROUD, face.y) - basis.x * wide / 2.0
+			_add(batches, "sill@doors", Transform3D(basis * Basis.from_scale(Vector3(wide, 1.0, depth)), start))
 	var bed: float = records["track"]["floor"]
 	for end in [-1.0, 1.0]:
 		var face_x: float = end * (50.0 - station.WALL)
@@ -296,6 +365,93 @@ static func _openings(station, batches: Dictionary) -> void:
 		for z: float in station.TRACKS_Z:
 			_add(batches, "portal_mouth@portals", Transform3D(basis, Vector3(face_x, bed, z)))
 		_add(batches, "portal_tunnel@portals", Transform3D(basis, Vector3(face_x, bed, 0.0)))
+	return revealed
+
+
+## Every bare end of wall and underside of a lintel no reveal covers (the notch's, the track's mouths' and tunnels',
+## the corners whose wall is open): cement linings, in rows a metre tall (or along), each fitted to its run.
+static func _linings(station, batches: Dictionary, revealed: Dictionary) -> void:
+	var wall: float = station.WALL
+	for end: Dictionary in station.ends:
+		if revealed.has(end["key"]):
+			continue
+		var inward: Vector2 = end["inward"]
+		var out: Vector2 = end["out"]
+		var in3 := Vector3(inward.x, 0.0, inward.y)
+		var out3 := Vector3(out.x, 0.0, out.y)
+		var at: Vector2 = end["at"]
+		var foot := Vector3(at.x, 0.0, at.y)
+		# (Its board across the wall's depth, facing the way the end faces.)
+		var x_axis := in3 if in3.cross(Vector3.UP).dot(out3) > 0.0 else -in3
+		var origin := foot if x_axis == in3 else foot + in3 * wall
+		var y0: float = end["y0"]
+		var y1: float = end["y1"]
+		var rows := maxi(1, roundi(y1 - y0))
+		var tall := (y1 - y0) / rows
+		for r in rows:
+			_add(batches, "lining@" + String(end["space"]), Transform3D(Basis(x_axis * wall, Vector3.UP * tall, out3),
+				origin + Vector3.UP * (y0 + r * tall)))
+	for head: Dictionary in station.heads:
+		if revealed.has(head["key"]):
+			continue
+		var a: Vector2 = head["from"]
+		var b: Vector2 = head["to"]
+		var inward: Vector2 = head["inward"]
+		var in3 := Vector3(inward.x, 0.0, inward.y)
+		var along := Vector3(b.x - a.x, 0.0, b.y - a.y)
+		var count := maxi(1, roundi(along.length()))
+		var piece := along / count
+		var y: float = head["y"]
+		for k in count:
+			var at := Vector3(a.x, y, a.y) + piece * k
+			# (Facing down: along it, across the wall's depth.)
+			var y_axis := in3 * wall if piece.cross(in3).dot(Vector3.DOWN) > 0.0 else -in3 * wall
+			var origin := at if y_axis.dot(in3) > 0.0 else at + in3 * wall
+			_add(batches, "lining@" + String(head["space"]), Transform3D(Basis(piece, y_axis, Vector3.DOWN), origin))
+
+
+## The track's bed and its notches': concrete slabs, fitted, laid LAID over the shell's bed.
+static func _bed(station, batches: Dictionary) -> void:
+	for space: String in ["track", "track_notch_n", "track_notch_s"]:
+		for box: MeshInstance3D in station._floor_boxes.get(space, []):
+			var size: Vector3 = (box.mesh as BoxMesh).size
+			var lo := box.position - size / 2.0
+			var hi := box.position + size / 2.0
+			var nx := maxi(1, roundi((hi.x - lo.x) / MODULE))
+			var nz := maxi(1, roundi((hi.z - lo.z) / MODULE))
+			var sx := (hi.x - lo.x) / (nx * MODULE)
+			var sz := (hi.z - lo.z) / (nz * MODULE)
+			for i in nx:
+				for j in nz:
+					_add(batches, "bed_slab@" + space, Transform3D(Basis.from_scale(Vector3(sx, 1.0, sz)),
+						Vector3(lo.x + (i + 0.5) * MODULE * sx, hi.y + LAID, lo.z + (j + 0.5) * MODULE * sz)))
+
+
+## Each track's mouth's run into the dark: concrete on its two sides and under its roof, slabs on its bed, to its cap.
+static func _mouth_runs(station, batches: Dictionary) -> void:
+	for run: Array in station.mouth_runs:
+		var x0: float = run[0]
+		var x1: float = run[1]
+		var z: float = run[2]
+		var bed: float = run[3]
+		var roof: float = run[4]
+		var half: float = station.MOUTH.x / 2.0
+		var count := maxi(1, roundi((x1 - x0) / PANEL))
+		var sx := (x1 - x0) / (count * PANEL)
+		for k in count:
+			var x := x0 + k * PANEL * sx
+			for s in [-1.0, 1.0]:
+				var inward := Vector3(0.0, 0.0, -s)
+				var along := Vector3.UP.cross(inward)
+				var foot := Vector3(x if along.x > 0.0 else x + PANEL * sx, 0.0, z + s * half)
+				var basis := Basis(along, Vector3.UP, inward)
+				_rows(batches, "pit_face@mouths", basis, foot, sx, bed, roof, PIT)
+			for j in 3:
+				var wide := 2.0 * half / 3.0
+				_add(batches, "bed_slab@mouths", Transform3D(Basis.from_scale(Vector3(sx * PANEL / MODULE, 1.0,
+					wide / MODULE)), Vector3(x + PANEL * sx / 2.0, bed + LAID, z - half + (j + 0.5) * wide)))
+			_add(batches, "lining@mouths", Transform3D(Basis(Vector3.RIGHT * PANEL * sx, Vector3.BACK * 2.0 * half,
+				Vector3.DOWN), Vector3(x, roof - 0.001, z - half)))
 
 
 ## The hanging signs (over each of the hall's doors, and each platform's door to its stairs), and the line maps (on the
@@ -346,6 +502,7 @@ static func _tablets(station, root: Node3D) -> void:
 	if not walls.has("name_tablet"):
 		return
 	var look := Painterly.material(SetKit.painted(["underground_walls.png", "underground_walls_base.png"]), &"bespoke")
+	_plainly_lit(look)
 	var transforms: Array = []
 	for side in [-1.0, 1.0]:
 		var inward := Vector3(0.0, 0.0, -side)
@@ -354,7 +511,7 @@ static func _tablets(station, root: Node3D) -> void:
 		for x: float in TABLETS_X:
 			var start := Vector3(x, TABLET_FOOT, face_z) - along * 0.5
 			transforms.append(Transform3D(Basis(along, Vector3.UP, inward), start))
-	_many(root, "name_tablet@platforms", "name_tablet", walls["name_tablet"], look, transforms)
+	_many(root, "name_tablet@platform_n", "name_tablet", walls["name_tablet"], look, transforms)
 
 
 static func _many(root: Node3D, key: String, kind: String, mesh: Mesh, look: Material, transforms: Array) -> void:
@@ -362,7 +519,8 @@ static func _many(root: Node3D, key: String, kind: String, mesh: Mesh, look: Mat
 	for i in dressed.get_surface_count():
 		var slot: Material = mesh.surface_get_material(i)
 		var glazed := slot != null and slot.resource_name.begins_with("glass")
-		(dressed as ArrayMesh).surface_set_material(i, SetKit.glass() if glazed else look)
+		var lit := glazed and kind in ["strip_fitting", "coffer"]
+		(dressed as ArrayMesh).surface_set_material(i, _tube() if lit else (SetKit.glass() if glazed else look))
 	var many := MultiMesh.new()
 	many.transform_format = MultiMesh.TRANSFORM_3D
 	many.mesh = dressed
@@ -373,9 +531,82 @@ static func _many(root: Node3D, key: String, kind: String, mesh: Mesh, look: Mat
 	node.name = key.replace("@", "_")
 	node.multimesh = many
 	node.set_meta("kind", kind)
+	# (On its level's layer alone: lit only by its own level's lights.)
+	node.layers = level_of(key.get_slice("@", 1))
 	# (Its instances' transforms kept with it: a headless run's renderer keeps none.)
 	node.set_meta("transforms", transforms)
 	root.add_child(node)
+
+
+## The layer of a group of dressing (its space, or what it serves): the hall, its stairwells, or the level below them;
+## a door its both sides.
+static func level_of(group: String) -> int:
+	if group == "hall":
+		return Layers.STATION_HALL
+	if group.begins_with("stairs") or group in ["flights", "ramps"]:
+		return Layers.STATION_STAIRS
+	if group == "doors":
+		return Layers.STATION_HALL | Layers.STATION_STAIRS | Layers.STATION_BELOW
+	return Layers.STATION_BELOW
+
+
+## The station's light: each lamp lighting its own level's layer and the world's movers (the player, actors, hands,
+## effects, the lightgem's probe), never another level's: the hall's slab between it and the platforms stops nothing a
+## shadowless light sends.
+static func _light(station, root: Node3D) -> void:
+	var movers := Layers.WORLD | Layers.ACTORS | Layers.VIEWMODEL | Layers.FX | Layers.GEM_PROBE
+	var hall_top: float = float(station.spaces()["hall"]["floor"]) + float(station.spaces()["hall"]["height"])
+	var places := []
+	for x: float in HALL_LAMPS_X:
+		for z: float in HALL_LAMPS_Z:
+			places.append([Vector3(x, hall_top - 0.8, z), HALL_LAMP, Layers.STATION_HALL])
+	var platform_top: float = float(station.spaces()["platform_n"]["floor"]) + float(station.spaces()["platform_n"]["height"])
+	for side in [-1.0, 1.0]:
+		for x: float in PLATFORM_LAMPS_X:
+			places.append([Vector3(x, platform_top - 0.6, side * (float(station.EDGE_Z) + STRIP_IN)), PLATFORM_LAMP,
+				Layers.STATION_BELOW])
+	for at: Vector3 in STAIR_LAMPS:
+		places.append([at, STAIR_LAMP, Layers.STATION_STAIRS])
+	for spec: Array in places:
+		var lamp := OmniLight3D.new()
+		lamp.name = "fluorescent"
+		lamp.light_color = FLUO
+		lamp.light_energy = (spec[1] as Vector2).x
+		lamp.omni_range = (spec[1] as Vector2).y
+		lamp.shadow_enabled = false
+		lamp.light_cull_mask = int(spec[2]) | movers
+		root.add_child(lamp, true)
+		lamp.position = spec[0]
+		station.lights.append(lamp)
+
+
+## The shell's own boxes still seen (its floors and ceilings in the joints, the mouths' runs) on their levels' layers.
+static func _shell_layers(station) -> void:
+	for space: String in station._floor_boxes:
+		for box: MeshInstance3D in station._floor_boxes[space] + station._ceiling_boxes[space]:
+			box.layers = level_of(space)
+	for box: MeshInstance3D in station.shell:
+		if box.layers == Layers.WORLD:
+			box.layers = Layers.STATION_BELOW if box.name.begins_with("mouth") or box.name.begins_with("track") \
+				else level_of(String(box.name).get_slice("_wall", 0))
+
+
+## Lit plainly by the station's own light: the painted light's broken bands off (on its tall plain walls they threw
+## dark camouflage blotches; the look pass after the Metro sets the house's painted treatment for every kit).
+static func _plainly_lit(look: ShaderMaterial) -> void:
+	look.set_shader_parameter("painted_light", 0.0)
+	look.set_shader_parameter("ramp_amount", 0.0)
+
+
+## The fluorescent tubes' glow.
+static func _tube() -> StandardMaterial3D:
+	var glow := StandardMaterial3D.new()
+	glow.albedo_color = FLUO
+	glow.emission_enabled = true
+	glow.emission = FLUO
+	glow.emission_energy_multiplier = TUBE_GLOW
+	glow.roughness = 0.3
+	return glow
 
 
 static func _add(batches: Dictionary, key: String, transform: Transform3D) -> void:

@@ -28,6 +28,7 @@ Frames (Blender: x along, -y out toward the room, z up; Godot turns -y into +z):
     Blender -b --factory-startup --python tools/eclipse/station_shell.py
 """
 
+import math
 import os
 import random
 import sys
@@ -41,7 +42,7 @@ from underground_shapes import box, pipe, smooth_object  # noqa: E402
 
 NAME = "station_shell"
 ATLAS = 4096
-SLOTS = ["tile_wall", "tile_dark", "tile_line", "tile_odd", "mortar", "plaster", "plaster_vault", "cement", "stone",
+SLOTS = ["tile_wall", "tile_dark", "tile_line", "tile_odd", "mortar", "plaster_wall", "plaster_vault", "cement", "cement_cast", "stone",
          "stone_old", "paint_yellow", "steel", "iron", "brass", "sign", "glass"]
 
 rng = random.Random(1969)
@@ -51,7 +52,7 @@ FACE = underground_walls.FACE
 MORTAR = underground_walls.MORTAR
 # The tiled panels' height (to just over their cap: the plaster above them is plaster_sheet's, the atlas kept for the
 # tiles).
-HEIGHTS = {"low": 2.5}
+HEIGHTS = {"low": underground_walls.CAP[1]}
 # The terrazzo floor's slabs, its stone copings (reaching in from the edge; the yellow line's place in it), the pit's
 # depth under a platform.
 MODULE = 1.2
@@ -107,13 +108,79 @@ def _panel(height, build):
     return made
 
 
+def _courses():
+    """underground_walls' courses in running bond, but where a course's tile is cut by the panel's edge its half ends
+    flush with it, so the next panel's half makes it whole: no joint runs straight up the wall at every panel's edge."""
+    places = []
+    joint = underground_walls.JOINT
+    for k, (z0, z1, width, slot) in enumerate(underground_walls.COURSES):
+        edges = [0.0]
+        x = width / 2 if k % 2 else width
+        while x < PANEL - 1e-6:
+            edges.append(x)
+            x += width
+        edges.append(PANEL)
+        for i, (a, b) in enumerate(zip(edges, edges[1:])):
+            cut = k % 2 == 1
+            a0 = a if cut and i == 0 else a + joint / 2
+            b0 = b if cut and i == len(edges) - 2 else b - joint / 2
+            places.append((a0, b0, z0 + joint / 2, z1 - joint / 2, slot, k))
+    return places
+
+
+def _tiled(worn):
+    """A tiled panel to just over its cap, its tiles in the flush bond; worn, where the years show (tiles fallen to the
+    mortar, others replaced with whatever was to hand, one cracked across)."""
+    def made(m):
+        box(m, (0.0, -MORTAR, 0.0), (PANEL, 0.0, underground_walls.CAP[1]), "mortar", r=0.0)
+        places = _courses()
+        fallen, odd, cracked = set(), set(), -1
+        if worn:
+            field = [i for i, p in enumerate(places) if p[4] == "tile_wall" and p[5] < len(underground_walls.COURSES) - 1]
+            rng.shuffle(field)
+            fallen, odd, cracked = set(field[:7]), set(field[7:12]), field[12]
+        for i, (x0, x1, z0, z1, slot, _) in enumerate(places):
+            if i in fallen:
+                continue
+            if i == cracked:
+                cut = x0 + (x1 - x0) * 0.4
+                underground_walls._tile(m, x0, cut - 0.002, z0, z1, slot)
+                underground_walls._tile(m, cut + 0.002, x1, z0, z1, slot)
+                continue
+            underground_walls._tile(m, x0, x1, z0, z1, "tile_odd" if i in odd else slot)
+
+    return made
+
+
 def plaster_sheet(m):
-    box(m, (0.0, -MORTAR, 0.0), (PANEL, 0.0, 1.0), "plaster", r=0.0)
+    box(m, (0.0, -MORTAR, 0.0), (PANEL, 0.0, 1.0), "plaster_wall", r=0.0)
+
+
+def lining(m):
+    """A cast cement board lining a wall's bare end or an opening's head: 1 m along x, 1 m up z, its face toward -y."""
+    box(m, (0.0, -0.04, 0.0), (1.0, 0.0, 1.0), "cement_cast", r=0.0)
+
+
+def sill(m):
+    """A door's stone threshold: 1 m wide along x, reaching 1 m back along +y from its front edge, its top at z = 0."""
+    box(m, (0.0, 0.0, -0.06), (1.0, 1.0, 0.0), "stone_old", r=0.008)
+
+
+def bed_slab(m):
+    """The track's concrete bed: a MODULE square centred on the origin, its top at z = 0."""
+    h = MODULE / 2 - 0.004
+    box(m, (-h, -h, -SLAB), (h, h, 0.0), "cement", r=0.004)
+
+
+def rail_post(m):
+    """A handrail's end post: its iron upright and the rail's brass end over it."""
+    pipe(m, [(0.0, 0.0, 0.0), (0.0, 0.0, 0.875)], 0.02, 6, "iron")
+    pipe(m, [(-0.02, 0.0, 0.9), (0.03, 0.0, 0.9)], 0.03, 8, "brass")
 
 
 def pit_face(m):
     """The pit's face under a platform's edge: rough concrete."""
-    box(m, (0.0, -0.04, 0.0), (PANEL, 0.0, PIT), "cement", r=0.0)
+    box(m, (0.0, -0.04, 0.0), (PANEL, 0.0, PIT), "cement_cast", r=0.0)
 
 
 # --- the floor -------------------------------------------------------------------------------------
@@ -153,16 +220,16 @@ def column_hall(m):
     box(m, (-s, -s, 1.3), (s, s, 1.5), "tile_line", r=0.0)
     box(m, (-s, -s, 1.5), (s, s, 2.42), "tile_wall", r=0.0)
     box(m, (-s - 0.02, -s - 0.02, 2.42), (s + 0.02, s + 0.02, 2.5), "tile_dark", r=0.0)
-    box(m, (-s + 0.01, -s + 0.01, 2.5), (s - 0.01, s - 0.01, h - 0.15), "plaster", r=0.0)
-    box(m, (-s - 0.06, -s - 0.06, h - 0.15), (s + 0.06, s + 0.06, h), "plaster", r=0.02)
+    box(m, (-s + 0.01, -s + 0.01, 2.5), (s - 0.01, s - 0.01, h - 0.15), "plaster_wall", r=0.0)
+    box(m, (-s - 0.06, -s - 0.06, h - 0.15), (s + 0.06, s + 0.06, h), "plaster_wall", r=0.02)
 
 
 def column_track(m):
     """A column between the tracks: plain concrete, chamfered, a plinth the ballast water has stained."""
     w, h = COLUMN_TRACK
     s = w / 2
-    box(m, (-s - 0.05, -s - 0.05, 0.0), (s + 0.05, s + 0.05, 0.3), "cement", r=0.02)
-    box(m, (-s, -s, 0.3), (s, s, h), "cement", r=0.03)
+    box(m, (-s - 0.05, -s - 0.05, 0.0), (s + 0.05, s + 0.05, 0.3), "cement_cast", r=0.02)
+    box(m, (-s, -s, 0.3), (s, s, h), "cement_cast", r=0.03)
 
 
 # --- the ceilings ----------------------------------------------------------------------------------
@@ -171,16 +238,32 @@ def coffer(m):
     """A coffer of the hall's ceiling: its beams round a recess, a fluorescent fitting across it."""
     c = COFFER / 2
     b = BEAM
-    box(m, (-c, -c, -COFFER_DEPTH), (c, -c + b, 0.0), "plaster_vault", r=0.02)
-    box(m, (-c, c - b, -COFFER_DEPTH), (c, c, 0.0), "plaster_vault", r=0.02)
-    box(m, (-c, -c + b, -COFFER_DEPTH), (-c + b, c - b, 0.0), "plaster_vault", r=0.02)
-    box(m, (c - b, -c + b, -COFFER_DEPTH), (c, c - b, 0.0), "plaster_vault", r=0.02)
+    _beams(m, c, b, COFFER_DEPTH, 0.02)
     box(m, (-c + b, -c + b, -0.04), (c - b, c - b, 0.0), "plaster_vault", r=0.0)
     _fitting(m, -c + b + 0.1, c - b - 0.1, -0.04)
 
 
+def _beams(m, c, b, d, r):
+    """A coffer's ring of beams, half of each beam its neighbour's: one profile swept round the square, its outside
+    square (two coffers' soffits meet flat, no groove between them to catch the light) and its edge on the recess
+    rounded `r` in two segments."""
+    k = math.sqrt(0.5)
+    profile = [(c, 0.0), (c, -d), (c - b + r, -d), (c - b + r * (1.0 - k), -d + r * (1.0 - k)), (c - b, -d + r),
+               (c - b, 0.0)]
+    m.shell()
+    for (s0, z0), (s1, z1) in zip(profile, profile[1:] + profile[:1]):
+        for (ax, ay), (bx, by) in zip(CORNERS, CORNERS[1:] + CORNERS[:1]):
+            m.face([(ax * s0, ay * s0, z0), (bx * s0, by * s0, z0), (bx * s1, by * s1, z1), (ax * s1, ay * s1, z1)],
+                   "plaster_vault")
+
+
+# A square's corners, counter-clockwise from above.
+CORNERS = [(1.0, 1.0), (-1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)]
+
+
 def ceiling_panel(m):
-    h = MODULE / 2 - 0.002
+    """A MODULE square of the plastered ceiling centred on the origin, its top at z = 0: met by the next, seamless."""
+    h = MODULE / 2
     box(m, (-h, -h, -0.04), (h, h, 0.0), "plaster_vault", r=0.0)
 
 
@@ -214,19 +297,19 @@ def handrail(m):
 # --- openings --------------------------------------------------------------------------------------
 
 def _reveal(w, h, d):
-    """An opening's cement lining: its jambs and head through the wall's depth, an architrave round it either face."""
+    """An opening's cast cement lining: its jambs and head through the wall's depth, an architrave round it either face."""
     def made(m):
         a, proud = ARCH
         x0, x1 = -w / 2, w / 2
         for x, inward in ((x0, 1), (x1, -1)):
             lo, hi = sorted((x, x + inward * LINING))
-            box(m, (lo, 0.0, 0.0), (hi, d, h), "cement", r=0.0)
-        box(m, (x0 + LINING, 0.0, h - LINING), (x1 - LINING, d, h), "cement", r=0.0)
+            box(m, (lo, 0.0, 0.0), (hi, d, h), "cement_cast", r=0.0)
+        box(m, (x0 + LINING, 0.0, h - LINING), (x1 - LINING, d, h), "cement_cast", r=0.0)
         for y0, y1 in ((-proud, 0.0), (d, d + proud)):
             for x, away in ((x0, -1), (x1, 1)):
                 lo, hi = sorted((x, x + away * a))
-                box(m, (lo, y0, 0.0), (hi, y1, h), "cement", r=0.0)
-            box(m, (x0 - a, y0, h), (x1 + a, y1, h + a), "cement", r=0.0)
+                box(m, (lo, y0, 0.0), (hi, y1, h), "cement_cast", r=0.0)
+            box(m, (x0 - a, y0, h), (x1 + a, y1, h + a), "cement_cast", r=0.0)
 
     return made
 
@@ -238,8 +321,8 @@ def _portal(size):
         f, d = FRAME
         for x, away in ((-w / 2, -1), (w / 2, 1)):
             lo, hi = sorted((x, x + away * f))
-            box(m, (lo, -d, 0.0), (hi, 0.0, h), "cement", r=0.02)
-        box(m, (-w / 2 - f, -d, h), (w / 2 + f, 0.0, h + f), "cement", r=0.02)
+            box(m, (lo, -d, 0.0), (hi, 0.0, h), "cement_cast", r=0.02)
+        box(m, (-w / 2 - f, -d, h), (w / 2 + f, 0.0, h + f), "cement_cast", r=0.02)
         box(m, (-w / 2 - f - 0.05, -d - 0.04, h + f), (w / 2 + f + 0.05, 0.0, h + f + 0.12), "stone_old", r=0.02)
 
     return made
@@ -275,9 +358,9 @@ def line_map(m):
 
 PIECES = []
 for _h, _height in HEIGHTS.items():
-    PIECES += [("wall_" + _h, _panel(_height, underground_walls.wall_tiled)),
-               ("wall_%s_worn" % _h, _panel(_height, underground_walls.wall_tiled_worn))]
-PIECES += [("plaster_sheet", plaster_sheet), ("pit_face", pit_face), ("floor_slab_a", _slab(False)),
+    PIECES += [("wall_" + _h, _tiled(False)), ("wall_%s_worn" % _h, _tiled(True))]
+PIECES += [("plaster_sheet", plaster_sheet), ("lining", lining), ("sill", sill), ("bed_slab", bed_slab),
+           ("rail_post", rail_post), ("pit_face", pit_face), ("floor_slab_a", _slab(False)),
            ("floor_slab_b", _slab(False)), ("floor_slab_c", _slab(True)), ("coping", coping),
            ("column_hall", column_hall), ("column_track", column_track), ("coffer", coffer),
            ("ceiling_panel", ceiling_panel), ("strip_fitting", strip_fitting), ("tread", tread), ("handrail", handrail),

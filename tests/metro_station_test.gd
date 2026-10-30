@@ -4,6 +4,7 @@ extends Node3D
 ##   Godot --headless --fixed-fps 60 --path . res://tests/metro_station_test.tscn
 
 const STATION := preload("res://maps/metro_station.tscn")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 
 var results: Array[String] = []
 var failures := 0
@@ -19,6 +20,7 @@ func _ready() -> void:
 	await _walked()
 	_mouths()
 	_dressed()
+	_lit()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -171,6 +173,149 @@ func _dressed() -> void:
 				aabb.position.y - under])
 	_check("S4c over the walks, nothing lower than 2.4 m", low.is_empty(), "%s" % [low.slice(0, 5)])
 
+	# S4d: no bare end of wall or lintel's underside: each lined, or inside a door's reveal (sampled at its middle, a
+	# hair in front of it).
+	var reveals := (drawn["boxes"] as Array).filter(func(b): return String(b["kind"]).begins_with("reveal_"))
+	var bare_ends := []
+	for end: Dictionary in station.ends:
+		var at: Vector2 = end["at"]
+		var out: Vector2 = end["out"]
+		var inward: Vector2 = end["inward"]
+		var mid := at + inward * float(station.WALL) / 2.0 + out * 0.02
+		var p := Vector3(mid.x, (float(end["y0"]) + float(end["y1"])) / 2.0, mid.y)
+		if not _covered(drawn, p):
+			bare_ends.append("end %s" % p.snapped(Vector3.ONE * 0.1))
+	for head: Dictionary in station.heads:
+		var a: Vector2 = head["from"]
+		var b: Vector2 = head["to"]
+		var inward: Vector2 = head["inward"]
+		var mid := (a + b) / 2.0 + inward * float(station.WALL) / 2.0
+		var p := Vector3(mid.x, float(head["y"]) - 0.02, mid.y)
+		if not _covered(drawn, p):
+			bare_ends.append("head %s" % p.snapped(Vector3.ONE * 0.1))
+	_check("S4d no bare end of wall or lintel's underside", bare_ends.is_empty() and not station.ends.is_empty(),
+		"%d ends, %d heads; bare %s" % [station.ends.size(), station.heads.size(), bare_ends.slice(0, 6)])
+
+	# S4e: each ramp clad: its sides and its underside covered at every metre along it.
+	var bare_ramps := []
+	for ramp: MeshInstance3D in station.ramp_boxes:
+		var size: Vector3 = (ramp.mesh as BoxMesh).size
+		var t: Transform3D = ramp.transform
+		var k := 0.5
+		while k < size.z:
+			var at: Vector3 = t.origin + t.basis.z * (k - size.z / 2.0)
+			for p in [at + t.basis.x * (size.x / 2.0 + 0.02), at - t.basis.x * (size.x / 2.0 + 0.02),
+					at - t.basis.y * (size.y / 2.0 + 0.02)]:
+				if not _covered(drawn, p):
+					bare_ramps.append("%s %s" % [ramp.name, (p as Vector3).snapped(Vector3.ONE * 0.1)])
+			k += 1.0
+	_check("S4e every ramp clad, its sides and underside", bare_ramps.is_empty() and not station.ramp_boxes.is_empty(),
+		"%s" % [bare_ramps.slice(0, 6)])
+
+	# S4f: each revealed door has its threshold.
+	var sills := (drawn["boxes"] as Array).filter(func(b): return b["kind"] == "sill")
+	var unsilled := []
+	for reveal: Dictionary in reveals:
+		var r: AABB = reveal["aabb"]
+		var foot := Vector3(r.get_center().x, r.position.y + 0.005, r.get_center().z)
+		if not sills.any(func(b): return (b["aabb"] as AABB).grow(0.02).has_point(foot)):
+			unsilled.append(foot.snapped(Vector3.ONE * 0.1))
+	_check("S4f every door has its threshold", unsilled.is_empty() and not reveals.is_empty(), "%s" % [unsilled])
+
+	# S4g: the track steps' walls are the platform's where they stand over it: tiled a metre over the platform's floor,
+	# plastered near their top, the pit's concrete only under the platform's floor.
+	var platform: float = station.spaces()["platform_n"]["floor"]
+	var wrong_notch := []
+	var notch_faces := 0
+	for face: Dictionary in faces:
+		if not String(face["space"]).begins_with("track_notch") or float(face["y1"]) < platform + 2.0:
+			continue
+		notch_faces += 1
+		var a: Vector2 = face["a"]
+		var b: Vector2 = face["b"]
+		var p: Vector2 = (a + b) / 2.0 + (face["inward"] as Vector2) * 0.03
+		for want: Array in [[platform - 1.0, "pit_face"], [platform + 1.0, "wall_low"], [float(face["y1"]) - 0.3, "plaster_sheet"]]:
+			var at := Vector3(p.x, want[0], p.y)
+			var kinds := _kinds_at(drawn, at)
+			if not kinds.any(func(k): return String(k).begins_with(want[1])):
+				wrong_notch.append("%s %s: %s, wanted %s" % [face["space"], at.snapped(Vector3.ONE * 0.1), kinds, want[1]])
+	_check("S4g the track steps' walls the platform's over its floor", notch_faces > 0 and wrong_notch.is_empty(),
+		"%d faces; %s" % [notch_faces, wrong_notch.slice(0, 6)])
+
+
+## Task 6: the station's light.
+## S6: every walk lit: each of S2's waypoints, a metre over its floor, within 70 % of some station light's reach, that
+## light's own level (none lit from another floor through a slab).
+## S6b: the tunnel mouths dark: no light within 6 m of a mouth's far half.
+## S6c: the light in budget: at most 40 shadowless lights and at most 2 with shadows.
+## S6d: no light through a floor: each light lights its own level's layer (and the world's movers: the player, actors,
+## hands, effects, the lightgem's probe) and never another level's; every dressing piece is on its level's layer.
+## S6e: the fittings glow: every fluorescent tube's surface emits.
+func _lit() -> void:
+	var lights: Array = station.get("lights") if station.get("lights") != null else []
+	var hall: int = Layers.STATION_HALL
+	var stairs: int = Layers.STATION_STAIRS
+	var below: int = Layers.STATION_BELOW
+	var levels := hall | stairs | below
+	var dark := []
+	var walks := [[Vector3(0.0, 1.0, -9.0), below], [Vector3(40.0, 1.0, -9.0), below], [Vector3(-45.0, 1.0, -9.0), below],
+		[Vector3(-2.0, 1.0, -20.0), stairs], [Vector3(-2.0, 1.0, -29.0), stairs], [Vector3(-6.0, 4.0, -21.0), stairs],
+		[Vector3(-6.0, 7.0, -12.5), hall], [Vector3(6.0, 7.0, 12.5), hall], [Vector3(-25.0, 7.0, 0.0), hall],
+		[Vector3(25.0, 7.0, 0.0), hall], [Vector3(0.0, 7.0, 0.0), hall], [Vector3(2.0, 1.0, 29.0), stairs],
+		[Vector3(2.0, 1.0, 10.0), below], [Vector3(-40.0, 1.0, 10.0), below], [Vector3(40.0, 1.0, 10.0), below]]
+	for walk in walks:
+		var at: Vector3 = walk[0]
+		var lit := lights.any(func(l): return (l as Light3D).light_cull_mask & int(walk[1]) != 0 \
+			and (l as Node3D).position.distance_to(at) < 0.7 * _reach(l))
+		if not lit:
+			dark.append(at)
+	_check("S6 every walk lit by its own level's light", not lights.is_empty() and dark.is_empty(), "%d lights; dark %s" % [
+		lights.size(), dark])
+
+	var near_mouth := []
+	for light: Light3D in lights:
+		for end in [-1.0, 1.0]:
+			for z: float in station.TRACKS_Z:
+				var far_half := Vector3(end * (50.0 + station.DARK_RUN * 0.75), 1.0, z)
+				if light.position.distance_to(far_half) < 6.0:
+					near_mouth.append(light.name)
+	_check("S6b the tunnel mouths dark", near_mouth.is_empty(), "%s" % [near_mouth])
+
+	var plain := lights.filter(func(l): return not (l as Light3D).shadow_enabled).size()
+	var shadowed := lights.size() - plain
+	_check("S6c the light in budget", plain <= 40 and shadowed <= 2, "%d shadowless, %d shadowed" % [plain, shadowed])
+
+	var leaks := []
+	for light: Light3D in lights:
+		var own: int = light.light_cull_mask & levels
+		if own != hall and own != stairs and own != below:
+			leaks.append("%s lights levels %d" % [light.name, own])
+		if light.light_cull_mask & (Layers.WORLD | Layers.ACTORS | Layers.VIEWMODEL | Layers.GEM_PROBE) \
+				!= (Layers.WORLD | Layers.ACTORS | Layers.VIEWMODEL | Layers.GEM_PROBE):
+			leaks.append("%s misses the movers" % light.name)
+	for node in station.find_children("*", "MultiMeshInstance3D", true, false):
+		var on: int = (node as VisualInstance3D).layers
+		if on & levels == 0 or on & Layers.WORLD != 0:
+			leaks.append("%s on layers %d" % [node.name, on])
+	_check("S6d no light through a floor", leaks.is_empty(), "%s" % [leaks.slice(0, 6)])
+
+	var unlit := []
+	for node in station.find_children("*", "MultiMeshInstance3D", true, false):
+		if not node.get_meta("kind", "") in ["strip_fitting", "coffer"]:
+			continue
+		var mesh := (node as MultiMeshInstance3D).multimesh.mesh
+		var glows := false
+		for i in mesh.get_surface_count():
+			var m := mesh.surface_get_material(i) as BaseMaterial3D
+			glows = glows or (m != null and m.emission_enabled and m.emission_energy_multiplier > 0.5)
+		if not glows:
+			unlit.append(node.name)
+	_check("S6e the fittings glow", unlit.is_empty(), "%s" % [unlit])
+
+
+func _reach(light: Light3D) -> float:
+	return (light as OmniLight3D).omni_range if light is OmniLight3D else (light as SpotLight3D).spot_range
+
 
 ## Where the set's dressing is drawn: {"boxes": [{kind, aabb}] in its frame, "grid": {cell: [box indices]}}, its
 ## MultiMeshes' instances each its own box.
@@ -198,6 +343,15 @@ func _drawn() -> Dictionary:
 							grid[key] = []
 						grid[key].append(boxes.size() - 1)
 	return {"boxes": boxes, "grid": grid}
+
+
+## The kinds of dressing drawn over `at`.
+func _kinds_at(drawn: Dictionary, at: Vector3) -> Array:
+	var kinds := []
+	for i in drawn["grid"].get(Vector3i((at / 2.0).floor()), []):
+		if (drawn["boxes"][i]["aabb"] as AABB).grow(0.01).has_point(at):
+			kinds.append(drawn["boxes"][i]["kind"])
+	return kinds
 
 
 func _covered(drawn: Dictionary, at: Vector3) -> bool:

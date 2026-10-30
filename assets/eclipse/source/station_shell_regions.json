@@ -5,9 +5,10 @@
   "tile_line",
   "tile_odd",
   "mortar",
-  "plaster",
+  "plaster_wall",
   "plaster_vault",
   "cement",
+  "cement_cast",
   "stone",
   "stone_old",
   "paint_yellow",
@@ -18,5 +19,5 @@
   "glass"
  ],
  "atlas_px": 4096,
- "px_per_m": 112.68
+ "px_per_m": 112.45
 }
