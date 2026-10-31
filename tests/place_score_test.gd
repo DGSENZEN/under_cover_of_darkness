@@ -12,9 +12,53 @@ func check(ok: bool, message: String) -> void:
 func near(a: float, b: float, within := 0.0005) -> bool:
 	return absf(a - b) <= within
 
+const FIXTURE := "res://tests/fixtures/place_score/score.json"
+## The fixture: 240 bpm, a bar is one second, a phrase four.
+const BAR := 1.0
+const PHRASE := 4.0
+const STEP := 1.0 / 60.0
+## A swell from silence, and the longest weight glide (1 / WEIGHT_GLIDE), with a little over.
+const SWELL := 1.5
+const GLIDE := 1.25
+var pos := 0.0
+
+
+## Zones a test sets by hand.
+class StubZones extends PlaceZones:
+	var w := {}
+	var d := 0.0
+
+	func weights_at(_point: Vector3) -> Dictionary:
+		return w
+
+	func depth_at(_point: Vector3) -> float:
+		return d
+
+
+func make_score(path := FIXTURE) -> PlaceScore:
+	pos = 0.0
+	var score := PlaceScore.new()
+	score.score_json_path = path
+	score.position_source = func() -> float: return pos
+	score.listener_source = func() -> Vector3: return Vector3.ZERO
+	score.zones = StubZones.new()
+	add_child(score)
+	score.set_process(false)
+	return score
+
+
+## Advance the bed's position in 1/60 s steps, stepping the score with it;
+## `scale` scales only the frame's delta (slow motion: the audio runs on).
+func run_for(score: PlaceScore, seconds: float, scale := 1.0) -> void:
+	for i in range(roundi(seconds / STEP)):
+		pos += STEP
+		score.step(STEP * scale)
+
+
 func _ready() -> void:
 	clock_checks()
 	zone_checks()
+	score_checks()
 	await get_tree().process_frame
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failures else 0)
@@ -46,3 +90,106 @@ func zone_checks() -> void:
 	check(near(zones.depth_at(Vector3(5.0, -11.0, 75.45)), 0.35) and near(zones.depth_at(Vector3(0.0, -14.0, -10.0)), 0.0), "Z7 depth by age: the market 0.35, the platform 0")
 	check(near(zones.depth_at(Vector3(100.0, -26.0, -185.0)), 1.0) and near(zones.depth_at(Vector3(0.0, -21.0, 0.0)), 0.7), "Z8 the old layer 0.7, deeper toward the shells' 1")
 	check(zones.space_at(Vector3(0.0, 5.0, 0.0)) == "", "Z9 over the hall's ceiling is in no space")
+
+func score_checks() -> void:
+	var score := make_score()
+	var zones := score.zones as StubZones
+	check(score.available and score.bed_playing(), "S1 the bed plays at once")
+	# Depth is only read while standing in some space (some weight).
+	zones.w = {"a": 0.0}
+	run_for(score, SWELL)
+	check(near(score.stem_gain_db(&"bed", &"drone_city"), 0.0, 0.5) and score.stem_gain_db(&"bed", &"drone_deep") <= -79.0, "S1 at depth 0, the city drone alone")
+	zones.d = 1.0
+	run_for(score, 4.0)
+	check(score.stem_gain_db(&"bed", &"drone_city") <= -79.0 and near(score.stem_gain_db(&"bed", &"drone_deep"), 0.0, 0.5), "S2 at depth 1, the deep drone alone")
+	zones.d = 0.0
+	score.free()
+
+	score = make_score()
+	zones = score.zones as StubZones
+	run_for(score, 0.3)
+	zones.w = {"a": 1.0}
+	run_for(score, 3.6)
+	check(not score.theme_playing(&"a"), "S3 not before the next phrase line")
+	run_for(score, 0.2)
+	check(score.theme_playing(&"a") and near(score.theme_started_at(&"a"), PHRASE, 0.02), "S3 a theme starts on the phrase line: %.3f" % score.theme_started_at(&"a"))
+	run_for(score, BAR)
+	check(score.stem_gain_db(&"a", &"lead") >= -1.0 and score.stem_gain_db(&"a", &"lead_full") <= -79.0, "S4 a bar in, the calm lead is up, the full one not")
+	run_for(score, 2.0 * PHRASE)
+	check(score.intensity_of(&"a") == &"full" and score.stem_gain_db(&"a", &"lead_full") >= -1.0, "S5 two phrases on, the theme is full")
+	var started := score.theme_started_at(&"a")
+	zones.w = {"a": 0.0}
+	run_for(score, 1.0 * BAR)
+	zones.w = {"a": 1.0}
+	run_for(score, 2.0 * BAR)
+	check(score.theme_playing(&"a") and near(score.theme_started_at(&"a"), started) and score.stem_gain_db(&"a", &"lead") >= -1.0, "S7 coming back while it fades swells it back, no restart")
+	zones.w = {"a": 0.0}
+	# The weight glides to nothing (1.25 s at most), then FADE_BARS of fade.
+	run_for(score, GLIDE + 2.0 * BAR + 0.05)
+	check(score.stem_gain_db(&"a", &"lead") <= -79.0, "S6 two bars after leaving, it has faded out: %.1f" % score.stem_gain_db(&"a", &"lead"))
+	run_for(score, PHRASE + 0.1)
+	check(not score.theme_playing(&"a"), "S6 a phrase at silence, it stops")
+	score.free()
+
+	score = make_score()
+	zones = score.zones as StubZones
+	var starts := 0
+	var was := false
+	var worst := 0.0
+	var last := 0.0
+	for i in range(80):
+		zones.w = {"a": float(i % 2)}
+		for j in range(6):
+			pos += STEP
+			score.step(STEP)
+			var now := score.theme_weight(&"a")
+			worst = maxf(worst, absf(now - last) / STEP)
+			last = now
+			if score.theme_playing(&"a") and not was:
+				starts += 1
+			was = score.theme_playing(&"a")
+	check(starts <= 1 and worst <= PlaceScore.WEIGHT_GLIDE + 0.01, "S8 flickering on a threshold: %d starts, weight moving %.2f/s at most" % [starts, worst])
+	score.free()
+
+	score = make_score()
+	zones = score.zones as StubZones
+	zones.w = {"a": 1.0}
+	run_for(score, PHRASE + 2.0)
+	var lead := score.stem_gain_db(&"a", &"lead")
+	zones.w = {}
+	run_for(score, 2.0)
+	check(near(score.stem_gain_db(&"a", &"lead"), lead, 0.5) and score.theme_playing(&"a"), "S9 in no space, the last weights hold")
+	zones.w = {"a": 1.0}
+	zones.d = 0.5
+	run_for(score, 3.0)
+	check(near(score.stem_gain_db(&"a", &"lead") - score.stem_gain_db(&"a", &"lead_city"), 12.0, 0.5), "S10 a city part sits 12 dB under at depth 0.5")
+	zones.d = 0.0
+	score.free()
+
+	score = make_score()
+	zones = score.zones as StubZones
+	zones.w = {"a": 1.0}
+	run_for(score, PHRASE + 0.05)
+	run_for(score, 4.0 * 8.0 + 2.5)
+	check(score.intensity_of(&"a") == &"rest" and score.stem_gain_db(&"a", &"lead") <= -79.0 and score.stem_gain_db(&"a", &"bass") >= -1.0, "S11 after four loops it rests, the bass alone")
+	run_for(score, 2.0 * PHRASE - 2.4)
+	check(score.intensity_of(&"a") == &"calm", "S11 after its rest, calm again")
+	score.free()
+
+	var timings := []
+	for scale in [1.0, 0.25]:
+		score = make_score()
+		zones = score.zones as StubZones
+		Engine.time_scale = scale
+		run_for(score, 0.3, scale)
+		zones.w = {"a": 1.0}
+		run_for(score, PHRASE + 1.0, scale)
+		timings.append([score.theme_started_at(&"a"), score.stem_gain_db(&"a", &"lead")])
+		Engine.time_scale = 1.0
+		score.free()
+	check(near(timings[0][0], timings[1][0]) and near(timings[0][1], timings[1][1], 0.01), "S12 slow motion does not slow the score: %s" % [timings])
+
+	score = make_score("res://tests/fixtures/place_score/nowhere.json")
+	check(not score.available, "S13 no score, silent")
+	run_for(score, 1.0)
+	score.free()
