@@ -3573,6 +3573,114 @@ class YourShapes(unittest.TestCase):
         self.assertTrue((self.yours.YOURS / self.KIT / "gone.npz").exists())
 
 
+class StationEngine(unittest.TestCase):
+    """The Company's engine at the hall's middle (tools/eclipse/station_engine.py; the spec's item 5; the user, Oct 31:
+    "it looks like a toy instead of a gigantic engine ... more things going on at the same time"): a stepped plinth with
+    a railed walk round a tezontle housing, flywheels driving pistons, a glowing dynamo drum under a dome, a governor
+    on its crown, gear trains in its windows, rows of big tubes into the coffers with gauge boards. Two static pieces
+    (stone, works), each on its own atlas, and the moving pieces. Closed, in budget, through the gate."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_engine
+        cls.kit = station_engine
+        station_engine.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+        cls.static = [cls.objects[n] for n in station_engine.STATIC]
+
+    def _hit(self, at, way, reach):
+        hits = [h for h in (_hit(o, at, way, reach) for o in self.static) if h is not None]
+        return min(hits, key=lambda h: (h - Vector(at)).length) if hits else None
+
+    def _open(self, o):
+        """Open edges of its solids (its dial cards are open by nature)."""
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        cards = {i for i, mat in enumerate(o.data.materials) if mat.name in self.kit.CARDS}
+        open_edges = sum(1 for e in bm.edges if len(e.link_faces) != 2
+                         and not all(f.material_index in cards for f in e.link_faces))
+        bm.free()
+        return open_edges
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: self._open(o) for n, o in self.objects.items() if self._open(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o], skip=self.kit.CARDS)
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_every_gauge_has_its_dial_under_its_glass(self):
+        o = self.objects["engine_works"]
+        dials = [p for p in o.data.polygons if o.data.materials[p.material_index].name in self.kit.CARDS]
+        # (Each card drawn from both sides.)
+        self.assertEqual(len(dials), 2 * sum(len(c) for c in self.kit.GAUGES))
+
+    def test_it_stands_floor_to_ceiling_round_a_walk(self):
+        vs = [v for o in self.static for v in _world(o)]
+        self.assertAlmostEqual(min(v.z for v in vs), 0.0, delta=0.005)
+        self.assertAlmostEqual(max(v.z for v in vs), 5.0, delta=0.005)
+        # (Its foot within a 9.6 m square, clear of the lanes; its steps a walk's, its walk a metre and more wide.)
+        foot = [v for v in vs if v.z < 2.4]
+        self.assertLessEqual(max(max(abs(v.x), abs(v.y)) for v in foot), 4.8)
+        for _, _, rise in self.kit.STEPS:
+            self.assertLessEqual(rise, 0.3)
+        self.assertGreaterEqual(self.kit.RAIL - self.kit.TALUD[0], 1.1)
+        self.assertGreaterEqual(self.kit.RAIL_HIGH, 0.95)
+        r0, r1, proud = self.kit.RING
+        self.assertLessEqual(r1, 4.8)
+        self.assertAlmostEqual(proud, 0.035, delta=0.001)
+
+    def test_tube_rows_reach_the_ceiling(self):
+        self.assertGreaterEqual(len(self.kit.BUNDLES), 4)
+        for k, (x, y) in enumerate(self.kit.bundle_tops()):
+            hit = self._hit((x, y, 4.8), (0, 0, 1), 0.5)
+            self.assertIsNotNone(hit, k)
+            self.assertAlmostEqual(hit.z, 5.0, delta=0.15, msg=k)
+            self.assertGreaterEqual(len(self.kit.BUNDLES[k][1]), 3, k)
+            self.assertGreaterEqual(max(r for _, r in self.kit.BUNDLES[k][1]), 0.22, k)
+
+    def test_gauge_boards_and_clockwork(self):
+        self.assertGreaterEqual(len(self.kit.GAUGES), 4)
+        self.assertGreaterEqual(sum(len(c) for c in self.kit.GAUGES), 16)
+        for k, cluster in enumerate(self.kit.GAUGES):
+            for at, normal, r in cluster:
+                hit = self._hit(Vector(at) + Vector(normal) * 0.2, -Vector(normal), 0.4)
+                self.assertIsNotNone(hit, (k, at))
+                self.assertLessEqual((hit - Vector(at)).length, 0.03, (k, at))
+        gears = [n for n in self.objects if n.startswith("gear_")]
+        self.assertGreaterEqual(len(gears), 3)
+        self.assertEqual(sorted(gears), sorted(self.kit.GEARS))
+        self.assertGreaterEqual(len([s for s in self.kit.gear_spots()]), 12)
+
+    def test_flywheels_drive_pistons_inside_their_cylinders(self):
+        # (Each crank turning a whole turn keeps its piston rod inside its cylinder and its crosshead between its
+        # slide bars: the linkage EngineCrank plays in Godot.)
+        rho, length, rod = self.kit.CRANK
+        lo, hi = self.kit.CYLINDER_SPAN
+        self.assertGreaterEqual(len(self.kit.CRANKS), 4)
+        for k in range(72):
+            t = 2 * math.pi * k / 72
+            head = self.kit.crosshead_height(t)
+            self.assertGreaterEqual(head + rod, lo + 0.05, k)
+            self.assertLessEqual(head + rod, hi - 0.03, k)
+            self.assertGreaterEqual(head - 0.07, self.kit.SLIDES[0], k)
+        for name in ("flywheel", "conrod", "crosshead", "governor"):
+            self.assertIn(name, self.objects)
+
+    def test_it_takes_the_runs_and_the_trays(self):
+        # (The runs' meeting point is inside the dome: every way out of it meets the engine.)
+        for way in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
+            self.assertIsNotNone(self._hit(self.kit.TERMINAL, way, 2.5), way)
+        # (Each tray ends inside an iron box round a row.)
+        for end in self.kit.TRAY_ENDS:
+            up = self._hit(end, (0, 0, 1), 0.6)
+            down = self._hit(end, (0, 0, -1), 0.6)
+            self.assertIsNotNone(up, end)
+            self.assertIsNotNone(down, end)
+
+
 if __name__ == "__main__":
     # (`-- Class` or `-- Class.test_name` after Blender's own arguments runs just those.)
     chosen = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []

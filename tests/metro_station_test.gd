@@ -30,6 +30,7 @@ func _ready() -> void:
 	await _turnstiles()
 	_neon()
 	await _runs()
+	await _engine()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -129,7 +130,9 @@ func _runs() -> void:
 		return
 	# (A booth's roof and a turnstile pylon are no walks: looked through to the floor.)
 	var roofs := []
-	for piece: Node3D in station.taquillas + station.turnstiles:
+	# (The engine takes the runs in at its crown: its works are no floor under them.)
+	var engine_parts: Array = [station.engine] if station.get("engine") != null else []
+	for piece: Node3D in station.taquillas + station.turnstiles + engine_parts:
 		for body: StaticBody3D in piece.find_children("*", "StaticBody3D", true, false):
 			roofs.append(body.get_rid())
 	for run: Node3D in runs:
@@ -649,7 +652,8 @@ func _walked() -> void:
 	var up_way: Array[Vector3] = [Vector3(-2.0, 1.05, -13.0), Vector3(-2.0, 1.05, -29.2), Vector3(-6.0, 1.05, -29.2),
 		Vector3(-6.0, 1.05, -14.5), Vector3(-6.0, 1.05, -12.5)]
 	var up := await _walk_path(Vector3(0.0, 1.05, -9.0), up_way, 3600)
-	var down_way: Array[Vector3] = [Vector3(6.0, 1.05, 12.5), Vector3(6.0, 1.05, 14.5), Vector3(6.0, 1.05, 29.2),
+	# (Round the engine at the hall's middle.)
+	var down_way: Array[Vector3] = [Vector3(-6.5, 1.05, 6.5), Vector3(6.0, 1.05, 6.5), Vector3(6.0, 1.05, 12.5), Vector3(6.0, 1.05, 14.5), Vector3(6.0, 1.05, 29.2),
 		Vector3(2.0, 1.05, 29.2), Vector3(2.0, 1.05, 13.0), Vector3(2.0, 1.05, 10.0)]
 	var down := await _walk_path(Vector3(-6.0, 7.05, -12.5), down_way, 3600)
 	var in_hall: bool = up["ok"] and absf(float(up["end"].y) - 7.05) < 0.15
@@ -720,10 +724,12 @@ func _dressed() -> void:
 	_check("S4b no word on it", words.is_empty(), "%s" % [words.slice(0, 4)])
 
 	var low := []
-	# (A booth's roof and a riser's top are no walks: their bodies are looked through to the floor.)
+	# (A booth's roof, a riser's top and the engine's works are no walks: their bodies are looked through to the
+	# floor.)
 	var roofs := []
 	var tops: Array = (station.get("taquillas") if station.get("taquillas") != null else []) \
-		+ (station.get("risers") if station.get("risers") != null else [])
+		+ (station.get("risers") if station.get("risers") != null else []) \
+		+ ([station.engine] if station.get("engine") != null else [])
 	for piece: Node3D in tops:
 		for body: StaticBody3D in piece.find_children("*", "StaticBody3D", true, false):
 			roofs.append(body.get_rid())
@@ -1115,6 +1121,109 @@ func _ray(from: Vector3, to: Vector3, skip: Array = []) -> Vector3:
 	var hit := space.intersect_ray(q)
 	return station.to_local(hit.position) if not hit.is_empty() else to
 
+
+## Task 5: the Company's engine (the user, Oct 31: "a gigantic engine ... more things going on at the same time").
+## Where it stands, and what its foot keeps clear by ENGINE_CLEAR: the stair heads, the market stairs' mouth, each
+## lane's approach (x, z boxes on the hall's floor).
+const ENGINE_AT := Vector3(0.0, 6.0, 0.0)
+const ENGINE_CLEAR := 1.5
+const ENGINE_KEEP_CLEAR := [Vector2(-6.0, -12.5), Vector2(6.0, 12.5), Vector2(-10.0, 14.0)]
+const ENGINE_LANES := [Rect2(-16.0, -4.0, 4.0, 8.0), Rect2(12.0, -4.0, 4.0, 8.0)]
+## The corridors' mouths on the hall, walked between.
+const CORRIDOR_W := Vector3(-29.0, 7.05, 0.0)
+const CORRIDOR_E := Vector3(29.0, 7.05, 0.0)
+
+## S11: the engine stands at the hall's middle, its footprint clear of the stairs, the market stairs and the lanes'
+## approaches; the Company's blade signs stand on it, neon on both their faces.
+## S11b: the player walks from corridor_w's mouth to corridor_e's, through the banks' lanes and round the engine, and
+## climbs its plinth to its walk.
+## S11c: it runs: every gear and the governor turn, each flywheel turns its crank, its conrod joins its crank's pin to
+## its crosshead's at every frame, its crosshead rises and falls; all of it uninterpolated (moved between ticks).
+func _engine() -> void:
+	var engine = station.get("engine")
+	if engine == null:
+		_check("S11 the engine stands at the hall's middle", false, "no engine")
+		_check("S11b walked round the engine", false, "no engine")
+		_check("S11c the engine runs", false, "no engine")
+		return
+	var wrong := []
+	if (engine as Node3D).position.distance_to(ENGINE_AT) > 0.01:
+		wrong.append("at %s" % [engine.position])
+	var foot: Rect2 = engine.get_meta("footprint", Rect2())
+	if foot.size.x < 8.0:
+		wrong.append("footprint %s" % [foot])
+	for point: Vector2 in ENGINE_KEEP_CLEAR:
+		var near := Vector2(clampf(point.x, foot.position.x, foot.end.x), clampf(point.y, foot.position.y, foot.end.y))
+		if near.distance_to(point) < ENGINE_CLEAR:
+			wrong.append("%.2f m from %s" % [near.distance_to(point), point])
+	for lane: Rect2 in ENGINE_LANES:
+		if lane.grow(ENGINE_CLEAR).intersects(foot):
+			wrong.append("within %.1f m of the lane %s" % [ENGINE_CLEAR, lane])
+	var blades := 0
+	for sign: Node3D in station.neon:
+		if sign.get_meta("on", "") == "engine":
+			blades += 1
+	if blades < 8:
+		wrong.append("%d neon on its blade signs" % blades)
+	_check("S11 the engine stands at the hall's middle", wrong.is_empty(), "%s" % [wrong])
+	# S11b: across the hall by the lanes and round the engine's south side; up its steps onto its walk.
+	var hall_floor: float = station.spaces()["hall"]["floor"]
+	var lane_w := Vector3(-14.0, hall_floor + 1.05, 6.0)
+	var lane_e := Vector3(14.0, hall_floor + 1.05, 6.0)
+	for bank: Node3D in station.turnstiles:
+		var lanes: Array = bank.get_meta("lanes", [])
+		if not lanes.is_empty():
+			var lane: Vector3 = lanes[lanes.size() - 1]
+			if bank.get_meta("side", "") == "west":
+				lane_w = Vector3(lane.x, hall_floor + 1.05, lane.z)
+			else:
+				lane_e = Vector3(lane.x, hall_floor + 1.05, lane.z)
+	var round := [lane_w + Vector3(-2.5, 0.0, 0.0), lane_w + Vector3(2.5, 0.0, 0.0),
+		Vector3(-6.5, hall_floor + 1.05, 6.5), Vector3(6.5, hall_floor + 1.05, 6.5), lane_e + Vector3(-2.5, 0.0, 0.0),
+		lane_e + Vector3(2.5, 0.0, 0.0), CORRIDOR_E]
+	var across := await _walk_path(CORRIDOR_W, round, 3600)
+	# (Through the gate toward the window at 135°.)
+	var up := await _walk_path(Vector3(-4.6, hall_floor + 1.05, 4.6), [Vector3(-2.12, hall_floor + 1.05, 2.12)], 900)
+	var deck: float = (up["end"] as Vector3).y - (hall_floor + 1.05)
+	_check("S11b walked round the engine", across["ok"] and up["ok"] and deck > 0.45,
+		"across %s, up %s, on its deck %.2f m up" % [across, up, deck])
+	# S11c: it runs.
+	var spinners: Array = engine.get_meta("spinners", [])
+	var cranks: Array = engine.get_meta("cranks", [])
+	var faults := []
+	if spinners.size() < 13 or cranks.size() < 4:
+		faults.append("%d spinners, %d cranks" % [spinners.size(), cranks.size()])
+	var before := []
+	for spinner: Node3D in spinners:
+		before.append(spinner.get_child(0).global_transform.basis)
+	var heights := []
+	for crank: Node3D in cranks:
+		heights.append([INF, -INF])
+	for frame in 40:
+		await get_tree().process_frame
+		for k in cranks.size():
+			var crank: Node3D = cranks[k]
+			var wheel: Node3D = crank.get_node("flywheel")
+			var rod: Node3D = crank.get_node("conrod")
+			var head: Node3D = crank.get_node("crosshead")
+			var pin: Vector3 = wheel.global_transform * Vector3(float(crank.throw), float(crank.out), 0.0)
+			var far: Vector3 = rod.global_transform * Vector3(0.0, float(crank.conrod), 0.0)
+			if rod.global_position.distance_to(pin) > 0.01 or far.distance_to(head.global_position) > 0.01:
+				faults.append("crank %d frame %d: pin %.3f, head %.3f" % [k, frame, rod.global_position.distance_to(pin),
+					far.distance_to(head.global_position)])
+			heights[k] = [minf(heights[k][0], head.global_position.y), maxf(heights[k][1], head.global_position.y)]
+	for k in cranks.size():
+		if heights[k][1] - heights[k][0] < 0.1:
+			faults.append("crank %d's crosshead moved %.3f m" % [k, heights[k][1] - heights[k][0]])
+	for k in spinners.size():
+		var after: Basis = spinners[k].get_child(0).global_transform.basis
+		if (before[k].inverse() * after).get_rotation_quaternion().get_angle() < 0.01:
+			faults.append("%s did not turn" % spinners[k].name)
+	for node: Node3D in spinners + cranks:
+		for part: Node in [node] + node.get_children():
+			if part is Node3D and (part as Node3D).physics_interpolation_mode != Node.PHYSICS_INTERPOLATION_MODE_OFF:
+				faults.append("%s interpolated" % part.name)
+	_check("S11c the engine runs", faults.is_empty(), "%s" % [faults.slice(0, 6)])
 
 ## Walks the set's player from `start` along `way`, turning toward each point; arrived at each within 0.3 m.
 func _walk_path(start: Vector3, way: Array, frames: int) -> Dictionary:

@@ -93,6 +93,8 @@ var mouths: Array[Node3D] = []
 ## Its floor's mains (half sunk along the walls' feet) and its cable trays under the coffers.
 var floor_mains: Array[Node3D] = []
 var trays: Array[Node3D] = []
+## The Company's engine at the hall's middle (its meta: "footprint", "spinners", "cranks").
+var engine: Node3D
 ## Its own light (the dressing's fluorescents; the big pieces' brass lamps join them).
 var lights: Array[Light3D] = []
 ## Its flights' ramps: [their ends, as built, and their width]; the ramps themselves.
