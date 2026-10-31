@@ -1,0 +1,12 @@
+{
+ "slots": [
+  "chiluca",
+  "tezontle",
+  "talavera_cobalt",
+  "iron",
+  "brass",
+  "copper"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 119.43
+}

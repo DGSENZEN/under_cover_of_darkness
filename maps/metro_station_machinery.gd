@@ -14,6 +14,23 @@ const RUNS_JSON := "res://assets/eclipse/kit/station_runs.json"
 const PIPES_KIT := "res://assets/eclipse/kit/station_pipes.glb"
 const DUCTS_KIT := "res://assets/eclipse/kit/station_ducts.glb"
 const PIPES_JSON := "res://assets/eclipse/kit/station_pipes.json"
+const ENGINE_KIT := "res://assets/eclipse/kit/station_engine.glb"
+const ENGINE_WORKS_KIT := "res://assets/eclipse/kit/station_engine_works.glb"
+const ENGINE_JSON := "res://assets/eclipse/kit/station_engine.json"
+const Clockwork := preload("res://scripts/Visual/Clockwork.gd")
+const EngineCrank := preload("res://scripts/Visual/EngineCrank.gd")
+const ENGINE_CORE := preload("res://scripts/Visual/engine_core.gdshader")
+const ENGINE_DIAL := preload("res://scripts/Visual/engine_dial.gdshader")
+const ENGINE_LAMP := preload("res://scripts/Visual/engine_lamp.gdshader")
+## The Company's engine (station_engine: the stone and the works, each placed at its frame's origin): where it stands,
+## its footprint's reach round it (its brass ring), its core's light (energy, reach) and its height over the hall's
+## floor.
+const ENGINE_AT := Vector3(0.0, 6.0, 0.0)
+const ENGINE_REACH := 4.78
+const CORE_LIGHT := Vector2(2.4, 9.0)
+const CORE_LIGHT_HIGH := 2.8
+## Its blade signs' tubes' light: low, standing on its pale deck (full, they washed the plinth pink).
+const ENGINE_BLADE_LIGHT := Vector2(0.22, 3.0)
 ## The floor's pipe mouths (station_pipes' mouth), venting the Company's fuel fumes: where each stands (the set's frame,
 ## on its floor), the fumes' height over its foot (the kit's FUME_AT), how they look (the fuel's sour amber-green).
 const MOUTHS := [Vector3(-25.0, 6.0, -11.6), Vector3(25.0, 6.0, 11.6), Vector3(-3.0, 6.0, 11.6), Vector3(11.0, 6.0, -11.6),
@@ -71,6 +88,125 @@ static func dress(station, root: Node3D) -> void:
 	_neon(station, root)
 	_runs(station, root)
 	_racks(station, root)
+	_engine(station, root)
+
+
+## The Company's engine at the hall's middle: its stone and its works (solid), its glowing core and its gauges' dials
+## and lamps, its core's light; its gears and governor turning (Clockwork) and its flywheels driving their pistons
+## (EngineCrank), stood from station_engine.json; the Company's blade signs on its deck.
+static func _engine(station, root: Node3D) -> void:
+	if not (ResourceLoader.exists(ENGINE_KIT) and ResourceLoader.exists(ENGINE_WORKS_KIT)
+			and FileAccess.file_exists(ENGINE_JSON)):
+		return
+	var stone_kit := SetKit.kit(ENGINE_KIT)
+	var works_kit := SetKit.kit(ENGINE_WORKS_KIT)
+	var stone_look := Painterly.material(SetKit.painted(["station_engine.png", "station_engine_base.png"]), &"bespoke")
+	var works_look := Painterly.material(SetKit.painted(["station_engine_works.png", "station_engine_works_base.png"]),
+		&"bespoke")
+	var level := Layers.STATION_HALL
+	var engine := Node3D.new()
+	engine.name = "engine"
+	root.add_child(engine)
+	engine.position = ENGINE_AT
+	engine.set_meta("footprint", Rect2(-ENGINE_REACH, -ENGINE_REACH, 2.0 * ENGINE_REACH, 2.0 * ENGINE_REACH))
+	station.engine = engine
+	var stone := SetKit.place(engine, stone_kit["engine"], stone_look, "engine", Vector3.ZERO, 0.0, true, true)
+	stone.layers = level
+	var works := SetKit.place(engine, works_kit["engine_works"], works_look, "engine_works", Vector3.ZERO, 0.0, true,
+		true)
+	works.layers = level
+	_glaze(works)
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ENGINE_JSON))
+	var spinners: Array[Node3D] = []
+	for gear: Dictionary in data["gears"]:
+		var out := _out(float(gear["heading"]))
+		var turner := _turner(engine, works_kit, works_look, String(gear["piece"]), _spot(gear),
+			Basis(out.cross(Vector3.UP), out, Vector3.UP), float(gear["turns"]), level)
+		spinners.append(turner)
+	var governor: Dictionary = data["governor"]
+	spinners.append(_turner(engine, works_kit, works_look, "governor", _spot(governor), Basis.IDENTITY,
+		float(governor["turns"]), level))
+	var cranks: Array[Node3D] = []
+	var linkage: Dictionary = data["linkage"]
+	for spot: Dictionary in data["cranks"]:
+		var out := _out(float(spot["heading"]))
+		var crank := EngineCrank.new()
+		crank.name = "crank"
+		crank.turns = float(spot["turns"])
+		crank.start = float(spot["start"])
+		crank.throw = float(linkage["throw"])
+		crank.conrod = float(linkage["conrod"])
+		crank.out = float(linkage["out"])
+		for part in ["flywheel", "conrod", "crosshead"]:
+			var piece := MeshInstance3D.new()
+			piece.name = part
+			piece.mesh = works_kit[part]
+			piece.material_override = works_look
+			piece.layers = level
+			crank.add_child(piece)
+		engine.add_child(crank, true)
+		crank.transform = Transform3D(Basis(Vector3.UP.cross(out), out, Vector3.DOWN), _spot(spot))
+		cranks.append(crank)
+	engine.set_meta("spinners", spinners)
+	engine.set_meta("cranks", cranks)
+	var StationDressing = load("res://maps/metro_station_dressing.gd")
+	var core := OmniLight3D.new()
+	core.name = "core_light"
+	core.light_color = StationDressing.COMPANY_BLUE
+	core.light_energy = CORE_LIGHT.x
+	core.omni_range = CORE_LIGHT.y
+	core.light_cull_mask = level | Layers.WORLD | Layers.ACTORS | Layers.VIEWMODEL | Layers.FX | Layers.GEM_PROBE
+	engine.add_child(core)
+	core.position = Vector3(0.0, CORE_LIGHT_HIGH, 0.0)
+	station.lights.append(core)
+	# The Company's blade signs standing on its deck.
+	if ResourceLoader.exists(NEON_KIT):
+		var neon_kit := SetKit.kit(NEON_KIT)
+		var look := _neon_look()
+		var seed := 400
+		for blade: Dictionary in data["blades"]:
+			_blade(station, root, neon_kit, look, Vector3(float(blade["x"]), float(blade["y"]), float(blade["z"])),
+				-deg_to_rad(float(blade["heading"])), "engine", seed, ENGINE_BLADE_LIGHT)
+			seed += 4
+
+
+## Out from the engine's middle along the set frame's heading (degrees).
+static func _out(heading: float) -> Vector3:
+	return Vector3(cos(deg_to_rad(heading)), 0.0, sin(deg_to_rad(heading)))
+
+
+## A spot of station_engine.json (the set frame), in the engine's own.
+static func _spot(spot: Dictionary) -> Vector3:
+	return Vector3(float(spot["x"]), float(spot["y"]), float(spot["z"])) - ENGINE_AT
+
+
+## A Clockwork at `at` turned to `basis`, the kit's `piece` its one child.
+static func _turner(engine: Node3D, kit: Dictionary, look: Material, piece: String, at: Vector3, basis: Basis,
+		turns: float, level: int) -> Node3D:
+	var turner := Clockwork.new()
+	turner.name = piece + "_turner"
+	turner.turns = turns
+	var part := MeshInstance3D.new()
+	part.name = piece
+	part.mesh = kit[piece]
+	part.material_override = look
+	part.layers = level
+	turner.add_child(part)
+	engine.add_child(turner, true)
+	turner.transform = Transform3D(basis, at)
+	return turner
+
+
+## The engine's lit glass: its core, its gauges' dials, its indicator lamps (its lenses stay clear glass).
+static func _glaze(piece: MeshInstance3D) -> void:
+	for i in piece.mesh.get_surface_count():
+		var slot: Material = piece.mesh.surface_get_material(i)
+		var name := slot.resource_name if slot != null else ""
+		var shader: Shader = {"glass_core": ENGINE_CORE, "glass_dial": ENGINE_DIAL, "glass_lamp": ENGINE_LAMP}.get(name)
+		if shader != null:
+			var lit := ShaderMaterial.new()
+			lit.shader = shader
+			piece.set_surface_override_material(i, lit)
 
 
 ## The Company's pipework (station_pipes: one piece each in the set's frame): the racks on the hall's long walls and
@@ -255,9 +391,7 @@ static func _neon(station, root: Node3D) -> void:
 	var StationDressing = load("res://maps/metro_station_dressing.gd")
 	var blue: Color = StationDressing.COMPANY_BLUE
 	var seed := 100
-	var look := Painterly.material(SetKit.painted(["station_neon.png", "station_neon_base.png"]), &"bespoke")
-	look.set_shader_parameter("painted_light", 0.0)
-	look.set_shader_parameter("ramp_amount", 0.0)
+	var look := _neon_look()
 	# The hanging boards: the neon's own board at each, an arrow and the symbol for where it leads on each face.
 	for k in station.sign_boards.size():
 		var board: Transform3D = station.sign_boards[k]
@@ -286,18 +420,36 @@ static func _neon(station, root: Node3D) -> void:
 		return
 	for bank: Node3D in station.turnstiles:
 		var on := bank.transform * Vector3(BLADE_ON.x, BLADE_ON.z, -BLADE_ON.y)
-		var blade := SetKit.place(root, kit["blade_company"], look, "blade_company", on, bank.rotation.y, false)
-		blade.layers = Layers.STATION_HALL
-		for face in [1.0, -1.0]:
-			var turn := Basis.IDENTITY if face > 0.0 else Basis(Vector3.UP, PI)
-			var outline := Transform3D(blade.basis * turn, on + blade.basis * Vector3(0.0, 0.0, face * BLADE_TUBE_OUT))
-			var sign := neon(station, root, kit["outline_blade"], blue, outline, seed, Layers.STATION_HALL, BLADE_LIGHT)
-			sign.set_meta("symbol", "outline")
-			sign.set_meta("on", String(bank.name))
-			seed += 1
-			var eye := Transform3D(blade.basis * turn, on + blade.basis * Vector3(0.0, BLADE_SYMBOL.y, face * BLADE_TUBE_OUT))
-			sign = neon(station, root, kit["symbol_" + BLADE_SYMBOL_KIND], ACCENTS[BLADE_SYMBOL_KIND], eye, seed,
-				Layers.STATION_HALL, BLADE_LIGHT, BLADE_SYMBOL.x)
-			sign.set_meta("symbol", "blade_" + BLADE_SYMBOL_KIND)
-			sign.set_meta("on", String(bank.name))
-			seed += 1
+		_blade(station, root, kit, look, on, bank.rotation.y, String(bank.name), seed)
+		seed += 4
+
+
+## The neon's painted look (its boards and blades lit by their own tubes, not the painted light).
+static func _neon_look() -> ShaderMaterial:
+	var look := Painterly.material(SetKit.painted(["station_neon.png", "station_neon_base.png"]), &"bespoke")
+	look.set_shader_parameter("painted_light", 0.0)
+	look.set_shader_parameter("ramp_amount", 0.0)
+	return look
+
+
+## A Company blade sign standing at `on`, turned `yaw`: the Company's blue outline and its eye in neon on both faces,
+## each sign's meta "on" naming what it stands on.
+static func _blade(station, root: Node3D, kit: Dictionary, look: Material, on: Vector3, yaw: float, on_name: String,
+		seed: int, light := BLADE_LIGHT) -> void:
+	var StationDressing = load("res://maps/metro_station_dressing.gd")
+	var blue: Color = StationDressing.COMPANY_BLUE
+	var blade := SetKit.place(root, kit["blade_company"], look, "blade_company", on, yaw, false)
+	blade.layers = Layers.STATION_HALL
+	for face in [1.0, -1.0]:
+		var turn := Basis.IDENTITY if face > 0.0 else Basis(Vector3.UP, PI)
+		var outline := Transform3D(blade.basis * turn, on + blade.basis * Vector3(0.0, 0.0, face * BLADE_TUBE_OUT))
+		var sign := neon(station, root, kit["outline_blade"], blue, outline, seed, Layers.STATION_HALL, light)
+		sign.set_meta("symbol", "outline")
+		sign.set_meta("on", on_name)
+		seed += 1
+		var eye := Transform3D(blade.basis * turn, on + blade.basis * Vector3(0.0, BLADE_SYMBOL.y, face * BLADE_TUBE_OUT))
+		sign = neon(station, root, kit["symbol_" + BLADE_SYMBOL_KIND], ACCENTS[BLADE_SYMBOL_KIND], eye, seed,
+			Layers.STATION_HALL, light, BLADE_SYMBOL.x)
+		sign.set_meta("symbol", "blade_" + BLADE_SYMBOL_KIND)
+		sign.set_meta("on", on_name)
+		seed += 1
