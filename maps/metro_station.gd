@@ -77,6 +77,12 @@ var taquillas: Array[Node3D] = []
 var turnstiles: Array[Node3D] = []
 ## The Light Company's lamps on their brackets (CompanyLamp: each one's light, ward glass, halo and haze).
 var company_lamps: Array[Node3D] = []
+## Its hanging direction signs (each board's transform at the ceiling, the space it hangs in, where its gap leads) and
+## its neon (NeonSign: the boards' arrows and symbols, the Company's blade signs).
+var sign_boards: Array[Transform3D] = []
+var sign_spaces: Array[String] = []
+var sign_leads: Array[String] = []
+var neon: Array[Node3D] = []
 ## Its own light (the dressing's fluorescents; the big pieces' brass lamps join them).
 var lights: Array[Light3D] = []
 ## Its flights' ramps: [their ends, as built, and their width]; the ramps themselves.

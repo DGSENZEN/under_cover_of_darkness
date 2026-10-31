@@ -26,6 +26,7 @@ func _ready() -> void:
 	await _lit()
 	_taquillas()
 	await _turnstiles()
+	_neon()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -107,6 +108,59 @@ func _taquillas() -> void:
 	_check("S7 the taquillas against their walls, their windows facing the hall", wrong.is_empty(), "%s" % [wrong])
 	_check("S7b a queue's room in front of every window", crowded.is_empty() and not (booths as Array).is_empty(),
 		"%s" % [crowded.slice(0, 6)])
+
+
+## The neon boards' faces (tools/eclipse/station_neon.py's NEON_FACE, and its middle under the ceiling).
+const NEON_FACE := Vector2(2.3, 0.54)
+const NEON_FACE_MIDDLE := 0.91
+
+
+## Task 2 (docs/superpowers/plans/2026-10-31-station-machinery.md): the station's signs in neon.
+## S9: every hanging direction sign carries, within 0.5 m of its board, an arrow and one symbol on each face; a Company
+## blade sign stands on each turnstile bank's pylon; every sign is silent, lights with at least 3 m of reach, its light
+## among the station's lights.
+func _neon() -> void:
+	var signs = station.get("neon")
+	var boards = station.get("sign_boards")
+	var wrong := []
+	if signs == null or boards == null or (boards as Array).is_empty():
+		_check("S9 the station's signs in neon", false, "neon %s, boards %s" % [signs, boards])
+		return
+	for board: Transform3D in boards:
+		var near := (signs as Array).filter(func(n): return (n as Node3D).global_transform.origin.distance_to(
+			station.global_transform * board.origin) < 1.6)
+		var arrows := near.filter(func(n): return String(n.get_meta("symbol", "")) == "arrow")
+		var symbols := near.filter(func(n): return not String(n.get_meta("symbol", "")) in ["", "arrow"])
+		if arrows.size() != 2 or symbols.size() != 2:
+			wrong.append("board at %s: %d arrows, %d symbols" % [board.origin, arrows.size(), symbols.size()])
+		# (Read from across the hall at half again their drawn size, the user, Oct 31: "enlarge the symbols", and "make
+		# sure they fit on the board": on a board of their own, each one's whole tube inside the board's face.)
+		var on := station.find_children("*", "MeshInstance3D", true, false).filter(func(m):
+			return m.get_meta("kind", "") == "neon_board" and (m as Node3D).transform.origin.distance_to(board.origin) < 0.01)
+		if on.is_empty():
+			wrong.append("board at %s: no neon board" % board.origin)
+		for sign in arrows + symbols:
+			var tube := (sign as Node3D).get_node_or_null("tube") as MeshInstance3D
+			var box: AABB = board.affine_inverse() * (sign as Node3D).transform * tube.transform * tube.mesh.get_aabb()
+			if maxf(box.size.x, box.size.y) < 0.45:
+				wrong.append("board at %s: %s too small" % [board.origin, sign.get_meta("symbol", "")])
+			if box.position.x < -NEON_FACE.x / 2.0 or box.end.x > NEON_FACE.x / 2.0 \
+					or box.position.y < -NEON_FACE_MIDDLE - NEON_FACE.y / 2.0 or box.end.y > -NEON_FACE_MIDDLE + NEON_FACE.y / 2.0:
+				wrong.append("board at %s: %s off its face %s" % [board.origin, sign.get_meta("symbol", ""), box])
+	for bank: Node3D in station.turnstiles:
+		var bladed := (signs as Array).any(func(n): return String(n.get_meta("on", "")) == bank.name)
+		if not bladed:
+			wrong.append("%s: no blade sign" % bank.name)
+	for sign in signs:
+		if not sign is NeonSign:
+			wrong.append("%s is no NeonSign" % sign)
+			continue
+		var neon := sign as NeonSign
+		if neon.buzz != &"" or neon.light_energy <= 0.0 or neon.light_range < 3.0 or not station.lights.has(neon.light):
+			wrong.append("%s: buzz %s, light %.1f / %.1f, listed %s" % [neon.name, neon.buzz, neon.light_energy,
+				neon.light_range, station.lights.has(neon.light)])
+	_check("S9 the station's signs in neon", wrong.is_empty(), "%d signs; %s" % [(signs as Array).size(),
+		wrong.slice(0, 6)])
 
 
 ## A piece's "footprint" (Rect2 in the set's x-z, for the crowd's routes) is its meshes' box seen from above.

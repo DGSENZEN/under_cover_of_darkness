@@ -3293,6 +3293,84 @@ class StationLamps(unittest.TestCase):
         self.assertIn("tin", {m.name for m in self.objects["ward_bracket"].data.materials})
 
 
+class StationNeon(unittest.TestCase):
+    """The station's neon (tools/eclipse/station_neon.py; docs/superpowers/plans/2026-10-31-station-machinery.md Task 2):
+    the symbols in tube (slot `neon` only, drawn by Neon's shader in game), each fitting a hanging board's face; the
+    Company's crowned blade sign: a blank face (the user's words), a stepped deco crown, under 2.4 m tall."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_neon
+        cls.kit = station_neon
+        station_neon.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def _ray(self, o, at, way):
+        tree = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get())
+        found = tree.ray_cast(Vector(at), Vector(way), 10.0)
+        if found[0] is None:
+            return None, None
+        return found[0], o.data.materials[o.data.polygons[found[2]].material_index].name
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_the_symbols_are_tube_on_a_boards_face(self):
+        names = ["symbol_" + n for n in ("marigold", "eye", "skull", "serpent", "hand", "arrow")]
+        self.assertLessEqual(set(names), set(self.objects))
+        self.assertTrue(0.012 <= self.kit.TUBE_R <= 0.02)
+        for n in names:
+            o = self.objects[n]
+            self.assertEqual({m.name for m in o.data.materials}, {"neon"}, n)
+            (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            self.assertLessEqual(x1 - x0, 0.32 + 2 * self.kit.TUBE_R, n)
+            self.assertLessEqual(z1 - z0, 0.32 + 2 * self.kit.TUBE_R, n)
+            self.assertLessEqual(y1 - y0, 2 * self.kit.TUBE_R + 0.002, n)
+            self.assertAlmostEqual((x0 + x1) / 2, 0.0, delta=0.03, msg=n)
+            self.assertAlmostEqual((z0 + z1) / 2, 0.0, delta=0.03, msg=n)
+
+    def test_a_neon_board_holds_its_symbols(self):
+        # (The user, Oct 31: the symbols enlarged must fit on the board: a board of the neon's own, hung on its rods
+        # from the ceiling (z = 0), its blank face both sides wide and tall enough for an arrow and a symbol 1.5 times
+        # their drawn size at its ends and the user's words between.)
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("neon_board")
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        w, h, _ = self.kit.NEON_BOARD
+        self.assertAlmostEqual(x1 - x0, w, delta=0.01)
+        fw, fh = self.kit.NEON_FACE
+        symbol = 0.32 * 1.5 + 2 * self.kit.TUBE_R * 1.5
+        self.assertGreaterEqual(fh, symbol + 0.02)
+        self.assertGreaterEqual(fw, 2 * (symbol + 0.04) + 0.9)
+        o = self.objects["neon_board"]
+        mid = -self.kit.NEON_DROP - h / 2
+        for side in (-1, 1):
+            for x in (-fw / 2 + 0.05, 0.0, fw / 2 - 0.05):
+                _, slot = self._ray(o, (x, side * 3.0, mid), (0.0, -side, 0.0))
+                self.assertEqual(slot, "sign", (side, x))
+
+    def test_the_companys_blade_sign(self):
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("blade_company")
+        self.assertAlmostEqual(z0, 0.0, delta=0.001)
+        self.assertLessEqual(z1, 2.4)
+        self.assertGreaterEqual(len(self.kit.CROWN), 3)
+        halves = [h for h, _, _ in self.kit.CROWN]
+        self.assertEqual(halves, sorted(halves, reverse=True))
+        o = self.objects["blade_company"]
+        for side in (-1, 1):
+            _, slot = self._ray(o, (0.0, side * 3.0, self.kit.FACE_AT), (0.0, -side, 0.0))
+            self.assertEqual(slot, "sign", side)
+
+
 class YourShapes(unittest.TestCase):
     """The user's shapes kept through a kit's rebuild (tools/eclipse/your_shapes.py; docs/superpowers/plans/
     2026-10-30-metro-station.md Task 2): a vertex the user moved in a piece's .blend survives the next build; an

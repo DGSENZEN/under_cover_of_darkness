@@ -19,6 +19,7 @@ const TAQUILLAS_KIT := "res://assets/eclipse/kit/station_taquillas.glb"
 const TURNSTILES_KIT := "res://assets/eclipse/kit/station_turnstiles.glb"
 const TurnstileLane := preload("res://scripts/Level/TurnstileLane.gd")
 const CompanyLamp := preload("res://scripts/Visual/CompanyLamp.gd")
+const StationMachinery := preload("res://maps/metro_station_machinery.gd")
 ## station_shell's measures (tools/eclipse/station_shell.py): a panel's width, the tiled panels' height, the tiles' face
 ## off the wall, a floor slab's and a ceiling panel's side, the coping's reach, a coffer's side, a pit face's height, a
 ## tread's depth and rise and a flight's width, a handrail's run, the line map's width.
@@ -154,6 +155,7 @@ static func dress(station) -> void:
 	_light(station, root)
 	_company_lamps(station, root)
 	_haze(station, root)
+	StationMachinery.dress(station, root)
 	_shell_layers(station)
 
 
@@ -665,8 +667,11 @@ static func _signs(station, batches: Dictionary) -> void:
 				inward = -inward
 			var at := mid + inward * SIGN_OUT
 			var in3 := Vector3(inward.x, 0.0, inward.y)
-			_add(batches, "sign_board@" + space, Transform3D(Basis(Vector3.UP.cross(in3), Vector3.UP, in3),
-				Vector3(at.x, top, at.y)))
+			var board := Transform3D(Basis(Vector3.UP.cross(in3), Vector3.UP, in3), Vector3(at.x, top, at.y))
+			# (The neon's own board hangs here: StationMachinery, its neon on it.)
+			station.sign_boards.append(board)
+			station.sign_spaces.append(space)
+			station.sign_leads.append(String(gap["to"]))
 	var hall_floor: float = records["hall"]["floor"]
 	_wall_piece(batches, "line_map@hall", Vector2(8.0, -14.0 + station.WALL), Vector2(0.0, 1.0), hall_floor + 1.2)
 	_wall_piece(batches, "line_map@platform_n", Vector2(4.0, -14.0 + station.WALL), Vector2(0.0, 1.0), 1.2)
