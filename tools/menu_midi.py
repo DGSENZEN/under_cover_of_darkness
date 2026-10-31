@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Small Standard MIDI File reader/writer for writing menu-theme parts.
 
-Parts are lists of (start_beat, length_beats, pitch, velocity). Writing
+Parts are lists of (start_beat, length_beats, pitch, velocity), with optional
+controls (beat, kind, value): kind 'bend' (-1..1 of the bend range), 'bend_range'
+(semitones, sent as RPN 0) or a CC number (0..127). Writing
 gives a format-0 file at 480 ticks per beat with tempo, 4/4 and a track
 name, ready for Logic's File > Import > MIDI File. Reading returns every
 track's notes, so a Logic export can be analysed. Standard library only.
@@ -58,8 +60,26 @@ def vlq(value):
     return bytes(reversed(out))
 
 
-def _track(notes, ppq, channel=0, name='', program=None, bpm=None):
+def _control(kind, value, channel):
+    if kind == 'bend':
+        bend = max(0, min(16383, round(8192 + float(value) * 8192)))
+        return bytes([0xE0 | channel, bend & 0x7F, bend >> 7])
+    if kind == 'bend_range':
+        cc = 0xB0 | channel
+        return bytes([cc, 101, 0, cc, 100, 0, cc, 6, int(value), cc, 38, 0, cc, 101, 127, cc, 100, 127])
+    return bytes([0xB0 | channel, int(kind), max(0, min(127, int(value)))])
+
+
+def _track(notes, ppq, channel=0, name='', program=None, bpm=None, controls=None):
     events = []
+    for beat, kind, value in controls or []:
+        # Before a note starting on the same tick, so a bend or range is in place for it.
+        data = _control(kind, value, channel)
+        if kind == 'bend_range':
+            for i in range(0, len(data), 3):
+                events.append((round(beat * ppq), 0.5, data[i:i + 3]))
+        else:
+            events.append((round(beat * ppq), 0.5, data))
     for start, length, pitch, velocity in notes:
         on = round(start * ppq)
         off = round((start + length) * ppq)
@@ -95,7 +115,8 @@ def write_song(path, bpm, parts, ppq=PPQ):
     ({'name', 'notes', 'channel'=0, 'program'=None}), so one import makes them all."""
     chunks = [_track([], ppq, bpm=bpm)]
     for part in parts:
-        chunks.append(_track(part['notes'], ppq, part.get('channel', 0), part.get('name', ''), part.get('program')))
+        chunks.append(_track(part['notes'], ppq, part.get('channel', 0), part.get('name', ''), part.get('program'),
+                             controls=part.get('controls')))
     header = b'MThd' + struct.pack('>IHHH', 6, 1, len(chunks), ppq)
     Path(path).write_bytes(header + b''.join(chunks))
 
@@ -111,7 +132,8 @@ def _read_vlq(data, at):
 
 
 def read_midi(path):
-    """{'ppq', 'bpm', 'tracks': [{'name', 'notes': [(start_beat, length_beats, pitch, velocity, channel)]}]}"""
+    """{'ppq', 'bpm', 'tracks': [{'name', 'notes': [(start_beat, length_beats, pitch, velocity, channel)],
+    'controls': [(beat, kind, value, channel)]}]} (an RPN 0 bend range is read back as 'bend_range')."""
     data = Path(path).read_bytes()
     if data[:4] != b'MThd':
         raise ValueError('Not a MIDI file')
@@ -125,7 +147,7 @@ def read_midi(path):
         length = struct.unpack('>I', data[at + 4:at + 8])[0]
         at += 8
         end = at + length
-        tick, status, name, held, notes = 0, 0, '', {}, []
+        tick, status, name, held, notes, controls, rpn = 0, 0, '', {}, [], [], {}
         while at < end:
             delta, at = _read_vlq(data, at)
             tick += delta
@@ -150,7 +172,15 @@ def read_midi(path):
                 width = 1 if kind in (0xC0, 0xD0) else 2
                 args = data[at:at + width]
                 at += width
-                if kind == 0x90 and args[1] > 0:
+                if kind == 0xE0:
+                    controls.append((tick / ppq, 'bend', ((args[1] << 7 | args[0]) - 8192) / 8192, channel))
+                elif kind == 0xB0 and args[0] in (101, 100, 6, 38):
+                    rpn[(channel, args[0])] = args[1]
+                    if args[0] == 6 and rpn.get((channel, 101)) == 0 and rpn.get((channel, 100)) == 0:
+                        controls.append((tick / ppq, 'bend_range', args[1], channel))
+                elif kind == 0xB0:
+                    controls.append((tick / ppq, args[0], args[1], channel))
+                elif kind == 0x90 and args[1] > 0:
                     held.setdefault((channel, args[0]), []).append((tick, args[1]))
                 elif kind == 0x80 or (kind == 0x90 and args[1] == 0):
                     starts = held.get((channel, args[0]))
@@ -158,5 +188,5 @@ def read_midi(path):
                         on, velocity = starts.pop(0)
                         notes.append((on / ppq, (tick - on) / ppq, args[0], velocity, channel))
         at = end
-        song['tracks'].append({'name': name, 'notes': sorted(notes)})
+        song['tracks'].append({'name': name, 'notes': sorted(notes), 'controls': controls})
     return song

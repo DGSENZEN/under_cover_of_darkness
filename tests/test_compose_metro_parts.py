@@ -57,6 +57,26 @@ class MetroPartsTest(unittest.TestCase):
             ends = [s + l for p in parts if p['name'][0] == take for s, l, _, _ in p['notes']]
             self.assertGreaterEqual(max(ends), 8.0 - 1e-6, take)
 
+    def test_midi_carries_bends_ccs_and_bend_range(self):
+        out = Path(tempfile.mkdtemp()) / 'moves.mid'
+        controls = [(0.0, 'bend_range', 12), (0.0, 74, 10), (1.0, 'bend', -1.0), (2.0, 'bend', 0.5), (3.0, 11, 127)]
+        self.midi.write_song(out, 72, [{'name': 'Moves', 'notes': [(0.0, 4.0, 60, 90)], 'controls': controls}])
+        song = self.midi.read_midi(out)
+        moves = [t for t in song['tracks'] if t['name'] == 'Moves'][0]['controls']
+        self.assertIn((0.0, 'bend_range', 12, 0), moves)
+        self.assertIn((0.0, 74, 10, 0), moves)
+        self.assertIn((3.0, 11, 127, 0), moves)
+        bends = [m for m in moves if m[1] == 'bend']
+        self.assertAlmostEqual(bends[0][2], -1.0, places=3)
+        self.assertAlmostEqual(bends[1][2], 0.5, places=3)
+
+    def test_menu_parts_without_controls_are_unchanged(self):
+        out = Path(tempfile.mkdtemp())
+        a, b = out / 'a.mid', out / 'b.mid'
+        self.midi.write_song(a, 78, [{'name': 'P', 'notes': [(0.0, 1.0, 62, 80)]}])
+        self.midi.write_song(b, 78, [{'name': 'P', 'notes': [(0.0, 1.0, 62, 80)], 'controls': []}])
+        self.assertEqual(a.read_bytes(), b.read_bytes())
+
     def test_writes_one_file_per_take(self):
         out = Path(tempfile.mkdtemp())
         path = self.compose.write_piece('bed', 72, 'Bb', 2, out)
