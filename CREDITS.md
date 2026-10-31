@@ -15,6 +15,13 @@ Every sound in the game is a recording, cut and levelled from the packs below by
 
 ### Free to use (no attribution required, credited with thanks)
 
+- **The Metro's sound** (its station hall's room, the crowd, the trains and their
+  draught, the pipes' knocks, ticks and valves, the neon's buzz, stutters and
+  ignition, the junction boxes, the transformer and the cables' surge, the tile
+  and carpet steps, the books opening, shutting and turning): generated with
+  **ElevenLabs** Sound Effects by Diego Gaytan on a paid plan (commercial use),
+  Oct 31 2026, and layered by `tools/prepare_sfx.py --metro`.
+
 - **Every voice** (the guards' talk, nods, laughs, sighs, coughs, breath on
   the cold air, grunts, gasps, breathing, their cries in a fight, and yours):
   "Voices Essentials" from the Essentials Series by **Nox Sound** (two men

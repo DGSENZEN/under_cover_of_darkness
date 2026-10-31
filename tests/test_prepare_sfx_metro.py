@@ -99,5 +99,37 @@ class MetroLayeringTest(unittest.TestCase):
         self.assertLess(abs(len(self.read(self.out / 'listen' / 'pipe_knock.wav')) - total), self.prep.RATE // 10)
 
 
+@unittest.skipUnless(os.path.isdir(os.path.expanduser('~/Downloads/AUCOD ElevenLabs/ucod_sounds')), 'the takes are not here')
+class MetroTablesTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.prep = load('prepare_sfx')
+
+    def test_real_tables_resolve(self):
+        prep = self.prep
+        self.assertGreater(len(prep.METRO_SHOTS), 0)
+        self.assertGreater(len(prep.METRO_LOOPS), 0)
+        for row in prep.METRO_SHOTS:
+            for take, _split in row[1]:
+                self.assertTrue(os.path.exists(prep._take_path(prep.METRO_SOURCE, take)), take)
+        for row in prep.METRO_LOOPS:
+            for take in row[1]:
+                self.assertTrue(os.path.exists(prep._take_path(prep.METRO_SOURCE, take)), take)
+
+    def test_real_hums_land_on_g(self):
+        prep = self.prep
+        out = Path(tempfile.mkdtemp())
+        try:
+            hums = [row for row in prep.METRO_LOOPS if row[3].get('hum')]
+            hum_shots = [row for row in prep.METRO_SHOTS if len(row) > 3 and row[3].get('hum')]
+            self.assertEqual(sorted(r[0] for r in hums + hum_shots), ['cable_surge', 'junction_hum', 'neon_buzz', 'transformer_hum'])
+            for path in [p for paths in prep.prepare_metro(shots=hum_shots, loops=hums, sfx_out=str(out),
+                                                            ambience_out=str(out)).values() for p in paths]:
+                x = prep._decode_take(path)
+                self.assertLess(abs(1200 * np.log2(prep.hum_hz(x) / prep.g_of(prep.hum_hz(x)))), prep.HUM_CENTS, path)
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
+
+
 if __name__ == '__main__':
     unittest.main()
