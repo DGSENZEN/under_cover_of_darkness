@@ -97,6 +97,10 @@ func zone_checks() -> void:
 	check(near(zones.depth_at(Vector3(5.0, -11.0, 75.45)), 0.35) and near(zones.depth_at(Vector3(0.0, -14.0, -10.0)), 0.0), "Z7 depth by age: the market 0.35, the platform 0")
 	check(near(zones.depth_at(Vector3(100.0, -26.0, -185.0)), 1.0) and near(zones.depth_at(Vector3(0.0, -21.0, 0.0)), 0.7), "Z8 the old layer 0.7, deeper toward the shells' 1")
 	check(zones.space_at(Vector3(0.0, 5.0, 0.0)) == "", "Z9 over the hall's ceiling is in no space")
+	# A space marked "" has no theme (yet), and nothing beyond it borrows through it.
+	var quiet := PlaceZones.from_plan(plan, {"candle_lane": "lane", "pasaje": ""}, [])
+	check(quiet.theme_of("pasaje") == "" and quiet.weights_at(Vector3(-9.0, -11.0, 75.0)).is_empty() == false and float(quiet.weights_at(Vector3(-9.0, -11.0, 75.0)).get("lane", 0.0)) == 0.0, "Z10 a space marked empty plays no theme")
+	check(quiet.theme_of("chapel") == "lane", "Z10 the chapel still borrows the lane's")
 
 func score_checks() -> void:
 	var score := make_score()
@@ -310,6 +314,15 @@ func cue_checks() -> void:
 	(score.zones as StubZones).d = 1.0
 	run_for(score, 1.05)
 	check(score.stem_gain_db(&"bed", &"drone_deep") >= -1.0 and score.stem_gain_db(&"bed", &"drone_city") <= -79.0, "C5 landing deep, the deep drone at once: %.1f" % score.stem_gain_db(&"bed", &"drone_deep"))
+	score.free()
+
+	# Landing where a theme plays: it starts with the bed, on the land, not a phrase later.
+	score = make_score(FIXTURE, true)
+	score.position_source = func() -> float: return maxf(0.0, pos - 1.0)
+	score.raw_source = func() -> float: return maxf(0.0, pos - 1.0)
+	(score.zones as StubZones).w = {"a": 1.0}
+	run_for(score, 1.1)
+	check(score.theme_playing(&"a") and near(score.theme_started_at(&"a"), 0.0, 0.02), "C6 landing in a theme's space, it starts on the land: %.2f" % score.theme_started_at(&"a"))
 	score.free()
 
 	# A cue that lands on its own last sound ends there: no frame may see it land.

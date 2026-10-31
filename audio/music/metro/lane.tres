@@ -1,0 +1,47 @@
+[gd_resource type="AudioStreamSynchronized" load_steps=15 format=3]
+
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/sub.ogg" id="sub"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/bass.ogg" id="bass"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/kit.ogg" id="kit"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/keys.ogg" id="keys"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/glass.ogg" id="glass"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/guitar.ogg" id="guitar"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/requinto.ogg" id="requinto"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/pad.ogg" id="pad"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/trumpet.ogg" id="trumpet"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/backbeat.ogg" id="backbeat"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/pleading.ogg" id="pleading"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/dragged.ogg" id="dragged"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/swarm.ogg" id="swarm"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/lane/swarm_drums.ogg" id="swarm_drums"]
+
+[resource]
+stream_count = 14
+stream_0/stream = ExtResource("sub")
+stream_0/volume = -80.0
+stream_1/stream = ExtResource("bass")
+stream_1/volume = -80.0
+stream_2/stream = ExtResource("kit")
+stream_2/volume = -80.0
+stream_3/stream = ExtResource("keys")
+stream_3/volume = -80.0
+stream_4/stream = ExtResource("glass")
+stream_4/volume = -80.0
+stream_5/stream = ExtResource("guitar")
+stream_5/volume = -80.0
+stream_6/stream = ExtResource("requinto")
+stream_6/volume = -80.0
+stream_7/stream = ExtResource("pad")
+stream_7/volume = -80.0
+stream_8/stream = ExtResource("trumpet")
+stream_8/volume = -80.0
+stream_9/stream = ExtResource("backbeat")
+stream_9/volume = -80.0
+stream_10/stream = ExtResource("pleading")
+stream_10/volume = -80.0
+stream_11/stream = ExtResource("dragged")
+stream_11/volume = -80.0
+stream_12/stream = ExtResource("swarm")
+stream_12/volume = -80.0
+stream_13/stream = ExtResource("swarm_drums")
+stream_13/volume = -80.0

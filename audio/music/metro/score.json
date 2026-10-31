@@ -33,12 +33,182 @@
       }
     ]
   },
-  "themes": {},
+  "themes": {
+    "lane": {
+      "bars": 16,
+      "loop_seconds": 53.333333333333336,
+      "resource": "res://audio/music/metro/lane.tres",
+      "stems": [
+        {
+          "id": "sub",
+          "part": "sub",
+          "index": 0,
+          "peak_db": -17.525532714942905,
+          "sha256": "814540e1db916034e8f07dd024925843975e2244b59ad9af1b555f229e5393a4"
+        },
+        {
+          "id": "bass",
+          "part": "bass",
+          "index": 1,
+          "peak_db": -16.076640690990352,
+          "sha256": "99d046474c39c257fdfc4b91d62efa8d20765dba169ebab45e9a7c972194ab0b"
+        },
+        {
+          "id": "kit",
+          "part": "kit",
+          "index": 2,
+          "peak_db": -12.108575012056422,
+          "sha256": "d8a5565204c43c94fc92bebfbe3638b6be0a83250421d5d2cedefbd65aec50f4"
+        },
+        {
+          "id": "keys",
+          "part": "keys",
+          "index": 3,
+          "peak_db": -12.416509401705937,
+          "sha256": "cf17b25905cbdbc29cefc7c820f32d583efd4f303d1a2fcb8fcff8176a1f18f8"
+        },
+        {
+          "id": "glass",
+          "part": "glass",
+          "index": 4,
+          "peak_db": -24.499809284659335,
+          "sha256": "e32a6bb9b65112a6bc514b45b3ce2559a5855077ae29e8d2da43c1b3a42ad30b"
+        },
+        {
+          "id": "guitar",
+          "part": "guitar",
+          "index": 5,
+          "peak_db": -16.881195068527482,
+          "sha256": "26548bdd2eb1a9863dc094e07f6265123d7f4ac4a2dcf6fda39f0764ddef0036"
+        },
+        {
+          "id": "requinto",
+          "part": "requinto",
+          "index": 6,
+          "peak_db": -26.683849648613926,
+          "sha256": "895c11577887c13921f81299b49e64053e07967abb52db8c3e97580f9531367b"
+        },
+        {
+          "id": "pad",
+          "part": "pad",
+          "index": 7,
+          "peak_db": -22.576720584685148,
+          "sha256": "3108711c2ef37401aba8cf43c181f102485c403f0e0e2c95bed31a6f4f4f634b"
+        },
+        {
+          "id": "trumpet",
+          "part": "trumpet",
+          "intensity": "full",
+          "index": 8,
+          "peak_db": -17.203768228829723,
+          "sha256": "cb2f18e5d7691f4487812f9f90a0ff2bbde76ee05ef53c626d4784ad35951d10"
+        },
+        {
+          "id": "backbeat",
+          "part": "backbeat",
+          "intensity": "full",
+          "index": 9,
+          "peak_db": -12.87325371509896,
+          "sha256": "8b3e0ace971f142062ded579cd579e25b783dc3fd361b9a1fe8f9a7a351420d7"
+        },
+        {
+          "id": "pleading",
+          "part": "pleading",
+          "haunted": "pleading",
+          "index": 10,
+          "peak_db": -29.766938039562234,
+          "sha256": "cdd8b8dfc3d376c635f577e9fb9b0a81db8c58c3b4837cec60954828a758a30e"
+        },
+        {
+          "id": "dragged",
+          "part": "dragged",
+          "haunted": "dragged",
+          "index": 11,
+          "peak_db": -19.100749980478305,
+          "sha256": "9654527030790a1aa92d4e286efc86d6979082b4f655960b0cc8603269972cb0"
+        },
+        {
+          "id": "swarm",
+          "part": "swarm",
+          "haunted": "swarm",
+          "index": 12,
+          "peak_db": -33.98708291195189,
+          "sha256": "f30efea3f735c09f27488ef2b42c13fd4625b2bcfc96b7555424614c1eb19bca"
+        },
+        {
+          "id": "swarm_drums",
+          "part": "swarm_drums",
+          "haunted": "swarm",
+          "index": 13,
+          "peak_db": -21.082156836729972,
+          "sha256": "7b71d1a44f9abce0d15843181eb59e1ec16b48188992d42a27e531964abac13f"
+        }
+      ],
+      "bed": [
+        "drone_city"
+      ],
+      "haunt_bed": [
+        "drone_deep"
+      ]
+    }
+  },
   "cue": {
     "path": "res://audio/music/metro/cue.ogg",
     "seconds": 20.0,
     "lands_bar": 4
   },
-  "spaces": {},
+  "spaces": {
+    "platform_n": "",
+    "track": "",
+    "platform_s": "",
+    "siding": "",
+    "stairs_n": "",
+    "stairs_s": "",
+    "hall": "",
+    "corridor_w": "",
+    "cross_w": "",
+    "corridor_e": "",
+    "cross_e": "",
+    "corridor_nw": "",
+    "exit_stairs_nw": "",
+    "kiosk_landing_nw": "",
+    "corridor_ne": "",
+    "exit_stairs_ne": "",
+    "kiosk_landing_ne": "",
+    "corridor_sw": "",
+    "exit_stairs_sw": "",
+    "kiosk_landing_sw": "",
+    "corridor_se": "",
+    "exit_stairs_se": "",
+    "kiosk_landing_se": "",
+    "market_stairs": "",
+    "pasaje_n": "",
+    "pasaje": "",
+    "pasaje_s": "",
+    "cistern_lane": "",
+    "herb_market": "",
+    "lane_sw": "",
+    "candle_lane": "lane",
+    "librarian_shop": "lane",
+    "chapel": "lane",
+    "lane_se": "",
+    "tianguis_lane": "",
+    "fondas": "",
+    "rag_lane": "",
+    "storeroom": "",
+    "square_s": "",
+    "light_gallery": "",
+    "vent_shaft": "",
+    "grate_room": "",
+    "loft": "",
+    "niche": "",
+    "vaults": "",
+    "cistern": "",
+    "drain_n": "",
+    "crypt": "",
+    "templo_shells": "",
+    "pawn_vault": "",
+    "temple_tunnel": ""
+  },
   "circles": []
 }

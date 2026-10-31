@@ -64,14 +64,14 @@ func theme_of(space: String) -> String:
 	return String(_themes.get(space, ""))
 
 
-## {theme: weight 0..1} at a point; {} when it stands in no space.
+## {theme: weight 0..1} at a point ("" for a space with no theme); {} when it stands in no space.
 func weights_at(point: Vector3) -> Dictionary:
 	var by_space := _space_weights(point)
 	var weights := {}
 	for name in by_space:
+		# A space with no theme still counts, under "": standing there is somewhere,
+		# and the themes around fade out (no space at all returns {}).
 		var theme := theme_of(name)
-		if theme.is_empty():
-			continue
 		weights[theme] = float(weights.get(theme, 0.0)) + float(by_space[name])
 	for circle in _circles:
 		var inside := theme_of(String(circle.get("inside", "")))

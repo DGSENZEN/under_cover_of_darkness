@@ -144,9 +144,16 @@ func step(_delta: float) -> void:
 		if cue_player != null and (not cue_player.playing or float(cue_source.call()) + MenuClock.SLACK >= int(score.cue.lands_bar) * _bar):
 			# The cue lands on the bed's first downbeat: it is there at once, at full,
 			# already at the depth of where you stand.
+			# The place's own theme comes in with it, on the land.
 			var here: Variant = listener_source.call()
 			if zones != null and here is Vector3 and not zones.weights_at(here).is_empty():
 				depth = zones.depth_at(here)
+				_weights = zones.weights_at(here)
+				for name in _themes:
+					var set: Dictionary = _themes[name]
+					set.weight = float(_weights.get(String(name), 0.0))
+					if float(set.weight) > NONE:
+						set.scheduled_at = 0.0
 			_mix_bed(0.0, true)
 			_bed.player.play()
 		return

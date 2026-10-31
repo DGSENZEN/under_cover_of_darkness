@@ -23,8 +23,148 @@
    }
   ]
  },
- "themes": {},
- "spaces": {},
+ "themes": {
+  "lane": {
+   "bars": 16,
+   "bed": [
+    "drone_city"
+   ],
+   "haunt_bed": [
+    "drone_deep"
+   ],
+   "stems": [
+    {
+     "id": "sub",
+     "file": "lane/sub.wav",
+     "part": "sub"
+    },
+    {
+     "id": "bass",
+     "file": "lane/bass.wav",
+     "part": "bass"
+    },
+    {
+     "id": "kit",
+     "file": "lane/kit.wav",
+     "part": "kit"
+    },
+    {
+     "id": "keys",
+     "file": "lane/keys.wav",
+     "part": "keys"
+    },
+    {
+     "id": "glass",
+     "file": "lane/glass.wav",
+     "part": "glass"
+    },
+    {
+     "id": "guitar",
+     "file": "lane/guitar.wav",
+     "part": "guitar"
+    },
+    {
+     "id": "requinto",
+     "file": "lane/requinto.wav",
+     "part": "requinto"
+    },
+    {
+     "id": "pad",
+     "file": "lane/pad.wav",
+     "part": "pad"
+    },
+    {
+     "id": "trumpet",
+     "file": "lane/trumpet.wav",
+     "part": "trumpet",
+     "intensity": "full"
+    },
+    {
+     "id": "backbeat",
+     "file": "lane/backbeat.wav",
+     "part": "backbeat",
+     "intensity": "full"
+    },
+    {
+     "id": "pleading",
+     "file": "lane/pleading.wav",
+     "part": "pleading",
+     "haunted": "pleading"
+    },
+    {
+     "id": "dragged",
+     "file": "lane/dragged.wav",
+     "part": "dragged",
+     "haunted": "dragged"
+    },
+    {
+     "id": "swarm",
+     "file": "lane/swarm.wav",
+     "part": "swarm",
+     "haunted": "swarm"
+    },
+    {
+     "id": "swarm_drums",
+     "file": "lane/swarm_drums.wav",
+     "part": "swarm_drums",
+     "haunted": "swarm"
+    }
+   ]
+  }
+ },
+ "spaces": {
+  "platform_n": "",
+  "track": "",
+  "platform_s": "",
+  "siding": "",
+  "stairs_n": "",
+  "stairs_s": "",
+  "hall": "",
+  "corridor_w": "",
+  "cross_w": "",
+  "corridor_e": "",
+  "cross_e": "",
+  "corridor_nw": "",
+  "exit_stairs_nw": "",
+  "kiosk_landing_nw": "",
+  "corridor_ne": "",
+  "exit_stairs_ne": "",
+  "kiosk_landing_ne": "",
+  "corridor_sw": "",
+  "exit_stairs_sw": "",
+  "kiosk_landing_sw": "",
+  "corridor_se": "",
+  "exit_stairs_se": "",
+  "kiosk_landing_se": "",
+  "market_stairs": "",
+  "pasaje_n": "",
+  "pasaje": "",
+  "pasaje_s": "",
+  "cistern_lane": "",
+  "herb_market": "",
+  "lane_sw": "",
+  "candle_lane": "lane",
+  "librarian_shop": "lane",
+  "chapel": "lane",
+  "lane_se": "",
+  "tianguis_lane": "",
+  "fondas": "",
+  "rag_lane": "",
+  "storeroom": "",
+  "square_s": "",
+  "light_gallery": "",
+  "vent_shaft": "",
+  "grate_room": "",
+  "loft": "",
+  "niche": "",
+  "vaults": "",
+  "cistern": "",
+  "drain_n": "",
+  "crypt": "",
+  "templo_shells": "",
+  "pawn_vault": "",
+  "temple_tunnel": ""
+ },
  "circles": [],
  "cue": {
   "file": "cue/enter.wav",
