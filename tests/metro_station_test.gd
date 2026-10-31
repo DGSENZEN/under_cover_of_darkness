@@ -23,7 +23,7 @@ func _ready() -> void:
 	_mouths()
 	_track()
 	_dressed()
-	_lit()
+	await _lit()
 	_taquillas()
 	await _turnstiles()
 	print("\n==== RESULTS ====")
@@ -566,7 +566,8 @@ func _lit() -> void:
 
 	var plain := lights.filter(func(l): return not (l as Light3D).shadow_enabled).size()
 	var shadowed := lights.size() - plain
-	_check("S6c the light in budget", plain <= 40 and shadowed <= 2, "%d shadowless, %d shadowed" % [plain, shadowed])
+	# (The budget is suspended, the user, Oct 31: "I don't mind cost, we can optimize rendering later": a report.)
+	_check("S6c the light counted", true, "%d shadowless, %d shadowed" % [plain, shadowed])
 
 	var leaks := []
 	for light: Light3D in lights:
@@ -594,6 +595,92 @@ func _lit() -> void:
 		if not glows:
 			unlit.append(node.name)
 	_check("S6e the fittings glow", unlit.is_empty(), "%s" % [unlit])
+
+	# S6f: Deadlock's key (docs/superpowers/specs/2026-10-31-station-machinery-design.md): every station space hazed
+	# warm (a FogVolume over its middle and its corners, its albedo warm); the hall and each platform lit by at least
+	# four warm fittings and four of the Company's blue lamps; no light left the old cool fluorescent.
+	var key := []
+	var fogs: Array = station.find_children("*", "FogVolume", true, false).filter(func(f):
+		var albedo: Color = ((f as FogVolume).material as FogMaterial).albedo if (f as FogVolume).material is FogMaterial \
+			else Color.BLACK
+		return albedo.r - albedo.b >= 0.15)
+	for space: String in ["hall", "stairs_n", "stairs_s", "platform_n", "platform_s", "track"]:
+		var record: Dictionary = station.spaces()[space]
+		var outline: Array = record["polygon"]
+		var lo := Vector2(INF, INF)
+		var hi := Vector2(-INF, -INF)
+		for q in outline:
+			lo = Vector2(minf(lo.x, q[0]), minf(lo.y, q[1]))
+			hi = Vector2(maxf(hi.x, q[0]), maxf(hi.y, q[1]))
+		var y := float(record["floor"]) + 1.5
+		for p: Vector2 in [(lo + hi) / 2.0, lo + Vector2(0.5, 0.5), hi - Vector2(0.5, 0.5)]:
+			var at := Vector3(p.x, y, p.y)
+			if not fogs.any(func(f): return AABB((f as FogVolume).position - (f as FogVolume).size / 2.0,
+					(f as FogVolume).size).has_point(at)):
+				key.append("%s unhazed at %s" % [space, at])
+	for level in [[hall, "hall"], [below, "the platforms"]]:
+		var own := lights.filter(func(l): return (l as Light3D).light_cull_mask & int(level[0]) != 0)
+		var warm := own.filter(func(l): return (l as Light3D).light_color.r - (l as Light3D).light_color.b >= 0.2)
+		var blue := own.filter(func(l): return (l as Light3D).light_color.b - (l as Light3D).light_color.r >= 0.2)
+		var need := 4 if level[1] == "hall" else 8
+		if warm.size() < need or blue.size() < need:
+			key.append("%s: %d warm, %d blue" % [level[1], warm.size(), blue.size()])
+	for light: Light3D in lights:
+		if light.light_color.is_equal_approx(Color(0.86, 0.97, 0.92)):
+			key.append("%s still fluorescent" % light.name)
+			break
+	_check("S6f warm haze against the Company's blue", key.is_empty(), "%s" % [key.slice(0, 6)])
+	await _lamps_breathe()
+
+
+## S6g: the Company's lamps atmospheric (the user, Oct 31: "a shader to the lamp itself to make it feel more
+## atmospheric"): each of the 20 drawn by the ward glass's shader behind its glass, a halo round it, a pocket of haze at
+## it; its light breathing with its glass (the same level, 0.6…1.2 of its energy, moving over 2 s), no two lamps in step.
+func _lamps_breathe() -> void:
+	var lamps = station.get("company_lamps")
+	var wrong := []
+	if lamps == null or (lamps as Array).size() != 20:
+		wrong.append("lamps: %s" % [lamps.size() if lamps != null else null])
+		lamps = []
+	var levels := {}
+	for lamp: Node3D in lamps:
+		var glass: ShaderMaterial = lamp.get("glass")
+		if glass == null or glass.shader.resource_path != "res://scripts/Visual/ward_glass.gdshader":
+			wrong.append("%s: glass %s" % [lamp.name, glass])
+		var halo: MeshInstance3D = lamp.get("halo")
+		if halo == null or not halo.material_override is ShaderMaterial \
+				or (halo.material_override as ShaderMaterial).shader.resource_path != "res://scripts/Visual/ward_halo.gdshader":
+			wrong.append("%s: no halo" % lamp.name)
+		elif not (halo.material_override as ShaderMaterial).shader.code.contains("fog_disabled"):
+			# (The user, Oct 31: "I can still see the light quad": fog added over a blend_add quad draws its square.)
+			wrong.append("%s: its halo takes the fog (its square shows)" % lamp.name)
+		var light: OmniLight3D = lamp.get("light")
+		var haze: FogVolume = lamp.get("haze")
+		if light == null or not station.lights.has(light):
+			wrong.append("%s: light" % lamp.name)
+			continue
+		if haze == null or haze.global_position.distance_to(light.global_position) > 0.6:
+			wrong.append("%s: no haze at it" % lamp.name)
+		levels[lamp] = []
+	for i in 120:
+		await get_tree().process_frame
+		for lamp: Node3D in levels:
+			var light: OmniLight3D = lamp.get("light")
+			var level: float = light.light_energy / float(lamp.get("energy"))
+			var glass: ShaderMaterial = lamp.get("glass")
+			if absf(float(glass.get_shader_parameter("pulse")) - level) > 0.01:
+				wrong.append("%s: glass %.2f, light %.2f" % [lamp.name, glass.get_shader_parameter("pulse"), level])
+			levels[lamp].append(level)
+	var seen := []
+	for lamp: Node3D in levels:
+		var run: Array = levels[lamp]
+		if run.min() < 0.6 or run.max() > 1.2 or run.max() - run.min() < 0.05:
+			wrong.append("%s breathes %.2f…%.2f" % [lamp.name, run.min(), run.max()])
+		if seen.has(run):
+			wrong.append("%s in step with another" % lamp.name)
+		seen.append(run)
+	_check("S6g the Company's lamps breathe in their haze", wrong.is_empty() and not (lamps as Array).is_empty(),
+		"%s" % [wrong.slice(0, 6)])
 
 
 func _reach(light: Light3D) -> float:

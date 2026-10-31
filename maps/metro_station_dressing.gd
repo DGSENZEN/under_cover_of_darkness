@@ -18,6 +18,7 @@ const WALLS_KIT := "res://assets/eclipse/kit/underground_walls.glb"
 const TAQUILLAS_KIT := "res://assets/eclipse/kit/station_taquillas.glb"
 const TURNSTILES_KIT := "res://assets/eclipse/kit/station_turnstiles.glb"
 const TurnstileLane := preload("res://scripts/Level/TurnstileLane.gd")
+const CompanyLamp := preload("res://scripts/Visual/CompanyLamp.gd")
 ## station_shell's measures (tools/eclipse/station_shell.py): a panel's width, the tiled panels' height, the tiles' face
 ## off the wall, a floor slab's and a ceiling panel's side, the coping's reach, a coffer's side, a pit face's height, a
 ## tread's depth and rise and a flight's width, a handrail's run, the line map's width.
@@ -66,18 +67,35 @@ const TABLETS_X := [-40.0, -24.0, -8.0, 8.0, 24.0, 40.0]
 const TABLET_FOOT := 1.65
 ## A hanging sign: how far in front of the gap it names (m).
 const SIGN_OUT := 1.5
-## Its light (the 1969 fittings' cool fluorescent): the hall's grid under its coffers, a lamp over each platform's
-## strip every 15 m, three down each stairwell; how bright, how far each reaches; the tubes' own glow.
-const FLUO := Color(0.86, 0.97, 0.92)
+## Its light in Deadlock's key (docs/superpowers/specs/2026-10-31-station-machinery-design.md): the 1969 fittings
+## burn warm (the haze's amber), against the Light Company's cold blue lamps, its arcs, and its engine's red leap. The
+## fittings: the hall's grid under its coffers, a lamp over each platform's strip every 15 m, three down each
+## stairwell; how bright, how far each reaches; the tubes' own glow.
+const HAZE := Color("#FFB060")
+const COMPANY_BLUE := Color("#5AB4FF")
+const ARC_RED := Color("#FF5A3C")
 const HALL_LAMPS_X := [-24.0, -12.0, 0.0, 12.0, 24.0]
 const HALL_LAMPS_Z := [-7.0, 0.0, 7.0]
-const HALL_LAMP := Vector2(1.5, 13.0)
+const HALL_LAMP := Vector2(1.1, 13.0)
 const PLATFORM_LAMPS_X := [-45.0, -30.0, -15.0, 0.0, 15.0, 30.0, 45.0]
-const PLATFORM_LAMP := Vector2(2.4, 12.0)
+const PLATFORM_LAMP := Vector2(1.8, 12.0)
 const STAIR_LAMPS := [Vector3(-4.0, 3.5, -27.0), Vector3(-4.0, 3.5, -19.0), Vector3(-4.0, 9.5, -17.0),
 	Vector3(4.0, 3.5, 27.0), Vector3(4.0, 3.5, 19.0), Vector3(4.0, 9.5, 17.0)]
 const STAIR_LAMP := Vector2(1.2, 9.0)
 const TUBE_GLOW := 2.5
+## The Company's bracket lamps (the station_lamps kit): on the hall's columns, facing the hall's middle, and on the
+## platforms' back walls between the name tablets (x); their mount's height over the floor; the globe's middle from the
+## mount (m: out, down: the kit's GLOBE); their energy and reach (CompanyLamp breathes round it).
+const LAMPS_KIT := "res://assets/eclipse/kit/station_lamps.glb"
+const BRACKETS_X := [-32.0, -16.0, 16.0, 32.0]
+const BRACKET_MOUNT := 3.6
+## The plaster's face over the tiles: in from a wall's face (the kit's MORTAR), in from a hall column's tiles.
+const PLASTER := 0.032
+const COLUMN_PLASTER := 0.01
+const BRACKET_GLOBE := Vector2(0.62, -0.52)
+const BRACKET_LAMP := Vector2(1.6, 8.0)
+## The haze over each of the station's spaces: its density (the map's fog is 0.045).
+const HAZE_DENSITY := 0.02
 ## The taquillas (tools/eclipse/station_taquillas.py's measures): each booth's middle along x, its windows' count, the
 ## wall it stands on (-1 the north, 1 the south); a window's width and the pier between two, the corner post's; how far
 ## the counter's edge stands out from the wall and its height; the ward lamp's globe out from the wall and up.
@@ -134,6 +152,8 @@ static func dress(station) -> void:
 	_taquillas(station, root)
 	_turnstiles(station, root)
 	_light(station, root)
+	_company_lamps(station, root)
+	_haze(station, root)
 	_shell_layers(station)
 
 
@@ -873,7 +893,7 @@ static func _light(station, root: Node3D) -> void:
 	for spec: Array in places:
 		var lamp := OmniLight3D.new()
 		lamp.name = "fluorescent"
-		lamp.light_color = FLUO
+		lamp.light_color = HAZE
 		lamp.light_energy = (spec[1] as Vector2).x
 		lamp.omni_range = (spec[1] as Vector2).y
 		lamp.shadow_enabled = false
@@ -881,6 +901,77 @@ static func _light(station, root: Node3D) -> void:
 		root.add_child(lamp, true)
 		lamp.position = spec[0]
 		station.lights.append(lamp)
+
+
+## The Light Company's blue lamps on brackets: on the hall's columns, each facing the hall's middle, and on the
+## platforms' back walls; a light at each globe, on its level's layer.
+static func _company_lamps(station, root: Node3D) -> void:
+	if not ResourceLoader.exists(LAMPS_KIT):
+		return
+	var kit := SetKit.kit(LAMPS_KIT)
+	if not kit.has("ward_bracket"):
+		return
+	var look := Painterly.material(SetKit.painted(["station_lamps.png", "station_lamps_base.png"]), &"bespoke")
+	_plainly_lit(look)
+	var movers := Layers.WORLD | Layers.ACTORS | Layers.VIEWMODEL | Layers.FX | Layers.GEM_PROBE
+	var hall_floor: float = station.spaces()["hall"]["floor"]
+	var platform_floor: float = station.spaces()["platform_n"]["floor"]
+	var back := 14.0 - float(station.WALL) - PLASTER
+	var places := []
+	for at: Vector2 in HALL_COLUMNS:
+		# (On the column's face toward the hall's middle.)
+		var facing := -signf(at.y)
+		places.append([Vector3(at.x, hall_floor + BRACKET_MOUNT, at.y + facing * (COLUMN_HALL.x / 2.0 - COLUMN_PLASTER)),
+			facing,
+			Layers.STATION_HALL])
+	for side in [-1.0, 1.0]:
+		for x: float in BRACKETS_X:
+			places.append([Vector3(x, platform_floor + BRACKET_MOUNT, side * back), -side, Layers.STATION_BELOW])
+	for k in places.size():
+		var spec: Array = places[k]
+		var facing: float = spec[1]
+		var yaw := 0.0 if facing > 0.0 else PI
+		var bracket := SetKit.place(root, kit["ward_bracket"], look, "ward_bracket", spec[0], yaw, false)
+		bracket.layers = int(spec[2])
+		# (Its breath: its light, the ward glass behind its panes, its halo, its pocket of haze.)
+		var lamp := CompanyLamp.new()
+		lamp.name = "company_lamp"
+		lamp.colour = COMPANY_BLUE
+		lamp.energy = BRACKET_LAMP.x
+		lamp.reach = BRACKET_LAMP.y
+		lamp.seed = k + 1
+		lamp.mask = int(spec[2]) | movers
+		lamp.layer = int(spec[2])
+		root.add_child(lamp, true)
+		lamp.position = (spec[0] as Vector3) + Vector3(0.0, BRACKET_GLOBE.y, facing * BRACKET_GLOBE.x)
+		for i in bracket.mesh.get_surface_count():
+			var slot: Material = bracket.mesh.surface_get_material(i)
+			if slot != null and slot.resource_name.begins_with("glass"):
+				bracket.set_surface_override_material(i, lamp.glass)
+		station.lights.append(lamp.light)
+		station.company_lamps.append(lamp)
+
+
+## A warm haze over each of the station's spaces (its own fog, the map's elsewhere).
+static func _haze(station, root: Node3D) -> void:
+	for space: String in ["hall", "stairs_n", "stairs_s", "platform_n", "platform_s", "track"]:
+		var record: Dictionary = station.spaces()[space]
+		var lo := Vector2(INF, INF)
+		var hi := Vector2(-INF, -INF)
+		for q in record["polygon"]:
+			lo = Vector2(minf(lo.x, q[0]), minf(lo.y, q[1]))
+			hi = Vector2(maxf(hi.x, q[0]), maxf(hi.y, q[1]))
+		var fog := FogVolume.new()
+		fog.name = "haze_" + space
+		fog.size = Vector3(hi.x - lo.x, float(record["height"]), hi.y - lo.y)
+		var material := FogMaterial.new()
+		material.albedo = HAZE
+		material.density = HAZE_DENSITY
+		material.edge_fade = 0.2
+		fog.material = material
+		root.add_child(fog, true)
+		fog.position = Vector3((lo.x + hi.x) / 2.0, float(record["floor"]) + float(record["height"]) / 2.0,
+			(lo.y + hi.y) / 2.0)
 
 
 ## The shell's own boxes still seen (its floors and ceilings in the joints, the mouths' runs) on their levels' layers.
@@ -904,9 +995,9 @@ static func _plainly_lit(look: ShaderMaterial) -> void:
 ## The fluorescent tubes' glow.
 static func _tube() -> StandardMaterial3D:
 	var glow := StandardMaterial3D.new()
-	glow.albedo_color = FLUO
+	glow.albedo_color = HAZE
 	glow.emission_enabled = true
-	glow.emission = FLUO
+	glow.emission = HAZE
 	glow.emission_energy_multiplier = TUBE_GLOW
 	glow.roughness = 0.3
 	return glow

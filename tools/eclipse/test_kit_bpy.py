@@ -11,7 +11,7 @@ import unittest
 
 import bmesh
 import bpy
-from mathutils import Vector
+from mathutils import Vector, geometry
 from mathutils.bvhtree import BVHTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -3189,6 +3189,108 @@ class StationTurnstiles(unittest.TestCase):
             # (The boss it turns in, brass on the working cabinets.)
             _, slot = self._ray(self.banks["bank_east"], (hub[0] + 0.3, 0.0, hub[2]), (-1.0, 0.0, 0.0), 1.0)
             self.assertEqual(slot, "brass", k)
+
+
+class StationLamps(unittest.TestCase):
+    """The Company's bracket lamps (tools/eclipse/station_lamps.py; docs/superpowers/plans/2026-10-31-station-machinery.md
+    Task 1), v2 on the user's note ("more work to look like lamps, more aesthetically distinct"): closed, in budget,
+    through the gate; a stepped back plate on the face (y = 0), a gooseneck arm out along -y; a tall eight-sided glass
+    lantern hung from it (mostly glass, read as a lamp across the hall), its crown stepped, a low sunburst round it, a turned knob over it;
+    the Company's obsidian ward eye on the glass's front (the lamps are wards); a tin milagro tied under it. Nothing more
+    than MOUNT_DROP under its mount, so on a wall at BRACKET_MOUNT it hangs over 2.4 m above the walks."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_lamps
+        cls.kit = station_lamps
+        station_lamps.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _ray(self, o, at, way):
+        tree = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get())
+        found = tree.ray_cast(Vector(at), Vector(way), 5.0)
+        if found[0] is None:
+            return None, None
+        return found[0], o.data.materials[o.data.polygons[found[2]].material_index].name
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_it_hangs_off_the_face_clear_of_the_walk(self):
+        vs = _world(self.objects["ward_bracket"])
+        (x0, x1), (y0, y1), (z0, z1) = [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+        self.assertAlmostEqual(y1, 0.0, delta=0.001)
+        self.assertGreaterEqual(y0, -1.0)
+        self.assertGreaterEqual(z0, -self.kit.MOUNT_DROP)
+        self.assertLessEqual(self.kit.MOUNT_DROP, 1.1)
+        self.assertLessEqual(x1 - x0, 0.7)
+
+    def test_a_tall_glass_lantern_most_of_its_face(self):
+        # (Seen from the front and the sides through its middle, glass most of the way up its body.)
+        o = self.objects["ward_bracket"]
+        gy, gz = self.kit.GLOBE
+        z0, z1 = gz - self.kit.LANTERN[1] / 2 + 0.03, gz + self.kit.LANTERN[1] / 2 - 0.03
+        self.assertGreaterEqual(self.kit.LANTERN[1], 0.45)
+        self.assertGreaterEqual(self.kit.LANTERN[0], 0.28)
+        for at, way in (((1.0, gy, None), (-1.0, 0.0, 0.0)), ((-1.0, gy, None), (1.0, 0.0, 0.0))):
+            found = [self._ray(o, (at[0], at[1], z0 + (z1 - z0) * k / 10), way)[1] for k in range(11)]
+            self.assertGreaterEqual(found.count("glass"), 7, found)
+
+    def test_the_companys_eye_on_its_front(self):
+        o = self.objects["ward_bracket"]
+        gy, gz = self.kit.GLOBE
+        _, slot = self._ray(o, (0.0, gy - 1.0, gz), (0.0, 1.0, 0.0))
+        self.assertEqual(slot, "obsidian")
+
+    def test_a_stepped_crown_with_a_sunburst_and_a_knob(self):
+        o = self.objects["ward_bracket"]
+        gy, gz = self.kit.GLOBE
+        top = gz + self.kit.LANTERN[1] / 2
+        self.assertGreaterEqual(len(self.kit.CROWN), 3)
+        halves = [h for h, _, _ in self.kit.CROWN]
+        self.assertEqual(halves, sorted(halves, reverse=True))
+        # (Its knob over the crown, seen from the side.)
+        _, slot = self._ray(o, (1.0, gy, top + self.kit.CROWN[-1][2] + 0.06), (-1.0, 0.0, 0.0))
+        self.assertEqual(slot, "brass")
+        # (Rays out round the crown: brass rays in some directions, none in others.)
+        found = [self._ray(o, (0.6 * math.cos(2 * math.pi * k / 48), gy + 0.6 * math.sin(2 * math.pi * k / 48),
+                               top + self.kit.SUN_AT), (-math.cos(2 * math.pi * k / 48), -math.sin(2 * math.pi * k / 48), 0.0))[0]
+                 for k in range(48)]
+        self.assertGreaterEqual(sum(1 for f in found if f is not None and (Vector(f) - Vector((0, gy, f[2]))).length > 0.2), 8)
+
+    def test_the_arm_is_joined_at_both_ends_and_its_brace_meets_it(self):
+        # (The user, Oct 31: "the gooseneck is not properly connected".)
+        neck, brace = [Vector(p) for p in self.kit.neck_points()], [Vector(p) for p in self.kit.brace_points()]
+
+        def off_neck(q):
+            return min(geometry.intersect_point_line(q, a, b)[0].__sub__(q).length
+                       if 0.0 <= geometry.intersect_point_line(q, a, b)[1] <= 1.0 else min((q - a).length, (q - b).length)
+                       for a, b in zip(neck, neck[1:]))
+
+        self.assertLessEqual(off_neck(brace[-1]), self.kit.ARM_R * 0.5)
+        o = self.objects["ward_bracket"]
+        # (Its root inside the corbel, its end inside the socket over the finial: solid metal round both.)
+        for q in (neck[0], neck[-1]):
+            hits = sum(1 for way in ((1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1))
+                       if self._ray(o, tuple(q), way)[0] is not None)
+            self.assertEqual(hits, 4, tuple(q))
+        # (The brace's foot on the back plate.)
+        self.assertLessEqual(abs(brace[0].y + self.kit.PLATE[0][3]), 0.02)
+
+    def test_its_shape_is_subtle(self):
+        # (The user, Oct 31: "the thorns are a bit too much": the sunburst short fins hugging the crown, a knob for
+        # a spike.)
+        self.assertLessEqual(self.kit.SUN_REACH, self.kit.CROWN[0][0] / math.cos(math.pi / self.kit.SIDES) + 0.05)
+        self.assertLessEqual(self.kit.SPIKE, 0.13)
+
+    def test_a_milagro_tied_under_it(self):
+        self.assertIn("tin", {m.name for m in self.objects["ward_bracket"].data.materials})
 
 
 class YourShapes(unittest.TestCase):
