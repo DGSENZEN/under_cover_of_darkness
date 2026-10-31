@@ -72,6 +72,9 @@ var columns: Array[Node3D] = []
 ## Its taquillas (the station_taquillas kit), each with its "side" ("east", "west"), its "windows" (each counter's
 ## front edge, in its middle, in the set's frame) and its "facing" (into the hall).
 var taquillas: Array[Node3D] = []
+## Its turnstile banks (the station_turnstiles kit), each with its "side" ("west", "east"), its "lanes" (each lane's
+## middle on the floor, in the set's frame) and its "arms" (each lane's turning pivot, null where the surge fused them).
+var turnstiles: Array[Node3D] = []
 ## Its own light (the dressing's fluorescents; the big pieces' brass lamps join them).
 var lights: Array[Light3D] = []
 ## Its flights' ramps: [their ends, as built, and their width]; the ramps themselves.

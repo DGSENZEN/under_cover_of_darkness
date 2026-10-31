@@ -558,6 +558,7 @@ func _tour(points: Array, from_start := false) -> Dictionary:
 
 	var ok := true
 	var worst := ""
+	points = _through_lanes(points)
 
 	for k in range(1, points.size()):
 		var target := _v(points[k])
@@ -570,6 +571,38 @@ func _tour(points: Array, from_start := false) -> Dictionary:
 			break
 
 	return {"ok": ok and player.is_on_floor(), "end": player.global_position, "failed": worst}
+
+
+## The plan's walks join a space's points in straight lines and know nothing of the station's turnstile banks: a leg
+## across a bank goes through its nearest lane instead, as anyone would (2 m before it, along its middle, 2 m after).
+func _through_lanes(points: Array) -> Array:
+	var station: Node3D = map.get_node_or_null("metro_station")
+	var banks = station.get("turnstiles") if station != null else null
+	if banks == null or (banks as Array).is_empty():
+		return points
+	var out := [points[0]]
+	for k in range(1, points.size()):
+		var a := _v(points[k - 1])
+		var b := _v(points[k])
+		for bank: Node3D in banks:
+			var lanes: Array = bank.get_meta("lanes", [])
+			if lanes.is_empty():
+				continue
+			var line: Vector3 = station.to_global(lanes[0])
+			if absf(a.y - line.y) > 0.5 or absf(b.y - line.y) > 0.5 or signf(a.x - line.x) == signf(b.x - line.x):
+				continue
+			var t := (line.x - a.x) / (b.x - a.x)
+			var cross := lerpf(a.z, b.z, t)
+			var best: Vector3 = station.to_global(lanes[0])
+			for lane: Vector3 in lanes:
+				var at: Vector3 = station.to_global(lane)
+				if absf(at.z - cross) < absf(best.z - cross):
+					best = at
+			var way := signf(b.x - a.x)
+			out.append([best.x - way * 2.0, best.y, best.z])
+			out.append([best.x + way * 2.0, best.y, best.z])
+		out.append(points[k])
+	return out
 
 
 func _leg(target: Vector3) -> Dictionary:

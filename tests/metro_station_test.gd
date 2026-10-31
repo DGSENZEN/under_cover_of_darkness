@@ -25,6 +25,7 @@ func _ready() -> void:
 	_dressed()
 	_lit()
 	_taquillas()
+	await _turnstiles()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -81,6 +82,8 @@ func _taquillas() -> void:
 		var windows: Array = booth.get_meta("windows", [])
 		if windows.size() != place[3]:
 			wrong.append("%s: %d windows" % [booth.name, windows.size()])
+		if not _footprint_fits(booth, box):
+			wrong.append("%s: no footprint over its box %s" % [booth.name, box])
 		var facing: Vector3 = booth.get_meta("facing", Vector3.ZERO)
 		if facing.distance_to(Vector3(0.0, 0.0, -place[2])) > 0.01:
 			wrong.append("%s: facing %s" % [booth.name, facing])
@@ -104,6 +107,111 @@ func _taquillas() -> void:
 	_check("S7 the taquillas against their walls, their windows facing the hall", wrong.is_empty(), "%s" % [wrong])
 	_check("S7b a queue's room in front of every window", crowded.is_empty() and not (booths as Array).is_empty(),
 		"%s" % [crowded.slice(0, 6)])
+
+
+## A piece's "footprint" (Rect2 in the set's x-z, for the crowd's routes) is its meshes' box seen from above.
+func _footprint_fits(piece: Node3D, box: AABB) -> bool:
+	if not piece.has_meta("footprint") or not piece.get_meta("footprint") is Rect2:
+		return false
+	var footprint: Rect2 = piece.get_meta("footprint")
+	var want := Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
+	return footprint.position.distance_to(want.position) < 0.02 and footprint.size.distance_to(want.size) < 0.02
+
+
+## Task 8: the turnstile banks.
+## The banks' places (the plan's): across the hall at x -14 (the west, its north half fused open) and x 14 (the east);
+## the lanes each has, and those of the west's fused (the hall's z -4…0).
+const BANKS := {"west": -14.0, "east": 14.0}
+const LANES := 4
+## Every lane clear at least this wide (m): the player's capsule and a hand.
+const LANE_CLEAR := 1.1
+
+
+## S8: each bank stands across the hall at its x, from wall to wall, closed beside its lanes (a ray across its railings
+## meets it), its four lanes each at least 1.1 m clear from the floor to 2 m (rays across the bank every centimetre).
+## S8b: the player walks through every lane, both ways. S8c: a working lane's arms turn a third as the player passes,
+## seen turned (interpolation off: they turn between ticks); the fused lanes (the west's north half) have no arms that
+## turn.
+func _turnstiles() -> void:
+	var banks = station.get("turnstiles")
+	var wrong := []
+	var narrow := []
+	var stuck := []
+	var turns := []
+	var walls := 14.0 - float(station.WALL) - 0.067
+	var hall_floor: float = station.spaces()["hall"]["floor"]
+	if banks == null or (banks as Array).size() != BANKS.size():
+		wrong.append("banks: %s" % [banks])
+		banks = []
+	for bank: Node3D in banks:
+		var side: String = bank.get_meta("side", "")
+		if not BANKS.has(side):
+			wrong.append("%s: no side" % bank.name)
+			continue
+		var x: float = BANKS[side]
+		var box := _box_of(bank)
+		if absf(box.get_center().x - x) > 0.3 or absf(box.position.z + walls) > 0.02 or absf(box.end.z - walls) > 0.02:
+			wrong.append("%s: x %.2f…%.2f z %.3f…%.3f" % [bank.name, box.position.x, box.end.x, box.position.z,
+				box.end.z])
+		if not _footprint_fits(bank, box):
+			wrong.append("%s: no footprint over its box %s" % [bank.name, box])
+		# (Its railings' fret is open to see through; their curb and top bar close them, the staff gate's too.)
+		for z in [-13.0, -10.0, -7.0, -5.0, 5.0, 7.0, 10.0, 13.0]:
+			for h in [0.06, 0.94]:
+				var hit := _ray(Vector3(x - 2.0, hall_floor + h, z), Vector3(x + 2.0, hall_floor + h, z))
+				if absf(hit.x - x) > 1.0:
+					wrong.append("%s: open at z %.1f, %.2f m up" % [bank.name, z, h])
+		var lanes: Array = bank.get_meta("lanes", [])
+		var arms: Array = bank.get_meta("arms", [])
+		if lanes.size() != LANES or arms.size() != LANES:
+			wrong.append("%s: %d lanes, %d arms" % [bank.name, lanes.size(), arms.size()])
+			continue
+		for k in LANES:
+			var lane: Vector3 = lanes[k]
+			var best := 0.0
+			var run := 0.0
+			for i in 151:
+				var z := lane.z - 0.75 + i * 0.01
+				var open := true
+				for h in [0.1, 0.4, 0.7, 1.0, 1.3, 1.6, 1.9]:
+					var from := Vector3(x - 2.0, hall_floor + h, z)
+					var to := Vector3(x + 2.0, hall_floor + h, z)
+					if _ray(from, to) != to:
+						open = false
+						break
+				run = run + 0.01 if open else 0.0
+				best = maxf(best, run)
+			if best < LANE_CLEAR:
+				narrow.append("%s lane %d: %.2f m" % [bank.name, k, best])
+			# (Fused: the west bank's lanes north of the hall's middle, its z under 0.)
+			var fused: bool = side == "west" and lane.z < 0.0
+			var turner = arms[k]
+			if fused != (turner == null):
+				turns.append("%s lane %d: fused %s, arms %s" % [bank.name, k, fused, turner])
+				continue
+			for way in [1.0, -1.0]:
+				var before: Basis = turner.global_transform.basis if turner != null else Basis.IDENTITY
+				var walked := await _walk_path(Vector3(x - way * 2.5, hall_floor + 1.05, lane.z),
+					[Vector3(x + way * 2.5, hall_floor + 1.05, lane.z)], 600)
+				if not walked["ok"]:
+					stuck.append("%s lane %d going %s: %s" % [bank.name, k, "east" if way > 0 else "west", walked])
+				if turner == null:
+					continue
+				await _frames(60)
+				var after: Basis = turner.global_transform.basis
+				# (Either way round: a third back reads as two thirds forward.)
+				var turned := (before.inverse() * after).get_rotation_quaternion().get_angle()
+				turned = minf(turned, TAU - turned)
+				if absf(turned - TAU / 3.0) > 0.05:
+					turns.append("%s lane %d going %s: turned %.2f" % [bank.name, k, way, turned])
+				if turner.physics_interpolation_mode != Node.PHYSICS_INTERPOLATION_MODE_OFF:
+					turns.append("%s lane %d: arms interpolated" % [bank.name, k])
+	_check("S8 the turnstile banks across the hall, every lane at least 1.1 m clear", wrong.is_empty() \
+		and narrow.is_empty() and not (banks as Array).is_empty(), "%s %s" % [wrong.slice(0, 6), narrow])
+	_check("S8b walked through every lane both ways", stuck.is_empty() and not (banks as Array).is_empty(),
+		"%s" % [stuck.slice(0, 6)])
+	_check("S8c the working arms turn a third as the player passes, the fused never", turns.is_empty() \
+		and not (banks as Array).is_empty(), "%s" % [turns.slice(0, 6)])
 
 
 ## A node's meshes' box in the set's frame.

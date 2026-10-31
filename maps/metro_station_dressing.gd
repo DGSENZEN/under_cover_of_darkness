@@ -16,6 +16,8 @@ const SHELL_KIT := "res://assets/eclipse/kit/station_shell.glb"
 const TRACK_KIT := "res://assets/eclipse/kit/station_track.glb"
 const WALLS_KIT := "res://assets/eclipse/kit/underground_walls.glb"
 const TAQUILLAS_KIT := "res://assets/eclipse/kit/station_taquillas.glb"
+const TURNSTILES_KIT := "res://assets/eclipse/kit/station_turnstiles.glb"
+const TurnstileLane := preload("res://scripts/Level/TurnstileLane.gd")
 ## station_shell's measures (tools/eclipse/station_shell.py): a panel's width, the tiled panels' height, the tiles' face
 ## off the wall, a floor slab's and a ceiling panel's side, the coping's reach, a coffer's side, a pit face's height, a
 ## tread's depth and rise and a flight's width, a handrail's run, the line map's width.
@@ -85,6 +87,16 @@ const TAQUILLA_PIER := 0.4
 const TAQUILLA_POST := 0.36
 const TAQUILLA_COUNTER := Vector2(2.32, 1.05)
 const TAQUILLA_LAMP := Vector2(2.45, 2.86)
+## The turnstile banks (tools/eclipse/station_turnstiles.py's measures): each bank's x and its turn (the kit's paid
+## side, +y, toward the hall's middle); its cabinets' middles along the bank and their width; a lane's hub (its height,
+## how far out from its cabinet's face) and the arms' axis tipped down into the lane; a lane's room for the Area3D that
+## turns them (m: along the walk, its height).
+const BANKS := {"west": [-14.0, -PI / 2.0], "east": [14.0, PI / 2.0]}
+const BANK_CABINETS := [-3.72, -1.86, 0.0, 1.86, 3.72]
+const BANK_CABINET := 0.56
+const BANK_HUB := Vector2(0.86, 0.07)
+const BANK_TILT := PI / 4.0
+const BANK_LANE := Vector2(2.4, 2.0)
 ## The Company's ward light (KitLoader's ward_cage_lamp), its energy and reach, and its globe's glow.
 const WARD := Color("#CFE8F0")
 const WARD_LAMP := Vector2(0.6, 4.5)
@@ -120,6 +132,7 @@ static func dress(station) -> void:
 	_track(station, root)
 	_tablets(station, root)
 	_taquillas(station, root)
+	_turnstiles(station, root)
 	_light(station, root)
 	_shell_layers(station)
 
@@ -719,9 +732,78 @@ static func _taquillas(station, root: Node3D) -> void:
 			lamp.position = Vector3(x, hall_floor + TAQUILLA_LAMP.y, wall * tiles + facing.z * TAQUILLA_LAMP.x)
 			station.lights.append(lamp)
 		booth.set_meta("side", side)
+		booth.set_meta("footprint", _footprint(station, booth))
 		booth.set_meta("windows", windows)
 		booth.set_meta("facing", facing)
 		station.taquillas.append(booth)
+
+
+## The turnstile banks across the hall: each bank solid (its own faces), its working lanes' arms on pivots that turn
+## as anyone walks through; the west's north half fused (no arms that turn: its melted arms are the bank's own).
+static func _turnstiles(station, root: Node3D) -> void:
+	if not ResourceLoader.exists(TURNSTILES_KIT):
+		return
+	var kit := SetKit.kit(TURNSTILES_KIT)
+	var look := Painterly.material(SetKit.painted(["station_turnstiles.png", "station_turnstiles_base.png"]),
+		&"bespoke")
+	_plainly_lit(look)
+	var hall_floor: float = station.spaces()["hall"]["floor"]
+	for side: String in BANKS:
+		var kind := "bank_" + side
+		if not kit.has(kind):
+			continue
+		var x: float = BANKS[side][0]
+		var yaw: float = BANKS[side][1]
+		var turn := Basis(Vector3.UP, yaw)
+		var at := Vector3(x, hall_floor, 0.0)
+		var bank := SetKit.place(root, kit[kind], look, kind, at, yaw, true, true)
+		bank.layers = Layers.STATION_HALL
+		# (The kit's frame, Blender's x along the bank, y the walk, z up: Godot's (x, z, -y) turned to its place.)
+		var kit_to_set := func(p: Vector3) -> Vector3: return at + turn * Vector3(p.x, p.z, -p.y)
+		var axis: Vector3 = turn * Vector3(cos(BANK_TILT), -sin(BANK_TILT), 0.0)
+		var walk: Vector3 = turn * Vector3(0.0, 0.0, -1.0)
+		var lanes: Array[Vector3] = []
+		var arms: Array = []
+		for k in BANK_CABINETS.size() - 1:
+			var middle: Vector3 = kit_to_set.call(Vector3((BANK_CABINETS[k] + BANK_CABINETS[k + 1]) / 2.0, 0.0, 0.0))
+			lanes.append(middle)
+			if side == "west" and middle.z < 0.0 or not kit.has("rotor"):
+				arms.append(null)
+				continue
+			var hub: Vector3 = kit_to_set.call(Vector3(BANK_CABINETS[k] + BANK_CABINET / 2.0 + BANK_HUB.y, 0.0,
+				BANK_HUB.x))
+			var pivot := Node3D.new()
+			pivot.name = "arms"
+			pivot.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+			root.add_child(pivot, true)
+			pivot.position = hub
+			var rotor := SetKit.place(pivot, kit["rotor"], look, "rotor", Vector3.ZERO, yaw, false)
+			rotor.layers = Layers.STATION_HALL
+			rotor.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+			var lane := TurnstileLane.new()
+			lane.name = "lane"
+			lane.arms = pivot
+			lane.axis = axis
+			lane.walk = walk
+			var shape := CollisionShape3D.new()
+			var room := BoxShape3D.new()
+			room.size = Vector3(BANK_LANE.x, BANK_LANE.y, BANK_CABINETS[1] - BANK_CABINETS[0] - BANK_CABINET)
+			shape.shape = room
+			lane.add_child(shape)
+			root.add_child(lane, true)
+			lane.position = middle + Vector3(0.0, BANK_LANE.y / 2.0, 0.0)
+			arms.append(pivot)
+		bank.set_meta("side", side)
+		bank.set_meta("footprint", _footprint(station, bank))
+		bank.set_meta("lanes", lanes)
+		bank.set_meta("arms", arms)
+		station.turnstiles.append(bank)
+
+
+## A piece's footprint (its mesh's box seen from above, in the set's x-z), for the crowd's routes.
+static func _footprint(station, piece: MeshInstance3D) -> Rect2:
+	var box: AABB = station.global_transform.affine_inverse() * piece.global_transform * piece.mesh.get_aabb()
+	return Rect2(box.position.x, box.position.z, box.size.x, box.size.z)
 
 
 ## A ward lamp's globe: the Company's cold light through its glass.

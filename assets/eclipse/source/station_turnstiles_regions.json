@@ -1,0 +1,23 @@
+{
+ "slots": [
+  "iron",
+  "brass",
+  "tezontle",
+  "chiluca",
+  "obsidian",
+  "sign",
+  "leather_black",
+  "scorched",
+  "brass_burnt",
+  "chiluca_scorched",
+  "hollow",
+  "wood",
+  "copper",
+  "silver",
+  "print_saint",
+  "marigold",
+  "wax"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 174.0
+}
