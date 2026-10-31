@@ -325,7 +325,101 @@ def lane(pedal):
             {'name': 'H Swarm', 'channel': 7, 'program': 14, 'notes': swarm}]
 
 
-PIECES = {'bed': bed, 'cue': cue, 'lane': lane}
+# How each player plays (beats at 72 bpm: 0.012 is 10 ms): timing spread, how far behind the
+# beat they sit, velocity spread, chord roll (lowest first), drift (bend range units, slow
+# micro-detuning), and whether long notes breathe (CC11) and bloom into vibrato (CC1).
+PLAYERS = {
+    'L Sub': dict(spread=0.004, behind=0.0, vel=3),
+    'L Bass': dict(spread=0.010, behind=0.012, vel=6),
+    'L Kit': dict(spread=0.005, behind=0.0, vel=5),
+    'L Backbeat': dict(spread=0.004, behind=0.004, vel=4),
+    'L Keys': dict(spread=0.008, behind=0.006, vel=6, roll=0.012, drift=0.02),
+    'L Glass': dict(spread=0.014, behind=0.0, vel=7),
+    'L Guitar': dict(spread=0.010, behind=0.004, vel=7, roll=0.022, drift=0.015),
+    'L Candle pad': dict(spread=0.006, behind=0.0, vel=3, drift=0.02),
+    'L Trumpet': dict(spread=0.012, behind=0.02, vel=6, drift=0.03, breath=True),
+    'H Pleading': dict(spread=0.01, behind=0.0, vel=4),
+    'H Dragged': dict(spread=0.006, behind=0.0, vel=3),
+    'H Swarm': dict(spread=0.01, behind=0.0, vel=6),
+}
+
+
+def perform(parts, seed=1925):
+    """The composed parts played: each by its player (PLAYERS), the same way every time."""
+    import random
+    rng = random.Random(seed)
+    out = []
+    for part in parts:
+        player = PLAYERS.get(part['name'])
+        if player is None:
+            out.append(part)
+            continue
+        played = dict(part)
+        # Chords: notes starting together, lowest rolled first.
+        together = {}
+        for note in part['notes']:
+            together.setdefault(round(note[0], 4), []).append(note)
+        notes = []
+        for start, chord in sorted(together.items()):
+            shift = player['behind'] + rng.gauss(0.0, player['spread'])
+            shift = max(-0.05, min(0.06, shift))
+            for i, (s0, length, pitch, vel) in enumerate(sorted(chord, key=lambda n: n[2])):
+                roll = i * player.get('roll', 0.0) * rng.uniform(0.6, 1.2)
+                v = int(round(vel + rng.gauss(0.0, player['vel'])))
+                notes.append((round(max(0.0, s0 + shift + roll), 4), length, pitch, max(1, min(127, v))))
+        played['notes'] = notes
+        controls = list(part.get('controls', []))
+        if player.get('drift'):
+            controls = _drift(controls, notes, player['drift'], rng)
+        if player.get('breath'):
+            # The player's own breathing takes over the written swells.
+            controls = [m for m in controls if m[1] != 11] + _breathe(notes, rng)
+        played['controls'] = controls
+        out.append(played)
+    return out
+
+
+def _drift(controls, notes, width, rng):
+    """Slow micro-detuning: the pitch wandering a few cents, a step every half beat,
+    laid over the written bends (a scoop or a fall-off still lands where it was written)."""
+    if not notes:
+        return controls
+    written = sorted((t, v) for t, k, v in controls if k == 'bend')
+    has_range = any(k == 'bend_range' for _, k, _ in controls)
+    out = list(controls) if has_range else [(0.0, 'bend_range', 2)] + list(controls)
+    end = max(s + l for s, l, _, _ in notes)
+    wander, t = 0.0, 0.0
+    while t < end:
+        wander = max(-width, min(width, wander + rng.uniform(-width, width) * 0.5))
+        base = 0.0
+        for when, value in written:
+            if when <= t:
+                base = value
+        # Leave the written gestures alone while they move.
+        if base == 0.0 and not any(abs(when - t) < 0.3 for when, _ in written):
+            out.append((round(t, 4), 'bend', round(wander, 4)))
+        t += 0.5
+    return out
+
+
+def _breathe(notes, rng):
+    """A wind player's long notes: in a little soft, swelling, easing off at the end, the
+    vibrato blooming after a moment; short notes just get a little lift."""
+    out = []
+    for start, length, _, vel in sorted(notes):
+        peak = min(127, 70 + vel // 3)
+        if length >= 1.0:
+            out += _ramp(start, start + 0.3, 11, peak - 30, peak, 4)
+            out += _ramp(start + length * 0.7, start + length, 11, peak, peak - 25, 4)
+            bloom = start + min(0.6, length * 0.4)
+            out += [(round(start, 4), 1, 0)] + _ramp(bloom, start + length * 0.85, 1, 0, 40 + rng.randint(0, 25), 6)
+            out.append((round(start + length, 4), 1, 0))
+        else:
+            out.append((round(start, 4), 11, peak - 10))
+    return out
+
+
+PIECES = {'bed': bed, 'cue': cue, 'lane': lambda pedal: perform(lane(pedal))}
 
 
 def write_piece(piece, bpm, pedal, take, out=OUT):

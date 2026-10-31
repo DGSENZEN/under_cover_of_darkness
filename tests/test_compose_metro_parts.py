@@ -137,6 +137,47 @@ class MetroPartsTest(unittest.TestCase):
         bends = [v for _, k, v in pleading['controls'] if k == 'bend']
         self.assertLess(min(bends), -0.5)
 
+    def test_performance_moves_notes_only_a_little_and_the_same_each_time(self):
+        raw = {p['name']: p for p in self.compose.lane('C')}
+        played = {p['name']: p for p in self.compose.perform(self.compose.lane('C'))}
+        again = {p['name']: p for p in self.compose.perform(self.compose.lane('C'))}
+        self.assertEqual(played, again)
+        for name, part in raw.items():
+            before = sorted(part['notes'])
+            after = sorted(played[name]['notes'])
+            self.assertEqual(len(before), len(after), name)
+            for a, b in zip(before, after):
+                self.assertLess(abs(a[0] - b[0]), 0.08, name)
+                self.assertEqual(a[2], b[2], name)
+            self.assertNotEqual(before, after, name)
+
+    def test_trumpet_breathes_blooms_and_drifts(self):
+        trumpet = [p for p in self.compose.perform(self.compose.lane('C')) if p['name'] == 'L Trumpet'][0]
+        moves = trumpet['controls']
+        self.assertTrue(any(k == 1 and v >= 40 for _, k, v in moves), 'no vibrato bloom')
+        self.assertTrue(any(k == 11 for _, k, v in moves), 'no expression')
+        written = [p for p in self.compose.lane('C') if p['name'] == 'L Trumpet'][0]['controls']
+        added = [m for m in moves if m not in written]
+        drift = [v for _, k, v in added if k == 'bend']
+        self.assertTrue(any(v != 0.0 for v in drift), 'no drift')
+        self.assertTrue(all(abs(v) <= 0.03 for v in drift), 'drift too wide')
+        # Laid back: on average a little behind the beat.
+        raw = sorted(n[0] for n in [p for p in self.compose.lane('C') if p['name'] == 'L Trumpet'][0]['notes'])
+        played = sorted(n[0] for n in trumpet['notes'])
+        self.assertGreater(sum(b - a for a, b in zip(raw, played)) / len(raw), 0.005)
+
+    def test_guitar_strums_low_first_and_keys_roll(self):
+        played = {p['name']: p for p in self.compose.perform(self.compose.lane('C'))}
+        second = sorted((n for n in played['L Guitar']['notes'] if n[0] >= 32), key=lambda n: n[0])
+        pairs = [(a, b) for a, b in zip(second, second[1:]) if abs(a[0] - b[0]) < 0.05 and 3 <= abs(a[2] - b[2]) <= 4]
+        self.assertGreater(len(pairs), 8)
+        self.assertTrue(all(a[2] < b[2] for a, b in pairs), 'the lower string sounds first')
+        keys = played['L Keys']['notes']
+        stabs = {}
+        for n in keys:
+            stabs.setdefault(round(n[0] * 4) / 4, []).append(n[0])
+        self.assertTrue(any(len(set(v)) > 1 for v in stabs.values()), 'chords not rolled')
+
     def test_midi_carries_bends_ccs_and_bend_range(self):
         out = Path(tempfile.mkdtemp()) / 'moves.mid'
         controls = [(0.0, 'bend_range', 12), (0.0, 74, 10), (1.0, 'bend', -1.0), (2.0, 'bend', 0.5), (3.0, 11, 127)]
