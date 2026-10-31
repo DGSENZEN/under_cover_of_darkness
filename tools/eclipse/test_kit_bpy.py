@@ -3441,10 +3441,55 @@ class StationPipes(unittest.TestCase):
             self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
 
     def test_big_pipes_on_brackets(self):
+        # (The user, Oct 31: "bigger".)
         self.assertGreaterEqual(len(self.kit.PIPES), 3)
-        self.assertGreaterEqual(max(r for _, r, _ in self.kit.PIPES), 0.08)
+        self.assertGreaterEqual(max(r for _, r, _ in self.kit.PIPES), 0.13)
         self.assertLessEqual(self.kit.BRACKET_EVERY, 2.4)
         self.assertGreaterEqual(len(self.kit.RACKS), 6)
+
+    def test_mains_risers_and_mouths(self):
+        # (A large machine being run: mains half a metre across under the coffers' beams, risers floor to ceiling, mouths
+        # venting from the floor.)
+        for name, (z, r, y, reach, floor, limit) in self.kit.MAINS.items():
+            self.assertGreaterEqual(2 * r, 0.35, name)
+            self.assertLessEqual(y + r, limit, name)
+            self.assertGreaterEqual(y - r, floor + 2.4, name)
+        self.assertGreaterEqual(len(self.kit.MAINS), 6)
+        self.assertGreaterEqual(max(2 * r for _, r, *_ in self.kit.MAINS.values()), 0.5)
+        # (Engrained: the floor's mains half sunk, the trays full of cables.)
+        r, up = self.kit.FLOOR_MAIN
+        self.assertLessEqual(up + r, 0.3)
+        self.assertLess(up, r)
+        self.assertGreaterEqual(len(self.kit.FLOOR_MAINS), 4)
+        self.assertGreaterEqual(self.kit.TRAY_CABLES, 5)
+        self.assertGreaterEqual(len(self.kit.RISERS), 8)
+        self.assertGreaterEqual(2 * self.kit.RISER[0], 0.5)
+        self.assertGreaterEqual(2 * self.kit.MOUTH[2], 1.0)
+
+
+class StationDucts(unittest.TestCase):
+    """The station's ducts (tools/eclipse/station_ducts.py: the floor's mains, the trays, the mouths, their feeds),
+    closed, in budget, through the gate; a mouth standing on z = 0."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_ducts
+        cls.kit = station_ducts
+        station_ducts.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_a_mouth_stands_on_the_floor(self):
+        vs = _world(self.objects["mouth"])
+        self.assertAlmostEqual(min(v[2] for v in vs), 0.0, delta=0.001)
 
 
 class YourShapes(unittest.TestCase):

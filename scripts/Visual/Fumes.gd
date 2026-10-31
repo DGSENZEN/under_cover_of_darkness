@@ -37,6 +37,25 @@ const DRIFT_CAP := 1.2
 @export var puff_speed := 0.32
 ## How hard its plumes churn and wave (m at the mouth's width of 0.5).
 @export var churn := 0.03
+## How much its edges are eaten away (1 the steam's), how big its shapes are against its own size (1 the steam's; under
+## 1 bigger, rounder billows), how soft its edges (the shader's hardness: a wider band softer).
+@export var erosion := 1.0
+@export var grain := 1.0
+@export var softness := 0.035
+## How far its plumes' grain is drawn out along them into streaks (1 the steam's; over 1 long streaks with the flow,
+## as Deadlock's ribbons).
+@export var streak := 1.0
+## How it dissipates as it climbs: how much more its plumes are eaten toward their crowns (1 the steam's), and where up
+## them (0 foot, 1 crown) they begin to thin away (the steam's 0.8).
+@export var dissipate := 1.0
+@export var fade_from := 0.8
+## How far (radians) a mouth-up plume winds round the column as it climbs, and how much wider its ring grows by its top:
+## Deadlock's smoke, ribbons curling round each other (0: straight up, the steam's).
+@export var twirl := 0.0
+## How far out round the mouth's middle a mouth-up plume's foot stands, as a share of the mouth's width (the steam's 0.35:
+## round its rim; small, out of the mouth itself).
+@export var ring := 0.35
+@export var widen := 0.0
 ## Its puffs moved by the god's breath (Breath.gd's attractor, on their own layer).
 @export var breathed := false
 @export var seed := 0
@@ -85,7 +104,7 @@ func build() -> void:
 			# Round a ring, each leaning out a little as it climbs.
 			var a := TAU * (float(i) + rng.randf_range(-0.2, 0.2)) / plumes
 			var way := Vector3(cos(a), 0.0, sin(a))
-			off = way * width * 0.35 if plumes > 1 else Vector3.ZERO
+			off = way * width * ring if plumes > 1 else Vector3.ZERO
 			lean = way * rise * rng.randf_range(0.06, 0.16)
 		else:
 			off = across * lerpf(-0.4, 0.4, (float(i) + 0.5) / plumes) * width + Vector3.UP * rng.randf_range(-0.08, 0.08)
@@ -98,7 +117,9 @@ func build() -> void:
 			var t := float(k) / 15.0
 			# Out of the mouth and turning up as it rises, curling back toward the wall it climbs.
 			var out_by := leave * (1.0 - pow(1.0 - minf(t * 2.5, 1.0), 2.0)) - (0.0 if upward else 0.05 * t)
-			path.append(off + _out * out_by + Vector3.UP * tall * pow(t, 1.15) + lean * t * t)
+			# (Winding round the column and spreading as it climbs, when it twirls.)
+			var round := off.rotated(Vector3.UP, twirl * t) * (1.0 + widen * t) if upward else off
+			path.append(round + _out * out_by + Vector3.UP * tall * pow(t, 1.15) + lean * t * t)
 
 		var tube := MeshInstance3D.new()
 		tube.name = "plume_%d" % i
@@ -202,12 +223,14 @@ func _look(is_puff: bool, look_seed: float) -> ShaderMaterial:
 	m.set_shader_parameter(&"opacity", opacity * (1.0 if is_puff else 0.85))
 	m.set_shader_parameter(&"puff", 1.0 if is_puff else 0.0)
 	m.set_shader_parameter(&"seed", look_seed)
-	m.set_shader_parameter(&"erosion", 0.3 if is_puff else 0.36)
-	m.set_shader_parameter(&"tail_eat", 0.55 if is_puff else 0.35)
+	m.set_shader_parameter(&"erosion", (0.3 if is_puff else 0.36) * erosion)
+	m.set_shader_parameter(&"hardness", softness)
+	m.set_shader_parameter(&"tail_eat", 0.55 if is_puff else 0.35 * dissipate)
+	m.set_shader_parameter(&"fade_from", fade_from)
 	m.set_shader_parameter(&"warmth", warmth * (0.5 if is_puff else 1.0))
 	# (Its churn and its noise's tiling in metres, whatever its size: a thin thread waves less.)
 	m.set_shader_parameter(&"churn", churn * width / 0.5)
-	m.set_shader_parameter(&"tiling", Vector2(1.2, 1.5 * rise / 1.2))
+	m.set_shader_parameter(&"tiling", Vector2(1.2 * streak, 1.5 * rise / 1.2 / streak) * grain)
 	looks.append(m)
 	return m
 

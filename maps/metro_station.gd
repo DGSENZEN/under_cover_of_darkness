@@ -86,6 +86,13 @@ var neon: Array[Node3D] = []
 ## The Company's cable runs (each with metas "points", "to", "cables") and its pipe racks on the walls.
 var runs: Array[Node3D] = []
 var racks: Array[Node3D] = []
+## Its machine's pipework (the user, Oct 31): the ceiling's mains, the walls' risers, the floor's fuming mouths.
+var mains: Array[Node3D] = []
+var risers: Array[Node3D] = []
+var mouths: Array[Node3D] = []
+## Its floor's mains (half sunk along the walls' feet) and its cable trays under the coffers.
+var floor_mains: Array[Node3D] = []
+var trays: Array[Node3D] = []
 ## Its own light (the dressing's fluorescents; the big pieces' brass lamps join them).
 var lights: Array[Light3D] = []
 ## Its flights' ramps: [their ends, as built, and their width]; the ramps themselves.

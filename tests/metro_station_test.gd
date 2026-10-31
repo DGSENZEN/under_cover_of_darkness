@@ -29,7 +29,7 @@ func _ready() -> void:
 	_taquillas()
 	await _turnstiles()
 	_neon()
-	_runs()
+	await _runs()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -117,7 +117,7 @@ func _taquillas() -> void:
 ## S10: six runs, each from the engine's crown junction to the piece it powers (its last point within 1 m of that
 ## piece), an arc riding it in the Company's blue, its light among the station's lights. S10b: every point of every run,
 ## and every 0.25 m between, at least 2.4 m over the floor under it (the booths' roofs looked through).
-const ENGINE_TERMINAL := Vector3(0.0, 9.9, 0.0)
+const ENGINE_TERMINAL := Vector3(0.0, 9.45, 0.0)
 
 
 func _runs() -> void:
@@ -204,8 +204,215 @@ func _runs() -> void:
 			if other.intersects(box):
 				bad.append("%s through %s" % [rack.name, board.name])
 	_check("S10e the Company's pipe racks on the walls", bad.is_empty(), "%s" % [bad.slice(0, 6)])
+	await _machine(runs, boards, roofs)
 
 
+## The user, Oct 31: "it needs more, on the ceiling, on the walls, bigger, the feel of a large machine being operated;
+## some big pipe mouths in the floor spewing fuel or fumes".
+## S10f: the ceiling's mains (2 at least): under the coffers' beams, 3.2 m over the hall's floor, clear of every run,
+## hanging board, blade sign and Company lamp. S10g: the risers (8 at least): each from its floor into its ceiling,
+## within 1.2 m of its wall, clear of the doors, the booths, the maps and tablets, the lamps and the racks. S10h: the
+## floor's pipe mouths (6 at least): solid, standing on their floor, fuming (a Fumes at their mouth, uninterpolated),
+## 1.5 m clear of the stair heads, the corridors' and market's mouths, the lanes' approaches and the booths' queues, and
+## on a platform 1.5 m back from its edge.
+func _machine(runs: Array, boards: Array, roofs: Array) -> void:
+	var hall_floor: float = station.spaces()["hall"]["floor"]
+	var hall_top := hall_floor + float(station.spaces()["hall"]["height"])
+	var avoid := station.find_children("*", "MeshInstance3D", true, false).filter(func(m):
+		var kind := String(m.get_meta("kind", ""))
+		return kind in ["neon_board", "blade_company", "ward_bracket", "taquilla_east", "taquilla_west", "bank_east",
+			"bank_west"] or kind.begins_with("rack_"))
+	var drawn := _drawn()
+	var mains = station.get("mains")
+	var risers = station.get("risers")
+	var mouths = station.get("mouths")
+	var wrong := []
+	if mains == null or (mains as Array).size() < 6:
+		wrong.append("mains %s" % [mains])
+		mains = []
+	for main: MeshInstance3D in mains:
+		var box := _set_box(main)
+		var low := hall_floor if box.position.y > hall_floor else 0.0
+		var high := hall_top if box.position.y > hall_floor else float(station.spaces()["platform_n"]["height"])
+		# (Its pipe under the coffers' beams the kit checks; its hanging rods reach the ceiling.)
+		if box.position.y < low + 2.4 or box.end.y > high + 0.001:
+			wrong.append("%s spans y %.2f…%.2f" % [main.name, box.position.y, box.end.y])
+		# (A main's box spans its branches: what counts is any of its own points inside another piece.)
+		wrong += _crossing(main.name, box, runs, [])
+		wrong += _points_in(main, avoid.filter(func(m): return not String(m.get_meta("kind", "")).begins_with("rack_")))
+	_check("S10f the ceiling's mains", wrong.is_empty(), "%s" % [wrong.slice(0, 6)])
+
+	wrong = []
+	if risers == null or (risers as Array).size() < 8:
+		wrong.append("risers %s" % [risers])
+		risers = []
+	var face := 14.0 - float(station.WALL) - 0.032
+	for riser: MeshInstance3D in risers:
+		var box := _set_box(riser)
+		var space := "hall" if box.position.y > hall_floor - 1.0 else "platform"
+		var floor_y := hall_floor if space == "hall" else 0.0
+		var top := hall_top if space == "hall" else floor_y + float(station.spaces()["platform_n"]["height"])
+		if absf(box.position.y - floor_y) > 0.05 or box.end.y < top - 0.05:
+			wrong.append("%s spans y %.2f…%.2f" % [riser.name, box.position.y, box.end.y])
+		var near := absf(absf(box.get_center().z) - face)
+		if near > 1.2:
+			wrong.append("%s %.2f off its wall" % [riser.name, near])
+		# (Its body, the pipe itself: its straps reach back to the wall over and under the racks, which pass behind it.)
+		var side := signf(box.get_center().z)
+		var body := AABB(Vector3(box.get_center().x - RISER.x, box.position.y, side * (face - RISER.y) - RISER.x),
+			Vector3(2.0 * RISER.x, box.size.y, 2.0 * RISER.x))
+		wrong += _crossing(riser.name, body, runs, avoid)
+		for b: Dictionary in drawn["boxes"]:
+			if String(b["kind"]) in ["line_map", "name_tablet"] and (b["aabb"] as AABB).intersects(box):
+				wrong.append("%s over a %s" % [riser.name, b["kind"]])
+		for record in station.spaces().values():
+			for gap: Dictionary in record.get("gaps", []):
+				var a := Vector2(gap["a"][0], gap["a"][1])
+				var c := Vector2(gap["b"][0], gap["b"][1])
+				var door := AABB(Vector3(minf(a.x, c.x), float(gap["y0"]) + 14.0, minf(a.y, c.y)) - Vector3(0.0, 0.0, 0.0),
+					Vector3(absf(a.x - c.x), float(gap["y1"]) - float(gap["y0"]), absf(a.y - c.y))).grow(0.6)
+				if door.intersects(box):
+					wrong.append("%s in the door to %s" % [riser.name, gap["to"]])
+	_check("S10g the walls' risers", wrong.is_empty(), "%s" % [wrong.slice(0, 6)])
+
+	wrong = []
+	if mouths == null or (mouths as Array).size() < 6:
+		wrong.append("mouths %s" % [mouths])
+		mouths = []
+	var keep_clear := [Vector2(-6.0, -12.5), Vector2(6.0, 12.5), Vector2(-29.0, 0.0), Vector2(29.0, 0.0),
+		Vector2(-10.0, 12.5)]
+	for mouth: MeshInstance3D in mouths:
+		var box := _set_box(mouth)
+		# (Probed beside it along the wall, away from its feed.)
+		var on := _floor_under(Vector3(box.position.x - 0.3, box.position.y + 0.3, box.get_center().z))
+		if absf(box.position.y - on) > 0.03:
+			wrong.append("%s stands at %.2f over a floor at %.2f" % [mouth.name, box.position.y, on])
+		if mouth.find_children("*", "StaticBody3D", true, false).is_empty():
+			wrong.append("%s not solid" % mouth.name)
+		var fumes := mouth.find_children("*", "Node3D", true, false).filter(func(n): return n is Fumes)
+		if fumes.is_empty():
+			wrong.append("%s does not fume" % mouth.name)
+		var foot := Rect2(box.position.x, box.position.z, box.size.x, box.size.z).grow(1.5)
+		for at: Vector2 in keep_clear:
+			if box.position.y > hall_floor - 1.0 and foot.has_point(at):
+				wrong.append("%s within 1.5 m of %s" % [mouth.name, at])
+		for bank_x in [-14.0, 14.0]:
+			if box.position.y > hall_floor - 1.0 and foot.intersects(Rect2(bank_x - 2.0, -4.0, 4.0, 8.0)):
+				wrong.append("%s in a lane's approach" % mouth.name)
+		for booth: Node3D in station.taquillas:
+			for w: Vector3 in booth.get_meta("windows", []):
+				var queue := Rect2(w.x - 0.5, minf(w.z, w.z + (booth.get_meta("facing") as Vector3).z * 2.0), 1.0, 2.0)
+				if foot.intersects(queue):
+					wrong.append("%s in %s's queue" % [mouth.name, booth.name])
+		if box.position.y < hall_floor - 1.0 and minf(absf(box.position.z), absf(box.end.z)) < float(station.EDGE_Z) + 1.5:
+			wrong.append("%s within 1.5 m of the platform's edge" % mouth.name)
+	_check("S10h the floor's pipe mouths fuming", wrong.is_empty(), "%s" % [wrong.slice(0, 6)])
+
+	# The user, Oct 31: "more engrained towards the terrain, same with the cables, a bit more".
+	# S10i: the floor's mains along the walls' feet: half sunk (diving under the floor), never more than 0.3 m over it
+	# (a step), no point of them over the floor in a door, in a booth or under a bank's railing; every fume mouth fed by
+	# a pipe of its own (meta "feed").
+	wrong = []
+	var floor_mains = station.get("floor_mains")
+	if floor_mains == null or (floor_mains as Array).size() < 4:
+		wrong.append("floor mains %s" % [floor_mains])
+		floor_mains = []
+	var blocked := []
+	for record in station.spaces().values():
+		for gap: Dictionary in record.get("gaps", []):
+			var a := Vector2(gap["a"][0], gap["a"][1])
+			var c := Vector2(gap["b"][0], gap["b"][1])
+			blocked.append(AABB(Vector3(minf(a.x, c.x), float(gap["y0"]) + 14.0 + 0.02, minf(a.y, c.y)),
+				Vector3(absf(a.x - c.x), 3.0, absf(a.y - c.y))).grow(0.25))
+	for piece: Node3D in station.taquillas:
+		blocked.append(_set_box(piece as MeshInstance3D).grow(-0.01))
+	# (A bank meets the walls only with its railing's curb and newels, 0.22 m wide.)
+	for bank: Node3D in station.turnstiles:
+		var b := _set_box(bank as MeshInstance3D)
+		blocked.append(AABB(Vector3(b.get_center().x - 0.15, b.position.y + 0.02, b.position.z), Vector3(0.3, b.size.y, b.size.z)))
+	for main: MeshInstance3D in floor_mains:
+		var box := _set_box(main)
+		var floor_y := hall_floor if box.end.y > hall_floor - 1.0 else 0.0
+		if box.position.y > floor_y - 0.1 or box.end.y > floor_y + 0.3:
+			wrong.append("%s spans y %.2f…%.2f over a floor at %.1f" % [main.name, box.position.y, box.end.y, floor_y])
+		var to_set := station.global_transform.affine_inverse() * main.global_transform
+		var seen := {}
+		for v: Vector3 in main.mesh.get_faces():
+			var p := to_set * v
+			if p.y < floor_y + 0.02:
+				continue
+			for k in blocked.size():
+				if not seen.has(k) and (blocked[k] as AABB).has_point(p):
+					seen[k] = true
+					wrong.append("%s over the floor in %s" % [main.name, blocked[k]])
+	for mouth: MeshInstance3D in mouths:
+		if not mouth.has_meta("feed"):
+			wrong.append("%s unfed" % mouth.name)
+	_check("S10i the floor's mains, half sunk, feeding the mouths", wrong.is_empty(), "%s" % [wrong.slice(0, 6)])
+
+	# S10j: the cable trays under the coffers, from the engine's place to the hall's end walls, each carrying 5 cables
+	# at least, 2.4 m over the floor.
+	wrong = []
+	var trays = station.get("trays")
+	if trays == null or (trays as Array).size() < 2:
+		wrong.append("trays %s" % [trays])
+		trays = []
+	for tray: MeshInstance3D in trays:
+		var box := _set_box(tray)
+		if box.position.y < hall_floor + 2.4 or box.end.y > hall_top + 0.001:
+			wrong.append("%s spans y %.2f…%.2f" % [tray.name, box.position.y, box.end.y])
+		if minf(absf(box.position.x), absf(box.end.x)) > 3.6 or maxf(absf(box.position.x), absf(box.end.x)) < 29.4:
+			wrong.append("%s spans x %.1f…%.1f" % [tray.name, box.position.x, box.end.x])
+		if int(tray.get_meta("cables", 0)) < 5:
+			wrong.append("%s carries %d" % [tray.name, int(tray.get_meta("cables", 0))])
+		wrong += _crossing(tray.name, box, runs, avoid)
+	_check("S10j the cable trays", wrong.is_empty(), "%s" % [wrong.slice(0, 6)])
+
+
+## A piece's mesh box in the set's frame.
+func _set_box(piece: MeshInstance3D) -> AABB:
+	return station.global_transform.affine_inverse() * piece.global_transform * piece.mesh.get_aabb()
+
+
+## The points of `piece` inside any of `others`' boxes (a long piece checked by its own geometry).
+func _points_in(piece: MeshInstance3D, others: Array) -> Array:
+	var out := []
+	var to_set := station.global_transform.affine_inverse() * piece.global_transform
+	var faces := piece.mesh.get_faces()
+	for other: MeshInstance3D in others:
+		var box := _set_box(other).grow(-0.01)
+		if not box.intersects(_set_box(piece)):
+			continue
+		for v: Vector3 in faces:
+			if box.has_point(to_set * v):
+				out.append("%s through %s" % [piece.name, other.name])
+				break
+	return out
+
+
+## What `box` (named `name`) crosses: a run's path, or another piece's box.
+func _crossing(name: String, box: AABB, runs: Array, pieces: Array) -> Array:
+	var out := []
+	for run: Node3D in runs:
+		for p: Vector3 in run.get_meta("points", PackedVector3Array()):
+			if box.grow(0.05).has_point(p):
+				out.append("%s crosses %s at %s" % [name, run.name, p])
+				break
+	# (A long piece's box spans its whole wall: what counts is any of its own points inside this box.)
+	var inside := box.grow(-0.01)
+	for piece: MeshInstance3D in pieces:
+		if not _set_box(piece).intersects(box):
+			continue
+		var to_set := station.global_transform.affine_inverse() * piece.global_transform
+		for v: Vector3 in piece.mesh.get_faces():
+			if inside.has_point(to_set * v):
+				out.append("%s through %s" % [name, piece.name])
+				break
+	return out
+
+
+## A riser's radius and its middle out from its wall's plaster (tools/eclipse/station_pipes.py's RISER).
+const RISER := Vector2(0.3, 0.75)
 ## The neon boards' faces (tools/eclipse/station_neon.py's NEON_FACE, and its middle under the ceiling).
 const NEON_FACE := Vector2(2.3, 0.54)
 const NEON_FACE_MIDDLE := 0.91
@@ -513,10 +720,12 @@ func _dressed() -> void:
 	_check("S4b no word on it", words.is_empty(), "%s" % [words.slice(0, 4)])
 
 	var low := []
-	# (A booth's roof is no walk: its bodies are looked through to the floor.)
+	# (A booth's roof and a riser's top are no walks: their bodies are looked through to the floor.)
 	var roofs := []
-	for booth: Node3D in station.get("taquillas") if station.get("taquillas") != null else []:
-		for body: StaticBody3D in booth.find_children("*", "StaticBody3D", true, false):
+	var tops: Array = (station.get("taquillas") if station.get("taquillas") != null else []) \
+		+ (station.get("risers") if station.get("risers") != null else [])
+	for piece: Node3D in tops:
+		for body: StaticBody3D in piece.find_children("*", "StaticBody3D", true, false):
 			roofs.append(body.get_rid())
 	var floors := {}
 	for name: String in station.spaces():

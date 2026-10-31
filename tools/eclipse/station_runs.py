@@ -26,8 +26,9 @@ ATLAS = 4096
 SLOTS = ["brass", "iron", "talavera_glaze"]
 JSON = common.ROOT / "assets" / "eclipse" / "kit" / "station_runs.json"
 
-# The engine's crown junction every run leaves from (the set's frame; the engine stands at the hall's middle).
-ENGINE_TERMINAL = (0.0, 9.9, 0.0)
+# The engine's crown junction every run leaves from (the set's frame; the engine stands at the hall's middle), under the
+# ceiling's mains (station_pipes): the hall's runs hang at its height, passing under them.
+ENGINE_TERMINAL = (0.0, 9.45, 0.0)
 # The cable's radius; a hanger every this far at most along a level span; a span's sag (share of its length, at most);
 # how the cable rounds a corner (m).
 CABLE_R = 0.032
@@ -44,14 +45,14 @@ HALL, STAIRS, PLATFORM = 11.0, 11.0, 5.5
 # Each run: what it powers, its anchors (x, y, z, the ceiling its hanger reaches or None).
 RUNS = {
     "bank_west": {"to": "blade_company", "anchors": [
-        (0.0, 9.9, 0.0, None), (-7.0, 9.9, 1.9, HALL), (-13.2, 9.9, 3.72, HALL), (-14.0, 10.08, 3.72, None)]},
+        (0.0, 9.45, 0.0, None), (-7.0, 9.45, 1.9, HALL), (-13.2, 9.45, 3.72, HALL), (-14.0, 10.08, 3.72, None)]},
     "bank_east": {"to": "blade_company", "anchors": [
-        (0.0, 9.9, 0.0, None), (7.0, 9.9, -1.9, HALL), (13.2, 9.9, -3.72, HALL), (14.0, 10.08, -3.72, None)]},
+        (0.0, 9.45, 0.0, None), (7.0, 9.45, -1.9, HALL), (13.2, 9.45, -3.72, HALL), (14.0, 10.08, -3.72, None)]},
     "taquilla_east": {"to": "taquilla_east", "anchors": [
-        (0.0, 9.9, 0.0, None), (9.0, 9.9, -5.0, HALL), (17.0, 9.9, -10.0, HALL), (20.0, 9.9, -11.95, HALL),
+        (0.0, 9.45, 0.0, None), (9.0, 9.45, -5.0, HALL), (17.0, 9.45, -10.0, HALL), (20.0, 9.45, -11.95, HALL),
         (20.0, 9.65, -11.95, None)]},
     "taquilla_west": {"to": "taquilla_west", "anchors": [
-        (0.0, 9.9, 0.0, None), (-9.0, 9.9, 5.0, HALL), (-17.0, 9.9, 10.0, HALL), (-20.0, 9.9, 11.95, HALL),
+        (0.0, 9.45, 0.0, None), (-9.0, 9.45, 5.0, HALL), (-17.0, 9.45, 10.0, HALL), (-20.0, 9.45, 11.95, HALL),
         (-20.0, 9.65, 11.95, None)]},
 }
 
@@ -63,7 +64,7 @@ def _platform_run(s):
     far end."""
     def m(x, y, z, c):
         return (x * s, y, z * s, c)
-    return [m(0.0, 9.9, 0.0, None), m(-5.2, 9.9, -9.0, HALL), m(-5.2, 8.6, -12.0, None), m(-5.2, 8.6, -14.6, None),
+    return [m(0.0, 9.45, 0.0, None), m(-5.2, 9.45, -9.0, HALL), m(-5.2, 8.6, -12.0, None), m(-5.2, 8.6, -14.6, None),
             m(-5.2, 10.6, -15.6, STAIRS), m(-5.2, 10.6, -27.0, STAIRS), m(-0.7, 10.6, -27.0, STAIRS),
             m(-0.7, 10.6, -14.4, STAIRS), m(-0.7, 2.7, -14.4, None), m(-0.7, 2.7, -13.4, None),
             m(-0.7, 5.25, -13.4, None), m(-0.7, 5.25, -10.5, PLATFORM), m(-31.0, 5.25, -10.5, PLATFORM),

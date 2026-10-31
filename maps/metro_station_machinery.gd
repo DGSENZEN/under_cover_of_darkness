@@ -12,6 +12,27 @@ const NEON_KIT := "res://assets/eclipse/kit/station_neon.glb"
 const RUNS_KIT := "res://assets/eclipse/kit/station_runs.glb"
 const RUNS_JSON := "res://assets/eclipse/kit/station_runs.json"
 const PIPES_KIT := "res://assets/eclipse/kit/station_pipes.glb"
+const DUCTS_KIT := "res://assets/eclipse/kit/station_ducts.glb"
+## The floor's pipe mouths (station_pipes' mouth), venting the Company's fuel fumes: where each stands (the set's frame,
+## on its floor), the fumes' height over its foot (the kit's FUME_AT), how they look (the fuel's sour amber-green).
+const MOUTHS := [Vector3(-25.0, 6.0, -11.6), Vector3(25.0, 6.0, 11.6), Vector3(-3.0, 6.0, 11.6), Vector3(11.0, 6.0, -11.6),
+	Vector3(-44.0, 0.0, -11.6), Vector3(28.0, 0.0, -11.6), Vector3(-28.0, 0.0, 11.6), Vector3(44.0, 0.0, 11.6)]
+## Each mouth fed from its wall's floor main (the kit's feed: FEED_LENGTH long, from the main toward the mouth), the
+## floor mains' line out from the plaster; how many cables a tray carries (the kit's TRAY_CABLES).
+const FEED_LENGTH := 1.32
+const FLOOR_MAIN_Z := 14.0 - 0.3 - 0.032 - 0.75
+const TRAY_CABLES := 6
+const FUME_AT := 0.95
+## Where its smoke rises from: down in its throat, under its lip (the kit's mouth: 0.9 high).
+const FUME_FROM := 0.7
+## The smoke: its mouth's width, how high its plumes climb, its colours lit and in shade (grey, the copal column's), the
+## haze it gathers in over the mouth.
+const SMOKE_WIDTH := 1.8
+const SMOKE_RISE := 3.6
+const SMOKE_LIT := Color(0.8, 0.79, 0.76)
+const SMOKE_SHADE := Color(0.34, 0.35, 0.41)
+const SMOKE_POOL := Vector3(4.0, 1.6, 4.0)
+const SMOKE_BILLOW := Vector3(2.4, 1.2, 2.4)
 
 ## The neon's own hanging board (station_neon's neon_board, in place of the shell's sign_board where neon hangs: the
 ## user, Oct 31, "enlarge the symbols" and "make sure they fit on the board"): its face's middle under the ceiling and
@@ -51,21 +72,117 @@ static func dress(station, root: Node3D) -> void:
 	_racks(station, root)
 
 
-## The Company's pipe racks on the hall's long walls and the platforms' back walls (station_pipes: one piece each in the
-## set's frame).
+## The Company's pipework (station_pipes: one piece each in the set's frame): the racks on the hall's long walls and
+## the platforms' back walls, the ceiling's mains, the walls' risers (solid), and the floor's mouths venting fumes.
 static func _racks(station, root: Node3D) -> void:
-	if not ResourceLoader.exists(PIPES_KIT):
+	if not ResourceLoader.exists(PIPES_KIT) or not ResourceLoader.exists(DUCTS_KIT):
 		return
 	var kit := SetKit.kit(PIPES_KIT)
 	var look := Painterly.material(SetKit.painted(["station_pipes.png", "station_pipes_base.png"]), &"bespoke")
 	look.set_shader_parameter("painted_light", 0.0)
 	look.set_shader_parameter("ramp_amount", 0.0)
+	var ducts := SetKit.kit(DUCTS_KIT)
+	var duct_look := Painterly.material(SetKit.painted(["station_ducts.png", "station_ducts_base.png"]), &"bespoke")
+	duct_look.set_shader_parameter("painted_light", 0.0)
+	duct_look.set_shader_parameter("ramp_amount", 0.0)
+	for kind: String in ducts:
+		if kind.begins_with("floor_"):
+			var floor_main := SetKit.place(root, ducts[kind], duct_look, kind, Vector3.ZERO, 0.0, true, true)
+			floor_main.layers = Layers.STATION_HALL if kind.begins_with("floor_hall") else Layers.STATION_BELOW
+			station.floor_mains.append(floor_main)
+		elif kind.begins_with("tray_"):
+			var tray := SetKit.place(root, ducts[kind], duct_look, kind, Vector3.ZERO, 0.0, false)
+			tray.layers = Layers.STATION_HALL
+			tray.set_meta("cables", TRAY_CABLES)
+			station.trays.append(tray)
 	for kind: String in kit:
-		if not kind.begins_with("rack_"):
-			continue
-		var rack := SetKit.place(root, kit[kind], look, kind, Vector3.ZERO, 0.0, false)
-		rack.layers = Layers.STATION_HALL if kind.begins_with("rack_hall") else Layers.STATION_BELOW
-		station.racks.append(rack)
+		var hall := kind.begins_with("rack_hall") or kind.begins_with("main_") or kind.begins_with("riser_h")
+		var level := Layers.STATION_HALL if hall else Layers.STATION_BELOW
+		if kind.begins_with("rack_"):
+			var rack := SetKit.place(root, kit[kind], look, kind, Vector3.ZERO, 0.0, false)
+			rack.layers = level
+			station.racks.append(rack)
+		elif kind.begins_with("main_"):
+			var main := SetKit.place(root, kit[kind], look, kind, Vector3.ZERO, 0.0, false)
+			main.layers = level
+			station.mains.append(main)
+		elif kind.begins_with("riser_"):
+			var riser := SetKit.place(root, kit[kind], look, kind, Vector3.ZERO, 0.0, true, true)
+			riser.layers = level
+			station.risers.append(riser)
+
+	if not ducts.has("mouth"):
+		return
+	for k in MOUTHS.size():
+		var at: Vector3 = MOUTHS[k]
+		var mouth := SetKit.place(root, ducts["mouth"], duct_look, "mouth", at, k * 0.7, true)
+		mouth.layers = Layers.STATION_HALL if at.y > 3.0 else Layers.STATION_BELOW
+		# (Its feed from the floor's main at its wall: the kit's feed runs from the main toward the mouth.)
+		if ducts.has("feed"):
+			var side := signf(at.z)
+			var feed := SetKit.place(root, ducts["feed"], duct_look, "feed", Vector3(at.x, at.y, side * FLOOR_MAIN_Z),
+				0.0 if side < 0.0 else PI, true)
+			feed.layers = mouth.layers
+			mouth.set_meta("feed", feed)
+		# (Smoke, its ribbons big: the user, Oct 31: "it's not more effects, it's making the ribbons and the general vibe
+		# of the smoke bigger". The copal column's way: a wide mouth, few fat plumes climbing high, few puffs, grey.)
+		var fumes := Fumes.new()
+		fumes.name = "fumes"
+		fumes.width = SMOKE_WIDTH
+		fumes.rise = SMOKE_RISE
+		fumes.plumes = 3
+		fumes.root = 0.14
+		fumes.crown = 0.42
+		fumes.lit = SMOKE_LIT
+		fumes.shade = SMOKE_SHADE
+		fumes.warmth = 0.03
+		fumes.glow = 0.08
+		fumes.opacity = 0.75
+		fumes.puffs = 0.0
+		fumes.churn = 0.05
+		# (Deadlock's ribbons (the user's reference, Mirage's tornado, docs/superpowers/refs/underground/
+		# deadlock_smoke_mirage_tornado.jpg): narrow smooth bands winding round each other up a slender helix, streaked
+		# with the flow, their edges fading soft, never eaten into holes; its foot a soft billow of haze.)
+		fumes.twirl = 3.6
+		# (Out of the mouth itself, the user, Oct 31: "they should be coming OUT of the mouth, not around it": their feet
+		# close round its middle, down in its throat, the helix widening as it climbs.)
+		fumes.ring = 0.08
+		fumes.widen = 5.0
+		fumes.erosion = 0.15
+		fumes.grain = 0.7
+		fumes.streak = 4.0
+		fumes.softness = 0.3
+		# (Dissipating as it climbs: smooth out of the mouth, thinning, breaking up and fading into the haze by its top,
+		# the user, Oct 31: "it should dissipate more".)
+		fumes.dissipate = 2.4
+		fumes.fade_from = 0.4
+		fumes.seed = 900 + k
+		# (A soft billow of haze at its foot, out of the mouth.)
+		var billow := FogVolume.new()
+		billow.name = "smoke_billow"
+		billow.shape = RenderingServer.FOG_VOLUME_SHAPE_ELLIPSOID
+		billow.size = SMOKE_BILLOW
+		var cloud := FogMaterial.new()
+		cloud.albedo = SMOKE_LIT
+		cloud.density = 1.4
+		cloud.edge_fade = 0.6
+		billow.material = cloud
+		mouth.add_child(billow)
+		billow.position = Vector3(0.0, FUME_AT + 0.4, 0.0)
+		# (Its smoke gathering in a haze over it, under the ceiling.)
+		var pool := FogVolume.new()
+		pool.name = "smoke_pool"
+		pool.size = SMOKE_POOL
+		var haze := FogMaterial.new()
+		haze.albedo = SMOKE_LIT
+		haze.density = 1.6
+		haze.edge_fade = 0.5
+		pool.material = haze
+		mouth.add_child(pool)
+		pool.position = Vector3(0.0, FUME_AT + SMOKE_RISE, 0.0)
+		mouth.add_child(fumes)
+		fumes.position = Vector3(0.0, FUME_FROM, 0.0)
+		station.mouths.append(mouth)
 
 
 ## The Company's cable runs from the engine's crown (station_runs: one piece each in the set's frame, a bundle of
