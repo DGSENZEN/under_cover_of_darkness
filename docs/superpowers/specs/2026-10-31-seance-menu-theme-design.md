@@ -45,6 +45,8 @@ The anti-goal is the Metro feedback ([[music-contemporary-not-generic]]): stock 
 
 The loop has six distinct chords, and each word gets a hover and a press jingle in each of them.
 
+The archetype screen's jingles (buttons 5–7) are rewritten too, in the same six chords, each archetype on two instruments of the séance's band (Claude's call, found while planning): Derive on the kit and fuzz bass (body, gut and fists, as the piano and kit were), Thaumaturge on the glockenspiel and choir (as before), Factotum on the Rhodes and muted trumpet (as before).
+
 ## The menu's layers
 
 The menu's layers keep their meaning (`scripts/Audio/MenuMusic.gd`):
