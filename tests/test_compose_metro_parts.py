@@ -44,18 +44,46 @@ class MetroPartsTest(unittest.TestCase):
         self.assertEqual(len(ghosts), 16)
         self.assertTrue(all(g[3] < k[3] for g, k in zip(ghosts, kicks)))
 
-    def test_cue_takes_stay_in_c_minor_and_land_on_bar_three(self):
-        minor = {0, 2, 3, 5, 7, 8, 10}
+    def test_cue_takes_hold_to_c_and_land_on_the_phrase_line(self):
+        # C minor with the Phrygian D flat the deep layers lean on.
+        allowed = {0, 1, 2, 3, 5, 7, 8, 10}
+        land = self.compose.CUE_LANDS_BAR * 4 - 4
         parts = self.compose.cue('C')
-        takes = {p['name'][0] for p in parts}
-        self.assertEqual(takes, {'A', 'B', 'C'})
+        self.assertEqual({p['name'][0] for p in parts}, {'1', '2', '3'})
         for part in parts:
-            self.assertTrue(all(n[2] % 12 in minor for n in part['notes']), part['name'])
-            self.assertTrue(all(s < 8.0 + 1e-6 for s, _, _, _ in part['notes']), part['name'])
-        # Each take's last sounding note reaches the bed's first downbeat (bar 3).
-        for take in 'ABC':
+            # (Drum hits, on channel 10, are not pitches.)
+            if part.get('channel') != 9:
+                self.assertTrue(all(n[2] % 12 in allowed for n in part['notes']), part['name'])
+            # (Nothing starts past the land but the second clack of the last pair.)
+            self.assertTrue(all(s <= land + 0.5 for s, _, _, _ in part['notes']), part['name'])
+        for take in '123':
             ends = [s + l for p in parts if p['name'][0] == take for s, l, _, _ in p['notes']]
-            self.assertGreaterEqual(max(ends), 8.0 - 1e-6, take)
+            self.assertGreaterEqual(max(ends), land - 0.3, take)
+
+    def test_tape_sink_bends_down_an_octave_as_it_slows(self):
+        organ = [p for p in self.compose.cue('C') if p['name'] == '1 Street organ'][0]
+        self.assertIn((0.0, 'bend_range', 12), organ['controls'])
+        bends = [v for _, k, v in organ['controls'] if k == 'bend']
+        self.assertAlmostEqual(min(bends), -1.0, places=2)
+        starts = [n[0] for n in organ['notes']]
+        gaps = [b - a for a, b in zip(starts, starts[1:])]
+        self.assertGreater(gaps[-1], gaps[0] * 2)
+
+    def test_wheels_brake_onto_the_land(self):
+        wheels = [p for p in self.compose.cue('C') if p['name'] == '3 Wheels'][0]['notes']
+        land = self.compose.CUE_LANDS_BAR * 4 - 4
+        pairs = sorted({round(n[0], 3) for n in wheels})
+        firsts = pairs[::2]
+        gaps = [b - a for a, b in zip(firsts, firsts[1:])]
+        self.assertTrue(all(b >= a - 1e-6 for a, b in zip(gaps, gaps[1:])), gaps)
+        self.assertAlmostEqual(firsts[-1], land, places=3)
+
+    def test_pressure_clusters_drift_apart(self):
+        parts = {p['name']: p for p in self.compose.cue('C')}
+        a = [v for _, k, v in parts['2 Cluster A']['controls'] if k == 'bend']
+        b = [v for _, k, v in parts['2 Cluster B']['controls'] if k == 'bend']
+        self.assertGreater(max(a), 0.0)
+        self.assertLess(min(b), 0.0)
 
     def test_midi_carries_bends_ccs_and_bend_range(self):
         out = Path(tempfile.mkdtemp()) / 'moves.mid'

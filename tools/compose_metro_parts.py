@@ -9,14 +9,18 @@ Every part is judged by ear in Logic: these are starting points, not the music.
         phrase), the deep drone (the pedal an octave down and its fifth), and the pulse
         (a soft kick on each downbeat and a ghost on 3&, swung 58 %). The room texture is a
         Logic patch, not MIDI.
-  cue   the entrance: two bars that land on the bed's first downbeat (bar 3), three
-        takes on their own tracks, all from bar 1 (mute the others to hear one):
-          A  falling away: a bell line down C minor from the top, over an organ chord that
-             turns from Cm(add9) to Abmaj7 over C
-          B  the street above: a barrel-organ waltz figure, heard three times, each an
-             octave lower and quieter, as if going down the stairs away from it
-          C  breath in: a soft repeated fifth swelling to the held breath before the land,
-             a high D left in the air
+  cue   the entrance: four bars (a phrase) that land on the bed's first downbeat, bar 5.
+        Three takes on their own tracks, all from bar 1 (mute the others to hear one); the
+        movement is written in (pitch bend, CC11 expression, CC74 brightness, CC1), the
+        rooms and echoes are Logic's (ChromaVerb, Tape Delay) on each track:
+          1  tape sink: the street's barrel-organ tune, its notes spreading apart while it
+             bends down an octave, as if the tape under the city slowed; a reversed swell
+             of the bed's chord rises out of it, and a sub drops onto the land
+          2  pressure change: a C Db G Ab cluster on two layers drifting apart (beating),
+             air rushing up the tunnel as its filter opens, then everything closes to a
+             muffle and cuts on a held breath; glass pings; a sub pressing up from below
+          3  under the floor: a train braking below, the wheels' double clack slowing until
+             it locks onto the land, a brake squeal bending down over it, a rumble passing
 """
 import argparse
 from pathlib import Path
@@ -55,34 +59,101 @@ def bed(pedal):
             {'name': 'Pulse', 'channel': 9, 'notes': pulse}]
 
 
+CUE_LANDS_BAR = 5
+
+
+def _ramp(beat0, beat1, kind, v0, v1, steps=24, curve=1.0):
+    """A control moving from v0 to v1 between two beats (curve > 1: slow, then fast)."""
+    out = []
+    for i in range(steps + 1):
+        f = i / steps
+        out.append((beat0 + (beat1 - beat0) * f, kind, v0 + (v1 - v0) * f ** curve))
+    return out
+
+
 def cue(pedal):
-    """The entrance cue's three takes, two bars from bar 1, landing on bar 3."""
+    """The entrance cue's three takes, a phrase from bar 1, landing on bar 5."""
+    import math
     c = pitch_class(pedal)
-    land = 2 * BEATS
-    # A: down the C minor scale from the top, one step a beat, the last held into the land.
-    steps = [12, 10, 8, 7, 5, 3, 2]
-    bells = [(beat, 1.0, 72 + c + step, 78 - 4 * beat) for beat, step in enumerate(steps)]
-    bells.append((7.0, 3.0, 60 + c + 12, 52))
-    pad = [(0.0, 4.0, n, 50) for n in (48 + c, 51 + c, 55 + c, 62 + c)]
-    pad += [(4.0, 4.5, n, 38) for n in (44 + c, 48 + c, 51 + c, 55 + c)]
-    # B: a waltz turn (G C Eb D C), from high and loud to low and faint.
-    figure = [(0.0, 7), (0.5, 12), (1.0, 15), (1.5, 14), (2.0, 12)]
-    street = []
-    for i, (octave, vel) in enumerate(((72, 74), (60, 54), (48, 36))):
-        at = i * 8.0 / 3.0
-        street += [(at + t, 0.45, octave + c + n - 12, vel) for t, n in figure if at + t < land - 0.2]
-    street.append((land - 0.5, 2.5, 36 + c, 40))
-    # C: sixteenths on the fifth, swelling, cut a sixteenth before the land; a high D hangs on.
-    swell = []
-    for k in range(int((land - 0.25) * 4)):
-        vel = int(18 + 82 * (k / ((land - 0.25) * 4)) ** 2)
-        swell += [(k * 0.25, 0.22, 55 + c, vel), (k * 0.25, 0.22, 60 + c, max(1, vel - 10))]
-    air = [(0.0, land + 1.0, 74 + c, 30)]
-    return [{'name': 'A Bells', 'channel': 0, 'program': 14, 'notes': bells},
-            {'name': 'A Organ', 'channel': 1, 'program': 19, 'notes': pad},
-            {'name': 'B Street organ', 'channel': 2, 'program': 20, 'notes': street},
-            {'name': 'C Swell', 'channel': 3, 'program': 49, 'notes': swell},
-            {'name': 'C Air', 'channel': 4, 'program': 88, 'notes': air}]
+    land = (CUE_LANDS_BAR - 1) * BEATS
+
+    # 1 Tape sink. The street tune (G C Eb D C Bb Ab G), each note further from the last.
+    tune = [7, 12, 15, 14, 12, 10, 8, 7, 3, 2, 0]
+    organ, at, gap = [], 0.0, 0.42
+    for step in tune:
+        if at >= land - 1.0:
+            break
+        organ.append((round(at, 4), gap * 0.9, 60 + c + step, 84))
+        at += gap
+        gap *= 1.28
+    organ_moves = [(0.0, 'bend_range', 12), (0.0, 11, 112), (0.0, 74, 100)]
+    # The tape slowing: down an octave, slow then sinking, with a little wow.
+    for i in range(65):
+        beat = 1.5 + (land - 1.5) * i / 64
+        sink = -((i / 64) ** 1.8)
+        wow = 0.015 * math.sin(i * 0.9)
+        organ_moves.append((beat, 'bend', max(-1.0, sink + wow * (1 + sink))))
+    organ_moves += _ramp(land * 0.5, land, 11, 112, 30) + _ramp(2.0, land, 74, 100, 15)
+    swell_at = land - 6.0
+    swell = [(swell_at, 6.0 - 0.1, n, 80) for n in (48 + c, 55 + c, 62 + c, 63 + c)]
+    swell_moves = [(0.0, 11, 0)] + _ramp(swell_at, land - 0.12, 11, 0, 127, 32, 3.0) + [(land - 0.1, 11, 0)]
+    sub = [(land - 2.0, 4.0, 36 + c, 110)]
+    sub_moves = [(0.0, 'bend_range', 12), (land - 2.0, 'bend', 1.0)] + _ramp(land - 2.0, land + 0.75, 'bend', 1.0, 0.0, 24, 0.5)
+
+    # 2 Pressure change. The cluster held on two layers drifting apart, a few cents each way.
+    cluster_notes = (60 + c, 61 + c, 67 + c, 68 + c)
+    hold = land - 0.25
+    a = [(0.0, hold, n, 70) for n in cluster_notes]
+    b = [(0.0, hold, n - 12, 64) for n in cluster_notes]
+    closing = _ramp(0.0, 4.0, 11, 0, 100) + _ramp(land - 4.0, hold, 74, 100, 8) + _ramp(land - 3.0, hold, 11, 100, 60)
+    a_moves = [(0.0, 'bend_range', 2), (0.0, 74, 100)] + _ramp(0.0, hold, 'bend', 0.0, 0.08) + closing
+    b_moves = [(0.0, 'bend_range', 2), (0.0, 74, 100)] + _ramp(0.0, hold, 'bend', 0.0, -0.08) + closing
+    air = [(0.0, hold, 72 + c, 90)]
+    air_moves = [(0.0, 11, 90)] + _ramp(0.0, land - 4.0, 74, 10, 115, 32, 0.7) + _ramp(land - 4.0, hold, 74, 115, 0, 16)
+    air_moves += [(beat * 0.5, 1, int(40 + 40 * math.sin(beat))) for beat in range(int(hold * 2))]
+    glass = [(3.25, 0.8, 96 + c, 46), (7.6, 0.8, 91 + c, 38), (11.1, 0.8, 97 + c, 30)]
+    pressure_sub = [(land / 2, hold - land / 2, 24 + c, 100)]
+    pressure_sub_moves = [(0.0, 11, 0)] + _ramp(land / 2, hold, 11, 0, 120, 24, 1.5)
+
+    # 3 Under the floor. Pairs of clacks (a bogie over a rail joint), the train braking:
+    # each pair further from the last, the last pair on the land.
+    # (Back from the land: the gaps shrink toward the train's running speed, a pair
+    # every quarter beat or so.)
+    firsts, gap = [], 1.6
+    t = land
+    while t >= 0.0:
+        firsts.append(t)
+        t -= gap
+        gap = max(0.3, gap * 0.82)
+    firsts.reverse()
+    wheels = []
+    for i, first in enumerate(firsts):
+        spread = 0.16 + 0.14 * (i / max(1, len(firsts) - 1))
+        vel = int(50 + 50 * math.sin(math.pi * min(1.0, (i + 1) / len(firsts))))
+        wheels.append((round(first, 4), 0.1, 75, max(40, vel)))
+        wheels.append((round(first + spread, 4), 0.1, 76, max(34, vel - 12)))
+    brake = [(land * 0.35, land * 0.65, 96 + c, 60)]
+    brake_moves = [(0.0, 'bend_range', 2), (land * 0.35, 'bend', 0.5)]
+    for i in range(64):
+        beat = land * 0.35 + land * 0.65 * i / 63
+        f = i / 63
+        brake_moves.append((beat, 'bend', 0.5 - 1.5 * f ** 1.4 + 0.04 * math.sin(i * 1.7)))
+    brake_moves += [(0.0, 11, 0)] + _ramp(land * 0.35, land * 0.6, 11, 0, 90) + _ramp(land * 0.8, land, 11, 90, 0)
+    rumble = [(0.0, land + 1.0, 24 + c, 100)]
+    rumble_moves = [(0.0, 11, 30)] + _ramp(0.0, land * 0.5, 11, 30, 120) + _ramp(land * 0.5, land + 1.0, 11, 120, 0)
+    rumble_moves += _ramp(0.0, land + 1.0, 74, 60, 10)
+
+    return [{'name': '1 Street organ', 'channel': 0, 'program': 20, 'notes': organ, 'controls': organ_moves},
+            {'name': '1 Reverse swell', 'channel': 1, 'program': 19, 'notes': swell, 'controls': swell_moves},
+            {'name': '1 Sub drop', 'channel': 2, 'program': 38, 'notes': sub, 'controls': sub_moves},
+            {'name': '2 Cluster A', 'channel': 3, 'program': 49, 'notes': a, 'controls': a_moves},
+            {'name': '2 Cluster B', 'channel': 4, 'program': 49, 'notes': b, 'controls': b_moves},
+            {'name': '2 Air', 'channel': 5, 'program': 122, 'notes': air, 'controls': air_moves},
+            {'name': '2 Glass', 'channel': 6, 'program': 14, 'notes': glass},
+            {'name': '2 Sub', 'channel': 7, 'program': 38, 'notes': pressure_sub, 'controls': pressure_sub_moves},
+            {'name': '3 Wheels', 'channel': 9, 'notes': wheels},
+            {'name': '3 Brake', 'channel': 10, 'program': 80, 'notes': brake, 'controls': brake_moves},
+            {'name': '3 Rumble', 'channel': 11, 'program': 38, 'notes': rumble, 'controls': rumble_moves}]
 
 
 PIECES = {'bed': bed, 'cue': cue}
