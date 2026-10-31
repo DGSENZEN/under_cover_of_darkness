@@ -1,0 +1,14 @@
+[gd_resource type="AudioStreamSynchronized" load_steps=4 format=3]
+
+[ext_resource type="AudioStream" path="res://audio/music/metro/bed/drone_city.ogg" id="drone_city"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/bed/drone_deep.ogg" id="drone_deep"]
+[ext_resource type="AudioStream" path="res://audio/music/metro/bed/pulse.ogg" id="pulse"]
+
+[resource]
+stream_count = 3
+stream_0/stream = ExtResource("drone_city")
+stream_0/volume = -80.0
+stream_1/stream = ExtResource("drone_deep")
+stream_1/volume = -80.0
+stream_2/stream = ExtResource("pulse")
+stream_2/volume = -80.0

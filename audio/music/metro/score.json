@@ -1,0 +1,40 @@
+{
+  "bpm": 72.0,
+  "beats_per_bar": 4,
+  "phrase_bars": 4,
+  "sample_rate": 48000,
+  "placeholder": false,
+  "common_gain_db": -8.000000000000002,
+  "bed": {
+    "bars": 16,
+    "loop_seconds": 53.333333333333336,
+    "resource": "res://audio/music/metro/bed.tres",
+    "stems": [
+      {
+        "id": "drone_city",
+        "role": "drone_city",
+        "index": 0,
+        "peak_db": -25.16765725263732,
+        "sha256": "0c93354dead86404feb6613a5d26730e72bc9a147dcdfad3115a0efad9e7d001"
+      },
+      {
+        "id": "drone_deep",
+        "role": "drone_deep",
+        "index": 1,
+        "peak_db": -14.460381698602529,
+        "sha256": "0dc861879aa8b510ba02ef310ad1fd7a3c1d27eaeb2c8a0d97c09f338e2df9f5"
+      },
+      {
+        "id": "pulse",
+        "role": "pulse",
+        "index": 2,
+        "peak_db": -25.780370892157364,
+        "sha256": "f40a4118be3f05e28773f45d58e7a91a76a6afa1cc36ef64c431ed6ace70eeed"
+      }
+    ]
+  },
+  "themes": {},
+  "cue": null,
+  "spaces": {},
+  "circles": []
+}
