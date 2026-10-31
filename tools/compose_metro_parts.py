@@ -21,6 +21,13 @@ Every part is judged by ear in Logic: these are starting points, not the music.
              muffle and cuts on a held breath; glass pings; a sub pressing up from below
           3  under the floor: a train braking below, the wheels' double clack slowing until
              it locks onto the land, a brake squeal bending down over it, a rumble passing
+  lane  the candle lane, 16 bars over the bed: a slow bolero in C Dorian, between her and
+        him. Cm9 F13 vamping, Abmaj7#11 and G7sus(b9) turning it, a Dbmaj7#11 pulling down.
+        Calm: an upright bass on the bolero's step, votive glass chiming its rhythm, a candle pad
+        flickering (CC74), her nylon guitar's fills. Full: his harmon trumpet's melody (bars
+        1-8, scoops and fall-offs bent in), brushes; her guitar answers it in thirds (9-16).
+        Haunts, silent until the anima act: H Pleading (wordless sighs bending down),
+        H Dragged (a low slide an octave down), H Swarm (glass trembling in a cluster).
 """
 import argparse
 from pathlib import Path
@@ -156,7 +163,132 @@ def cue(pedal):
             {'name': '3 Rumble', 'channel': 11, 'program': 38, 'notes': rumble, 'controls': rumble_moves}]
 
 
-PIECES = {'bed': bed, 'cue': cue}
+# C Dorian, one bar each, two passes of eight: (name, chord tones above the root, root pc).
+LANE_CHORDS = [('Cm9', 0, (0, 3, 7, 10, 14)), ('F13', 5, (0, 4, 10, 14, 21)), ('Cm9', 0, (0, 3, 7, 10, 14)),
+               ('F13', 5, (0, 4, 10, 14, 21)), ('Abmaj7#11', 8, (0, 4, 7, 11, 18)), ('G7sus(b9)', 7, (0, 5, 10, 13, 17)),
+               ('Cm9', 0, (0, 3, 7, 10, 14)), ('Cm9', 0, (0, 3, 7, 10, 14)),
+               ('Cm9', 0, (0, 3, 7, 10, 14)), ('F13', 5, (0, 4, 10, 14, 21)), ('Cm9', 0, (0, 3, 7, 10, 14)),
+               ('F13', 5, (0, 4, 10, 14, 21)), ('Abmaj7#11', 8, (0, 4, 7, 11, 18)), ('Dbmaj7#11', 1, (0, 4, 7, 11, 18)),
+               ('Cm9', 0, (0, 2, 7, 10, 15)), ('Cm9', 0, (0, 3, 7, 10, 14))]
+# His melody, bars 1-8: (bar, beat, length, semitones above middle C).
+LANE_MELODY = [(0, 1.5, 0.5, -5), (0, 2.0, 1.0, -2), (0, 3.0, 1.5, 0),
+               (1, 0.5, 0.5, 2), (1, 1.0, 1.0, 3), (1, 2.0, 0.75, 2), (1, 2.75, 1.25, 0),
+               (2, 0.0, 2.0, -2), (2, 2.0, 0.5, -3), (2, 2.5, 0.5, -5), (2, 3.0, 1.0, -3),
+               (3, 0.0, 3.0, -5),
+               (4, 1.0, 0.5, 0), (4, 1.5, 0.5, 2), (4, 2.0, 2.0, 3),
+               (5, 0.0, 1.5, 2), (5, 1.5, 0.5, 0), (5, 2.0, 2.0, -4),
+               (6, 0.0, 1.0, -5), (6, 1.0, 1.0, -7), (6, 2.0, 2.0, -9),
+               (7, 0.0, 3.5, -10)]
+DORIAN = (0, 2, 3, 5, 7, 9, 10)
+
+
+def _third_below(pitch, c):
+    """The C Dorian note a diatonic third under `pitch` (itself in the mode)."""
+    degree = (pitch - c) % 12
+    if degree not in DORIAN:
+        return pitch - 3
+    i = DORIAN.index(degree)
+    below = DORIAN[(i - 2) % 7]
+    return pitch - ((degree - below) % 12)
+
+
+def lane(pedal):
+    """The candle lane's theme: 16 bars, calm and full parts, and its three haunts."""
+    import math
+    import random
+    c = pitch_class(pedal)
+    rng = random.Random(1924)
+    bars = len(LANE_CHORDS)
+    end = bars * BEATS
+
+    bass, glass, pad, pad_moves = [], [], [], [(0.0, 11, 96)]
+    for bar, (_, root, tones) in enumerate(LANE_CHORDS):
+        at = bar * BEATS
+        r = 36 + (c + root) % 12
+        nxt = 36 + (c + LANE_CHORDS[(bar + 1) % bars][1]) % 12
+        # The bolero's step: the root, the fifth on three, a lean into the next root from its fifth below.
+        lean = nxt - 5 if nxt - 5 >= 31 else nxt + 7
+        bass += [(at, 1.4, r, 92), (at + 2.0, 1.0, r + 7, 78), (at + 3.5, 0.45, lean, 64)]
+        # The votives: the bolero's rhythm on chord tones up high, soft and uneven.
+        for k, beat in enumerate((0.0, 1.0, 1.5, 2.0, 3.0)):
+            tone = 84 + (c + root + tones[(k * 2 + bar) % len(tones)]) % 12
+            vel = (52 if beat in (0.0, 2.0) else 34) + rng.randint(-6, 6)
+            glass.append((round(at + beat + rng.uniform(-0.02, 0.02), 4), 0.4, tone, vel))
+        pad += [(at, BEATS, 60 + (c + root + t) % 12 + (12 if t > 12 else 0) - 12, 54) for t in tones[1:4]]
+    # The candle flicker: the pad's brightness wandering, an eighth at a time.
+    bright = 60.0
+    for i in range(int(end * 2)):
+        bright = max(30.0, min(90.0, bright + rng.uniform(-9, 9)))
+        pad_moves.append((i * 0.5, 74, int(bright)))
+
+    # His melody (bars 1-8), scooped up into long notes and falling off phrase ends.
+    trumpet, trumpet_moves = [], [(0.0, 'bend_range', 2)]
+    phrase_ends = {(2, 1), (3, 0), (5, 2), (7, 0)}
+    for bar, beat, length, step in LANE_MELODY:
+        at = bar * BEATS + beat
+        trumpet.append((at, length * 0.95, 60 + c + step, 80 if length >= 1.0 else 70))
+        if length >= 1.0:
+            trumpet_moves += [(at, 'bend', -0.25), (at + 0.15, 'bend', 0.0)]
+            trumpet_moves += _ramp(at, at + min(length, 2.0), 11, 70, 110, 8)
+        if (bar, int(beat)) in phrase_ends:
+            trumpet_moves += _ramp(at + length * 0.7, at + length * 0.95, 'bend', 0.0, -1.0, 8, 2.0)
+            trumpet_moves.append((at + length, 'bend', 0.0))
+    # A few of his answers to her, sparse, in the second eight.
+    for bar, beat, step in ((9, 3.0, 3), (11, 3.5, 2), (13, 2.5, 7)):
+        trumpet.append((bar * BEATS + beat, 0.9, 60 + c + step, 62))
+
+    # Her guitar: fills in the first eight, then his melody answered in thirds.
+    guitar = []
+    for bar in (1, 3, 5, 7):
+        at = bar * BEATS + 3.0
+        root, tones = LANE_CHORDS[bar][1], LANE_CHORDS[bar][2]
+        for i, t in enumerate(tones[:3]):
+            # The chord tone in the guitar's middle, G3 up.
+            pitch = 48 + (c + root + t) % 12
+            guitar.append((at + i * 0.25, 0.3, pitch + 12 if pitch < 55 else pitch, 58 - i * 6))
+    for bar, beat, length, step in LANE_MELODY:
+        at = (bar + 8) * BEATS + beat
+        top = 60 + c + step
+        guitar += [(at, length * 0.9, top, 72), (at, length * 0.9, _third_below(top, c), 64)]
+
+    # Brushes (full): a slow bolero groove, swept.
+    brushes = []
+    for bar in range(bars):
+        at = bar * BEATS
+        brushes += [(at, 0.2, 36, 70), (at + 2.75, 0.2, 36, 52), (at + 1.0, 0.3, 38, 48), (at + 3.0, 0.3, 38, 56)]
+        brushes += [(at + h + 0.5, 0.1, 42, 26 + rng.randint(0, 8)) for h in range(4)]
+
+    # The haunts. Pleading: sighs, a wordless voice bending down a tone, every two bars.
+    pleading, pleading_moves = [], [(0.0, 'bend_range', 2), (0.0, 11, 0)]
+    for k in range(8):
+        at = k * 8.0 + 1.0
+        root, tones = LANE_CHORDS[k * 2][1], LANE_CHORDS[k * 2][2]
+        pitch = 72 + (c + root + tones[(k + 2) % len(tones)]) % 12
+        pleading.append((at, 5.5, pitch, 70))
+        pleading_moves += [(at, 'bend', 0.0)] + _ramp(at + 1.5, at + 5.0, 'bend', 0.0, -1.0, 12, 1.5)
+        pleading_moves += _ramp(at, at + 1.5, 11, 0, 110, 6) + _ramp(at + 4.0, at + 5.5, 11, 110, 0, 6)
+    # Dragged: something low hauled down an octave, every four bars.
+    dragged, dragged_moves = [], [(0.0, 'bend_range', 12)]
+    for k in range(4):
+        at = k * 16.0
+        dragged.append((at, 8.0, 36 + c, 96))
+        dragged_moves += [(at, 'bend', 0.0)] + _ramp(at + 1.0, at + 8.0, 'bend', 0.0, -1.0, 24, 1.6)
+    # Swarm: the votives' glass trembling in a cluster, thirty-seconds the whole way.
+    cluster = [84 + (c + n) % 12 for n in (0, 1, 2, 3, 7, 8)]
+    swarm = [(round(i * 0.125, 4), 0.12, rng.choice(cluster), rng.randint(14, 44)) for i in range(int(end * 8))]
+
+    return [{'name': 'L Bass', 'channel': 0, 'program': 32, 'notes': bass},
+            {'name': 'L Glass', 'channel': 1, 'program': 8, 'notes': glass},
+            {'name': 'L Guitar', 'channel': 2, 'program': 24, 'notes': guitar},
+            {'name': 'L Candle pad', 'channel': 3, 'program': 89, 'notes': pad, 'controls': pad_moves},
+            {'name': 'L Trumpet', 'channel': 4, 'program': 59, 'notes': trumpet, 'controls': trumpet_moves},
+            {'name': 'L Brushes', 'channel': 9, 'notes': brushes},
+            {'name': 'H Pleading', 'channel': 5, 'program': 52, 'notes': pleading, 'controls': pleading_moves},
+            {'name': 'H Dragged', 'channel': 6, 'program': 38, 'notes': dragged, 'controls': dragged_moves},
+            {'name': 'H Swarm', 'channel': 7, 'program': 14, 'notes': swarm}]
+
+
+PIECES = {'bed': bed, 'cue': cue, 'lane': lane}
 
 
 def write_piece(piece, bpm, pedal, take, out=OUT):

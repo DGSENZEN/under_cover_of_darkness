@@ -85,6 +85,38 @@ class MetroPartsTest(unittest.TestCase):
         self.assertGreater(max(a), 0.0)
         self.assertLess(min(b), 0.0)
 
+    def test_lane_is_sixteen_bars_of_c_dorian_with_its_haunts(self):
+        parts = {p['name']: p for p in self.compose.lane('C')}
+        for name in ('L Bass', 'L Glass', 'L Guitar', 'L Candle pad', 'L Trumpet', 'L Brushes',
+                     'H Pleading', 'H Dragged', 'H Swarm'):
+            self.assertIn(name, parts)
+        # C Dorian, with the Db and Ab the deep layers lean on.
+        allowed = {0, 1, 2, 3, 5, 7, 8, 9, 10}
+        for name, part in parts.items():
+            if part.get('channel') == 9:
+                continue
+            self.assertTrue(all(n[2] % 12 in allowed for n in part['notes']), name)
+            self.assertTrue(all(s < 64.0 for s, _, _, _ in part['notes']), name)
+        self.assertAlmostEqual(max(s + l for s, l, _, _ in parts['L Bass']['notes']), 64.0, delta=0.6)
+
+    def test_him_then_her(self):
+        parts = {p['name']: p for p in self.compose.lane('C')}
+        trumpet = [n[0] for n in parts['L Trumpet']['notes']]
+        guitar = parts['L Guitar']['notes']
+        # His melody leads the first eight bars; her thirds carry the second eight.
+        self.assertGreater(sum(1 for t in trumpet if t < 32), 2 * sum(1 for t in trumpet if t >= 32))
+        second = [n for n in guitar if n[0] >= 32]
+        starts = {}
+        for n in second:
+            starts.setdefault(round(n[0], 3), []).append(n[2])
+        thirds = [ps for ps in starts.values() if len(ps) == 2 and 3 <= abs(ps[0] - ps[1]) <= 4]
+        self.assertGreater(len(thirds), 8)
+
+    def test_pleading_sighs_bend_down(self):
+        pleading = [p for p in self.compose.lane('C') if p['name'] == 'H Pleading'][0]
+        bends = [v for _, k, v in pleading['controls'] if k == 'bend']
+        self.assertLess(min(bends), -0.5)
+
     def test_midi_carries_bends_ccs_and_bend_range(self):
         out = Path(tempfile.mkdtemp()) / 'moves.mid'
         controls = [(0.0, 'bend_range', 12), (0.0, 74, 10), (1.0, 'bend', -1.0), (2.0, 'bend', 0.5), (3.0, 11, 127)]
