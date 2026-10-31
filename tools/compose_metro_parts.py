@@ -21,11 +21,15 @@ Every part is judged by ear in Logic: these are starting points, not the music.
              muffle and cuts on a held breath; glass pings; a sub pressing up from below
           3  under the floor: a train braking below, the wheels' double clack slowing until
              it locks onto the land, a brake squeal bending down over it, a rumble passing
-  lane  the candle lane, 16 bars over the bed: a slow bolero in C Dorian, between her and
-        him. Cm9 F13 vamping, Abmaj7#11 and G7sus(b9) turning it, a Dbmaj7#11 pulling down.
-        Calm: an upright bass on the bolero's step, votive glass chiming its rhythm, a candle pad
-        flickering (CC74), her nylon guitar's fills. Full: his harmon trumpet's melody (bars
-        1-8, scoops and fall-offs bent in), brushes; her guitar answers it in thirds (9-16).
+  lane  the candle lane, 16 bars over the bed: a slow trip-hop bolero in C Dorian, between
+        her and him. Cm9 F13 vamping, Abmaj7#11 and G7sus(b9) turning it, a Dbmaj7#11 pulling
+        down. Every part keeps to its own register so they sit apart: a sub (C1), the bass
+        locked to the kick (C2), the candle pad low and soft (C3), Rhodes stabs on the
+        off-beats (C4), his trumpet (G4-Eb5), the votive glass up high (C6-C7).
+        Calm: the kit (a broken kick, swung sixteenth hats, a rim), sub, bass, keys, pad, glass,
+        her guitar's fills. Full: the backbeat (a heavy late snare on 2 and 4 with a clap under
+        it, ghosts, fills), his harmon trumpet (bars 1-8, scoops and fall-offs bent in); her
+        guitar answers him in thirds (9-16).
         Haunts, silent until the anima act: H Pleading (wordless sighs bending down),
         H Dragged (a low slide an octave down), H Swarm (glass trembling in a cluster).
 """
@@ -201,20 +205,35 @@ def lane(pedal):
     bars = len(LANE_CHORDS)
     end = bars * BEATS
 
-    bass, glass, pad, pad_moves = [], [], [], [(0.0, 11, 96)]
+    # The kit's broken kick, alternating bars; the bass locks to it.
+    kick_bars = [[(0.0, 124), (1.75, 92), (2.5, 112)], [(0.0, 124), (2.25, 96), (2.75, 110), (3.75, 74)]]
+    sub, bass, bass_moves, glass, pad, keys = [], [], [(0.0, 'bend_range', 2)], [], [], []
     for bar, (_, root, tones) in enumerate(LANE_CHORDS):
         at = bar * BEATS
         r = 36 + (c + root) % 12
         nxt = 36 + (c + LANE_CHORDS[(bar + 1) % bars][1]) % 12
-        # The bolero's step: the root, the fifth on three, a lean into the next root from its fifth below.
         lean = nxt - 5 if nxt - 5 >= 31 else nxt + 7
-        bass += [(at, 1.4, r, 92), (at + 2.0, 1.0, r + 7, 78), (at + 3.5, 0.45, lean, 64)]
-        # The votives: the bolero's rhythm on chord tones up high, soft and uneven.
-        for k, beat in enumerate((0.0, 1.0, 1.5, 2.0, 3.0)):
-            tone = 84 + (c + root + tones[(k * 2 + bar) % len(tones)]) % 12
-            vel = (52 if beat in (0.0, 2.0) else 34) + rng.randint(-6, 6)
-            glass.append((round(at + beat + rng.uniform(-0.02, 0.02), 4), 0.4, tone, vel))
-        pad += [(at, BEATS, 60 + (c + root + t) % 12 + (12 if t > 12 else 0) - 12, 54) for t in tones[1:4]]
+        sub.append((at, 3.5, r - 12, 90))
+        if bar % 2 == 0:
+            bass += [(at, 1.5, r, 100), (at + 1.75, 0.5, r + 7, 80), (at + 2.5, 0.9, r, 92), (at + 3.5, 0.45, lean, 70)]
+        else:
+            bass += [(at, 2.0, r, 100), (at + 2.25, 0.4, r + 12, 72), (at + 2.75, 0.9, r + 7, 88), (at + 3.75, 0.25, lean, 66)]
+        # Slid up into the bar's root, a quarter tone below, now and then.
+        if bar % 4 == 0:
+            bass_moves += [(at, 'bend', -0.5), (at + 0.12, 'bend', 0.0)]
+        # The votives, every other bar, sparse and high: they answer, they do not fill.
+        if bar % 2 == 1:
+            for k, beat in enumerate((0.0, 1.5, 3.0)):
+                tone = 84 + (c + root + tones[(k * 2 + bar) % len(tones)]) % 12
+                glass.append((round(at + beat + rng.uniform(-0.02, 0.02), 4), 0.4, tone, 44 + rng.randint(-6, 6)))
+        # The pad, low and soft: the room's warmth, out of the melody's way.
+        pad += [(at, BEATS, 48 + (c + root + t) % 12, 44) for t in tones[1:4]]
+        # Rhodes stabs on the off-beats, rootless (third, seventh, ninth); lighter under his melody.
+        voicing = [60 + (c + root + t) % 12 for t in tones[1:4]]
+        beats = (3.5,) if bar < 8 else (1.5, 3.5)
+        for beat in beats:
+            keys += [(at + beat + 0.02, 0.32, v, (50 if bar < 8 else 62) + rng.randint(-4, 4)) for v in voicing]
+    pad_moves = [(0.0, 11, 90)]
     # The candle flicker: the pad's brightness wandering, an eighth at a time.
     bright = 60.0
     for i in range(int(end * 2)):
@@ -226,7 +245,8 @@ def lane(pedal):
     phrase_ends = {(2, 1), (3, 0), (5, 2), (7, 0)}
     for bar, beat, length, step in LANE_MELODY:
         at = bar * BEATS + beat
-        trumpet.append((at, length * 0.95, 60 + c + step, 80 if length >= 1.0 else 70))
+        # An octave over her guitar and the keys: his line has the air to itself.
+        trumpet.append((at, length * 0.95, 72 + c + step, 80 if length >= 1.0 else 70))
         if length >= 1.0:
             trumpet_moves += [(at, 'bend', -0.25), (at + 0.15, 'bend', 0.0)]
             trumpet_moves += _ramp(at, at + min(length, 2.0), 11, 70, 110, 8)
@@ -235,7 +255,7 @@ def lane(pedal):
             trumpet_moves.append((at + length, 'bend', 0.0))
     # A few of his answers to her, sparse, in the second eight.
     for bar, beat, step in ((9, 3.0, 3), (11, 3.5, 2), (13, 2.5, 7)):
-        trumpet.append((bar * BEATS + beat, 0.9, 60 + c + step, 62))
+        trumpet.append((bar * BEATS + beat, 0.9, 72 + c + step, 62))
 
     # Her guitar: fills in the first eight, then his melody answered in thirds.
     guitar = []
@@ -251,12 +271,26 @@ def lane(pedal):
         top = 60 + c + step
         guitar += [(at, length * 0.9, top, 72), (at, length * 0.9, _third_below(top, c), 64)]
 
-    # Brushes (full): a slow bolero groove, swept.
-    brushes = []
+    # The kit (calm): the broken kick, swung sixteenth hats, a rim; an open hat closing four bars.
+    kit, backbeat = [], []
     for bar in range(bars):
         at = bar * BEATS
-        brushes += [(at, 0.2, 36, 70), (at + 2.75, 0.2, 36, 52), (at + 1.0, 0.3, 38, 48), (at + 3.0, 0.3, 38, 56)]
-        brushes += [(at + h + 0.5, 0.1, 42, 26 + rng.randint(0, 8)) for h in range(4)]
+        phrase_end = bar % 4 == 3
+        kit += [(at + beat, 0.25, 36, vel) for beat, vel in kick_bars[bar % 2] if not (phrase_end and beat == 3.75)]
+        for k in range(16):
+            if phrase_end and k >= 14:
+                break
+            vel = 58 if k % 4 == 0 else 42 if k % 2 == 0 else 24 + (k * 7) % 10
+            kit.append((at + k * 0.25 + (0.035 if k % 2 else 0.0), 0.2, 42, vel))
+        kit.append((at + 2.75, 0.2, 37, 36))
+        if phrase_end:
+            kit.append((at + 3.5, 0.5, 46, 56))
+        # The backbeat (full): heavy and a hair late on 2 and 4, a clap under it, ghosts, a fill.
+        for beat in (1.0, 3.0):
+            backbeat += [(at + beat + 0.018, 0.25, 38, 124 if beat == 3.0 else 118), (at + beat + 0.018, 0.25, 39, 84)]
+        backbeat += [(at + g, 0.2, 38, v) for g, v in (((2.25, 28), (3.75, 24)) if bar % 2 else ((1.75, 28), (3.25, 26)))]
+        if bar % 8 == 7:
+            backbeat += [(at + 3.5, 0.2, 38, 52), (at + 3.625, 0.2, 38, 64), (at + 3.75, 0.2, 38, 80), (at + 3.875, 0.2, 38, 96)]
 
     # The haunts. Pleading: sighs, a wordless voice bending down a tone, every two bars.
     pleading, pleading_moves = [], [(0.0, 'bend_range', 2), (0.0, 11, 0)]
@@ -277,12 +311,15 @@ def lane(pedal):
     cluster = [84 + (c + n) % 12 for n in (0, 1, 2, 3, 7, 8)]
     swarm = [(round(i * 0.125, 4), 0.12, rng.choice(cluster), rng.randint(14, 44)) for i in range(int(end * 8))]
 
-    return [{'name': 'L Bass', 'channel': 0, 'program': 32, 'notes': bass},
+    return [{'name': 'L Sub', 'channel': 8, 'program': 38, 'notes': sub},
+            {'name': 'L Bass', 'channel': 0, 'program': 32, 'notes': bass, 'controls': bass_moves},
+            {'name': 'L Kit', 'channel': 9, 'notes': kit},
+            {'name': 'L Keys', 'channel': 10, 'program': 4, 'notes': keys},
             {'name': 'L Glass', 'channel': 1, 'program': 8, 'notes': glass},
             {'name': 'L Guitar', 'channel': 2, 'program': 24, 'notes': guitar},
             {'name': 'L Candle pad', 'channel': 3, 'program': 89, 'notes': pad, 'controls': pad_moves},
             {'name': 'L Trumpet', 'channel': 4, 'program': 59, 'notes': trumpet, 'controls': trumpet_moves},
-            {'name': 'L Brushes', 'channel': 9, 'notes': brushes},
+            {'name': 'L Backbeat', 'channel': 9, 'notes': backbeat},
             {'name': 'H Pleading', 'channel': 5, 'program': 52, 'notes': pleading, 'controls': pleading_moves},
             {'name': 'H Dragged', 'channel': 6, 'program': 38, 'notes': dragged, 'controls': dragged_moves},
             {'name': 'H Swarm', 'channel': 7, 'program': 14, 'notes': swarm}]

@@ -87,8 +87,8 @@ class MetroPartsTest(unittest.TestCase):
 
     def test_lane_is_sixteen_bars_of_c_dorian_with_its_haunts(self):
         parts = {p['name']: p for p in self.compose.lane('C')}
-        for name in ('L Bass', 'L Glass', 'L Guitar', 'L Candle pad', 'L Trumpet', 'L Brushes',
-                     'H Pleading', 'H Dragged', 'H Swarm'):
+        for name in ('L Sub', 'L Bass', 'L Kit', 'L Keys', 'L Glass', 'L Guitar', 'L Candle pad',
+                     'L Trumpet', 'L Backbeat', 'H Pleading', 'H Dragged', 'H Swarm'):
             self.assertIn(name, parts)
         # C Dorian, with the Db and Ab the deep layers lean on.
         allowed = {0, 1, 2, 3, 5, 7, 8, 9, 10}
@@ -98,6 +98,26 @@ class MetroPartsTest(unittest.TestCase):
             self.assertTrue(all(n[2] % 12 in allowed for n in part['notes']), name)
             self.assertTrue(all(s < 64.0 for s, _, _, _ in part['notes']), name)
         self.assertAlmostEqual(max(s + l for s, l, _, _ in parts['L Bass']['notes']), 64.0, delta=0.6)
+
+    def test_every_part_keeps_to_its_own_register(self):
+        import statistics
+        parts = {p['name']: p for p in self.compose.lane('C')}
+        bands = [('L Sub', 24, 35), ('L Bass', 36, 47), ('L Candle pad', 48, 64), ('L Keys', 60, 74),
+                 ('L Trumpet', 62, 79), ('L Glass', 84, 98)]
+        for name, low, high in bands:
+            median = statistics.median(n[2] for n in parts[name]['notes'])
+            self.assertTrue(low <= median <= high, f'{name} median {median}')
+
+    def test_trip_hop_backbeat_sits_late_on_two_and_four(self):
+        parts = {p['name']: p for p in self.compose.lane('C')}
+        snares = [n for n in parts['L Backbeat']['notes'] if n[2] == 38 and n[3] >= 100]
+        offsets = {round((n[0] % 4) - int(n[0] % 4), 3) for n in snares}
+        self.assertTrue(all(0.0 < o < 0.05 for o in offsets), offsets)
+        self.assertEqual({int(n[0] % 4) for n in snares}, {1, 3})
+        kicks = [n for n in parts['L Kit']['notes'] if n[2] == 36]
+        self.assertEqual(sum(1 for n in kicks if n[0] % 4 == 0.0), 16)
+        hats = sorted(n[0] % 1 for n in parts['L Kit']['notes'] if n[2] == 42)
+        self.assertTrue(any(abs(h - 0.285) < 0.01 for h in hats))
 
     def test_him_then_her(self):
         parts = {p['name']: p for p in self.compose.lane('C')}
