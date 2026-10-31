@@ -1,0 +1,163 @@
+[
+ {
+  "piece": "riser_hall",
+  "x": -27.0,
+  "floor": 6.0,
+  "side": -1,
+  "z": -12.918
+ },
+ {
+  "piece": "riser_hall",
+  "x": -20.0,
+  "floor": 6.0,
+  "side": -1,
+  "z": -12.918
+ },
+ {
+  "piece": "riser_hall",
+  "x": -2.0,
+  "floor": 6.0,
+  "side": -1,
+  "z": -12.918
+ },
+ {
+  "piece": "riser_hall",
+  "x": 12.0,
+  "floor": 6.0,
+  "side": -1,
+  "z": -12.918
+ },
+ {
+  "piece": "riser_hall",
+  "x": 27.0,
+  "floor": 6.0,
+  "side": -1,
+  "z": -12.918
+ },
+ {
+  "piece": "riser_hall",
+  "x": -27.0,
+  "floor": 6.0,
+  "side": 1,
+  "z": 12.918
+ },
+ {
+  "piece": "riser_hall",
+  "x": -16.5,
+  "floor": 6.0,
+  "side": 1,
+  "z": 12.918
+ },
+ {
+  "piece": "riser_hall",
+  "x": -3.0,
+  "floor": 6.0,
+  "side": 1,
+  "z": 12.918
+ },
+ {
+  "piece": "riser_hall",
+  "x": 12.0,
+  "floor": 6.0,
+  "side": 1,
+  "z": 12.918
+ },
+ {
+  "piece": "riser_hall",
+  "x": 20.0,
+  "floor": 6.0,
+  "side": 1,
+  "z": 12.918
+ },
+ {
+  "piece": "riser_hall",
+  "x": 27.0,
+  "floor": 6.0,
+  "side": 1,
+  "z": 12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": -47.0,
+  "floor": 0.0,
+  "side": -1,
+  "z": -12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": -36.0,
+  "floor": 0.0,
+  "side": -1,
+  "z": -12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": -12.0,
+  "floor": 0.0,
+  "side": -1,
+  "z": -12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": 12.0,
+  "floor": 0.0,
+  "side": -1,
+  "z": -12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": 36.0,
+  "floor": 0.0,
+  "side": -1,
+  "z": -12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": 47.0,
+  "floor": 0.0,
+  "side": -1,
+  "z": -12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": -47.0,
+  "floor": 0.0,
+  "side": 1,
+  "z": 12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": -36.0,
+  "floor": 0.0,
+  "side": 1,
+  "z": 12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": -12.0,
+  "floor": 0.0,
+  "side": 1,
+  "z": 12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": 12.0,
+  "floor": 0.0,
+  "side": 1,
+  "z": 12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": 36.0,
+  "floor": 0.0,
+  "side": 1,
+  "z": 12.918
+ },
+ {
+  "piece": "riser_platform",
+  "x": 47.0,
+  "floor": 0.0,
+  "side": 1,
+  "z": 12.918
+ }
+]

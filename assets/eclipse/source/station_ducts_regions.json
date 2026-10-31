@@ -1,0 +1,9 @@
+{
+ "slots": [
+  "iron",
+  "brass",
+  "rubber"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 40.85
+}

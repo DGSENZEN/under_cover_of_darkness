@@ -1305,6 +1305,8 @@ func _animas() -> void:
 
 		animas = AnimasScript.new()
 		animas.name = "animas"
+		# (Its hands and flames moved each frame, not in the physics step: drawn interpolated they would judder.)
+		animas.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		# Hands reaching up out of their fire (the uncanny kit's, cut from the CC0 base body), in Graves'
 		# chartreuse (vfx_method.md).
 		if ResourceLoader.exists(UNCANNY_KIT):

@@ -352,6 +352,8 @@ func _vent_souls() -> void:
 		var vent: Array = VENT_SOULS[k]
 		var souls: Node3D = AnimasScript.new()
 		souls.name = "vent_animas_%d" % k
+		# (Moved each frame, not in the physics step: drawn interpolated they would judder.)
+		souls.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		souls.hand_meshes = hands
 		souls.colour = Color("b8f04a")
 		souls.seed = 41 + 17 * k
@@ -415,6 +417,9 @@ func _people() -> void:
 	crowd_of_shades = ShadeCrowd.new()
 	crowd_of_shades.name = "shade_crowd"
 	for route: Array in ROUTES:
+		# (In the Metro the Pasaje walks its own street: the lane keeps only its own ways in and out.)
+		if not standalone and String(route[0]).begins_with("pasaje_"):
+			continue
 		crowd_of_shades.routes.append({"name": route[0], "points": PackedVector3Array(route[1]), "every": route[2],
 			"keep": route[3], "along": route[4]})
 	crowd_of_shades.walked_into_by = player
@@ -572,6 +577,8 @@ func _landmarks() -> void:
 	var look := Painterly.material(_painted(["lane_landmarks.png", "lane_landmarks_base.png"]), &"bespoke")
 	for kind in ["garland", "garland_fixings", "milagro_bracket", "red_lantern"]:
 		landmarks[kind] = _place(meshes[kind], look, kind, Vector3.ZERO, 0.0, false)
+	# (Her garland swung each frame, not in the physics step: drawn interpolated it would judder.)
+	landmarks["garland"].physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	# His lantern's glass, red and lit from within, and its light.
 	var lantern: MeshInstance3D = landmarks["red_lantern"]
 	for i in lantern.mesh.get_surface_count():
@@ -626,6 +633,8 @@ func _landmarks() -> void:
 		_glows[red_glass] = red_glass.emission_energy_multiplier
 	milagro_pivot = Node3D.new()
 	milagro_pivot.name = "milagro_pivot"
+	# (Turned each frame, not in the physics step: drawn interpolated it would judder.)
+	milagro_pivot.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(milagro_pivot)
 	milagro_pivot.position = MILAGRO_HOOK
 	var heart := _place(meshes["milagro_heart"], look, "milagro_heart", Vector3.ZERO, 0.0, false)

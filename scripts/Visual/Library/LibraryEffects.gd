@@ -19,6 +19,11 @@ var ward: Node3D
 var shadow: Node3D
 
 
+func _init() -> void:
+	# (All of it moved each frame, not in the physics step: drawn interpolated it would judder.)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+
+
 func build(lab: Node3D) -> void:
 	if not projections.is_empty():
 		return

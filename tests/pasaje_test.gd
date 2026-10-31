@@ -4,7 +4,8 @@ extends Node3D
 
 const PASAJE := preload("res://maps/pasaje.tscn")
 const Layers := preload("res://scripts/Visual/Layers.gd")
-## The set's shadowless lights at most: the stalls' sixteen neons and eight bulbs, and one to each ward's candles.
+## The set's shadowless lights at most: the stalls' sixteen neons and eight bulbs, the kiosk's bulb, and one to each
+## ward's candles.
 const LIGHT_BUDGET := 30
 
 var results: Array[String] = []
@@ -26,6 +27,7 @@ func _ready() -> void:
 	_wards()
 	_bills()
 	_happened()
+	_life()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -60,7 +62,8 @@ func _shell() -> void:
 	_check("P1 the stretch's shell at the plan's measure, its openings open", floored and walled and roofed and open,
 		"floored %s walled %s roofed %s openings %s" % [floored, walled, roofed, open])
 
-	var street: Array[Vector3] = [Vector3(0.0, 1.05, 19.0)]
+	# (Round the kiosk at the south end, by its west side.)
+	var street: Array[Vector3] = [Vector3(-2.35, 1.05, 15.2), Vector3(-2.35, 1.05, 19.0), Vector3(0.0, 1.05, 19.3)]
 	var down := await _walk_path(Vector3(0.0, 1.05, -19.0), street, 2400)
 	var herbs: Array[Vector3] = [Vector3(-3.0, 1.05, -1.0), Vector3(-5.6, 1.05, -1.0)]
 	var to_herbs := await _walk_path(Vector3(0.0, 1.05, -6.0), herbs, 1200)
@@ -147,7 +150,15 @@ func _stalls() -> void:
 		var near := box.position.x if side > 0 else -box.end.x
 		var middle := box.get_center().z
 		var front: Array[Vector3] = [Vector3(side * (near - 0.6), 1.05, middle)]
-		var walk := await _walk_path(Vector3(0.0, 1.05, middle), front, 300)
+		var start := Vector3(0.0, 1.05, middle)
+		# (Where the kiosk stands in the street's middle, from in front of it, round its side.)
+		var kiosk: Node3D = pasaje.get("kiosk")
+		if kiosk != null:
+			var around := _stall_box(kiosk).grow(0.6)
+			if around.has_point(Vector3(0.0, around.get_center().y, middle)):
+				start = Vector3(0.0, 1.05, around.position.z)
+				front.push_front(Vector3(side * (near - 0.6), 1.05, around.position.z))
+		var walk := await _walk_path(start, front, 400)
 		if not walk["ok"]:
 			unreached.append("%s %s" % [name, walk["end"]])
 	_check("P4b the player reaches every stall's front", not stalls.is_empty() and unreached.is_empty(),
@@ -254,7 +265,8 @@ func _overhead() -> void:
 	var low := []
 	for piece: MeshInstance3D in overhead:
 		var box := _local_box(piece)
-		if box.position.x < 3.0 and box.end.x > -3.0 and box.position.y < 2.4:
+		# (Over every head: the player's capsule stands 2.05 m; the canopy's fringe hangs to 2.15 m and more.)
+		if box.position.x < 3.0 and box.end.x > -3.0 and box.position.y < 2.12:
 			low.append("%s %.2f" % [piece.name, box.position.y])
 	_check("P6 nothing overhead hangs into the walk", not overhead.is_empty() and low.is_empty(),
 		"%d pieces; low %s" % [overhead.size(), low.slice(0, 4)])
@@ -391,6 +403,152 @@ func _happened() -> void:
 				under.append("%s at %s not sooted" % [mark.name, there])
 	_check("P7h the giant hand lies over the paint and the bills under it", hand != null and under.is_empty(),
 		"%s" % [under])
+
+
+## Task 8: the Pasaje's life. Its crowd of shades walks the street both ways and in and out of the herb market, never
+## through a stall, drawn from the whole city (its trades, old and young, the church in hiding, the uncanny); a keeper
+## behind every counter in a pose that fits the trade; the people who stand, each where there is a cause; and a
+## walker with susto followed by the faint shade of their own lost soul.
+func _life() -> void:
+	var crowd: Node3D = pasaje.get("crowd_of_shades")
+	var routes: Array = pasaje.get("ROUTES") if pasaje.get("ROUTES") != null else []
+	var boxes := {}
+	for name in pasaje.stalls:
+		boxes[name] = _stall_box(pasaje.stalls[name])
+	var on_stall := []
+	var kinds := {}
+	if crowd != null:
+		for step in 60:
+			crowd._process(1.0)
+			for walker: Dictionary in crowd.walkers:
+				var shade: Node3D = walker["shade"]
+				kinds[String(shade.name)] = true
+				var at := pasaje.to_local(shade.global_position)
+				for name in boxes:
+					var box: AABB = boxes[name]
+					if at.x > box.position.x and at.x < box.end.x and at.z > box.position.z and at.z < box.end.z:
+						on_stall.append("%s on %s" % [shade.name, name])
+	var unstarted := []
+	for route: Array in routes:
+		if crowd == null or int(crowd.started.get(route[0], 0)) == 0:
+			unstarted.append(route[0])
+	_check("P8 the crowd walks the street and comes and goes, drawn from the whole city",
+		crowd != null and not routes.is_empty() and unstarted.is_empty() and on_stall.is_empty() and kinds.size() >= 10,
+		"routes %d, unstarted %s, on stalls %s, kinds %d" % [routes.size(), unstarted, on_stall.slice(0, 4), kinds.size()])
+
+	# A keeper behind every counter, in a pose fitting the trade.
+	var fits := {"tamales": "keeper_stir", "atole": "keeper_stir", "coffee": "keeper_stir", "tortas": "keeper_fan",
+		"herbs": "keeper_weigh", "chiles": "keeper_weigh", "fruit": "keeper_weigh"}
+	var keepers: Array = pasaje.get("keepers") if pasaje.get("keepers") != null else []
+	var kept := {}
+	var wrong := []
+	for keeper: Node3D in keepers:
+		var stall_name: String = keeper.get_meta("stall", "")
+		var pose: String = keeper.get_meta("pose", "")
+		if not pasaje.stalls.has(stall_name):
+			wrong.append("%s at no stall" % keeper.name)
+			continue
+		kept[stall_name] = true
+		var stall: Node3D = pasaje.stalls[stall_name]
+		var at := stall.to_local(keeper.global_position)
+		var width: float = pasaje.STALLS.filter(func(s): return s[0] == stall_name)[0][4]
+		if not pose.begins_with("keeper_") or (fits.has(stall_name) and pose != fits[stall_name]):
+			wrong.append("%s %s" % [stall_name, pose])
+		if at.z < 0.1 or at.z > 0.86 or absf(at.x) > width / 2.0:
+			wrong.append("%s keeper at %s" % [stall_name, at])
+	_check("P8b a keeper behind every stall's counter, each in a pose that fits its trade",
+		kept.size() == pasaje.stalls.size() and wrong.is_empty(), "%d of %d kept; %s" % [kept.size(), pasaje.stalls.size(), wrong])
+
+	# The people who stand, each where there is a cause, off the stalls and out of the crowd's way.
+	var circle: Node3D = pasaje.wards.get("north_circle")
+	var herbs: Array = pasaje.OPENINGS["herb_market"]
+	var copal: Node3D = pasaje.stalls.get("copal")
+	var sweets: Node3D = pasaje.stalls.get("sweets")
+	var near := func(a: Vector3, b: Vector3, reach: float) -> bool: return Vector2(a.x - b.x, a.z - b.z).length() < reach
+	var causes := {
+		"medium": func(at: Vector3) -> bool: return circle != null and near.call(at, _ward_middle(circle), 2.5),
+		"curandero": func(at: Vector3) -> bool: return copal != null and near.call(at, pasaje.to_local(copal.global_position), 3.0),
+		"gendarme": func(at: Vector3) -> bool: return near.call(at, Vector3(-pasaje.HALF_W, 0.0, 0.5 * (herbs[1] + herbs[2])), 3.5),
+		"organ_grinder": func(at: Vector3) -> bool: return at.z > 5.0,
+		"sereno": func(at: Vector3) -> bool: return at.z < -15.0,
+		"mother": func(at: Vector3) -> bool: return sweets != null and near.call(at, pasaje.to_local(sweets.global_position), 3.0),
+	}
+	var people: Array = pasaje.get("people") if pasaje.get("people") != null else []
+	var placed := {}
+	var astray := []
+	for person: Node3D in people:
+		var pose: String = person.get_meta("pose", "")
+		var at := pasaje.to_local(person.global_position)
+		placed[pose] = true
+		if causes.has(pose) and not causes[pose].call(at):
+			astray.append("%s at %s" % [pose, at])
+		for name in boxes:
+			var box: AABB = boxes[name]
+			if at.x > box.position.x and at.x < box.end.x and at.z > box.position.z and at.z < box.end.z:
+				astray.append("%s on %s" % [pose, name])
+		for route: Array in routes:
+			for i in route[1].size() - 1:
+				var a: Vector3 = route[1][i]
+				var b: Vector3 = route[1][i + 1]
+				var on := Geometry3D.get_closest_point_to_segment(Vector3(at.x, 0.0, at.z), a, b)
+				if on.distance_to(Vector3(at.x, 0.0, at.z)) < 0.5:
+					astray.append("%s in the way of %s" % [pose, route[0]])
+	var absent := causes.keys().filter(func(k): return not placed.has(k))
+	_check("P8c the people who stand stand where they have cause, off the stalls and out of the crowd's way",
+		absent.is_empty() and astray.is_empty(), "absent %s; %s" % [absent, astray])
+
+	# Susto: the soul a step behind, faint.
+	var echoed := false
+	var detail := "no crowd"
+	if crowd != null and not routes.is_empty():
+		var walker: Dictionary = crowd.start(routes[0][0], true, "city_susto")
+		for step in 6:
+			crowd._process(0.5)
+		var echo: Node3D = walker.get("echo")
+		if echo != null and is_instance_valid(echo):
+			var lag: float = float(walker["at"]) - float(walker.get("echo_at", walker["at"]))
+			echoed = echo.presence > 0.1 and echo.presence < 0.6 and lag > 0.4
+			detail = "presence %.2f, lag %.2f" % [echo.presence, lag]
+		else:
+			detail = "no echo on %s" % walker.get("shade")
+	_check("P8d a walker with susto is followed by the faint shade of their own soul", echoed, detail)
+
+	# The kiosk the stallholders built in the street's middle under the canopy, closing the view down it: walkable
+	# either side (clear of the stalls by a capsule's width and more), off the canopy's circle, out of the crowd's way.
+	var kiosk: Node3D = pasaje.get("kiosk")
+	var problems := []
+	if kiosk == null:
+		problems.append("no kiosk")
+	else:
+		var box := _stall_box(kiosk)
+		if absf(box.get_center().x) > 0.3 or box.position.z < 13.0 or box.end.z > 19.9:
+			problems.append("at %s" % box)
+		if kiosk.find_children("*", "CollisionShape3D", true, false).is_empty():
+			problems.append("not solid")
+		for name in boxes:
+			var stall: AABB = boxes[name]
+			if stall.end.z > box.position.z and stall.position.z < box.end.z:
+				var gap := stall.position.x - box.end.x if stall.get_center().x > 0.0 else box.position.x - stall.end.x
+				if gap < 1.1:
+					problems.append("%.2f m to %s" % [gap, name])
+		var circle_at := _ward_middle(pasaje.wards["canopy_circle"])
+		if Vector2(clampf(circle_at.x, box.position.x, box.end.x) - circle_at.x,
+				clampf(circle_at.z, box.position.z, box.end.z) - circle_at.z).length() < 1.0:
+			problems.append("on the canopy's circle")
+		var grown := box.grow(0.3)
+		for route: Array in routes:
+			for i in route[1].size() - 1:
+				for t in 21:
+					var p: Vector3 = route[1][i].lerp(route[1][i + 1], t / 20.0)
+					if p.x > grown.position.x and p.x < grown.end.x and p.z > grown.position.z and p.z < grown.end.z:
+						problems.append("%s through it" % route[0])
+						break
+		for person: Node3D in people:
+			var at := pasaje.to_local(person.global_position)
+			if at.x > grown.position.x and at.x < grown.end.x and at.z > grown.position.z and at.z < grown.end.z:
+				problems.append("%s in it" % person.get_meta("pose", ""))
+	_check("P8e a kiosk in the street's middle under the canopy, walkable either side, off the circle, out of the way",
+		problems.is_empty(), "%s" % [problems])
 
 
 ## A ward's middle in the set's frame (the mean of its candles).

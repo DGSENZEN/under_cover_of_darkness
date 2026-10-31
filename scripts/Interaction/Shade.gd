@@ -121,6 +121,8 @@ func _ready() -> void:
 
 	if save != null:
 		save.register(self)
+	# (Its smoke and its cut-out moved each frame, not in the physics step: drawn interpolated they would judder.)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	if character != "":
 		dialogue = DialogueBook.character(character)
 	elif type_id != "":

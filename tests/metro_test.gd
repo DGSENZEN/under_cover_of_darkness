@@ -7,6 +7,7 @@ extends Node3D
 ##   Godot --headless --fixed-fps 60 --path . res://tests/metro_test.tscn
 
 const MAP := preload("res://maps/metro.tscn")
+const Layers := preload("res://scripts/Visual/Layers.gd")
 ## How near a waypoint counts as reached (m, across).
 const REACHED := 0.6
 ## Frames a leg may take before it counts as stuck.
@@ -89,10 +90,53 @@ func _run() -> void:
 	_check("M5 the pixel grid is off", Retro.virtual_height == 0, "virtual_height %d" % Retro.virtual_height)
 
 	await _sets()
+	await _judder()
 
 	# M6 nothing reported an error
 	await _frames(2)
 	_check("M6 no engine errors", errors.lines.is_empty(), "%s" % [errors.lines.slice(0, 4)])
+
+
+## M20: nothing seen judders: the project interpolates physics, so a visual drawn interpolated but moved between
+## physics ticks (in _process) stutters against the interpolated camera. With the physics at 20 ticks a second under
+## 60 frames, no visible interpolated visual may move on a frame with no tick before it, wherever the player stands
+## (the Pasaje, the candle lane, the corridors either side of the Pasaje). (tests/diag_judder.tscn names them all.)
+func _judder() -> void:
+	var found := {}
+	var ticks_were := Engine.physics_ticks_per_second
+	Engine.physics_ticks_per_second = 20
+	# (And the station: its hall and a platform, where the Company's arcs and lamps move.)
+	for spot in [Vector3(-9.0, -11.0, 70.0), Vector3(-2.0, -11.0, 75.45), Vector3(19.0, -11.0, 78.0),
+			Vector3(-10.0, -11.0, 40.0), Vector3(-9.0, -11.0, 105.0), Vector3(4.0, -8.0, 3.0), Vector3(10.0, -14.0, -10.0)]:
+		map.player.global_position = spot + Vector3(0.0, 1.05, 0.0)
+		await _frames(30)
+		var was := {}
+		for node: Node in map.find_children("*", "VisualInstance3D", true, false):
+			was[node] = (node as Node3D).global_transform
+		var ticks := Engine.get_physics_frames()
+		for i in 60:
+			await get_tree().process_frame
+			var ticked := Engine.get_physics_frames() != ticks
+			ticks = Engine.get_physics_frames()
+			for key in was.keys():
+				# (Some go while watched: a crowd's shade leaving, a spark.)
+				if not is_instance_valid(key):
+					was.erase(key)
+					continue
+				var node := key as Node3D
+				var now := node.global_transform
+				# (A physics body's own visuals move with it, on its ticks; the tick counter can read a frame late, so
+				# they are left to their body.)
+				if not ticked and node.is_visible_in_tree() and node.is_physics_interpolated_and_enabled() \
+						and not node.get_parent() is PhysicsBody3D and not now.is_equal_approx(was[node]):
+					found["%s at %s (frame %d, moved %s)" % [map.get_path_to(node), spot, i,
+						now.origin - (was[node] as Transform3D).origin]] = true
+				was[node] = now
+	Engine.physics_ticks_per_second = ticks_were
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(10)
+	_check("M20 nothing seen judders: no interpolated visual moved between physics ticks", found.is_empty(),
+		"%d: %s" % [found.size(), found.keys().slice(0, 6)])
 
 
 ## The candle lane set into the map (docs/superpowers/plans/2026-10-23-candle-lane.md, Task 9): in its place, the
@@ -143,10 +187,189 @@ func _sets() -> void:
 
 	await _set_in_place(lane)
 	await _pasaje_in_place()
+	_one_crowd()
+	_pasaje_shows()
+	await _station()
+
+
+## The station set (docs/superpowers/plans/2026-10-30-metro-station.md, Task 3).
+## M21: in its place, the greybox gone from its spaces and their flights only (the corridors, the market stairs and
+## the siding still there).
+## M22: walked from the arrival up the north stairwell into the hall, through the west bank's free lane out into the
+## west corridor; across the paid hall out into the east corridor; down into the market stairs; down the south
+## stairwell onto the south platform.
+## M23: out of the pit: from the bed up each track's steps onto its platform.
+func _station() -> void:
+	var station: Node3D = map.get_node_or_null("metro_station")
+	if station == null:
+		_check("M21 the station in its place, the greybox gone from its spaces only", false, "no metro_station")
+		return
+	var taken: Array = station.SPACES + station.ROUTES_TAKEN
+	var left: Array = map.greybox.get_children().map(func(n): return String(n.name))
+	var gone := taken.filter(func(n): return left.has(n))
+	var kept := ["corridor_w", "corridor_e", "market_stairs", "siding"].filter(func(n): return not left.has(n))
+	# (Its seams to the lane's standard, as the Pasaje's: none of it in the map's other spaces, no face flush with a
+	# greybox wall's.)
+	var meshes: Array = station.find_children("*", "MeshInstance3D", true, false).filter(func(m):
+		return m.is_visible_in_tree() and m.mesh != null)
+	var into := _intrusions(meshes, map.SETS["metro_station"][1])
+	var flush := _flush(meshes.filter(func(m): return m.mesh is BoxMesh or m.has_meta("built")))
+	_check("M21 the station in its place, the greybox gone from its spaces only, its seams clean",
+		station.position.is_equal_approx(station.PLAN_ORIGIN) and gone.is_empty() and kept.is_empty() \
+			and into.is_empty() and flush.is_empty() and map.SETS["metro_station"][1] == taken,
+		"at %s; still greybox %s; gone too %s; into %s; flush %s" % [station.position, gone, kept, into.slice(0, 4),
+			flush.slice(0, 4)])
+
+	var west := await _tour([[0, -14, -9], [-2, -14, -13], [-2, -14, -29.2], [-6, -14, -29.2], [-6, -14, -28.5],
+		[-6, -8, -14], [-6, -8, -12.5], [-10, -8, -2], [-18, -8, -2], [-32, -8, 0]], true)
+	var east := await _tour([[-10, -8, 2], [10, -8, 2], [18, -8, 2], [32, -8, 0]], true)
+	var market := await _tour([[-6, -8, 4], [-10, -8, 12.5], [-10, -8, 14], [-10, -8.6, 16]], true)
+	var south := await _tour([[2, -8, 6], [6, -8, 12.5], [6, -8, 14], [6, -14, 28.5], [6, -14, 29.2], [2, -14, 29.2],
+		[2, -14, 13], [2, -14, 10]], true)
+	_check("M22 walked from the arrival up into the hall, out into both corridors and the market stairs, down onto the south platform",
+		west["ok"] and east["ok"] and market["ok"] and south["ok"],
+		"west %s east %s market %s south %s" % [west, east, market, south])
+
+	var north_up := await _tour([[-20, -15.2, -2.5], [49, -15.2, -2.5], [49, -15.2, -8.3], [48.5, -15.2, -8.3],
+		[42.5, -14, -8.3], [40, -14, -10]], true)
+	var south_up := await _tour([[20, -15.2, 2.5], [-49, -15.2, 2.5], [-49, -15.2, 8.3], [-48.5, -15.2, 8.3],
+		[-42.5, -14, 8.3], [-40, -14, 10]], true)
+	_check("M23 out of the pit: from the bed up each track's steps onto its platform", north_up["ok"] and south_up["ok"],
+		"north %s south %s" % [north_up, south_up])
+	# M24: nothing inside the car's envelope: no face the set draws (its meshes, each of its many pieces where it laid
+	# them) and no light inside the box CAR wide by CAR.y tall over PAD_TOP, centred on each track, over x -50...50.
+	var envelopes := []
+	for z: float in station.TRACKS_Z:
+		envelopes.append(AABB(Vector3(-50.0, float(station.PAD_TOP) + 0.01, z - station.CAR.x / 2.0 + 0.001),
+			Vector3(100.0, station.CAR.y - 0.01, station.CAR.x - 0.002)))
+	var inside := []
+	for node in station.find_children("*", "GeometryInstance3D", true, false):
+		if not (node as Node3D).is_visible_in_tree():
+			continue
+		var to_set: Transform3D = station.global_transform.affine_inverse() * (node as Node3D).global_transform
+		# ([its mesh, where it is laid in the set's frame], each instance of many its own.)
+		var drawn := []
+		if node is MultiMeshInstance3D:
+			var many := (node as MultiMeshInstance3D).multimesh
+			if many == null or many.mesh == null:
+				continue
+			for t: Transform3D in node.get_meta("transforms", []):
+				drawn.append([many.mesh, to_set * t])
+		elif node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+			drawn.append([(node as MeshInstance3D).mesh, to_set])
+		for piece: Array in drawn:
+			var aabb: AABB = piece[1] * (piece[0] as Mesh).get_aabb()
+			for envelope: AABB in envelopes:
+				# (Its box first; then its faces, a frame round an opening only boxing the opening.)
+				if envelope.intersects(aabb) and _faces_inside(piece[0], piece[1], envelope):
+					inside.append("%s %s" % [node.name, aabb.get_center().snapped(Vector3.ONE * 0.1)])
+	for light: Node in map.find_children("*", "Light3D", true, false):
+		var at: Vector3 = station.to_local((light as Node3D).global_position)
+		for envelope: AABB in envelopes:
+			if envelope.has_point(at):
+				inside.append("light %s %s" % [light.name, at.snapped(Vector3.ONE * 0.1)])
+	_check("M24 nothing inside the car's envelope", inside.is_empty(), "%d: %s" % [inside.size(), inside.slice(0, 6)])
+	# M25: the station lit by its own fittings: no plan lamp (the map's sodium glow at each sign and scene) stands in
+	# its spaces.
+	var in_station := []
+	for lamp: OmniLight3D in map.lamps:
+		var p := lamp.global_position
+		for s in map.plan["spaces"]:
+			if s["name"] in station.SPACES and Geometry2D.is_point_in_polygon(Vector2(p.x, p.z), _poly(s["polygon"])) \
+					and p.y >= float(s["floor"]) - 0.01 and p.y <= float(s["floor"]) + float(s["height"]) + 0.01:
+				in_station.append("%s in %s" % [lamp.name, s["name"]])
+	_check("M25 the station lit by its own fittings, no plan lamp in its spaces", in_station.is_empty(), "%s" % [in_station])
+	# M26: and no light of the map's beyond it reaches it through its walls or floors: none but its own lights its
+	# levels' layers (the vaults' sodium lamp under the platforms turned their pit faces red).
+	var station_layers: int = Layers.STATION_HALL | Layers.STATION_STAIRS | Layers.STATION_BELOW
+	var through := []
+	for light: Node in map.find_children("*", "Light3D", true, false):
+		# (The player's own, which go where they go, light it as they light anything.)
+		if not station.is_ancestor_of(light) and not map.player.is_ancestor_of(light) \
+				and (light as Light3D).light_cull_mask & station_layers != 0:
+			through.append(String(light.name))
+	_check("M26 no light beyond the station lights it through its walls", through.is_empty(), "%d: %s" % [through.size(),
+		through.slice(0, 6)])
+	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
+	await _frames(10)
+
+
+## Whether any face of `mesh`, laid by `at`, keeps an area inside `box` (each triangle clipped by its six planes).
+func _faces_inside(mesh: Mesh, at: Transform3D, box: AABB) -> bool:
+	var planes := [Plane(Vector3.RIGHT, box.end.x), Plane(Vector3.LEFT, -box.position.x), Plane(Vector3.UP, box.end.y),
+		Plane(Vector3.DOWN, -box.position.y), Plane(Vector3.BACK, box.end.z), Plane(Vector3.FORWARD, -box.position.z)]
+	var faces := mesh.get_faces()
+	for i in range(0, faces.size(), 3):
+		var kept := PackedVector3Array([at * faces[i], at * faces[i + 1], at * faces[i + 2]])
+		for plane: Plane in planes:
+			kept = Geometry3D.clip_polygon(kept, plane)
+			if kept.size() < 3:
+				break
+		if kept.size() >= 3:
+			var area := 0.0
+			for k in range(1, kept.size() - 1):
+				area += (kept[k] - kept[0]).cross(kept[k + 1] - kept[0]).length() / 2.0
+			if area > 1e-6:
+				return true
+	return false
 
 
 ## The Pasaje set (docs/superpowers/plans/2026-10-26-pasaje-market.md): in its place, the greybox gone from its middle
 ## only; its seams to the lane's standard; walked from the market stairs down it into the lane.
+## M17: everything the Pasaje set lights, sounds and shows stands in the map's Pasaje, at its floor's level (its crowd,
+## which walks, excepted; and what is drawn in the world's frame).
+func _pasaje_shows() -> void:
+	var pasaje: Node3D = map.get_node_or_null("pasaje")
+	if pasaje == null:
+		_check("M17 everything the Pasaje lights, sounds and shows stands in the Pasaje", false, "no Pasaje")
+		return
+	var own: Rect2 = _rect("pasaje").grow(0.5)
+	var crowd: Node3D = pasaje.get("crowd_of_shades")
+	var strays := []
+	for node: Node in pasaje.find_children("*", "VisualInstance3D", true, false) + pasaje.find_children("*", "AudioStreamPlayer3D", true, false):
+		if (crowd != null and crowd.is_ancestor_of(node)) or not (node as Node3D).is_visible_in_tree():
+			continue
+		var drawn_in_world := false
+		var up: Node = node
+		while up != pasaje and up != null:
+			drawn_in_world = drawn_in_world or (up is Node3D and up.top_level and up.global_transform.origin == Vector3.ZERO)
+			up = up.get_parent()
+		if drawn_in_world:
+			continue
+		var at: Vector3 = (node as Node3D).global_position
+		if not own.has_point(Vector2(at.x, at.z)) or at.y < -11.5 or at.y > -11.0 + 5.5:
+			strays.append("%s %s" % [node.name, at])
+	_check("M17 everything the Pasaje lights, sounds and shows stands in the Pasaje", strays.is_empty(),
+		"%d out: %s" % [strays.size(), strays.slice(0, 6)])
+
+
+## M16: in the Metro the Pasaje walks its own crowd and the lane its own: no lane route runs in the Pasaje (but where
+## into_lane begins and out_of_lane ends, at the mouth), and no Pasaje route enters the lane.
+func _one_crowd() -> void:
+	var lane: Node3D = map.get_node_or_null("candle_lane")
+	var pasaje: Node3D = map.get_node_or_null("pasaje")
+	var doubled := []
+	if lane == null or pasaje == null or pasaje.get("crowd_of_shades") == null:
+		_check("M16 no shades doubled where the lane and the Pasaje meet", false, "no lane, Pasaje or Pasaje crowd")
+		return
+	var inside := func(p: Vector3) -> bool:
+		var at: Vector3 = pasaje.to_local(p)
+		return absf(at.x) < pasaje.HALF_W - pasaje.WALL and absf(at.z) < pasaje.HALF_L
+	for route: Dictionary in lane.crowd_of_shades.routes:
+		var points: PackedVector3Array = route["points"]
+		for i in points.size():
+			var at: Vector3 = lane.crowd_of_shades.to_global(points[i])
+			var end: bool = (route["name"] == "into_lane" and i == 0) or (route["name"] == "out_of_lane" and i == points.size() - 1)
+			if inside.call(at) and not end:
+				doubled.append("lane %s point %d" % [route["name"], i])
+	for route: Dictionary in pasaje.crowd_of_shades.routes:
+		for p: Vector3 in route["points"]:
+			var at: Vector3 = pasaje.crowd_of_shades.to_global(p)
+			if not inside.call(at):
+				doubled.append("Pasaje %s at %s" % [route["name"], pasaje.to_local(at)])
+	_check("M16 no shades doubled where the lane and the Pasaje meet", doubled.is_empty(), "%s" % [doubled])
+
+
 func _pasaje_in_place() -> void:
 	var pasaje: Node3D = map.get_node_or_null("pasaje")
 	var names: Array = map.greybox.get_children().map(func(n): return String(n.name))
@@ -187,7 +410,10 @@ func _intrusions(meshes: Array, own: Array) -> Array:
 		for mesh: MeshInstance3D in meshes:
 			var box: AABB = mesh.global_transform * mesh.get_aabb()
 			var cut := box.intersection(room)
-			if cut.has_volume() and minf(cut.size.x, minf(cut.size.y, cut.size.z)) > 0.06:
+			# (Its box first; then its faces, past the 6 cm a seam may give: a long cable's box clips corners its tube
+			# never reaches.)
+			if cut.has_volume() and minf(cut.size.x, minf(cut.size.y, cut.size.z)) > 0.06 \
+					and _faces_inside(mesh.mesh, mesh.global_transform, room.grow(-0.06)):
 				into.append("%s into %s %s" % [mesh.name, s["name"], cut.size])
 	return into
 
@@ -280,7 +506,11 @@ func _set_in_place(lane: Node3D) -> void:
 			up = up.get_parent()
 		if drawn_in_world:
 			continue
+		# (Where it is drawn: a mesh's middle, not its origin, which a piece turning on a pivot at its middle swings
+		# round it (the shop's armillary).)
 		var at: Vector3 = (node as Node3D).global_position
+		if node is GeometryInstance3D:
+			at = ((node as Node3D).global_transform * (node as GeometryInstance3D).get_aabb()).get_center()
 		var flat := Vector2(at.x, at.z)
 		# (A pocket's sounds may come from the map's Pasaje or chapel beyond its ends.)
 		var spaces: Array = own + ([_rect("pasaje"), _rect("chapel")] if node.has_meta("pocket") else [])
@@ -335,6 +565,7 @@ func _tour(points: Array, from_start := false) -> Dictionary:
 
 	var ok := true
 	var worst := ""
+	points = _through_lanes(points)
 
 	for k in range(1, points.size()):
 		var target := _v(points[k])
@@ -347,6 +578,38 @@ func _tour(points: Array, from_start := false) -> Dictionary:
 			break
 
 	return {"ok": ok and player.is_on_floor(), "end": player.global_position, "failed": worst}
+
+
+## The plan's walks join a space's points in straight lines and know nothing of the station's turnstile banks: a leg
+## across a bank goes through its nearest lane instead, as anyone would (2 m before it, along its middle, 2 m after).
+func _through_lanes(points: Array) -> Array:
+	var station: Node3D = map.get_node_or_null("metro_station")
+	var banks = station.get("turnstiles") if station != null else null
+	if banks == null or (banks as Array).is_empty():
+		return points
+	var out := [points[0]]
+	for k in range(1, points.size()):
+		var a := _v(points[k - 1])
+		var b := _v(points[k])
+		for bank: Node3D in banks:
+			var lanes: Array = bank.get_meta("lanes", [])
+			if lanes.is_empty():
+				continue
+			var line: Vector3 = station.to_global(lanes[0])
+			if absf(a.y - line.y) > 0.5 or absf(b.y - line.y) > 0.5 or signf(a.x - line.x) == signf(b.x - line.x):
+				continue
+			var t := (line.x - a.x) / (b.x - a.x)
+			var cross := lerpf(a.z, b.z, t)
+			var best: Vector3 = station.to_global(lanes[0])
+			for lane: Vector3 in lanes:
+				var at: Vector3 = station.to_global(lane)
+				if absf(at.z - cross) < absf(best.z - cross):
+					best = at
+			var way := signf(b.x - a.x)
+			out.append([best.x - way * 2.0, best.y, best.z])
+			out.append([best.x + way * 2.0, best.y, best.z])
+		out.append(points[k])
+	return out
 
 
 func _leg(target: Vector3) -> Dictionary:

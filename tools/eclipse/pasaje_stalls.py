@@ -308,6 +308,69 @@ def plancha(m):
     box(m, (x0 + 0.02, y0 - 0.06, z0 + 0.045), (x1 - 0.02, y0, z0 + 0.08), "steel", r=0.0)
 
 
+# The kiosk (in its own frame: x across it, its hatch toward -y, z up): its body's half width and half depth, its
+# walls' thickness, its hatch (sill and lintel), its eaves, the ridge's height, the sign board's top (under the
+# canopy, which sags to 3.0 m over the street's middle), its wings' length and how far they open.
+KIOSK_X, KIOSK_Y = 1.2, 0.6
+KIOSK_WALL = 0.06
+KIOSK_SILL, KIOSK_LINTEL = 1.0, 1.9
+KIOSK_EAVES, KIOSK_RIDGE = 2.3, 2.72
+KIOSK_SIGN_TOP = 2.95
+KIOSK_WING, KIOSK_OPEN = 0.75, math.radians(45.0)
+
+
+def kiosk(m):
+    """The newspaper and lottery kiosk the stallholders built in the street's middle under their canopy: a painted box
+    on a plinth, its hatch to the north with its shutter propped up over it as an awning, the papers stacked on its
+    sill; its display boards hinged open from its front corners; a gable of tin over it and the board on its ridge,
+    blank for the user's words; bundles of the morning's papers stacked behind it."""
+    x, y, w = KIOSK_X, KIOSK_Y, KIOSK_WALL
+    box(m, (-x - 0.05, -y - 0.05, 0.0), (x + 0.05, y + 0.05, 0.12), "iron", r=0.0)
+    # Its walls: the sides the full depth, the back and the front between them; the hatch cut in the front.
+    for s in (-1, 1):
+        box(m, (min(s * x, s * (x - w)), -y, 0.12), (max(s * x, s * (x - w)), y, KIOSK_EAVES), "paint_blue", r=0.0)
+    box(m, (-x + w, y - w, 0.12), (x - w, y, KIOSK_EAVES), "paint_blue", r=0.0)
+    hatch = x - 0.25
+    box(m, (-x + w, -y, 0.12), (x - w, -y + w, KIOSK_SILL), "paint_blue", r=0.0)
+    box(m, (-x + w, -y, KIOSK_LINTEL), (x - w, -y + w, KIOSK_EAVES), "paint_blue", r=0.0)
+    for s in (-1, 1):
+        box(m, (min(s * hatch, s * (x - w)), -y, KIOSK_SILL), (max(s * hatch, s * (x - w)), -y + w, KIOSK_LINTEL),
+            "paint_blue", r=0.0)
+    # The sill out under the hatch, the papers stacked on it.
+    box(m, (-hatch, -y - 0.22, KIOSK_SILL - 0.04), (hatch, -y, KIOSK_SILL + 0.02), "wood", r=0.0)
+    for k, (x0, x1, h) in enumerate(((-0.85, -0.45, 0.09), (-0.35, 0.05, 0.14), (0.2, 0.6, 0.06), (0.65, 0.88, 0.11))):
+        box(m, (x0, -y - 0.2, KIOSK_SILL + 0.02), (x1, -y - 0.03, KIOSK_SILL + 0.02 + h), "sign", r=0.0)
+    # Its shutter propped up over the hatch as an awning, on two struts from the sill's ends.
+    lift = math.radians(28.0)
+    deep = 0.62
+    centre = (0.0, -y - 0.03 - deep / 2 * math.cos(lift), KIOSK_LINTEL + deep / 2 * math.sin(lift))
+    box(m, (centre[0] - hatch - 0.05, centre[1] - deep / 2, centre[2] - 0.0175),
+        (centre[0] + hatch + 0.05, centre[1] + deep / 2, centre[2] + 0.0175), "tin", r=0.0, turn=(-lift, 0.0, 0.0))
+    tip = (-y - 0.03 - deep * math.cos(lift) * 0.92, KIOSK_LINTEL + deep * math.sin(lift) * 0.92 - 0.03)
+    for s in (-1, 1):
+        pipe(m, [(s * (hatch - 0.05), -y - 0.18, KIOSK_SILL + 0.02), (s * (hatch - 0.05), tip[0], tip[1])], 0.012, 6,
+             "steel")
+    # The display boards hinged open from its front corners, a frame round each, its hinges.
+    for s in (-1, 1):
+        way = (s * math.cos(KIOSK_OPEN), -math.sin(KIOSK_OPEN))
+        mid = (s * (x + 0.02) + way[0] * KIOSK_WING / 2, -y + way[1] * KIOSK_WING / 2)
+        yaw = math.atan2(way[1], way[0])
+        box(m, (mid[0] - KIOSK_WING / 2, mid[1] - 0.0175, 0.35), (mid[0] + KIOSK_WING / 2, mid[1] + 0.0175, 2.15),
+            "paint_blue", r=0.0, turn=(0.0, 0.0, yaw))
+        for z in (0.6, 1.9):
+            # (Out on the corner, its faces well off the walls' on both sides.)
+            x0, x1 = sorted((s * (x - 0.02), s * (x + 0.06)))
+            box(m, (x0, -y - 0.045, z - 0.05), (x1, -y + 0.045, z + 0.05), "iron", r=0.0)
+    # The gable of tin over it, its eaves out past the walls, and the board on its ridge.
+    _extrude_x(m, [(y + 0.25, KIOSK_EAVES), (-y - 0.25, KIOSK_EAVES), (-y - 0.25, KIOSK_EAVES + 0.06),
+                   (0.0, KIOSK_RIDGE), (y + 0.25, KIOSK_EAVES + 0.06)], -x - 0.2, x + 0.2, "tin")
+    box(m, (-x + 0.15, -0.04, KIOSK_RIDGE - 0.06), (x - 0.15, 0.04, KIOSK_SIGN_TOP), "enamel", r=0.0)
+    box(m, (-x + 0.2, -0.085, KIOSK_RIDGE - 0.02), (x - 0.2, -0.04, KIOSK_SIGN_TOP - 0.04), "sign", r=0.0)
+    # The morning's bundles stacked behind it, wrapped in canvas.
+    for x0, x1, h in ((-0.95, -0.35, 0.42), (-0.3, 0.2, 0.28), (0.4, 0.95, 0.36)):
+        box(m, (x0, y + 0.06, 0.0), (x1, y + 0.36, h), "cloth", r=0.02)
+
+
 PIECES = []
 for _w in WIDTHS:
     PIECES += [(piece_name("pipe_frame", _w), _pipe_frame(_w)), (piece_name("booth", _w), _booth(_w)),
@@ -316,7 +379,7 @@ for _w in WIDTHS:
                (piece_name("counter", _w), _counter(_w))]
 for _w in NEON_WIDTHS:
     PIECES += [("neon_box_%d" % round(_w * 10), _neon_box(_w)), ("neon_tube_%d" % round(_w * 10), _neon_tube(_w))]
-PIECES += [("barrow", barrow), ("vitrina", vitrina), ("plancha", plancha)]
+PIECES += [("barrow", barrow), ("vitrina", vitrina), ("plancha", plancha), ("kiosk", kiosk)]
 
 BUDGET = {name: 3000 for name, _ in PIECES}
 # (The tubes, straps, ropes and rims are millimetres across by nature.)

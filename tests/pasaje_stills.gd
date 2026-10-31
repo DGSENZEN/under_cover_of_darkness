@@ -39,6 +39,16 @@ const VIEWS := [
 	[Vector3(0.6, 1.65, 2.2), Vector3(3.3, 0.0, 1.3), "10c_happened_the_claws_from_the_lane"],
 	[Vector3(-1.0, 1.65, 4.4), Vector3(3.6, 0.3, 1.2), "10d_happened_the_claws_from_the_street"],
 	[Vector3(0.3, 1.65, 18.9), Vector3(-4.7, 2.0, 18.6), "10e_happened_the_hand"],
+	[Vector3(3.9, 1.65, 0.5), Vector3(-0.8, 1.2, -14.0), "11a_life_from_the_lanes_mouth_north"],
+	[Vector3(3.9, 1.65, 0.5), Vector3(-0.8, 1.2, 15.0), "11b_life_from_the_lanes_mouth_south"],
+	[Vector3(0.6, 1.65, -13.8), Vector3(-3.8, 1.3, -15.6), "11c_keeper_tortas"],
+	[Vector3(0.6, 1.65, -3.6), Vector3(-3.8, 1.3, -5.25), "11d_keeper_herbs"],
+	[Vector3(0.8, 1.65, -14.4), Vector3(-2.7, 1.1, -17.4), "11e_the_medium_at_the_circle"],
+	[Vector3(-0.4, 1.65, -1.2), Vector3(2.3, 1.1, -3.5), "11f_the_curandero_censing"],
+	[Vector3(0.0, 1.65, 3.5), Vector3(0.0, 1.4, 14.0), "11g_the_south_end_the_organ_grinder"],
+	[Vector3(0.0, 1.65, 11.5), Vector3(0.0, 1.5, 17.2), "12a_the_kiosk"],
+	[Vector3(-1.4, 1.65, 14.4), Vector3(0.2, 1.2, 17.0), "12b_the_kiosk_close"],
+	[Vector3(-3.0, 1.65, 19.4), Vector3(0.0, 1.4, 17.4), "12c_behind_the_kiosk"],
 ]
 ## The close views lit: [eye, looks at, name].
 const CLOSE := [
@@ -87,6 +97,7 @@ func _ready() -> void:
 		_look(view[0], view[1])
 		await _seconds(0.5)
 		_shot(view[2])
+	lamp.queue_free()
 	get_tree().quit(0)
 
 

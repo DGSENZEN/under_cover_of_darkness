@@ -238,7 +238,8 @@ def _gaps(a, b, openings, y_of):
         t, off, length = _along(a, b, o["at"])
 
         if off <= ON_WALL and -1e-6 <= t <= length + 1e-6:
-            y0 = y_of(o)
+            # (Over its sill, if it has one: a parapet stands under it.)
+            y0 = y_of(o) + o.get("sill", 0.0)
             out.append((t - o["width"] / 2, t + o["width"] / 2, y0, y0 + o.get("height", GAP_HEIGHT)))
 
     return out

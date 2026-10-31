@@ -119,6 +119,20 @@ class Greybox(unittest.TestCase):
         self.assertTrue([f for f in walls if _in_plane(f, below) and _covers(f, below)])
         self.assertEqual([f for f in walls if _in_plane(f, above) and _covers(f, above)], [])
 
+    def test_an_opening_over_a_sill_keeps_its_wall_below(self):
+        # A passage on the well's floor opening into it over a 2 m sill (a parapet): walled to the sill's top, open over
+        # it, on both its sides.
+        P = _town()
+        P.space("ledge", plan.rect(10, -56, 20, -50), floor=-8.0, height=4.0,
+                openings=[{"to": "well_a", "at": (10, -53), "sill": 2.0}])
+        box = greybox.build(P.data())
+        for name in ("ledge", "well_a"):
+            walls = [f for f in _mesh(box, name)["faces"] if abs(f["normal"][1]) < 0.01]
+            below = (10.0, -7.0, -53.0)
+            above = (10.0, -5.5, -53.0)
+            self.assertTrue([f for f in walls if _in_plane(f, below) and _covers(f, below)], name)
+            self.assertEqual([f for f in walls if _in_plane(f, above) and _covers(f, above)], [], name)
+
     def test_pit_keeps_its_wall_beside_a_pit_on_the_same_side(self):
         # A small pit inside a bigger one, both meeting x 100: the big pit's
         # west wall stands its whole length.

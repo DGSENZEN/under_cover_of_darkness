@@ -24,7 +24,12 @@ BLENDER = os.environ.get("BLENDER", "/Applications/Blender.app/Contents/MacOS/Bl
 POSES = ["bargaining", "waiting", "kneeling_a", "kneeling_b", "walking_a", "walking_b", "walking_c",
          "keeper_counter", "keeper_stir", "keeper_fan", "keeper_weigh", "keeper_wrap",
          "pelona", "clerk", "lineman", "gendarme",
-         "newsboy", "water_carrier", "porter", "organ_grinder", "sereno"]
+         "newsboy", "water_carrier", "porter", "organ_grinder", "sereno",
+         "old_man", "grandmother", "mother", "running_boy", "running_girl",
+         "priest", "nun", "devotee",
+         "nahual_coyote", "nahual_jaguar", "lechuza", "curandero", "susto", "medium", "chaneque", "tall_man"]
+# How tall each kind of body stands (m): children; the chaneque, a spirit a child's height; the man taller than anyone.
+HEIGHTS = {"boy": (1.0, 1.5), "child": (1.0, 1.5), "girl": (1.0, 1.5), "small": (0.8, 1.05), "tall": (1.95, 2.1)}
 CELL = (256, 512)
 # The commit the lane's seven people were approved in.
 APPROVED = "2ca81339"
@@ -65,8 +70,8 @@ class Silhouettes(unittest.TestCase):
         cell_m = self.meta["cell_m"]
         for name in POSES:
             height = self.poses[name]["height_m"]
-            low, high = (1.0, 1.3) if name.startswith("kneeling") else (1.2, 1.5) if self.poses[name].get("child") \
-                else (1.5, 1.95)
+            low, high = (1.0, 1.3) if name.startswith("kneeling") else \
+                HEIGHTS.get(self.poses[name].get("body"), (1.5, 1.95))
             self.assertTrue(low <= height <= high, "%s %.2f m" % (name, height))
             # (The json's height is the drawing's.)
             rows = np.nonzero(self._cell(name)[..., 3].max(axis=1) > 128)[0]

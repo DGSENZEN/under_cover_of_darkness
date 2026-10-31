@@ -1,0 +1,23 @@
+{
+ "slots": [
+  "tile_wall",
+  "tile_dark",
+  "tile_line",
+  "tile_odd",
+  "mortar",
+  "plaster_wall",
+  "plaster_vault",
+  "cement",
+  "cement_cast",
+  "stone",
+  "stone_old",
+  "paint_yellow",
+  "steel",
+  "iron",
+  "brass",
+  "sign",
+  "glass"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 111.53
+}

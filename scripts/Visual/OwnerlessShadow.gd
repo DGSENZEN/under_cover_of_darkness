@@ -56,6 +56,8 @@ func _ready() -> void:
 	decal.upper_fade = 0.05
 	decal.lower_fade = 0.05
 	decal.visible = false
+	# (It crosses in _process, between physics ticks: drawn uninterpolated, or it judders.)
+	decal.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(decal)
 	# (Projected into the wall, its image upright.)
 	decal.rotation_degrees = Vector3(90.0, 180.0, 0.0) if far else Vector3(-90.0, 0.0, 180.0)

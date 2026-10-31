@@ -1,0 +1,11 @@
+{
+ "slots": [
+  "iron",
+  "brass",
+  "obsidian",
+  "glass",
+  "tin"
+ ],
+ "atlas_px": 2048,
+ "px_per_m": 912.6
+}

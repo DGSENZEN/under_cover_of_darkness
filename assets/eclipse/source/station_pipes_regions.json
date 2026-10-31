@@ -1,0 +1,13 @@
+{
+ "slots": [
+  "brass",
+  "iron",
+  "pipe_red",
+  "pipe_green",
+  "sign",
+  "glass",
+  "rubber"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 40.92
+}

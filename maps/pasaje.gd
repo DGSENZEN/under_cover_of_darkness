@@ -15,6 +15,8 @@ const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const PLAYER := preload("res://Player.tscn")
 const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
+const Silhouette := preload("res://scripts/Visual/Silhouette.gd")
+const ShadeCrowd := preload("res://scripts/Visual/ShadeCrowd.gd")
 
 const PLAN_ORIGIN := Vector3(-9.0, -11.0, 75.0)
 const HALF_W := 5.0
@@ -188,6 +190,57 @@ const HAND_TILT := 0.14
 const SWING := deg_to_rad(4.0)
 const SWING_FULL := 1.0
 ## The food's steam: [stall, its Vfx preset, where it leaves (the stall's frame)].
+## The kiosk's place: in the street's middle under the canopy, short of its candle circle.
+const KIOSK_AT := Vector3(0.0, 0.0, 17.2)
+## Its bulb, in its own frame: inside its hatch, under its roof.
+const KIOSK_BULB_AT := Vector3(0.0, 2.25, 0.35)
+## The crowd's routes (scripts/Visual/ShadeCrowd.gd; the set's frame, on the floor): [name, points, every (s, least
+## and most between one setting out and the next), keep (how much of it one walks before it may come apart), along
+## (the chance one forms partway along)]. The street both ways, each keeping to its right, as far as the kiosk; into
+## the herb market's mouth and out of it.
+const ROUTES := [
+	["street_south", [Vector3(1.2, 0.0, -19.5), Vector3(1.2, 0.0, 15.6)], Vector2(2.0, 4.0), Vector2(0.5, 1.0), 0.4],
+	["street_north", [Vector3(-1.2, 0.0, 15.6), Vector3(-1.2, 0.0, -19.5)], Vector2(2.0, 4.0), Vector2(0.5, 1.0), 0.4],
+	["into_herbs", [Vector3(1.2, 0.0, -9.0), Vector3(0.0, 0.0, -3.0), Vector3(-2.6, 0.0, -1.2), Vector3(-4.5, 0.0, -1.2)],
+		Vector2(5.0, 9.0), Vector2(0.8, 1.0), 0.2],
+	["out_of_herbs", [Vector3(-4.5, 0.0, -1.6), Vector3(-2.6, 0.0, -1.6), Vector3(-1.2, 0.0, 2.5),
+		Vector3(-1.2, 0.0, 12.0)], Vector2(5.0, 9.0), Vector2(0.6, 1.0), 0.0],
+]
+## Who walks it (the loops' sheets; a name twice is drawn twice as often): the city's trades and its people, the
+## lane's own folk, now and then the church in hiding, and, seldom, the uncanny among them.
+const WALKS := ["city_pelona", "city_pelona", "city_clerk", "city_clerk", "city_lineman", "city_newsboy", "city_newsboy",
+	"city_water_carrier", "city_porter", "city_porter", "city_old_man", "city_grandmother", "city_grandmother",
+	"city_running", "city_priest", "city_nun", "city_devotee", "walk_coat", "walk_coat", "walk_jacket", "walk_jacket",
+	"walk_rebozo", "walk_carry", "city_nahual_coyote", "city_nahual_jaguar", "city_lechuza", "city_susto",
+	"city_tall_man", "city_chaneque"]
+## The walkers whose own soul walks behind them.
+const ECHOES := ["city_susto"]
+## The stallkeepers, by stall: [pose (silhouettes.py), mirrored, where they stand (the stall's frame: x along it, z out
+## toward the street, behind the counter)]. Stirring the pots at the food stalls, fanning the plancha and the flies,
+## weighing herbs, chiles, fruit and copal, wrapping candles, saints, flowers and sweets, leaning at the rest.
+const KEEPERS := {
+	"tamales": ["keeper_stir", false, Vector3(0.15, 0.0, 0.3)], "radios": ["keeper_counter", true, Vector3(0.0, 0.0, 0.45)],
+	"candles": ["keeper_wrap", false, Vector3(-0.5, 0.0, 0.45)], "copal": ["keeper_weigh", true, Vector3(0.3, 0.0, 0.45)],
+	"milagros": ["keeper_counter", false, Vector3(0.0, 0.0, 0.45)], "saints": ["keeper_wrap", true, Vector3(0.3, 0.0, 0.45)],
+	"atole": ["keeper_stir", true, Vector3(-0.4, 0.0, 0.45)], "sweets": ["keeper_fan", false, Vector3(0.2, 0.0, 0.45)],
+	"tortas": ["keeper_fan", true, Vector3(0.3, 0.0, 0.45)], "fruit": ["keeper_weigh", false, Vector3(0.45, 0.0, 0.5)],
+	"lottery": ["keeper_counter", true, Vector3(0.0, 0.0, 0.45)], "herbs": ["keeper_weigh", false, Vector3(-0.4, 0.0, 0.45)],
+	"chiles": ["keeper_weigh", true, Vector3(0.2, 0.0, 0.45)], "flowers": ["keeper_wrap", false, Vector3(0.0, 0.0, 0.45)],
+	"coffee": ["keeper_stir", false, Vector3(-0.4, 0.0, 0.45)], "tinsmith": ["keeper_counter", false, Vector3(0.5, 0.0, 0.45)],
+}
+## The people who stand, each where there is a cause: [pose, where (the set's frame), the way they look]. The medium
+## at the north circle where the rite went wrong, its ectoplasm still pouring out of her; the curandero censing
+## before the copal stall; the gendarme watching the herb market's mouth; the organ grinder playing for the south
+## end's nights; the sereno at the north end, his lantern toward the dark beyond; a mother with her baby at the
+## sweets.
+const PEOPLE := [
+	["medium", Vector3(-2.7, 0.0, -17.2), Vector3(0.0, 0.0, -1.0)],
+	["curandero", Vector3(2.3, 0.0, -3.4), Vector3(1.0, 0.0, 0.0)],
+	["gendarme", Vector3(-3.7, 0.0, 1.4), Vector3(0.0, 0.0, -1.0)],
+	["organ_grinder", Vector3(0.0, 0.0, 10.4), Vector3(0.0, 0.0, 1.0)],
+	["sereno", Vector3(2.4, 0.0, -18.9), Vector3(0.0, 0.0, -1.0)],
+	["mother", Vector3(2.4, 0.0, 16.4), Vector3(1.0, 0.0, 0.0)],
+]
 const STEAM := [["tamales", "pot_steam", Vector3(0.15, 1.51, 0.8)], ["tortas", "steam", Vector3(0.25, 1.02, 1.15)],
 	["atole", "pot_steam", Vector3(-0.6, 1.54, 1.12)], ["coffee", "pot_steam", Vector3(-0.55, 1.28, 1.1)]]
 
@@ -215,6 +268,8 @@ var missing: Array[String] = []
 ## The stalls by name: each a root on its wall at its place, its pieces in the stall's frame (x along the wall, the
 ## tiles at z 0, the street toward +z).
 var stalls := {}
+## The newspaper and lottery kiosk in the street's middle under the canopy.
+var kiosk: Node3D
 ## The set's own lights: the neons' and the bulbs'.
 var lights: Array[Light3D] = []
 ## The food's steam (Vfx systems), leaning on the draught.
@@ -231,6 +286,10 @@ var bill_stacks: Array[Node3D] = []
 var wards := {}
 ## The marks of what happened, by their kind (the scorch, the spiral, the gouges, the hand): each its decal.
 var happened := {}
+## Its life: the crowd of shades walking the street, the stallkeepers behind their counters, the people who stand.
+var crowd_of_shades: Node3D
+var keepers: Array[MeshInstance3D] = []
+var people: Array[MeshInstance3D] = []
 
 
 func _ready() -> void:
@@ -247,6 +306,7 @@ func _ready() -> void:
 	_marks()
 	_wards()
 	_happened()
+	_life()
 	if standalone:
 		_environment()
 		_stubs()
@@ -257,6 +317,8 @@ func _ready() -> void:
 		player.debug_traversal = false
 		add_child(player)
 		player.position = Vector3(0.0, 1.05, -18.0)
+	if crowd_of_shades != null:
+		crowd_of_shades.walked_into_by = player
 
 
 func _process(delta: float) -> void:
@@ -515,6 +577,15 @@ func _stalls() -> void:
 			SetKit.place(root, kit[piece[0]], look, piece[0], Vector3.ZERO, 0.0, piece[1], true)
 		_neon(root, kit, look, width, spec[6], k)
 		stalls[spec[0]] = root
+	# The kiosk the stallholders built in the street's middle under their canopy, its hatch to the north: what the eye
+	# meets looking down the street (the unbuilt stretch beyond is the greybox's).
+	if kit.has("kiosk"):
+		kiosk = Node3D.new()
+		kiosk.name = "kiosk"
+		add_child(kiosk)
+		kiosk.position = KIOSK_AT
+		kiosk.rotation.y = PI
+		SetKit.place(kiosk, kit["kiosk"], look, "kiosk", Vector3.ZERO, 0.0, true, true)
 
 
 ## A stall's neon over its cover: the box (its face blank) and its tube, lit by a NeonSign of the stall's colour.
@@ -555,21 +626,10 @@ func _wares() -> void:
 		var root: Node3D = stalls[name]
 		var at := BULB_AT if root.find_children("counter*", "MeshInstance3D", true, false).size() > 0 \
 			else Vector3(0.0, BULB_AT.y, BULB_AT.z)
-		var bulb := SetKit.place(root, kit["bulb"], look, "bulb", at, 0.0, false)
-		# (Its glass glowing; its socket and cord painted.)
-		for i in bulb.mesh.get_surface_count():
-			var slot: Material = bulb.mesh.surface_get_material(i)
-			if slot != null and slot.resource_name.begins_with("glass"):
-				bulb.set_surface_override_material(i, lit)
-		var light := OmniLight3D.new()
-		light.name = "bulb_light"
-		light.light_color = BULB_COLOUR
-		light.light_energy = 0.9
-		light.omni_range = 3.2
-		light.shadow_enabled = false
-		root.add_child(light)
-		light.position = at + Vector3(0.0, -0.26, 0.0)
-		lights.append(light)
+		_bulb(root, kit, look, lit, at)
+	# The kiosk's, inside its hatch over the papers: what the eye meets at the street's end, lit.
+	if kiosk != null:
+		_bulb(kiosk, kit, look, lit, KIOSK_BULB_AT)
 	for spec in STEAM:
 		var system := Vfx.system(spec[1])
 		system.name = "steam"
@@ -577,6 +637,24 @@ func _wares() -> void:
 		system.position = spec[2]
 		Vfx.emit(system, true)
 		steam.append(system)
+
+
+## A bare bulb hung at `at` in `root`, its glass glowing (its socket and cord painted), its light under it.
+func _bulb(root: Node3D, kit: Dictionary, look: Material, lit: Material, at: Vector3) -> void:
+	var bulb := SetKit.place(root, kit["bulb"], look, "bulb", at, 0.0, false)
+	for i in bulb.mesh.get_surface_count():
+		var slot: Material = bulb.mesh.surface_get_material(i)
+		if slot != null and slot.resource_name.begins_with("glass"):
+			bulb.set_surface_override_material(i, lit)
+	var light := OmniLight3D.new()
+	light.name = "bulb_light"
+	light.light_color = BULB_COLOUR
+	light.light_energy = 0.9
+	light.omni_range = 3.2
+	light.shadow_enabled = false
+	root.add_child(light)
+	light.position = at + Vector3(0.0, -0.26, 0.0)
+	lights.append(light)
 
 
 ## What the market hung over its street: direction signs on rods from the girders, cables and bulb strings slung
@@ -594,6 +672,8 @@ func _overhead() -> void:
 	lit.emission_energy_multiplier = 3.0
 	var root := Node3D.new()
 	root.name = "overhead"
+	# (Its signs swung each frame, not in the physics step: drawn interpolated they would judder.)
+	root.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(root)
 	for spec in GIRDER_SIGNS:
 		overhead.append(SetKit.place(root, kit["drop_rod"], look, "drop_rod", Vector3(spec[1], GIRDER_FOOT, spec[2]), 0.0, false))
@@ -609,6 +689,9 @@ func _overhead() -> void:
 				string.set_surface_override_material(i, lit)
 		overhead.append(string)
 	overhead.append(SetKit.place(root, kit["canopy"], look, "canopy", Vector3.ZERO, 0.0, false))
+	# (Its back closed to the ceiling with tarpaulins: the dark beyond the stretch's end not seen over it.)
+	if kit.has("canopy_back"):
+		overhead.append(SetKit.place(root, kit["canopy_back"], look, "canopy_back", Vector3.ZERO, 0.0, false))
 	overhead.append(SetKit.place(root, kit["gantry"], look, "gantry", Vector3(0.0, 0.0, GANTRY_Z), 0.0, false))
 	for x in GANTRY_HOOKS:
 		_hung_sign(root, kit, look, "sign_board_b", Vector3(x, GANTRY_HOOK_Y, GANTRY_Z))
@@ -825,6 +908,65 @@ func _happened() -> void:
 		mark.texture_normal = normals[MARK_CELLS.find(kind)] if normals.size() == MARK_CELLS.size() else null
 	for kind in happened:
 		happened[kind].set_meta("kind", kind)
+
+
+## The Pasaje's life: its crowd of shades coming and going along the street and through the herb market's mouth, a
+## keeper behind every counter, and the people who stand where they have cause.
+func _life() -> void:
+	crowd_of_shades = ShadeCrowd.new()
+	crowd_of_shades.name = "shade_crowd"
+	crowd_of_shades.walks = WALKS
+	crowd_of_shades.paced_by_loop = true
+	crowd_of_shades.echoes = ECHOES
+	for route: Array in ROUTES:
+		crowd_of_shades.routes.append({"name": route[0], "points": PackedVector3Array(route[1]), "every": route[2],
+			"keep": route[3], "along": route[4]})
+	add_child(crowd_of_shades)
+
+	var behind := Node3D.new()
+	behind.name = "keepers"
+	add_child(behind)
+	for stall_name in KEEPERS:
+		var stall: Node3D = stalls.get(stall_name)
+		var spec: Array = KEEPERS[stall_name]
+		var keeper: MeshInstance3D = Silhouette.make(spec[0], spec[1])
+		if stall == null or keeper == null:
+			missing.append("keeper %s" % stall_name)
+			continue
+		keeper.name = "keeper_" + stall_name
+		keeper.set_meta("stall", stall_name)
+		behind.add_child(keeper)
+		# (Behind its counter, its face to the street.)
+		keeper.position = stall.transform * spec[2]
+		keeper.rotation.y = stall.rotation.y
+		keepers.append(keeper)
+
+	var standing := Node3D.new()
+	standing.name = "people"
+	add_child(standing)
+	for spec: Array in PEOPLE:
+		var at: Vector3 = spec[1]
+		var looks: Vector3 = spec[2]
+		# (Its face to the street's middle; drawn looking left, so mirrored when it looks the other way.)
+		var facing := Vector3(-signf(at.x) if absf(at.x) > 0.3 else 0.0, 0.0, 0.0 if absf(at.x) > 0.3 else 1.0)
+		var yaw := atan2(facing.x, facing.z)
+		var left := Vector3(-cos(yaw), 0.0, sin(yaw))
+		var person: MeshInstance3D = Silhouette.make(spec[0], looks.dot(left) < 0.0)
+		if person == null:
+			missing.append("person %s" % spec[0])
+			continue
+		standing.add_child(person)
+		person.position = at
+		person.rotation.y = yaw
+		people.append(person)
+		if spec[0] == "curandero":
+			# His censer's copal, out from his hand.
+			var smoke := Vfx.system("censer")
+			smoke.name = "censer"
+			person.add_child(smoke)
+			smoke.position = Vector3(0.5 if looks.dot(left) < 0.0 else -0.5, 0.95, 0.0)
+			Vfx.emit(smoke, true)
+			steam.append(smoke)
 
 
 ## A ward's root, kept by its spot's name.

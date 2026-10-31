@@ -11,7 +11,7 @@ import unittest
 
 import bmesh
 import bpy
-from mathutils import Vector
+from mathutils import Vector, geometry
 from mathutils.bvhtree import BVHTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -2461,6 +2461,14 @@ class PasajeStalls(unittest.TestCase):
     def test_every_piece_stands_in_a_stalls_depth_under_the_mains(self):
         for n in self.objects:
             (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            if n == "kiosk":
+                # (The kiosk stands free in the street's middle, not against the wall: within its own body and
+                # wings, under the canopy's sag.)
+                self.assertLessEqual(max(-y0, y1), 1.2, n)
+                self.assertLessEqual(max(-x0, x1), 1.8, n)
+                self.assertGreaterEqual(z0, -0.0005, n)
+                self.assertLessEqual(z1, pasaje_stalls.KIOSK_SIGN_TOP + 0.001, n)
+                continue
             self.assertGreaterEqual(y0, -pasaje_stalls.REACH - 0.001, n)
             self.assertLessEqual(y1, 0.0005, n)
             self.assertGreaterEqual(z0, -0.0005, n)
@@ -2571,7 +2579,8 @@ class PasajeOverhead(unittest.TestCase):
         # (Blender y is the set's -z: z 13 to the stretch's end.)
         self.assertLessEqual(y0, -19.9)
         self.assertGreaterEqual(y1, -13.0)
-        self.assertGreaterEqual(z0, 2.4)
+        # (Its fringe over a head: the player's capsule stands 2.05 m tall.)
+        self.assertGreaterEqual(z0, 2.12)
         # Its edges, where the mains stand off the walls, between the air line's top and the gas main's bottom.
         edge = [v.z for v in _world(self.objects["canopy"]) if abs(v.x) >= 4.4]
         self.assertTrue(edge and min(edge) > 3.125 and max(edge) < 3.21, (min(edge), max(edge)))
@@ -2584,6 +2593,984 @@ class PasajeOverhead(unittest.TestCase):
         self.assertTrue(0.04 < -y0 < 0.1, y0)
         self.assertAlmostEqual(x1 - x0, pasaje_overhead.CURL[0], delta=0.002)
         self.assertTrue(z0 < -0.02 and z1 < 0.06, (z0, z1))
+
+
+class StationShell(unittest.TestCase):
+    """The station's shell dressed (tools/eclipse/station_shell.py; docs/superpowers/plans/2026-10-30-metro-station.md
+    Task 4): every piece closed, in budget, through the gate; the walls at their heights, the coping's top the floor's
+    with the yellow line let into it, a tread's top at its step."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_shell
+        cls.kit = station_shell
+        station_shell.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_the_walls_stand_their_heights(self):
+        for h, height in self.kit.HEIGHTS.items():
+            for n in ("wall_" + h, "wall_%s_worn" % h):
+                (x0, x1), _, (z0, z1) = self._extent(n)
+                self.assertAlmostEqual(z1, height, delta=0.01, msg=n)
+                self.assertAlmostEqual(x1 - x0, self.kit.PANEL, delta=0.01, msg=n)
+
+    def test_the_coping_is_the_floor_with_its_line_let_in(self):
+        o = self.objects["coping"]
+        _, (y0, y1), (z0, z1) = self._extent("coping")
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(y1 - y0, self.kit.COPING, delta=0.01)
+        yellow = [o.data.materials[p.material_index].name == "paint_yellow" for p in o.data.polygons]
+        line = [o.matrix_world @ o.data.vertices[v].co for p, y in zip(o.data.polygons, yellow) if y for v in p.vertices]
+        self.assertTrue(line and all(self.kit.LINE[0] - 0.001 <= v.y <= self.kit.LINE[1] + 0.001 and v.z <= 0.0
+                                     for v in line))
+
+    def test_no_joint_runs_straight_up_a_panel_edge(self):
+        # (The panel's every other course ends flush at both its edges, a cut tile's half: the next panel makes it
+        # whole.)
+        for n in ("wall_low", "wall_low_worn"):
+            vs = _world(self.objects[n])
+            for k, (z0, z1, _, _) in enumerate(self.kit.underground_walls.COURSES):
+                if k % 2 == 0:
+                    continue
+                mid = (z0 + z1) / 2
+                at_edge = [v for v in vs if abs(v[2] - mid) < (z1 - z0) / 2 and v[1] < -self.kit.MORTAR + 0.001]
+                self.assertTrue(any(abs(v[0]) < 1e-4 for v in at_edge), (n, k, "left"))
+                self.assertTrue(any(abs(v[0] - self.kit.PANEL) < 1e-4 for v in at_edge), (n, k, "right"))
+
+    def test_neighbouring_coffers_meet_in_one_flat_soffit(self):
+        # (A beam is two coffers' halves: rounded where they meet, the two made a groove down its middle that caught
+        # the tubes' light, a hairline down every beam. Square there; the arris kept where the beam meets the recess.)
+        o = self.objects["coffer"]
+        c, b, d = self.kit.COFFER / 2, self.kit.BEAM, self.kit.COFFER_DEPTH
+        for x, y in ((c - 0.003, 0.3), (-c + 0.003, 0.3), (0.3, c - 0.003), (0.3, -c + 0.003)):
+            hit = _hit(o, (x, y, -1.0), (0.0, 0.0, 1.0))
+            self.assertAlmostEqual(hit.z, -d, delta=0.001, msg=(x, y))
+        hit = _hit(o, (c - b + 0.003, 0.3, -1.0), (0.0, 0.0, 1.0))
+        self.assertGreater(hit.z, -d + 0.005, "the beam's arris at the recess")
+
+    def test_a_guard_rail_guards_a_drop(self):
+        # (Round the track steps' cut: a top rail a metre up, a mid rail under it so no one slips between, a post at a
+        # run's start; the end post closes the last run.)
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("guard_rail")
+        self.assertAlmostEqual(x1 - x0, self.kit.RAIL, delta=0.06)
+        self.assertAlmostEqual(z0, 0.0, delta=0.001)
+        self.assertAlmostEqual(z1, self.kit.GUARD[0] + 0.025, delta=0.003)
+        o = self.objects["guard_rail"]
+        for z in self.kit.GUARD:
+            hit = _hit(o, (self.kit.RAIL / 2, -1.0, z), (0.0, 1.0, 0.0))
+            self.assertIsNotNone(hit, z)
+        _, _, (pz0, pz1) = self._extent("guard_post")
+        self.assertAlmostEqual(pz1, z1, delta=0.01)
+
+    def test_the_parapets_cap_covers_its_faces(self):
+        # (Its stone over the parapet's top and the pit faces either side of it, a little proud, its top the floor's.)
+        _, (y0, y1), (z0, z1) = self._extent("parapet_cap")
+        self.assertGreaterEqual(y1 - y0 + 1e-6, self.kit.CAP[0])
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(z1 - z0, self.kit.CAP[1], delta=0.001)
+
+    def test_the_plaster_ceilings_panels_meet(self):
+        # (A plastered ceiling has no joints: a gap between two panels let the light on what lies above through, a
+        # dashed hairline across the ceiling at a distance.)
+        (x0, x1), (y0, y1), _ = self._extent("ceiling_panel")
+        self.assertAlmostEqual(x1 - x0, self.kit.MODULE, delta=0.0002)
+        self.assertAlmostEqual(y1 - y0, self.kit.MODULE, delta=0.0002)
+
+    def test_the_upright_cement_is_cast_not_the_tracks(self):
+        # (The shared grimy cement read as camouflage at arm's length, a door's jamb or the walls down the track steps:
+        # every upright face of the station's is cast, calm; only the track's bed underfoot keeps the grime.)
+        for n in ["lining", "pit_face", "column_track", "portal_mouth", "portal_tunnel"] + \
+                [self.kit.reveal_name(*r) for r in self.kit.REVEALS]:
+            self.assertNotIn("cement", {m.name for m in self.objects[n].data.materials}, n)
+            self.assertIn("cement_cast", {m.name for m in self.objects[n].data.materials}, n)
+        self.assertIn("cement", {m.name for m in self.objects["bed_slab"].data.materials})
+
+    def test_a_tread_tops_its_step(self):
+        _, (y0, y1), (z0, z1) = self._extent("tread")
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(z1 - z0, self.kit.RISE, delta=0.001)
+        self.assertAlmostEqual(y1 - y0, self.kit.TREAD, delta=0.001)
+
+
+class StationTrack(unittest.TestCase):
+    """The track laid for the MP-68 (tools/eclipse/station_track.py; docs/superpowers/plans/2026-10-30-metro-station.md
+    Task 5): every piece closed, in budget, through the gate; the running pads' tops at the module's z = 0, nothing of
+    the bed over them; the guide bar's pieces all behind their contact face (y >= 0), the car's side of it clear; the
+    drain's grating flush with the bed's top and its channel deep under it."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_track
+        cls.kit = station_track
+        station_track.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_the_pads_carry_the_car_and_nothing_stands_over_them(self):
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("track_bed")
+        self.assertAlmostEqual(x1 - x0, self.kit.MODULE, delta=0.001)
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(y1, self.kit.PAD_FROM + self.kit.PAD_WIDE / 2, delta=0.001)
+        o = self.objects["track_bed"]
+        for y in (-self.kit.PAD_FROM, self.kit.PAD_FROM):
+            for x in (0.3, 5.0, 9.7):
+                # (Its worn band a millimetre under its edges.)
+                self.assertAlmostEqual(_hit(o, (x, y, 1.0), (0.0, 0.0, -1.0)).z, 0.0, delta=0.0015, msg=(x, y))
+        # (The safety rails under the pads' tops: the tyres ride the pads.)
+        hit = _hit(o, (5.0, self.kit.GAUGE / 2, 1.0), (0.0, 0.0, -1.0))
+        self.assertTrue(-0.06 < hit.z < -0.01, hit.z)
+
+    def test_the_tyres_wear_the_pads_black(self):
+        # (Where the tyres run, a band down each pad's middle worn black, a hair under its edges; the sleepers a darker
+        # stone than the bed's cement; the safety rails dark iron, never the fittings' steel.)
+        o = self.objects["track_bed"]
+        tree = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get())
+
+        def slot_under(x, y):
+            found = tree.ray_cast(Vector((x, y, 1.0)), Vector((0.0, 0.0, -1.0)), 5.0)
+            return o.data.materials[o.data.polygons[found[2]].material_index].name
+
+        for y in (-self.kit.PAD_FROM, self.kit.PAD_FROM):
+            self.assertEqual(slot_under(5.0, y), "rubber", y)
+            self.assertEqual(slot_under(5.0, y + self.kit.PAD_WIDE / 2 - 0.02), "cement", y)
+        self.assertEqual(slot_under(5.5, 0.0), "stone")
+        self.assertEqual(slot_under(5.0, self.kit.GAUGE / 2), "iron")
+
+    def test_the_guide_bar_keeps_behind_its_face(self):
+        for n in ("guide_bar", "guide_flare", "guide_kerb"):
+            (_, _), (y0, _), _ = self._extent(n)
+            self.assertGreaterEqual(y0, -0.0005, n)
+        o = self.objects["guide_bar"]
+        hit = _hit(o, (0.3, -1.0, self.kit.BAR[1]), (0.0, 1.0, 0.0))
+        self.assertAlmostEqual(hit.y, 0.0, delta=0.001)
+        # (The flare turns away from the car: its far end's face further back than its near end's.)
+        f = self.objects["guide_flare"]
+        near = _hit(f, (0.02, -1.0, self.kit.BAR[1]), (0.0, 1.0, 0.0))
+        far = _hit(f, (self.kit.FLARE[0] - 0.05, -1.0, self.kit.BAR[1]), (0.0, 1.0, 0.0))
+        self.assertLess(near.y, 0.01)
+        self.assertGreater(far.y, self.kit.FLARE[1] * 0.7)
+
+    def test_the_drain_is_flush_and_deep(self):
+        _, (y0, y1), (z0, z1) = self._extent("drain")
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(y1 - y0, self.kit.DRAIN[0], delta=0.001)
+        o = self.objects["drain"]
+        # (Between two of its grating's bars a ray falls to the channel's floor; on a bar it stops at the bed's top.)
+        hits = [_hit(o, (x / 100.0, 0.0, 1.0), (0.0, 0.0, -1.0)).z for x in range(2, 118, 1)]
+        self.assertAlmostEqual(max(hits), 0.0, delta=0.001)
+        self.assertLess(min(hits), -self.kit.DRAIN[1] + 0.03)
+
+    def test_the_drains_end_is_stopped_flush(self):
+        # (Where the trench meets the walkers' tunnels, a cast stop closes the channel, its top the bed's.)
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("drain_end")
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        self.assertAlmostEqual(y1 - y0, self.kit.DRAIN[0], delta=0.001)
+        o = self.objects["drain_end"]
+        for y in (-0.15, 0.0, 0.15):
+            self.assertAlmostEqual(_hit(o, ((x0 + x1) / 2, y, 1.0), (0.0, 0.0, -1.0)).z, 0.0, delta=0.001, msg=y)
+
+
+class StationTaquillas(unittest.TestCase):
+    """The taquillas (tools/eclipse/station_taquillas.py; docs/superpowers/plans/2026-10-30-metro-station.md Task 7):
+    the Light Company's two booths, each closed, in budget, through the gate; standing on the floor with its back on the
+    wall's face (y = 0), its windows facing the hall (-y); through each window the seller's side seen between brass bars,
+    a dished cash slot let into its chiluca counter under them, a blank sign and the Company's ward lamp over it. Built to
+    the house's inspirations: a tezontle plinth, estípites between the windows, Talavera under them, a stepped fret and a
+    stepped chiluca crown, a crest over the middle bearing the Company's emblem (the user's), the seller's own things."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_taquillas
+        cls.kit = station_taquillas
+        station_taquillas.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def _slot(self, o, hit_index):
+        return o.data.materials[o.data.polygons[hit_index].material_index].name
+
+    def _ray(self, o, at, way):
+        tree = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get())
+        found = tree.ray_cast(Vector(at), Vector(way), 20.0)
+        return (found[0], self._slot(o, found[2])) if found[0] is not None else (None, None)
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_a_booth_stands_on_the_floor_its_back_on_the_wall(self):
+        # (8 m of wall each, the hall's 5 m clear over it for its coffers' fittings.)
+        for n, count in self.kit.WINDOWS.items():
+            (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            self.assertAlmostEqual(z0, 0.0, delta=0.001, msg=n)
+            self.assertAlmostEqual(y1, 0.0, delta=0.001, msg=n)
+            self.assertLessEqual(x1 - x0, 8.0, n)
+            self.assertAlmostEqual(x0, -x1, delta=0.01, msg=n)
+            # (Its crest under the hall's coffers and their fittings, 4.4 m up.)
+            self.assertLessEqual(z1, 3.8, n)
+            self.assertEqual(len(self.kit.window_xs(count)), count, n)
+            self.assertIn(count, (2, 3), n)
+
+    def test_through_every_window_the_seller_is_seen_between_brass_bars(self):
+        front = -self.kit.DEPTH
+        z = self.kit.COUNTER + (self.kit.WINDOW[1] - self.kit.COUNTER) * 0.4
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for k, cx in enumerate(self.kit.window_xs(count)):
+                bars = self.kit.bar_xs(cx)
+                self.assertGreaterEqual(len(bars), 6, (n, k))
+                for a, b in zip(bars, bars[1:]):
+                    hit, _ = self._ray(o, ((a + b) / 2, -5.0, z), (0.0, 1.0, 0.0))
+                    self.assertGreater(hit.y, front + 0.1, (n, k, a))
+                    # (Between two bars a hand's width at most.)
+                    self.assertLessEqual(b - a, 0.13, (n, k, a))
+                hit, slot = self._ray(o, (bars[1], -5.0, z), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "brass", (n, k))
+                self.assertLess(hit.y, front + 0.1, (n, k))
+
+    def test_the_counter_carries_a_dished_slot_under_the_bars(self):
+        front = -self.kit.DEPTH
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count):
+                # (The counter's stone out in front of the window, at its height.)
+                # (Rays down from inside the window's head, under the cornice and the lamp.)
+                top = self.kit.WINDOW[1] - 0.05
+                hit, slot = self._ray(o, (cx + 0.4, front - self.kit.COUNTER_OUT * 0.75, top), (0.0, 0.0, -1.0))
+                self.assertAlmostEqual(hit.z, self.kit.COUNTER, delta=0.002, msg=(n, cx))
+                self.assertEqual(slot, "chiluca", (n, cx))
+                # (The dish under the slot sunk in it, brass worn by the coins; through the slot the seller's side.)
+                hit, slot = self._ray(o, (cx, front - 0.05, top), (0.0, 0.0, -1.0))
+                self.assertEqual(slot, "brass", (n, cx))
+                self.assertLess(hit.z, self.kit.COUNTER - 0.03, (n, cx))
+                hit, _ = self._ray(o, (cx, -5.0, self.kit.COUNTER + self.kit.SLOT[1] / 2), (0.0, 1.0, 0.0))
+                self.assertGreater(hit.y, front + 0.1, (n, cx))
+
+    def test_a_blank_sign_and_the_companys_lamp_over_every_window(self):
+        front = -self.kit.DEPTH
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count):
+                _, slot = self._ray(o, (cx, -5.0, sum(self.kit.SIGN) / 2), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "sign", (n, cx))
+                hit, slot = self._ray(o, (cx, self.kit.LAMP[0], 3.6), (0.0, 0.0, -1.0))
+                self.assertIn(slot, ("brass", "glass"), (n, cx))
+                self.assertGreater(hit.z, self.kit.WINDOW[1], (n, cx))
+                self.assertLess(self.kit.LAMP[0], front, n)
+
+    def _clear_of_lamps(self, count, x):
+        return all(abs(x - cx) > 0.3 for cx in self.kit.window_xs(count))
+
+    def test_it_stands_on_tezontle_under_a_stepped_chiluca_crown(self):
+        # (Mayan-Revival setbacks: the cornice out over the frieze, each tier over it set further back.)
+        front = -self.kit.DEPTH
+        self.assertGreaterEqual(len(self.kit.CROWN), 3)
+        outs = [out for _, _, out in sorted(self.kit.CROWN)]
+        self.assertEqual(outs[1:], sorted(outs[1:], reverse=True))
+        self.assertTrue(all(a > b for a, b in zip(outs[1:], outs[2:])), outs)
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            x = self.kit.window_xs(count)[0] - 0.45
+            _, slot = self._ray(o, (x, -5.0, self.kit.PLINTH[0] / 2), (0.0, 1.0, 0.0))
+            self.assertEqual(slot, "tezontle", n)
+            for z0, z1, out in self.kit.CROWN:
+                hit, slot = self._ray(o, (x, -5.0, (z0 + z1) / 2), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "chiluca", (n, z0))
+                self.assertAlmostEqual(hit.y, front - out, delta=0.003, msg=(n, z0))
+
+    def test_a_stepped_fret_runs_the_frieze(self):
+        # (A greca along the frieze over the signs: raised steps on the frieze's ground, read in and out along it.)
+        front = -self.kit.DEPTH
+        z = sum(self.kit.FRET) / 2
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            half = self.kit.length(count) / 2
+            depths = []
+            for i in range(int((2 * half - 0.6) * 100)):
+                x = -half + 0.3 + i / 100.0
+                if not self._clear_of_lamps(count, x):
+                    continue
+                hit, slot = self._ray(o, (x, -5.0, z), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "chiluca", (n, x))
+                depths.append(round(hit.y - front, 3))
+            self.assertEqual(set(depths), {0.0, -self.kit.FRET_PROUD}, n)
+            turns = sum(1 for a, b in zip(depths, depths[1:]) if a != b)
+            self.assertGreaterEqual(turns, 4 * (2 * half - 0.6) * 0.5, n)
+
+    def test_estipites_stand_between_the_windows(self):
+        # (Inverted pyramids of chiluca: narrow at the counter, broad under the frieze.)
+        front = -self.kit.DEPTH
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count)[:-1]:
+                low, slot = self._ray(o, (cx, front - 0.03, self.kit.COUNTER + 0.15), (1.0, 0.0, 0.0))
+                self.assertEqual(slot, "chiluca", (n, cx))
+                high, slot = self._ray(o, (cx, front - 0.03, self.kit.TRANSOM - 0.05), (1.0, 0.0, 0.0))
+                self.assertEqual(slot, "chiluca", (n, cx))
+                self.assertLess(high.x, low.x - 0.05, (n, cx))
+
+    def test_a_stepped_crest_over_the_middle_bears_the_companys_emblem(self):
+        front = -self.kit.DEPTH
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            hit, _ = self._ray(o, (0.0, front + 0.2, 5.0), (0.0, 0.0, -1.0))
+            self.assertGreaterEqual(hit.z, self.kit.TOP + 0.3, n)
+            hit, _ = self._ray(o, (self.kit.window_xs(count)[0] - 0.45, front + 0.2, 5.0), (0.0, 0.0, -1.0))
+            self.assertAlmostEqual(hit.z, self.kit.TOP, delta=0.002, msg=n)
+            # (Beside the middle lamp's rod.)
+            _, slot = self._ray(o, (0.2, -5.0, sum(self.kit.EMBLEM) / 2), (0.0, 1.0, 0.0))
+            self.assertEqual(slot, "sign", n)
+
+    def test_the_companys_lamps_are_wards(self):
+        # (Its lamps keep the dead off the till: caged, obsidian lenses on their four sides.)
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count):
+                _, slot = self._ray(o, (cx, -5.0, self.kit.LAMP[1]), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "obsidian", (n, cx))
+
+    def test_talavera_under_every_window(self):
+        talavera = {"talavera_cobalt", "talavera_glaze", "talavera_yellow"}
+        # (Along the middle of a row of tiles, under the panel's middle: not along a joint.)
+        rows = self.kit.TILE_GRID[1]
+        z = self.kit.TILES[0] + (self.kit.TILES[1] - self.kit.TILES[0]) * (rows // 2 - 0.5) / rows
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count):
+                found = []
+                for i in range(-50, 51, 5):
+                    _, slot = self._ray(o, (cx + i / 100.0, -5.0, z), (0.0, 1.0, 0.0))
+                    found.append(slot)
+                tiled = [f for f in found if f in talavera]
+                self.assertGreaterEqual(len(tiled), len(found) * 0.6, (n, cx, found))
+                self.assertGreaterEqual(len(set(tiled)), 2, (n, cx))
+
+    def test_the_seller_keeps_their_own_things(self):
+        # (A saint's card on the boards, marigolds in a tin on the desk.)
+        for n, o in self.objects.items():
+            self.assertLessEqual({"print_saint", "marigold", "tin"}, {m.name for m in o.data.materials}, n)
+
+    def test_the_seller_stands_raised_behind_the_counter(self):
+        # (Inside, the booth's boarded floor raised so the seller looks down over the counter; the desk behind each
+        # window at the counter's height.)
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count):
+                hit, slot = self._ray(o, (cx + 0.5, -0.5, 2.0), (0.0, 0.0, -1.0))
+                self.assertAlmostEqual(hit.z, self.kit.FLOOR, delta=0.002, msg=(n, cx))
+                self.assertEqual(slot, "wood", (n, cx))
+
+
+class StationTurnstiles(unittest.TestCase):
+    """The turnstile banks (tools/eclipse/station_turnstiles.py; docs/superpowers/plans/2026-10-30-metro-station.md
+    Task 8): two banks across the hall, each its cabinets across its middle and a railing from them to both walls; every
+    lane at least 1.1 m clear for the player's capsule. Built to the house's inspirations: cabinets on tezontle under
+    stepped tops, the Company's ward eyes and tally dials, stepped chiluca pylons, an open stepped fret in the railings.
+    The west bank's half fused open by the surge (blackened, its arms melted and hanging, its eyes blown out, the dead's
+    fare left on it), its other half patched in the Company's planks; the working arms a piece of their own."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_turnstiles
+        cls.kit = station_turnstiles
+        station_turnstiles.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+        cls.banks = {n: cls.objects[n] for n in ("bank_east", "bank_west")}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def _ray(self, o, at, way, far=20.0):
+        tree = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get())
+        found = tree.ray_cast(Vector(at), Vector(way), far)
+        if found[0] is None:
+            return None, None
+        return found[0], o.data.materials[o.data.polygons[found[2]].material_index].name
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_a_bank_runs_wall_to_wall_on_the_floor(self):
+        self.assertAlmostEqual(self.kit.HALF, 14.0 - 0.3 - 0.067, places=6)
+        xs = self.kit.cabinet_xs()
+        self.assertAlmostEqual(xs[0] - self.kit.CAB[0] / 2, -4.0, delta=0.01)
+        self.assertAlmostEqual(xs[-1] + self.kit.CAB[0] / 2, 4.0, delta=0.01)
+        for n in self.banks:
+            (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            self.assertAlmostEqual(x0, -self.kit.HALF, delta=0.002, msg=n)
+            self.assertAlmostEqual(x1, self.kit.HALF, delta=0.002, msg=n)
+            self.assertAlmostEqual(z0, 0.0, delta=0.001, msg=n)
+            self.assertLessEqual(y1 - y0, 2.0, n)
+            # (Nothing over the hall's walks hangs; its pylons stand under the coffers' fittings.)
+            self.assertLessEqual(z1, 2.4, n)
+
+    def _clear_run(self, o, k):
+        """The widest run across lane k (m) that no ray along the walk meets, from the floor to 2 m."""
+        xs = self.kit.cabinet_xs()
+        a, b = xs[k], xs[k + 1]
+        best = run = 0.0
+        x = a
+        while x <= b:
+            hit = any(self._ray(o, (x, -3.0, z / 10.0), (0.0, 1.0, 0.0), 6.0)[0] is not None for z in range(1, 21))
+            run = 0.0 if hit else run + 0.005
+            best = max(best, run)
+            x += 0.005
+        return best
+
+    def test_every_lane_is_at_least_1_1_m_clear(self):
+        for n, o in self.banks.items():
+            lanes = self.kit.lane_xs()
+            self.assertEqual(len(lanes), 4, n)
+            for k in range(len(lanes)):
+                self.assertGreaterEqual(self._clear_run(o, k), 1.1, (n, k))
+
+    def test_cabinets_stand_on_tezontle_under_stepped_tops(self):
+        halves = [h for _, _, h in self.kit.STEPS]
+        self.assertEqual(halves, sorted(halves, reverse=True))
+        for n, o in self.banks.items():
+            for cx in self.kit.cabinet_xs():
+                _, slot = self._ray(o, (cx, -3.0, self.kit.PLINTH[0] / 2), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "tezontle", (n, cx))
+                for i, (z0, z1, h) in enumerate(self.kit.STEPS):
+                    inner = self.kit.STEPS[i + 1][2] if i + 1 < len(self.kit.STEPS) else 0.0
+                    hit, _ = self._ray(o, (cx + (h + inner) / 2, 0.6, 3.0), (0.0, 0.0, -1.0))
+                    self.assertAlmostEqual(hit.z, z1, delta=0.002, msg=(n, cx, i))
+
+    def test_the_companys_eyes_and_dials_face_the_entry(self):
+        for n, o in self.banks.items():
+            for k, cx in enumerate(self.kit.cabinet_xs()):
+                fused = n == "bank_west" and k < 2
+                _, slot = self._ray(o, (cx, -3.0, self.kit.EYE[0]), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "hollow" if fused else "obsidian", (n, k))
+                _, slot = self._ray(o, (cx, -3.0, self.kit.DIAL[1]), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "brass_burnt" if fused else "sign", (n, k))
+
+    def test_stepped_pylons_crown_the_outer_cabinets(self):
+        for n, o in self.banks.items():
+            for k, cx in enumerate((self.kit.cabinet_xs()[0], self.kit.cabinet_xs()[-1])):
+                hit, slot = self._ray(o, (cx, 0.0, 5.0), (0.0, 0.0, -1.0))
+                smoked = n == "bank_west" and k == 0
+                self.assertEqual(slot, "chiluca_scorched" if smoked else "chiluca", (n, cx))
+                self.assertAlmostEqual(hit.z, self.kit.PYLON[-1][1], delta=0.002, msg=(n, cx))
+                for side in (-1, 1):
+                    _, slot = self._ray(o, (cx, side * 3.0, sum(self.kit.PLAQUE[:2]) / 2), (0.0, -side, 0.0))
+                    self.assertEqual(slot, "sign", (n, cx, side))
+
+    def test_railings_with_an_open_stepped_fret_reach_the_walls(self):
+        for n, o in self.banks.items():
+            for side in (-1, 1):
+                # (A newel against the wall.)
+                _, slot = self._ray(o, (side * (self.kit.HALF - 0.05), 0.0, 5.0), (0.0, 0.0, -1.0))
+                self.assertEqual(slot, "chiluca", (n, side))
+                # (The last bay: a brass handrail over it; its fret open, seen through.)
+                mid = side * (self.kit.HALF - self.kit.NEWEL - 1.0)
+                hit, slot = self._ray(o, (mid, 0.0, 5.0), (0.0, 0.0, -1.0))
+                self.assertEqual(slot, "brass", (n, side))
+                self.assertGreater(hit.z, self.kit.TOP_BAR, (n, side))
+                seen = [self._ray(o, (mid - 0.9 + i / 100.0, -3.0, 0.55), (0.0, 1.0, 0.0), 6.0)[1] for i in range(180)]
+                self.assertGreaterEqual(seen.count(None), 50, (n, side))
+                self.assertGreaterEqual(seen.count("iron"), 18, (n, side))
+
+    def test_a_staff_gate_chained_shut(self):
+        near = self.kit.cabinet_xs()[-1] + self.kit.CAB[0] / 2 + self.kit.PLINTH[1] + self.kit.NEWEL
+        for n, o in self.banks.items():
+            _, slot = self._ray(o, (near + 0.06, -3.0, 0.535), (0.0, 1.0, 0.0))
+            self.assertEqual(slot, "brass", n)
+
+    def _side(self, o, k, face):
+        """What lane k's ray meets on cabinet k's +x face (face 1) or cabinet k+1's -x face (face -1), at several
+        places along it under the band."""
+        x = self.kit.lane_xs()[k]
+        found = []
+        for y in (-0.6, -0.35, 0.35, 0.6):
+            for z in (0.25, 0.4, 0.52):
+                found.append(self._ray(o, (x, y, z), (-face, 0.0, 0.0), 1.0)[1])
+        return found
+
+    def test_the_west_banks_north_half_fused_its_south_half_patched(self):
+        west, east = self.banks["bank_west"], self.banks["bank_east"]
+        for k in (0, 1):
+            found = self._side(west, k, 1)
+            self.assertGreaterEqual(found.count("scorched"), len(found) * 0.8, (k, found))
+        for k in (2, 3):
+            found = self._side(west, k, 1)
+            self.assertGreaterEqual(found.count("wood"), len(found) * 0.6, (k, found))
+        for k in range(4):
+            found = self._side(east, k, 1)
+            self.assertEqual(set(found), {"iron"}, (k, found))
+        # (The fused arms hang: nothing of them across the lane at the hub's height.)
+        for k in (0, 1):
+            hub = self.kit.hub_at(k)
+            hit, _ = self._ray(west, (self.kit.cabinet_xs()[k + 1] - 0.4, 0.0, hub[2]), (-1.0, 0.0, 0.0), 2.0)
+            self.assertLess(hit.x, hub[0] + 0.1, k)
+
+    def test_the_fused_half_reads_burnt(self):
+        # (Its iron charred warm, its brass heat-tinted, the pylon over it blackened from its foot: never the neutral
+        # black the cold light turns navy, as iron's is.)
+        import json
+        recipes = common.ROOT / "tools" / "textures" / "recipes" / "underground"
+        for name in ("scorched", "brass_burnt", "chiluca_scorched"):
+            recipe = json.loads((recipes / (name + ".json")).read_text())
+            r, g, b = (int(recipe["colour"][i:i + 2], 16) for i in (1, 3, 5))
+            self.assertGreaterEqual(r - b, 0x10, name)
+        self.assertGreater(json.loads((recipes / "chiluca_scorched.json").read_text())["height_light"], 0.3)
+        west = self.banks["bank_west"]
+        used = {m.name for m in west.data.materials} | {m.name for m in self.banks["bank_east"].data.materials}
+        self.assertNotIn("soot_black", used)
+        xs = self.kit.cabinet_xs()
+        for cx, slot in ((xs[0], "chiluca_scorched"), (xs[-1], "chiluca")):
+            _, found = self._ray(west, (cx - 3.0, 0.0, 1.5), (1.0, 0.0, 0.0))
+            self.assertEqual(found, slot, cx)
+        hub = self.kit.hub_at(0)
+        _, found = self._ray(west, (hub[0] + 0.035, -0.3, 0.38), (0.0, 1.0, 0.0), 1.0)
+        self.assertEqual(found, "brass_burnt")
+
+    def test_the_dead_are_left_their_fare(self):
+        found = {m.name for m in self.banks["bank_west"].data.materials}
+        self.assertLessEqual({"copper", "silver", "print_saint", "marigold", "wax"}, found)
+        self.assertFalse({"copper", "print_saint", "marigold", "wax"} & {m.name for m in self.banks["bank_east"].data.materials})
+
+    def test_the_arms_turn_about_their_hub(self):
+        dirs = self.kit.arm_directions()
+        a = self.kit.axis()
+        for i in range(3):
+            self.assertAlmostEqual(dirs[i].dot(a), dirs[0].dot(a), places=5)
+            for j in range(i + 1, 3):
+                self.assertAlmostEqual(dirs[i].angle(dirs[j]), dirs[1].angle(dirs[2]), places=5)
+        self.assertAlmostEqual(dirs[0].z, 0.0, places=6)
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("rotor")
+        self.assertTrue(x0 < 0.0 < x1 and y0 < 0.0 < y1 and z0 < 0.0 < z1)
+        self.assertGreaterEqual(x1, 0.9)
+        for k in range(4):
+            hub = self.kit.hub_at(k)
+            far = self.kit.cabinet_xs()[k + 1] - self.kit.CAB[0] / 2 - self.kit.BAND[2]
+            self.assertLessEqual(hub[0] + x1, far - 0.15, k)
+            self.assertGreaterEqual(hub[2] + z0, 0.1, k)
+            # (The boss it turns in, brass on the working cabinets.)
+            _, slot = self._ray(self.banks["bank_east"], (hub[0] + 0.3, 0.0, hub[2]), (-1.0, 0.0, 0.0), 1.0)
+            self.assertEqual(slot, "brass", k)
+
+
+class StationLamps(unittest.TestCase):
+    """The Company's bracket lamps (tools/eclipse/station_lamps.py; docs/superpowers/plans/2026-10-31-station-machinery.md
+    Task 1), v2 on the user's note ("more work to look like lamps, more aesthetically distinct"): closed, in budget,
+    through the gate; a stepped back plate on the face (y = 0), a gooseneck arm out along -y; a tall eight-sided glass
+    lantern hung from it (mostly glass, read as a lamp across the hall), its crown stepped, a low sunburst round it, a turned knob over it;
+    the Company's obsidian ward eye on the glass's front (the lamps are wards); a tin milagro tied under it. Nothing more
+    than MOUNT_DROP under its mount, so on a wall at BRACKET_MOUNT it hangs over 2.4 m above the walks."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_lamps
+        cls.kit = station_lamps
+        station_lamps.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _ray(self, o, at, way):
+        tree = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get())
+        found = tree.ray_cast(Vector(at), Vector(way), 5.0)
+        if found[0] is None:
+            return None, None
+        return found[0], o.data.materials[o.data.polygons[found[2]].material_index].name
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_it_hangs_off_the_face_clear_of_the_walk(self):
+        vs = _world(self.objects["ward_bracket"])
+        (x0, x1), (y0, y1), (z0, z1) = [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+        self.assertAlmostEqual(y1, 0.0, delta=0.001)
+        self.assertGreaterEqual(y0, -1.0)
+        self.assertGreaterEqual(z0, -self.kit.MOUNT_DROP)
+        self.assertLessEqual(self.kit.MOUNT_DROP, 1.1)
+        self.assertLessEqual(x1 - x0, 0.7)
+
+    def test_a_tall_glass_lantern_most_of_its_face(self):
+        # (Seen from the front and the sides through its middle, glass most of the way up its body.)
+        o = self.objects["ward_bracket"]
+        gy, gz = self.kit.GLOBE
+        z0, z1 = gz - self.kit.LANTERN[1] / 2 + 0.03, gz + self.kit.LANTERN[1] / 2 - 0.03
+        self.assertGreaterEqual(self.kit.LANTERN[1], 0.45)
+        self.assertGreaterEqual(self.kit.LANTERN[0], 0.28)
+        for at, way in (((1.0, gy, None), (-1.0, 0.0, 0.0)), ((-1.0, gy, None), (1.0, 0.0, 0.0))):
+            found = [self._ray(o, (at[0], at[1], z0 + (z1 - z0) * k / 10), way)[1] for k in range(11)]
+            self.assertGreaterEqual(found.count("glass"), 7, found)
+
+    def test_the_companys_eye_on_its_front(self):
+        o = self.objects["ward_bracket"]
+        gy, gz = self.kit.GLOBE
+        _, slot = self._ray(o, (0.0, gy - 1.0, gz), (0.0, 1.0, 0.0))
+        self.assertEqual(slot, "obsidian")
+
+    def test_a_stepped_crown_with_a_sunburst_and_a_knob(self):
+        o = self.objects["ward_bracket"]
+        gy, gz = self.kit.GLOBE
+        top = gz + self.kit.LANTERN[1] / 2
+        self.assertGreaterEqual(len(self.kit.CROWN), 3)
+        halves = [h for h, _, _ in self.kit.CROWN]
+        self.assertEqual(halves, sorted(halves, reverse=True))
+        # (Its knob over the crown, seen from the side.)
+        _, slot = self._ray(o, (1.0, gy, top + self.kit.CROWN[-1][2] + 0.06), (-1.0, 0.0, 0.0))
+        self.assertEqual(slot, "brass")
+        # (Rays out round the crown: brass rays in some directions, none in others.)
+        found = [self._ray(o, (0.6 * math.cos(2 * math.pi * k / 48), gy + 0.6 * math.sin(2 * math.pi * k / 48),
+                               top + self.kit.SUN_AT), (-math.cos(2 * math.pi * k / 48), -math.sin(2 * math.pi * k / 48), 0.0))[0]
+                 for k in range(48)]
+        self.assertGreaterEqual(sum(1 for f in found if f is not None and (Vector(f) - Vector((0, gy, f[2]))).length > 0.2), 8)
+
+    def test_the_arm_is_joined_at_both_ends_and_its_brace_meets_it(self):
+        # (The user, Oct 31: "the gooseneck is not properly connected".)
+        neck, brace = [Vector(p) for p in self.kit.neck_points()], [Vector(p) for p in self.kit.brace_points()]
+
+        def off_neck(q):
+            return min(geometry.intersect_point_line(q, a, b)[0].__sub__(q).length
+                       if 0.0 <= geometry.intersect_point_line(q, a, b)[1] <= 1.0 else min((q - a).length, (q - b).length)
+                       for a, b in zip(neck, neck[1:]))
+
+        self.assertLessEqual(off_neck(brace[-1]), self.kit.ARM_R * 0.5)
+        o = self.objects["ward_bracket"]
+        # (Its root inside the corbel, its end inside the socket over the finial: solid metal round both.)
+        for q in (neck[0], neck[-1]):
+            hits = sum(1 for way in ((1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1))
+                       if self._ray(o, tuple(q), way)[0] is not None)
+            self.assertEqual(hits, 4, tuple(q))
+        # (The brace's foot on the back plate.)
+        self.assertLessEqual(abs(brace[0].y + self.kit.PLATE[0][3]), 0.02)
+
+    def test_its_shape_is_subtle(self):
+        # (The user, Oct 31: "the thorns are a bit too much": the sunburst short fins hugging the crown, a knob for
+        # a spike.)
+        self.assertLessEqual(self.kit.SUN_REACH, self.kit.CROWN[0][0] / math.cos(math.pi / self.kit.SIDES) + 0.05)
+        self.assertLessEqual(self.kit.SPIKE, 0.13)
+
+    def test_a_milagro_tied_under_it(self):
+        self.assertIn("tin", {m.name for m in self.objects["ward_bracket"].data.materials})
+
+
+class StationNeon(unittest.TestCase):
+    """The station's neon (tools/eclipse/station_neon.py; docs/superpowers/plans/2026-10-31-station-machinery.md Task 2):
+    the symbols in tube (slot `neon` only, drawn by Neon's shader in game), each fitting a hanging board's face; the
+    Company's crowned blade sign: a blank face (the user's words), a stepped deco crown, under 2.4 m tall."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_neon
+        cls.kit = station_neon
+        station_neon.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def _ray(self, o, at, way):
+        tree = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get())
+        found = tree.ray_cast(Vector(at), Vector(way), 10.0)
+        if found[0] is None:
+            return None, None
+        return found[0], o.data.materials[o.data.polygons[found[2]].material_index].name
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_the_symbols_are_tube_on_a_boards_face(self):
+        names = ["symbol_" + n for n in ("marigold", "eye", "skull", "serpent", "hand", "arrow")]
+        self.assertLessEqual(set(names), set(self.objects))
+        self.assertTrue(0.012 <= self.kit.TUBE_R <= 0.02)
+        for n in names:
+            o = self.objects[n]
+            self.assertEqual({m.name for m in o.data.materials}, {"neon"}, n)
+            (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            self.assertLessEqual(x1 - x0, 0.32 + 2 * self.kit.TUBE_R, n)
+            self.assertLessEqual(z1 - z0, 0.32 + 2 * self.kit.TUBE_R, n)
+            self.assertLessEqual(y1 - y0, 2 * self.kit.TUBE_R + 0.002, n)
+            self.assertAlmostEqual((x0 + x1) / 2, 0.0, delta=0.03, msg=n)
+            self.assertAlmostEqual((z0 + z1) / 2, 0.0, delta=0.03, msg=n)
+
+    def test_a_neon_board_holds_its_symbols(self):
+        # (The user, Oct 31: the symbols enlarged must fit on the board: a board of the neon's own, hung on its rods
+        # from the ceiling (z = 0), its blank face both sides wide and tall enough for an arrow and a symbol 1.5 times
+        # their drawn size at its ends and the user's words between.)
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("neon_board")
+        self.assertAlmostEqual(z1, 0.0, delta=0.001)
+        w, h, _ = self.kit.NEON_BOARD
+        self.assertAlmostEqual(x1 - x0, w, delta=0.01)
+        fw, fh = self.kit.NEON_FACE
+        symbol = 0.32 * 1.5 + 2 * self.kit.TUBE_R * 1.5
+        self.assertGreaterEqual(fh, symbol + 0.02)
+        self.assertGreaterEqual(fw, 2 * (symbol + 0.04) + 0.9)
+        o = self.objects["neon_board"]
+        mid = -self.kit.NEON_DROP - h / 2
+        for side in (-1, 1):
+            for x in (-fw / 2 + 0.05, 0.0, fw / 2 - 0.05):
+                _, slot = self._ray(o, (x, side * 3.0, mid), (0.0, -side, 0.0))
+                self.assertEqual(slot, "sign", (side, x))
+
+    def test_the_companys_blade_sign(self):
+        (x0, x1), (y0, y1), (z0, z1) = self._extent("blade_company")
+        self.assertAlmostEqual(z0, 0.0, delta=0.001)
+        self.assertLessEqual(z1, 2.4)
+        self.assertGreaterEqual(len(self.kit.CROWN), 3)
+        halves = [h for h, _, _ in self.kit.CROWN]
+        self.assertEqual(halves, sorted(halves, reverse=True))
+        o = self.objects["blade_company"]
+        for side in (-1, 1):
+            _, slot = self._ray(o, (0.0, side * 3.0, self.kit.FACE_AT), (0.0, -side, 0.0))
+            self.assertEqual(slot, "sign", side)
+
+
+class StationRuns(unittest.TestCase):
+    """The Company's cable runs (tools/eclipse/station_runs.py; docs/superpowers/plans/2026-10-31-station-machinery.md
+    Task 4): one piece per run in the set's frame, its cable chunky brass sagging between its hangers, an insulator bell
+    at each; every run from the engine's crown junction; its sampled path written to station_runs.json for the arcs."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_runs
+        cls.kit = station_runs
+        station_runs.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_six_runs_from_the_engine_chunky(self):
+        self.assertEqual(len(self.kit.RUNS), 6)
+        self.assertGreaterEqual(self.kit.CABLE_R, 0.03)
+        for name, run in self.kit.RUNS.items():
+            path = self.kit.path(name)
+            start = Vector(path[0])
+            self.assertLessEqual((start - Vector(self.kit.ENGINE_TERMINAL)).length, 0.05, name)
+            self.assertIn("to", run)
+            # (Its cable within its hangers' sag of the line between its anchors: no kinks, no loops.)
+            self.assertGreater(len(path), len(run["anchors"]), name)
+
+    def test_each_run_a_bundle_of_cables(self):
+        # (The user, Oct 31: "add more cables": each run three cables side by side, held by its hangers.)
+        self.assertGreaterEqual(len(self.kit.BUNDLE), 3)
+        offsets = sorted(self.kit.BUNDLE)
+        self.assertTrue(all(b - a >= 2 * self.kit.CABLE_R + 0.02 for a, b in zip(offsets, offsets[1:])))
+
+    def test_the_json_carries_each_runs_path(self):
+        import json
+        self.kit.write_json()
+        data = json.loads(self.kit.JSON.read_text())
+        self.assertEqual(sorted(data), sorted(self.kit.RUNS))
+        for name in data:
+            self.assertEqual(data[name]["to"], self.kit.RUNS[name]["to"])
+            self.assertEqual(len(data[name]["points"]), len(self.kit.path(name)))
+
+
+class StationPipes(unittest.TestCase):
+    """The Company's pipe racks (tools/eclipse/station_pipes.py; the user, Oct 31: "add more cables, piping around"):
+    big pipes along the hall's long walls and the platforms' back walls on iron brackets, each rack a piece of its own in
+    the set's frame; closed, in budget, through the gate."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_pipes
+        cls.kit = station_pipes
+        station_pipes.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_big_pipes_on_brackets(self):
+        # (The user, Oct 31: "bigger".)
+        self.assertGreaterEqual(len(self.kit.PIPES), 3)
+        self.assertGreaterEqual(max(r for _, r, _ in self.kit.PIPES), 0.13)
+        self.assertLessEqual(self.kit.BRACKET_EVERY, 2.4)
+        self.assertGreaterEqual(len(self.kit.RACKS), 6)
+
+    def test_mains_risers_and_mouths(self):
+        # (A large machine being run: mains half a metre across under the coffers' beams, risers floor to ceiling, mouths
+        # venting from the floor.)
+        for name, (z, r, y, reach, floor, limit) in self.kit.MAINS.items():
+            self.assertGreaterEqual(2 * r, 0.35, name)
+            self.assertLessEqual(y + r, limit, name)
+            self.assertGreaterEqual(y - r, floor + 2.4, name)
+        self.assertGreaterEqual(len(self.kit.MAINS), 6)
+        self.assertGreaterEqual(max(2 * r for _, r, *_ in self.kit.MAINS.values()), 0.5)
+        # (Engrained: the floor's mains half sunk, the trays full of cables.)
+        r, up = self.kit.FLOOR_MAIN
+        self.assertLessEqual(up + r, 0.3)
+        self.assertLess(up, r)
+        self.assertGreaterEqual(len(self.kit.FLOOR_MAINS), 4)
+        self.assertGreaterEqual(self.kit.TRAY_CABLES, 5)
+        self.assertGreaterEqual(len(self.kit.RISERS), 8)
+        self.assertGreaterEqual(2 * self.kit.RISER[0], 0.5)
+        self.assertGreaterEqual(2 * self.kit.MOUTH[2], 1.0)
+
+
+class StationDucts(unittest.TestCase):
+    """The station's ducts (tools/eclipse/station_ducts.py: the floor's mains, the trays, the mouths, their feeds),
+    closed, in budget, through the gate; a mouth standing on z = 0."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_ducts
+        cls.kit = station_ducts
+        station_ducts.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_a_mouth_stands_on_the_floor(self):
+        vs = _world(self.objects["mouth"])
+        self.assertAlmostEqual(min(v[2] for v in vs), 0.0, delta=0.001)
+
+
+class YourShapes(unittest.TestCase):
+    """The user's shapes kept through a kit's rebuild (tools/eclipse/your_shapes.py; docs/superpowers/plans/
+    2026-10-30-metro-station.md Task 2): a vertex the user moved in a piece's .blend survives the next build; an
+    untouched piece writes nothing; a kept shape still meets the gate; a shape for a piece no longer built is reported,
+    never lost. Built in a folder of its own, never the repository's."""
+
+    KIT = "yours_test"
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        import common
+        import your_shapes
+        self.common, self.yours = common, your_shapes
+        self.folder = Path(tempfile.mkdtemp())
+        self.kept = (common.SOURCE, your_shapes.YOURS)
+        common.SOURCE = self.folder / "source"
+        your_shapes.YOURS = self.folder / "yours"
+
+    def tearDown(self):
+        import shutil
+        self.common.SOURCE, self.yours.YOURS = self.kept
+        shutil.rmtree(self.folder, ignore_errors=True)
+
+    def _build(self):
+        """The test kit: a box and a cylinder, side by side, built and exported."""
+        self.common.reset()
+        bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, 0.0, 0.5))
+        box = bpy.context.active_object
+        box.name = "box"
+        bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.4, depth=1.0, location=(2.0, 0.0, 0.5))
+        bpy.context.active_object.name = "drum"
+        for o in bpy.context.scene.objects:
+            o.data.materials.append(self.common.slot("stone_step"))
+        self.common.export_piece(self.KIT, 256, ["stone_step"], out=self.folder / "kit", sets_each=True)
+        return {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _top(self, o):
+        return max((o.matrix_world @ v.co).z for v in o.data.vertices)
+
+    def test_a_moved_vertex_survives_the_next_build(self):
+        objects = self._build()
+        drum = sorted(round(v.co.z, 4) for v in objects["drum"].data.vertices)
+        top = max(objects["box"].data.vertices, key=lambda v: (v.co.z, v.co.x, v.co.y))
+        top.co.z += 0.05
+        self.assertEqual(self.yours.harvest(list(objects.values()), self.KIT), ["box"])
+        objects = self._build()
+        self.assertAlmostEqual(self._top(objects["box"]), 1.05, delta=0.001)
+        self.assertEqual(sorted(round(v.co.z, 4) for v in objects["drum"].data.vertices), drum)
+
+    def test_an_untouched_piece_writes_nothing(self):
+        objects = self._build()
+        self.assertEqual(self.yours.harvest(list(objects.values()), self.KIT), [])
+        self._build()
+        self.assertFalse((self.yours.YOURS / self.KIT).exists() and any((self.yours.YOURS / self.KIT).iterdir()))
+
+    def test_a_kept_shape_still_meets_the_gate(self):
+        objects = self._build()
+        # (A second lid laid 1 cm over its top, a layered face: the gate catches it on the next build.)
+        work = bmesh.new()
+        work.from_mesh(objects["box"].data)
+        work.faces.ensure_lookup_table()
+        lid = max(work.faces, key=lambda f: f.calc_center_median().z)
+        copy = bmesh.ops.duplicate(work, geom=[lid])["geom"]
+        bmesh.ops.translate(work, vec=(0.0, 0.0, 0.01), verts=[g for g in copy if isinstance(g, bmesh.types.BMVert)])
+        work.to_mesh(objects["box"].data)
+        work.free()
+        self.yours.harvest(list(objects.values()), self.KIT)
+        with self.assertRaises(SystemExit):
+            self._build()
+
+    def test_a_shape_for_a_piece_no_longer_built_is_reported_not_lost(self):
+        objects = self._build()
+        objects["box"].data.vertices[0].co.z -= 0.05
+        self.yours.harvest(list(objects.values()), self.KIT)
+        (self.yours.YOURS / self.KIT / "box.npz").rename(self.yours.YOURS / self.KIT / "gone.npz")
+        objects = self._build()
+        self.assertEqual(self.yours.keep(list(objects.values()), self.KIT), [])
+        self.assertTrue((self.yours.YOURS / self.KIT / "gone.npz").exists())
 
 
 if __name__ == "__main__":

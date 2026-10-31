@@ -30,6 +30,8 @@ uniform float seed = 0.0;
 uniform float puff = 0.0;
 // Fade where it meets a wall or the floor (m).
 uniform float soft = 0.15;
+// Where up a plume (0 its foot, 1 its crown) it starts to thin away.
+uniform float fade_from = 0.8;
 
 varying float age;
 varying vec3 local;
@@ -84,7 +86,7 @@ void fragment() {
 	vec4 at = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, behind, 1.0);
 	float gap = -at.z / at.w + VERTEX.z;
 	// A plume's foot comes in out of the vent; its crown thins away.
-	float ends = puff > 0.5 ? 1.0 : smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(0.8, 1.0, age));
+	float ends = puff > 0.5 ? 1.0 : smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(fade_from, 1.0, age));
 	ALBEDO = lit.rgb;
 	// (A little light of its own, so it reads pale against a lit wall and in shadow alike.)
 	EMISSION = warm.rgb * warmth * (1.0 - smoothstep(0.0, 0.45, age)) + lit.rgb * glow;

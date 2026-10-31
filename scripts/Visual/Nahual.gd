@@ -93,6 +93,11 @@ var _watched := false
 var _back_in := 0.0
 
 
+func _init() -> void:
+	# (Its head turned each frame, not in the physics step: drawn interpolated it would judder.)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+
+
 ## Its body and head from the kit, painted `look`, its eyes `ember`.
 func build(body_mesh: Mesh, head_mesh: Mesh, look: Material, ember: Material) -> void:
 	_rng.seed = seed

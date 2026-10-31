@@ -5,7 +5,7 @@
   {
    "name": "walk_coat",
    "row": 0,
-   "height_m": 1.851,
+   "height_m": 1.837,
    "facing": "left",
    "seconds": 1.667,
    "stride_m": 1.35,
@@ -37,7 +37,7 @@
   {
    "name": "walk_carry",
    "row": 2,
-   "height_m": 1.892,
+   "height_m": 1.893,
    "facing": "left",
    "seconds": 2.0,
    "stride_m": 1.364,
@@ -53,7 +53,7 @@
   {
    "name": "walk_jacket",
    "row": 3,
-   "height_m": 1.849,
+   "height_m": 1.835,
    "facing": "left",
    "seconds": 1.667,
    "stride_m": 1.349,
@@ -85,7 +85,7 @@
   {
    "name": "idle_waiting",
    "row": 5,
-   "height_m": 1.826,
+   "height_m": 1.812,
    "facing": "left",
    "seconds": 2.5,
    "stride_m": 0.0,

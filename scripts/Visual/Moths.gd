@@ -28,6 +28,8 @@ func _ready() -> void:
 
 	if save != null:
 		save.register(self)
+	# (Flown each frame, not in the physics step: drawn interpolated they would judder.)
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	var look := StandardMaterial3D.new()
