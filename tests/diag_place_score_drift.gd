@@ -9,6 +9,7 @@ extends Node
 ##   Godot --headless --path . res://tests/diag_place_score_drift.tscn [-- --seconds=180]
 
 const FIXTURE := "res://tests/fixtures/place_score/"
+## The recording's own mix rate is used; this only if there is none.
 const RATE := 48000
 const BAR := 1.0
 ## A click's first sample over this (16-bit) is its onset.
@@ -44,7 +45,9 @@ func _ready() -> void:
 	bed_rec.set_recording_active(false)
 	theme_rec.set_recording_active(false)
 	AudioServer.unlock()
-	var bed_onsets := _onsets(bed_rec.get_recording())
+	var bed_wav := bed_rec.get_recording()
+	var rate := float(bed_wav.mix_rate) if bed_wav != null else float(RATE)
+	var bed_onsets := _onsets(bed_wav)
 	var theme_onsets := _onsets(theme_rec.get_recording())
 	var worst := 0.0
 	var first := INF
@@ -56,7 +59,7 @@ func _ready() -> void:
 				nearest = b - t
 		if is_inf(nearest):
 			continue
-		var offset_ms := absf(nearest) / RATE * 1000.0
+		var offset_ms := absf(nearest) / rate * 1000.0
 		if is_inf(first):
 			first = offset_ms
 		worst = maxf(worst, offset_ms)
@@ -102,7 +105,7 @@ func _onsets(wav: AudioStreamWAV) -> PackedInt64Array:
 	while frame < frames:
 		if absi(data.decode_s16(frame * 4)) > ONSET:
 			found.append(frame)
-			frame += int(RATE * BAR * 0.8)
+			frame += int(wav.mix_rate * BAR * 0.8)
 		else:
 			frame += 1
 	return found

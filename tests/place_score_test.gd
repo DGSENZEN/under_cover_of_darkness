@@ -35,11 +35,13 @@ class StubZones extends PlaceZones:
 		return d
 
 
-func make_score(path := FIXTURE) -> PlaceScore:
+func make_score(path := FIXTURE, with_cue := false) -> PlaceScore:
 	pos = 0.0
 	var score := PlaceScore.new()
 	score.score_json_path = path
+	score.play_cue = with_cue
 	score.position_source = func() -> float: return pos
+	score.cue_source = func() -> float: return pos
 	score.listener_source = func() -> Vector3: return Vector3.ZERO
 	score.zones = StubZones.new()
 	add_child(score)
@@ -61,6 +63,8 @@ func _ready() -> void:
 	score_checks()
 	variant_checks()
 	anima_checks()
+	cue_checks()
+	await metro_checks()
 	await get_tree().process_frame
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failures else 0)
@@ -191,6 +195,23 @@ func score_checks() -> void:
 		score.free()
 	check(near(timings[0][0], timings[1][0]) and near(timings[0][1], timings[1][1], 0.01), "S12 slow motion does not slow the score: %s" % [timings])
 
+	# The mixer runs ahead of what is heard: a theme starts when the bed's next
+	# mixed chunk reaches the line, from where the bed is in it, loop after loop.
+	score = make_score()
+	zones = score.zones as StubZones
+	score.raw_source = func() -> float: return pos - 0.1
+	zones.w = {"a": 1.0}
+	run_for(score, PHRASE + 0.05)
+	check(not score.theme_playing(&"a"), "S14 heard at the line, the mixer not yet: no start")
+	run_for(score, 0.1)
+	check(score.theme_playing(&"a") and score.theme_start_offset(&"a") <= STEP + 0.001, "S14 started as the mixer reaches the line, from its top: %.3f" % score.theme_start_offset(&"a"))
+	zones.w = {"a": 0.0}
+	run_for(score, 3.0 * PHRASE)
+	zones.w = {"a": 1.0}
+	run_for(score, 2.0 * PHRASE)
+	check(score.theme_playing(&"a") and score.theme_start_offset(&"a") <= STEP + 0.001, "S15 after the bed has looped, still from its top: %.3f" % score.theme_start_offset(&"a"))
+	score.free()
+
 	score = make_score("res://tests/fixtures/place_score/nowhere.json")
 	check(not score.available, "S13 no score, silent")
 	run_for(score, 1.0)
@@ -268,3 +289,79 @@ func anima_checks() -> void:
 	run_for(score, 2.0)
 	check(score.haunt().values().max() <= 0.0001, "A6 no ánimas anywhere: nothing")
 	score.free()
+
+func cue_checks() -> void:
+	var score := make_score(FIXTURE, true)
+	check(score.cue_playing() and not score.bed_playing(), "C1 the entrance cue first, the bed not yet")
+	run_for(score, 0.9)
+	check(not score.bed_playing(), "C1 not before the cue lands")
+	run_for(score, 0.15)
+	check(score.bed_playing(), "C1 the bed comes in where the cue lands (bar 1)")
+	score.free()
+
+	# A cue that lands on its own last sound ends there: no frame may see it land.
+	score = make_score(FIXTURE, true)
+	score.cue_source = func() -> float: return 0.0
+	score.cue_player.stop()
+	run_for(score, STEP)
+	check(score.bed_playing(), "C3 a cue that has ended brings the bed in")
+	score.free()
+
+	var fight := GDScript.new()
+	fight.source_code = "extends Node\nvar intensity := 0.0\n"
+	fight.reload()
+	var music: Node = fight.new()
+	music.name = "Music"
+	get_tree().current_scene.add_child(music)
+	score = make_score()
+	var bus := AudioServer.get_bus_index(PlaceScore.BUS)
+	music.intensity = 1.0
+	run_for(score, 0.1)
+	check(near(AudioServer.get_bus_volume_db(bus), PlaceScore.UNDER_COMBAT_DB, 0.5), "C2 in a fight the score sinks under it: %.1f dB" % AudioServer.get_bus_volume_db(bus))
+	music.intensity = 0.0
+	run_for(score, 0.1)
+	check(near(AudioServer.get_bus_volume_db(bus), 0.0, 0.5), "C2 and comes back as the fight fades")
+	score.free()
+	music.free()
+
+func metro_checks() -> void:
+	var packed := load("res://maps/metro.tscn") as PackedScene
+	var map := packed.instantiate()
+	add_child(map)
+	for i in range(5):
+		await get_tree().process_frame
+	var mine := map.get_node_or_null("PlaceScore")
+	var under_lane: Array = map.get_node("candle_lane").find_children("*", "PlaceScore", true, false)
+	check(mine is PlaceScore and under_lane.is_empty(), "M1 the Metro has its score at its root, none under the lane")
+	check(mine != null and not mine.available, "M1 with no Metro score yet, it is silent")
+	map.queue_free()
+	await get_tree().process_frame
+
+	map = packed.instantiate()
+	map.score_path = FIXTURE
+	add_child(map)
+	for i in range(5):
+		await get_tree().process_frame
+	var first: PlaceScore = map.get_node("PlaceScore")
+	check(first.available and first.cue_playing(), "M3 on arriving, the entrance cue")
+	# The cue lands in audio time, which --fixed-fps frames do not keep.
+	var since := Time.get_ticks_msec()
+	while not first.bed_playing() and Time.get_ticks_msec() - since < 15000:
+		await get_tree().process_frame
+	map.get_node("candle_lane")._hush()
+	await get_tree().process_frame
+	check(first.bed_playing(), "M2 the lane's hush leaves the Metro's score playing")
+	var players := first.find_children("*", "AudioStreamPlayer", true, false)
+	map.queue_free()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	check(players.all(func(p): return not is_instance_valid(p)), "M3 leaving the Metro lets go of every player")
+	map = packed.instantiate()
+	map.score_path = FIXTURE
+	add_child(map)
+	for i in range(5):
+		await get_tree().process_frame
+	var again: PlaceScore = map.get_node("PlaceScore")
+	check(again != first and again.cue_playing() and not again.bed_playing(), "M3 coming back, the cue again, the bed from its top")
+	map.queue_free()
+	await get_tree().process_frame

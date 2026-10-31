@@ -11,7 +11,9 @@ extends Node
 ## What the ánimas do near you (never their being near) bends it: one begging
 ## you detunes it, one straining or dragged back makes the pulse falter under
 ## a muffle, a swarm of them out at once; each act also brings in the stems
-## written for it (`haunted`).
+## written for it (`haunted`). On arriving, the entrance cue plays first and
+## the bed comes in where it lands; in a fight the whole score sinks under the
+## combat score (Music) and comes back as the fight fades.
 ## Everything is timed by the bed's audio position, never by frame time, so
 ## slow motion and hit-stops leave the music alone.
 ## Loads score.json (tools/prepare_place_score.py) and the .tres it names.
@@ -47,12 +49,16 @@ const DETUNE_WET := 0.35
 const MUFFLE_HZ := 1800.0
 const OPEN_HZ := 20000.0
 const PULSE_FALTER_DB := -12.0
+## Under a fight at its height (the combat score's intensity 1), this much (dB).
+const UNDER_COMBAT_DB := -18.0
 const ACTS: Array[StringName] = [&"pleading", &"straining", &"dragged", &"swarm"]
 ## The ánimas are looked for this often (s).
 const FIND_EVERY := 1.0
 
 @export var score_json_path := ""
 @export var plan_path := "res://assets/eclipse/metro/plan.json"
+## Whether the entrance cue (score.json `cue`) plays before the bed.
+@export var play_cue := true
 ## Where the listener is (a Vector3): by default the player's position.
 var listener_source: Callable
 ## The bed's heard position (s); by default its player's, latency-corrected.
@@ -64,6 +70,11 @@ var zones: PlaceZones
 var people_source: Callable
 ## The ánimas near you: [{state, at}]; by default every Animas node's souls in HAUNT_RANGE.
 var animas_source: Callable
+## The cue's position (s); by default its player's.
+var cue_source: Callable
+## The combat score's intensity now (0..1); by default the level's Music node's.
+var music_source: Callable
+var cue_player: AudioStreamPlayer
 var available := false
 var score := {}
 var depth := 0.0
@@ -72,12 +83,11 @@ var _bed := {}
 var _themes := {}
 var _phrase := 0.0
 var _bar := 0.0
-## Bed time: the bed's position run on across its loops.
+## Bed time: the bed's position run on across its loops, as heard and as mixed.
 var _time := 0.0
+var _raw := 0.0
 var _last_loop_pos := -1.0
 var _loops := 0
-var _raw_last := -1.0
-var _raw_loops := 0
 var _weights := {}
 var _haunt := {&"pleading": 0.0, &"straining": 0.0, &"dragged": 0.0, &"swarm": 0.0}
 var _animas: Array = []
@@ -97,12 +107,25 @@ func _ready() -> void:
 		listener_source = _listener
 	if not animas_source.is_valid():
 		animas_source = _near_animas
+	if not cue_source.is_valid():
+		cue_source = func() -> float: return cue_player.get_playback_position() if cue_player != null and cue_player.playing else 0.0
+	if not music_source.is_valid():
+		music_source = _fight
 	if not raw_source.is_valid():
 		raw_source = position_source if position_source.is_valid() else _bed_raw
 	if not position_source.is_valid():
 		position_source = _bed_heard
 	available = true
-	_bed.player.play()
+	var cue: Variant = score.get("cue")
+	if play_cue and cue is Dictionary and ResourceLoader.exists(String(cue.path)):
+		cue_player = AudioStreamPlayer.new()
+		cue_player.name = "Cue"
+		cue_player.bus = BUS
+		cue_player.stream = load(String(cue.path))
+		add_child(cue_player)
+		cue_player.play()
+	else:
+		_bed.player.play()
 
 
 func _process(delta: float) -> void:
@@ -113,8 +136,16 @@ func _process(delta: float) -> void:
 func step(_delta: float) -> void:
 	if not available:
 		return
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index(BUS), UNDER_COMBAT_DB * clampf(float(music_source.call()), 0.0, 1.0))
+	if not _bed.player.playing:
+		# The entrance cue: the bed comes in where it lands, the themes after it.
+		# (A cue landing on its own end stops there: its having ended is landing too.)
+		if cue_player != null and (not cue_player.playing or float(cue_source.call()) + MenuClock.SLACK >= int(score.cue.lands_bar) * _bar):
+			_bed.player.play()
+		return
 	var before := _time
 	_time = _bed_time()
+	_raw = _raw_time()
 	var dt := maxf(_time - before, 0.0)
 	var point: Variant = listener_source.call()
 	if zones != null and point is Vector3:
@@ -145,6 +176,10 @@ static func muffle() -> AudioEffectLowPassFilter:
 	return AudioServer.get_bus_effect(AudioServer.get_bus_index(BUS), 1) as AudioEffectLowPassFilter
 
 
+func cue_playing() -> bool:
+	return cue_player != null and cue_player.playing
+
+
 func bed_playing() -> bool:
 	return available and _bed.player.playing
 
@@ -156,6 +191,11 @@ func theme_playing(theme: StringName) -> bool:
 ## The bed time of the theme's last start (-1: never started).
 func theme_started_at(theme: StringName) -> float:
 	return float(_themes[theme].started_at) if _themes.has(theme) else -1.0
+
+
+## How far into itself the theme's player began, at its last start (s).
+func theme_start_offset(theme: StringName) -> float:
+	return float(_themes[theme].offset) if _themes.has(theme) else 0.0
 
 
 ## How much the theme is where you are now, glided (0..1).
@@ -195,6 +235,8 @@ func hush() -> void:
 		if set.has("player") and is_instance_valid(set.player):
 			set.player.stop()
 			set.player.stream = null
+	if cue_player != null and is_instance_valid(cue_player):
+		cue_player.stop()
 	_themes.clear()
 	_bed = {}
 	available = false
@@ -260,7 +302,7 @@ func _make_set(set_name: StringName, entry: Dictionary) -> Dictionary:
 	return {"name": set_name, "entry": entry, "stream": stream, "player": player, "gains": gains,
 		"loop": float(entry.loop_seconds), "weight": 0.0, "playing": false, "scheduled_at": -1.0,
 		"started_at": -1.0, "silent_for": 0.0, "held": 0.0, "away": 0.0, "intensity": &"calm", "rest_left": 0.0,
-		"choice": {}, "line": -1}
+		"choice": {}, "line": -1, "offset": 0.0}
 
 
 func _mix_bed(dt: float) -> void:
@@ -286,7 +328,9 @@ func _step_theme(set: Dictionary, dt: float) -> void:
 			return
 		if float(set.scheduled_at) < 0.0:
 			set.scheduled_at = PlaceClock.next_phrase_line(_time, _phrase)
-		if _time + MenuClock.SLACK < float(set.scheduled_at):
+		# Started when the bed's next mixed chunk reaches the line (the mixer runs
+		# ahead of what is heard), so both are mixed from the same place.
+		if _raw + MenuClock.SLACK < float(set.scheduled_at):
 			return
 		_start(set)
 	_grow(set, dt)
@@ -314,7 +358,7 @@ func _step_theme(set: Dictionary, dt: float) -> void:
 ## From its own top, as late as the bed already is past the line.
 func _start(set: Dictionary) -> void:
 	var line := float(set.scheduled_at)
-	var late := clampf(_raw_time() - line, 0.0, float(set.loop) - 0.001)
+	var late := clampf(_raw - line, 0.0, float(set.loop) - 0.001)
 	for id in set.gains:
 		set.gains[id] = OUT
 	_apply(set)
@@ -323,6 +367,7 @@ func _start(set: Dictionary) -> void:
 	AudioServer.unlock()
 	set.playing = true
 	set.started_at = line
+	set.offset = late
 	set.scheduled_at = -1.0
 	set.silent_for = 0.0
 	set.held = 0.0
@@ -451,12 +496,12 @@ func _bed_time() -> float:
 	return _loops * float(_bed.loop) + pos
 
 
+## The mixed position as bed time: the heard time, moved by how far the mixer is
+## from it within the loop (never a loop apart, whichever side of a wrap).
 func _raw_time() -> float:
-	var pos := fposmod(float(raw_source.call()), float(_bed.loop))
-	if _raw_last >= 0.0 and pos < _raw_last - float(_bed.loop) * 0.5:
-		_raw_loops += 1
-	_raw_last = pos
-	return _raw_loops * float(_bed.loop) + pos
+	var loop := float(_bed.loop)
+	var apart := fposmod(float(raw_source.call()), loop) - fposmod(_time, loop)
+	return _time + wrapf(apart, -loop * 0.5, loop * 0.5)
 
 
 func _bed_raw() -> float:
@@ -467,6 +512,13 @@ func _bed_heard() -> float:
 	if not _bed.player.playing:
 		return 0.0
 	return PlaceClock.heard(_bed.player.get_playback_position(), AudioServer.get_time_since_last_mix(), AudioServer.get_output_latency())
+
+
+## The level's combat score's intensity (0 with none).
+func _fight() -> float:
+	var level := get_tree().current_scene
+	var music := level.get_node_or_null("Music") if level != null else null
+	return float(music.get("intensity")) if music != null and music.get("intensity") != null else 0.0
 
 
 func _listener() -> Variant:

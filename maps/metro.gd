@@ -24,6 +24,9 @@ const LABEL_RANGE := 30.0
 const SETS := {"candle_lane": ["res://maps/candle_lane.tscn", ["candle_lane", "librarian_shop"]],
 	"pasaje": ["res://maps/pasaje.tscn", ["pasaje"]]}
 
+## The Metro's score (PlaceScore), added at the map's root once the sets are in:
+## under a set, candle_lane._hush() would stop its players.
+@export var score_path := "res://audio/music/metro/score.json"
 var plan: Dictionary
 var greybox: GreyboxLoader
 var player: CharacterBody3D
@@ -66,6 +69,10 @@ func _sets() -> void:
 	var pasaje := get_node_or_null("pasaje")
 	if lane != null and pasaje != null:
 		pasaje.draught = lane.draught_now
+	var music := PlaceScore.new()
+	music.name = "PlaceScore"
+	music.score_json_path = score_path
+	add_child(music)
 
 
 func _unhandled_input(event: InputEvent) -> void:
