@@ -8,10 +8,15 @@ extends Node
 ## the bed's drone from city to deep and thins the themes' city parts. A theme
 ## you stay with grows full, then after a while rests on its bass alone. What
 ## you have done picks a theme's variants (PeopleState), on its phrase lines.
+## What the ánimas do near you (never their being near) bends it: one begging
+## you detunes it, one straining or dragged back makes the pulse falter under
+## a muffle, a swarm of them out at once; each act also brings in the stems
+## written for it (`haunted`).
 ## Everything is timed by the bed's audio position, never by frame time, so
 ## slow motion and hit-stops leave the music alone.
 ## Loads score.json (tools/prepare_place_score.py) and the .tres it names.
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const AnimasScript := preload("res://scripts/Visual/Animas.gd")
 
 ## Its own bus, under Music: the live effects (the ánimas) sit on it.
 const BUS := &"PlaceScore"
@@ -32,6 +37,19 @@ const CITY_THIN_DB := 24.0
 const HELD := 0.5
 ## A weight this small is nothing.
 const NONE := 0.001
+## The ánimas within this (m) of you count; their acts ease in and out (per second).
+const HAUNT_RANGE := 8.0
+const HAUNT_RISE := 2.0
+const HAUNT_FALL := 0.5
+## This many out of the drain at once (not below) half swarm; one more, fully.
+const SWARM_FROM := 4
+const DETUNE_WET := 0.35
+const MUFFLE_HZ := 1800.0
+const OPEN_HZ := 20000.0
+const PULSE_FALTER_DB := -12.0
+const ACTS: Array[StringName] = [&"pleading", &"straining", &"dragged", &"swarm"]
+## The ánimas are looked for this often (s).
+const FIND_EVERY := 1.0
 
 @export var score_json_path := ""
 @export var plan_path := "res://assets/eclipse/metro/plan.json"
@@ -44,6 +62,8 @@ var raw_source: Callable
 var zones: PlaceZones
 ## What the people of the city remember (a PeopleState, or null).
 var people_source: Callable
+## The ánimas near you: [{state, at}]; by default every Animas node's souls in HAUNT_RANGE.
+var animas_source: Callable
 var available := false
 var score := {}
 var depth := 0.0
@@ -59,6 +79,9 @@ var _loops := 0
 var _raw_last := -1.0
 var _raw_loops := 0
 var _weights := {}
+var _haunt := {&"pleading": 0.0, &"straining": 0.0, &"dragged": 0.0, &"swarm": 0.0}
+var _animas: Array = []
+var _find_in := 0.0
 
 
 func _ready() -> void:
@@ -72,6 +95,8 @@ func _ready() -> void:
 		people_source = func() -> Variant: return CityState.people
 	if not listener_source.is_valid():
 		listener_source = _listener
+	if not animas_source.is_valid():
+		animas_source = _near_animas
 	if not raw_source.is_valid():
 		raw_source = position_source if position_source.is_valid() else _bed_raw
 	if not position_source.is_valid():
@@ -98,9 +123,26 @@ func step(_delta: float) -> void:
 		if not found.is_empty():
 			_weights = found
 			depth = move_toward(depth, zones.depth_at(point), DEPTH_GLIDE * dt)
+	_haunted_by(dt)
 	_mix_bed(dt)
 	for name in _themes:
 		_step_theme(_themes[name], dt)
+
+
+## How much each of the ánimas' acts is upon the music now (0..1).
+func haunt() -> Dictionary:
+	return _haunt.duplicate()
+
+
+## The score bus's detune and muffle.
+static func chorus() -> AudioEffectChorus:
+	ensure_bus()
+	return AudioServer.get_bus_effect(AudioServer.get_bus_index(BUS), 0) as AudioEffectChorus
+
+
+static func muffle() -> AudioEffectLowPassFilter:
+	ensure_bus()
+	return AudioServer.get_bus_effect(AudioServer.get_bus_index(BUS), 1) as AudioEffectLowPassFilter
 
 
 func bed_playing() -> bool:
@@ -170,6 +212,13 @@ static func ensure_bus() -> void:
 	var index := AudioServer.bus_count - 1
 	AudioServer.set_bus_name(index, BUS)
 	AudioServer.set_bus_send(index, Sfx.BUS_MUSIC if AudioServer.get_bus_index(Sfx.BUS_MUSIC) >= 0 else &"Master")
+	var detune := AudioEffectChorus.new()
+	detune.dry = 1.0
+	detune.wet = 0.0
+	AudioServer.add_bus_effect(index, detune)
+	var low := AudioEffectLowPassFilter.new()
+	low.cutoff_hz = OPEN_HZ
+	AudioServer.add_bus_effect(index, low)
 
 
 func _load() -> bool:
@@ -222,6 +271,8 @@ func _mix_bed(dt: float) -> void:
 				target = _db(1.0 - depth)
 			"drone_deep":
 				target = _db(depth)
+			"pulse":
+				target = PULSE_FALTER_DB * maxf(float(_haunt[&"straining"]), float(_haunt[&"dragged"]))
 		_slide(_bed, StringName(stem.id), target, dt)
 	_apply(_bed)
 
@@ -326,9 +377,9 @@ func _target(set: Dictionary, stem: Dictionary) -> float:
 		return OUT
 	if String(stem.get("intensity", "")) == "full" and set.intensity != &"full":
 		return OUT
-	if stem.has("haunted"):
-		return OUT
 	var target := _db(float(set.weight))
+	if stem.has("haunted"):
+		target += _db(float(_haunt.get(StringName(stem.haunted), 0.0)))
 	if bool(stem.get("city", false)):
 		target -= CITY_THIN_DB * depth
 	return maxf(target, OUT)
@@ -349,6 +400,43 @@ func _slide(set: Dictionary, id: StringName, target: float, dt: float, fade_bars
 func _apply(set: Dictionary) -> void:
 	for stem in set.entry.stems:
 		set.stream.set_sync_stream_volume(int(stem.index), float(set.gains[StringName(stem.id)]))
+
+
+## The ánimas' acts near you, eased; the bus's detune and muffle follow them.
+func _haunted_by(dt: float) -> void:
+	var doing := {&"pleading": 0.0, &"straining": 0.0, &"dragged": 0.0, &"swarm": 0.0}
+	var out := 0
+	for soul in animas_source.call():
+		var state := StringName(soul.state)
+		if doing.has(state):
+			doing[state] = 1.0
+		if state != &"below":
+			out += 1
+	doing[&"swarm"] = clampf(float(out - SWARM_FROM + 1) / 2.0, 0.0, 1.0)
+	for act in ACTS:
+		var now := float(_haunt[act])
+		_haunt[act] = move_toward(now, float(doing[act]), (HAUNT_RISE if doing[act] > now else HAUNT_FALL) * dt)
+	chorus().wet = DETUNE_WET * float(_haunt[&"pleading"])
+	var falter := maxf(float(_haunt[&"straining"]), float(_haunt[&"dragged"]))
+	muffle().cutoff_hz = OPEN_HZ * pow(MUFFLE_HZ / OPEN_HZ, falter)
+
+
+## Every Animas node's souls within HAUNT_RANGE of you (the nodes looked for now and then).
+func _near_animas() -> Array:
+	_find_in -= get_process_delta_time()
+	if _find_in <= 0.0:
+		_find_in = FIND_EVERY
+		_animas = get_tree().root.find_children("*", "Node3D", true, false).filter(func(n): return n.get_script() == AnimasScript)
+	var point: Variant = listener_source.call()
+	var near := []
+	if not point is Vector3:
+		return near
+	for node: Node3D in _animas:
+		if not is_instance_valid(node) or node.global_position.distance_to(point) > HAUNT_RANGE:
+			continue
+		for i in range(int(node.count)):
+			near.append({"state": node.state_of(i), "at": node.global_position})
+	return near
 
 
 func _db(amount: float) -> float:

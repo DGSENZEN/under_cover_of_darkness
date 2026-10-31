@@ -60,6 +60,7 @@ func _ready() -> void:
 	zone_checks()
 	score_checks()
 	variant_checks()
+	anima_checks()
 	await get_tree().process_frame
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failures else 0)
@@ -218,4 +219,52 @@ func variant_checks() -> void:
 	zones.w = {"b": 1.0}
 	run_for(score, PHRASE + 2.0)
 	check(score.part_choice(&"b", &"lead") == &"lead" and score.stem_gain_db(&"b", &"lead") >= -1.0, "V4 no one remembered: the defaults")
+	score.free()
+
+func souls(states: Array) -> Array:
+	var out := []
+	for state in states:
+		out.append({"state": state, "at": Vector3(2.0, 0.0, 0.0)})
+	return out
+
+func anima_checks() -> void:
+	# Changed in place: a lambda holds what its locals were when it was made.
+	var near_souls := []
+	var score := make_score()
+	var zones := score.zones as StubZones
+	score.animas_source = func() -> Array: return near_souls
+	zones.w = {"a": 1.0}
+	run_for(score, PHRASE + 2.0)
+	near_souls.clear()
+	near_souls.append_array(souls(["warming", "lurking", "warming"]))
+	run_for(score, 3.0)
+	var h := score.haunt()
+	check(h.values().max() <= 0.0001 and near(PlaceScore.chorus().wet, 0.0, 0.001), "A1 near but only warming and lurking: nothing changes: %s" % h)
+	near_souls.clear()
+	near_souls.append_array(souls(["pleading"]))
+	run_for(score, 1.0)
+	h = score.haunt()
+	check(float(h[&"pleading"]) >= 0.9 and near(PlaceScore.chorus().wet, PlaceScore.DETUNE_WET, 0.03), "A2 one begging you: the lead detunes (%.2f wet)" % PlaceScore.chorus().wet)
+	run_for(score, 0.5)
+	check(score.stem_gain_db(&"a", &"haunt") >= -2.0, "A2 and its pleading stem comes in: %.1f" % score.stem_gain_db(&"a", &"haunt"))
+	near_souls.clear()
+	run_for(score, 3.0)
+	check(float(score.haunt()[&"pleading"]) <= 0.1 and score.stem_gain_db(&"a", &"haunt") <= -40.0, "A3 when it stops, it lets go")
+	near_souls.clear()
+	near_souls.append_array(souls(["dragged"]))
+	run_for(score, 1.0)
+	check(score.stem_gain_db(&"bed", &"pulse") <= -10.0 and PlaceScore.muffle().cutoff_hz <= 2500.0, "A4 one dragged back: the pulse falters (%.1f), muffled (%.0f Hz)" % [score.stem_gain_db(&"bed", &"pulse"), PlaceScore.muffle().cutoff_hz])
+	near_souls.clear()
+	near_souls.append_array(souls(["seeking", "seeking", "seeking"]))
+	run_for(score, 4.0)
+	var three := float(score.haunt()[&"swarm"])
+	near_souls.clear()
+	near_souls.append_array(souls(["seeking", "seeking", "seeking", "seeking", "seeking"]))
+	run_for(score, 1.0)
+	check(near(three, 0.0, 0.01) and float(score.haunt()[&"swarm"]) >= 0.99, "A5 five out at once swarm, three do not")
+	score.free()
+
+	score = make_score()
+	run_for(score, 2.0)
+	check(score.haunt().values().max() <= 0.0001, "A6 no ánimas anywhere: nothing")
 	score.free()
