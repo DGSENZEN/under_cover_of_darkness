@@ -59,6 +59,11 @@ only the Underground's layers (LAYER_LOOPS, BEDS, LAYER_SHOTS: neon, pipes, book
 
 only the ánimas' voices (SOULS);
 
+    python3 tools/prepare_sfx.py --metro [--listen=DIR]
+
+only the Metro's sounds (METRO_SHOTS, METRO_LOOPS: the user's ElevenLabs takes,
+layered), and with --listen a listening file per sound in DIR;
+
     python3 tools/prepare_sfx.py --weather
 
 only the weather's loops (WEATHER_LOOPS: the NOX Essentials' rain and wind,
@@ -1260,9 +1265,255 @@ def prepare_score(only=None):
         print("%-18s loop, %.3f s (%.2f bars), %.1f LUFS" % (name, len(x) / RATE, len(x) / RATE / BAR, loudness_stereo(x)))
 
 
+# The Metro (docs/superpowers/specs/2026-10-31-metro-sound-design.md): the user's ElevenLabs takes (generated on a
+# paid plan, Oct 31 2026), each named by its id (the number after its last "-"), layered into seeded variations and
+# seamless loops (prepare_metro), every hum on G (the Metro score's bed is in C). Nothing reverbed: the room is the game's.
+METRO_SOURCE = os.path.expanduser("~/Downloads/AUCOD ElevenLabs/ucod_sounds/")
+# A shot: (group, [(take, hits to split, or None for the whole take)], variations[, options]).
+METRO_SHOTS = []
+# A loop: (name, [takes], seconds, options).
+METRO_LOOPS = []
+# The options: stereo (kept stereo: a bed, a flat gust), pitch, lowpass (Hz), hum (pitched onto the nearest G),
+# pick ("short" or "long": only that half of the hits, by length), count (loops: name_1..name_n; one is name itself).
+METRO_SEED = 1931
+# The silence between variations in a listening file (s).
+LISTEN_GAP = 0.4
+# How far off G a hum may land (cents).
+HUM_CENTS = 20.0
+METRO_LOOP_IMPORT = FIRE_IMPORT.replace("force/mono=true", "force/mono={mono}")
+
+
+def g_of(hz):
+    """The G nearest `hz`: 98 Hz an octave up or down."""
+    return 98.0 * 2.0 ** round(np.log2(hz / 98.0))
+
+
+def hum_hz(x, lo=40.0, hi=420.0):
+    """The strongest pitch in `x` between `lo` and `hi` Hz."""
+    m = x if x.ndim == 1 else x.mean(axis=1)
+    spectrum = np.abs(np.fft.rfft(m * np.hanning(len(m))))
+    hz = np.fft.rfftfreq(len(m), 1.0 / RATE)
+    band = (hz >= lo) & (hz <= hi)
+    return float(hz[band][np.argmax(spectrum[band])])
+
+
+def _resample(x, ratio):
+    """Faster by `ratio` (pitch and speed together, a tape's way); mono or stereo."""
+    at = np.arange(0.0, len(x) - 1, ratio)
+    old = np.arange(len(x))
+
+    if x.ndim == 1:
+        return np.interp(at, old, x)
+
+    return np.stack([np.interp(at, old, x[:, c]) for c in range(x.shape[1])], axis=1)
+
+
+def retune(x, to_hz, lo=40.0, hi=420.0):
+    """`x` pitched so its hum lands on `to_hz`; refused more than HUM_CENTS off after."""
+    y = _resample(x, to_hz / hum_hz(x, lo, hi))
+    off = 1200.0 * np.log2(hum_hz(y, lo, hi) / to_hz)
+
+    if abs(off) > HUM_CENTS:
+        raise ValueError("a hum landed %.0f cents off %.1f Hz" % (off, to_hz))
+
+    return y
+
+
+def _loud(x):
+    return loudness(x if x.ndim == 1 else x.mean(axis=1))
+
+
+def _fade_any(x, fade_in, fade_out):
+    return fade(x, fade_in, fade_out) if x.ndim == 1 else fade_stereo(x, fade_in, fade_out)
+
+
+def layered_shots(hits, count, rng, under_chance=0.5, under_db=(-12.0, -6.0), under_late=(0.002, 0.012), pitch=0.06):
+    """`count` variations of `hits`: each hit in turn at a pitch of its own, now and then another hit laid under it a
+    few ms late; all matched in loudness to their median, and held under PEAK_LIMIT_DB together."""
+    out = []
+
+    for k in range(count):
+        main = _resample(hits[k % len(hits)], rng.uniform(1.0 - pitch, 1.0 + pitch))
+
+        if len(hits) > 1 and rng.random() < under_chance:
+            other = hits[(k % len(hits) + 1 + int(rng.integers(0, len(hits) - 1))) % len(hits)]
+            under = _resample(other, rng.uniform(1.0 - pitch, 1.0 + pitch)) * 10 ** (rng.uniform(*under_db) / 20)
+            late = int(rng.uniform(*under_late) * RATE)
+            length = max(len(main), late + len(under))
+            both = np.zeros((length,) + main.shape[1:])
+            both[:len(main)] += main
+            both[late:late + len(under)] += under
+            main = both
+
+        out.append(_fade_any(main, 0.003, min(0.05, len(main) / RATE / 4)))
+
+    levels = [_loud(v) for v in out]
+    middle = float(np.median(levels))
+    out = [v * 10 ** ((middle - level) / 20) for v, level in zip(out, levels)]
+    peak = max(np.abs(v).max() for v in out)
+    limit = 10 ** (PEAK_LIMIT_DB / 20)
+    return [v * (limit / peak) for v in out] if peak > limit else out
+
+
+def layered_loop(takes, seconds, rng, stereo=False):
+    """`seconds` of `takes` laid over each other, each from a place of its own (the first at full, the others a few dB
+    under), its end laid over its start equal-power: a seamless loop, peaking at -3 dB."""
+    n = int(seconds * RATE)
+    tail = int(1.5 * RATE)
+    shape = (n + tail, 2) if stereo else (n + tail,)
+    bed = np.zeros(shape)
+
+    for k, take in enumerate(takes):
+        take = (np.stack([take, take], axis=1) if take.ndim == 1 else take) if stereo else \
+            (take if take.ndim == 1 else take.mean(axis=1))
+
+        while len(take) < n + tail:
+            take = np.concatenate([take, take])
+
+        at = int(rng.integers(0, len(take) - (n + tail) + 1))
+        bed += take[at:at + n + tail] * (1.0 if k == 0 else 10 ** (rng.uniform(-6.0, -2.0) / 20))
+
+    t = np.linspace(0.0, np.pi * 0.5, tail)
+
+    if stereo:
+        t = t[:, None]
+
+    bed[:tail] = bed[n:n + tail] * np.cos(t) + bed[:tail] * np.sin(t)
+    return peak_normalise(bed[:n], -3.0)
+
+
+def _take_path(source, take):
+    """A take: a file the game already cuts from (an absolute path), a name in `source`, or an id."""
+    if os.path.isabs(take) and os.path.exists(take):
+        return take
+
+    for name in (take, take + ".wav", take + ".mp3"):
+        if os.path.exists(os.path.join(source, name)):
+            return os.path.join(source, name)
+
+    found = glob.glob(os.path.join(source, "*-%s.mp3" % take))
+
+    if len(found) != 1:
+        raise FileNotFoundError("take %s: %d files in %s" % (take, len(found), source))
+
+    return found[0]
+
+
+def _decode_take(path, stereo=False, pitch=1.0, lowpass=None):
+    command = ["ffmpeg", "-v", "error", "-i", path]
+    filters = _filters(lowpass, pitch)
+
+    if filters:
+        command += ["-af", ",".join(filters)]
+
+    raw = subprocess.run(command + ["-f", "f32le", "-ac", "2", "-ar", str(RATE), "-"], capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).astype(np.float64)
+    return x if stereo else x.mean(axis=1)
+
+
+def _write_any(path, x):
+    (write_wav if x.ndim == 1 else write_wav_stereo)(path, x)
+
+
+def _listening(listen, name, pieces):
+    os.makedirs(listen, exist_ok=True)
+    gap = np.zeros((int(LISTEN_GAP * RATE),) + pieces[0].shape[1:])
+    _write_any(os.path.join(listen, name + ".wav"), np.concatenate([part for x in pieces for part in (x, gap)]))
+
+
+def prepare_metro(source=METRO_SOURCE, sfx_out=OUT, ambience_out=AMBIENCE_OUT, listen=None, shots=None, loops=None,
+                  seed=METRO_SEED):
+    """The Metro's shots to `sfx_out` (each group's old files removed first) and its loops to `ambience_out`; with
+    `listen`, a listening file per name there. Returns {name: [paths written]}."""
+    shots = METRO_SHOTS if shots is None else shots
+    loops = METRO_LOOPS if loops is None else loops
+    rng = np.random.default_rng(seed)
+    written = {}
+    os.makedirs(sfx_out, exist_ok=True)
+    os.makedirs(ambience_out, exist_ok=True)
+
+    for row in shots:
+        group, takes, count = row[:3]
+        options = row[3] if len(row) > 3 else {}
+        stereo = options.get("stereo", False)
+        hits = []
+
+        for take, split in takes:
+            x = _decode_take(_take_path(source, take), stereo, options.get("pitch", 1.0), options.get("lowpass"))
+
+            if options.get("hum"):
+                x = retune(x, g_of(hum_hz(x)))
+
+            mono = x if x.ndim == 1 else x.mean(axis=1)
+            spans = [[a / RATE, b / RATE] for a, b in [auto_bounds(mono)]] if split is None else split_events(mono, split)
+            hits += [x[int(a * RATE):int(b * RATE)] for a, b in spans]
+
+        if options.get("pick"):
+            hits.sort(key=len)
+            half = max(len(hits) // 2, 1)
+            hits = hits[:half] if options["pick"] == "short" else hits[-half:]
+
+        variations = layered_shots(hits, count, rng)
+
+        for old in glob.glob(os.path.join(sfx_out, group + "_[0-9]*.wav")) + \
+                glob.glob(os.path.join(sfx_out, group + "_[0-9]*.wav.import")):
+            if re.fullmatch(re.escape(group) + r"_\d+\.wav(\.import)?", os.path.basename(old)):
+                os.remove(old)
+
+        written[group] = []
+
+        for k, x in enumerate(variations, start=1):
+            path = os.path.join(sfx_out, "%s_%d.wav" % (group, k))
+            _write_any(path, x)
+            written[group].append(path)
+
+        if listen:
+            _listening(listen, group, variations)
+
+        print("%-16s %2d shot(s), %.1f LUFS" % (group, count, float(np.median([_loud(x) for x in variations]))))
+
+    for name, takes, seconds, options in loops:
+        stereo = options.get("stereo", False)
+        decoded = []
+
+        for take in takes:
+            x = _decode_take(_take_path(source, take), stereo, options.get("pitch", 1.0), options.get("lowpass"))
+            decoded.append(retune(x, g_of(hum_hz(x))) if options.get("hum") else x)
+
+        count = options.get("count", 1)
+        names = [name] if count == 1 else ["%s_%d" % (name, k) for k in range(1, count + 1)]
+        written[name] = []
+        made = []
+
+        for each in names:
+            x = layered_loop(decoded, seconds, rng, stereo)
+            path = os.path.join(ambience_out, each + ".wav")
+            _write_any(path, x)
+            importer = path + ".import"
+
+            if not os.path.exists(importer):
+                with open(importer, "w") as out:
+                    out.write(METRO_LOOP_IMPORT.format(name=each, mono="false" if stereo else "true"))
+
+            written[name].append(path)
+            made.append(x)
+
+        if listen:
+            _listening(listen, name, made)
+
+        print("%-16s %d loop(s), %.1f s, %.1f LUFS" % (name, count, seconds, _loud(made[0])))
+
+    return written
+
+
 def main():
     only = None
     args = []
+    listen = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--listen=")), None)
+
+    if "--metro" in sys.argv[1:]:
+        prepare_metro(listen=listen)
+        return
 
     for a in sys.argv[1:]:
         if a.startswith("--only="):
