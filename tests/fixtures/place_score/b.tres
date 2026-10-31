@@ -1,0 +1,11 @@
+[gd_resource type="AudioStreamSynchronized" load_steps=3 format=3]
+
+[ext_resource type="AudioStream" path="res://tests/fixtures/place_score/b/lead_met.ogg" id="lead_met"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/place_score/b/lead.ogg" id="lead"]
+
+[resource]
+stream_count = 2
+stream_0/stream = ExtResource("lead_met")
+stream_0/volume = -80.0
+stream_1/stream = ExtResource("lead")
+stream_1/volume = -80.0

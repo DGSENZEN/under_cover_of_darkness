@@ -1,0 +1,20 @@
+[gd_resource type="AudioStreamSynchronized" load_steps=6 format=3]
+
+[ext_resource type="AudioStream" path="res://tests/fixtures/place_score/a/bass.ogg" id="bass"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/place_score/a/lead.ogg" id="lead"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/place_score/a/lead_city.ogg" id="lead_city"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/place_score/a/lead_full.ogg" id="lead_full"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/place_score/a/haunt.ogg" id="haunt"]
+
+[resource]
+stream_count = 5
+stream_0/stream = ExtResource("bass")
+stream_0/volume = -80.0
+stream_1/stream = ExtResource("lead")
+stream_1/volume = -80.0
+stream_2/stream = ExtResource("lead_city")
+stream_2/volume = -80.0
+stream_3/stream = ExtResource("lead_full")
+stream_3/volume = -80.0
+stream_4/stream = ExtResource("haunt")
+stream_4/volume = -80.0

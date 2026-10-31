@@ -1,0 +1,153 @@
+{
+  "bpm": 240.0,
+  "beats_per_bar": 4,
+  "phrase_bars": 4,
+  "sample_rate": 48000,
+  "placeholder": true,
+  "common_gain_db": -13.249148445519198,
+  "bed": {
+    "bars": 8,
+    "loop_seconds": 8.0,
+    "resource": "res://tests/fixtures/place_score/bed.tres",
+    "stems": [
+      {
+        "id": "drone_city",
+        "role": "drone_city",
+        "index": 0,
+        "peak_db": -24.622226642454798,
+        "sha256": "573b605923d36cdf622be9fc8506426bc3648c034f974622156080309ec146d4"
+      },
+      {
+        "id": "drone_deep",
+        "role": "drone_deep",
+        "index": 1,
+        "peak_db": -24.622226642454798,
+        "sha256": "c8cee9b803c00833e522d93547e8bb8a2f308fbfacac1b4592422fbcde74138d"
+      },
+      {
+        "id": "pulse",
+        "role": "pulse",
+        "index": 2,
+        "peak_db": -24.622226642454798,
+        "sha256": "a3e09c8afc4f2b5665a00860b8c7849733bc601b3f5559f55f3f41879c7022ce"
+      },
+      {
+        "id": "room",
+        "role": "room",
+        "index": 3,
+        "peak_db": -24.622226642454798,
+        "sha256": "df3a4976594bfcf189c934a56ced1ee1169f800d9288a223437a0ecba5076d5a"
+      }
+    ]
+  },
+  "themes": {
+    "a": {
+      "bars": 8,
+      "loop_seconds": 8.0,
+      "resource": "res://tests/fixtures/place_score/a.tres",
+      "stems": [
+        {
+          "id": "bass",
+          "part": "bass",
+          "index": 0,
+          "peak_db": -24.622226642454798,
+          "sha256": "4bb86dba1a40c4ced9fdc3f77715737f82dea5f02d27a643abac0da95b1bebd3"
+        },
+        {
+          "id": "lead",
+          "part": "lead",
+          "intensity": "calm",
+          "index": 1,
+          "peak_db": -24.622226642454798,
+          "sha256": "c1ae78e0df74a058916d1075c7eabbe0fbbfc58a93a5198aa1e631c910f476c6"
+        },
+        {
+          "id": "lead_city",
+          "part": "lead_city",
+          "intensity": "calm",
+          "city": true,
+          "index": 2,
+          "peak_db": -24.622226642454798,
+          "sha256": "8ca4cf62c58cd920c295eab4144163552d80c58579241e8d255b84d310f3f320"
+        },
+        {
+          "id": "lead_full",
+          "part": "lead_full",
+          "intensity": "full",
+          "index": 3,
+          "peak_db": -24.622226642454798,
+          "sha256": "e08e67128519486ac15a0eeeb4ef9fee008afb1fd5e0cd718897daee05138d21"
+        },
+        {
+          "id": "haunt",
+          "part": "haunt",
+          "haunted": "pleading",
+          "index": 4,
+          "peak_db": -24.622226642454798,
+          "sha256": "e767e6431d227b8e0ae5f8f588a494467a2fb64c2f276c4c3551cea07b679214"
+        }
+      ]
+    },
+    "b": {
+      "bars": 4,
+      "loop_seconds": 4.0,
+      "resource": "res://tests/fixtures/place_score/b.tres",
+      "stems": [
+        {
+          "id": "lead_met",
+          "part": "lead",
+          "variant": {
+            "character": "curandera",
+            "when": "met"
+          },
+          "index": 0,
+          "peak_db": -24.622226642454798,
+          "sha256": "7580143299f0872013d55b8707b596241c27d7c779ae419bd3d8a7cceb55db84"
+        },
+        {
+          "id": "lead",
+          "part": "lead",
+          "index": 1,
+          "peak_db": -24.622226642454798,
+          "sha256": "d021fc2b39bab067f3738cd3b68771da1641a92a840f6bd91c578bcc2527bc29"
+        }
+      ]
+    },
+    "c": {
+      "bars": 4,
+      "loop_seconds": 4.0,
+      "resource": "res://tests/fixtures/place_score/c.tres",
+      "stems": [
+        {
+          "id": "lead",
+          "part": "lead",
+          "index": 0,
+          "peak_db": -24.622226642454798,
+          "sha256": "e75c32e49aabf1afb50c2a6ee609632de628063fe0cefb17cd796f082c3baae4"
+        }
+      ]
+    }
+  },
+  "cue": {
+    "path": "res://tests/fixtures/place_score/cue.ogg",
+    "seconds": 1.0,
+    "lands_bar": 1
+  },
+  "spaces": {
+    "candle_lane": "a",
+    "librarian_shop": "b"
+  },
+  "circles": [
+    {
+      "theme": "c",
+      "inside": "candle_lane",
+      "at": [
+        12.8,
+        -11.0,
+        73.2
+      ],
+      "radius": 3.5,
+      "full": 1.5
+    }
+  ]
+}

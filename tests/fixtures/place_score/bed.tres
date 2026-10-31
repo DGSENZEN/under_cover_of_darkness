@@ -1,0 +1,17 @@
+[gd_resource type="AudioStreamSynchronized" load_steps=5 format=3]
+
+[ext_resource type="AudioStream" path="res://tests/fixtures/place_score/bed/drone_city.ogg" id="drone_city"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/place_score/bed/drone_deep.ogg" id="drone_deep"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/place_score/bed/pulse.ogg" id="pulse"]
+[ext_resource type="AudioStream" path="res://tests/fixtures/place_score/bed/room.ogg" id="room"]
+
+[resource]
+stream_count = 4
+stream_0/stream = ExtResource("drone_city")
+stream_0/volume = -80.0
+stream_1/stream = ExtResource("drone_deep")
+stream_1/volume = -80.0
+stream_2/stream = ExtResource("pulse")
+stream_2/volume = -80.0
+stream_3/stream = ExtResource("room")
+stream_3/volume = -80.0
