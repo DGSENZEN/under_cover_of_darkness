@@ -1,0 +1,6 @@
+# Logic exports are working masters: never committed (see README.md).
+*.wav
+*.aif
+*.aiff
+*.caf
+*.flac
