@@ -44,6 +44,19 @@ class MetroPartsTest(unittest.TestCase):
         self.assertEqual(len(ghosts), 16)
         self.assertTrue(all(g[3] < k[3] for g, k in zip(ghosts, kicks)))
 
+    def test_cue_takes_stay_in_c_minor_and_land_on_bar_three(self):
+        minor = {0, 2, 3, 5, 7, 8, 10}
+        parts = self.compose.cue('C')
+        takes = {p['name'][0] for p in parts}
+        self.assertEqual(takes, {'A', 'B', 'C'})
+        for part in parts:
+            self.assertTrue(all(n[2] % 12 in minor for n in part['notes']), part['name'])
+            self.assertTrue(all(s < 8.0 + 1e-6 for s, _, _, _ in part['notes']), part['name'])
+        # Each take's last sounding note reaches the bed's first downbeat (bar 3).
+        for take in 'ABC':
+            ends = [s + l for p in parts if p['name'][0] == take for s, l, _, _ in p['notes']]
+            self.assertGreaterEqual(max(ends), 8.0 - 1e-6, take)
+
     def test_writes_one_file_per_take(self):
         out = Path(tempfile.mkdtemp())
         path = self.compose.write_piece('bed', 72, 'Bb', 2, out)
