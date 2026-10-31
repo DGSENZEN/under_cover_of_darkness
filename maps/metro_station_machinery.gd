@@ -13,6 +13,7 @@ const RUNS_KIT := "res://assets/eclipse/kit/station_runs.glb"
 const RUNS_JSON := "res://assets/eclipse/kit/station_runs.json"
 const PIPES_KIT := "res://assets/eclipse/kit/station_pipes.glb"
 const DUCTS_KIT := "res://assets/eclipse/kit/station_ducts.glb"
+const PIPES_JSON := "res://assets/eclipse/kit/station_pipes.json"
 ## The floor's pipe mouths (station_pipes' mouth), venting the Company's fuel fumes: where each stands (the set's frame,
 ## on its floor), the fumes' height over its foot (the kit's FUME_AT), how they look (the fuel's sour amber-green).
 const MOUTHS := [Vector3(-25.0, 6.0, -11.6), Vector3(25.0, 6.0, 11.6), Vector3(-3.0, 6.0, 11.6), Vector3(11.0, 6.0, -11.6),
@@ -106,11 +107,20 @@ static func _racks(station, root: Node3D) -> void:
 			var main := SetKit.place(root, kit[kind], look, kind, Vector3.ZERO, 0.0, false)
 			main.layers = level
 			station.mains.append(main)
-		elif kind.begins_with("riser_"):
-			var riser := SetKit.place(root, kit[kind], look, kind, Vector3.ZERO, 0.0, true, true)
-			riser.layers = level
-			station.risers.append(riser)
 
+
+	# (The risers: one built for the hall and one for the platforms, each stood where the kit's json says, turned to its
+	# wall.)
+	if FileAccess.file_exists(PIPES_JSON):
+		for spot: Dictionary in JSON.parse_string(FileAccess.get_file_as_string(PIPES_JSON)):
+			var piece := String(spot["piece"])
+			if not kit.has(piece):
+				continue
+			var at := Vector3(float(spot["x"]), float(spot["floor"]), float(spot["z"]))
+			var riser := SetKit.place(root, kit[piece], look, piece, at, 0.0 if float(spot["side"]) < 0.0 else PI, true,
+				true)
+			riser.layers = Layers.STATION_HALL if piece == "riser_hall" else Layers.STATION_BELOW
+			station.risers.append(riser)
 	if not ducts.has("mouth"):
 		return
 	for k in MOUTHS.size():

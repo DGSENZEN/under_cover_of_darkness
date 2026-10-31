@@ -221,10 +221,13 @@ def _tray(name):
     return build
 
 
-def _riser(name):
-    side, x, floor, ceiling = RISERS[name]
+def _riser(height):
+    """A riser, built once and placed at each of RISERS (the set turns it to its wall): its axis at the origin, standing
+    on z = 0 (Godot's y), its wall behind it toward Godot's -z (out from the plaster's face), the room toward +z."""
+    side, x, floor, ceiling = -1, 0.0, 0.0, height
     r, out = RISER
-    z = side * (FACE - out)
+    z = 0.0
+    face = out
 
     def build(m):
         # (Its foot inside its collar, never in the collar's plane.)
@@ -255,7 +258,7 @@ def _riser(name):
         turned(m, [(0.115, 0.07), (0.115, 0.115)], 20, "sign", at=gauge_at, lean=math.pi / 2, towards=towards)
         # (Strapped to the wall over and under the racks' height.)
         for y in (floor + 2.8, ceiling - 0.35):
-            a, b = sorted((side * FACE, z - side * (r - 0.05)))
+            a, b = sorted((side * face, z - side * (r - 0.05)))
             _gbox(m, (x - 0.06, y - 0.05, a), (x + 0.06, y + 0.05, b), "iron")
     return build
 
@@ -292,7 +295,7 @@ def feed(m):
 FEED_LENGTH = 1.32
 
 PIECES = [("rack_" + n, _rack(n)) for n in RACKS] + [(n, _main(n)) for n in MAINS] + \
-    [(n, _riser(n)) for n in RISERS]
+    [("riser_hall", _riser(5.0)), ("riser_platform", _riser(5.5))]
 # (The floor's mains, the trays, the mouths and their feeds paint on an atlas of their own: station_ducts.)
 DUCT_PIECES = [(n, _floor_main(n)) for n in FLOOR_MAINS] + [(n, _tray(n)) for n in TRAYS] + \
     [("mouth", mouth), ("feed", feed)]
@@ -303,6 +306,18 @@ FUME_AT = MOUTH[1] + 0.05
 SLIVER = {n: 0.004 for n, _ in PIECES}
 
 
+JSON = common.ROOT / "assets" / "eclipse" / "kit" / "station_pipes.json"
+
+
+def write_json():
+    """Where each riser stands (the set's frame): its piece, x, its floor, its wall's side (-1 north, 1 south), and its
+    axis's z."""
+    import json
+    JSON.write_text(json.dumps([{"piece": "riser_hall" if floor > 3.0 else "riser_platform", "x": x, "floor": floor,
+                                 "side": side, "z": side * (FACE - RISER[1])}
+                                for side, x, floor, ceiling in RISERS.values()], indent=1))
+
+
 def build():
     common.reset()
     for name, f in PIECES:
@@ -311,6 +326,7 @@ def build():
 
 def main():
     build()
+    write_json()
     common.export_piece(NAME, ATLAS, SLOTS, out=common.ROOT / "assets" / "eclipse" / "kit", sets_each=True,
                         budget=max(BUDGET.values()), sliver=min(SLIVER.values()), pack_margin=0.0015)
 
