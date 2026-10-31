@@ -27,7 +27,8 @@ Every part is judged by ear in Logic: these are starting points, not the music.
         locked to the kick (C2), the candle pad low and soft (C3), Rhodes stabs on the
         off-beats (C4), his trumpet (G4-Eb5), the votive glass up high (C6-C7).
         Calm: the kit (a broken kick, swung sixteenth hats, a rim), sub, bass, keys, pad, glass,
-        her guitar's fills. Full: the backbeat (a heavy late snare on 2 and 4 with a clap under
+        her guitar's fills, the requinto (the trio's lead guitar following every chord up high,
+        stepping out with passing notes where the melody rests). Full: the backbeat (a heavy late snare on 2 and 4 with a clap under
         it, ghosts, fills), his harmon trumpet (bars 1-8, scoops and fall-offs bent in); her
         guitar answers him in thirds (9-16).
         Haunts, silent until the anima act: H Pleading (wordless sighs bending down),
@@ -271,6 +272,33 @@ def lane(pedal):
         top = 60 + c + step
         guitar += [(at, length * 0.9, top, 72), (at, length * 0.9, _third_below(top, c), 64)]
 
+    # The requinto: the bolero trio's lead guitar, following every chord in swung eighths up
+    # high, soft and thinned under a melody, stepping out where the melody rests with
+    # sixteenth passing notes down the mode (the beats stay on the chord).
+    sounding = set()
+    for bar, beat, length, _ in LANE_MELODY:
+        for b in (bar, bar + 8):
+            at = b * BEATS + beat
+            sounding.update(round(at + k * 0.5, 1) for k in range(int(length * 2)))
+    requinto = []
+    shape = (0, 2, 1, 3, 2, 4, 3, 1)
+    for bar, (_, root, tones) in enumerate(LANE_CHORDS):
+        at = bar * BEATS
+        ring = sorted({74 + (c + root + t - 74) % 12 for t in tones})
+        for k in range(8):
+            when = at + k * 0.5
+            pitch = ring[shape[k] % len(ring)]
+            busy = round(when, 1) in sounding
+            if busy and k % 2:
+                continue
+            swing = 0.04 if k % 2 else 0.0
+            requinto.append((round(when + swing, 4), 0.45, pitch, (38 if busy else 62) + rng.randint(-4, 4)))
+            if not busy and k % 2 == 0:
+                # A passing note down the mode, between this chord tone and the next.
+                degree = (pitch - c) % 12
+                below = max(d for d in DORIAN if d < degree) if any(d < degree for d in DORIAN) else DORIAN[-1] - 12
+                requinto.append((round(when + 0.25 + 0.02, 4), 0.2, pitch - (degree - below), 52 + rng.randint(-4, 4)))
+
     # The kit (calm): the broken kick, swung sixteenth hats, a rim; an open hat closing four bars.
     kit, backbeat = [], []
     for bar in range(bars):
@@ -317,6 +345,7 @@ def lane(pedal):
             {'name': 'L Keys', 'channel': 10, 'program': 4, 'notes': keys},
             {'name': 'L Glass', 'channel': 1, 'program': 8, 'notes': glass},
             {'name': 'L Guitar', 'channel': 2, 'program': 24, 'notes': guitar},
+            {'name': 'L Requinto', 'channel': 12, 'program': 25, 'notes': requinto},
             {'name': 'L Candle pad', 'channel': 3, 'program': 89, 'notes': pad, 'controls': pad_moves},
             {'name': 'L Trumpet', 'channel': 4, 'program': 59, 'notes': trumpet, 'controls': trumpet_moves},
             {'name': 'L Backbeat', 'channel': 9, 'notes': backbeat},
@@ -336,6 +365,7 @@ PLAYERS = {
     'L Keys': dict(spread=0.008, behind=0.006, vel=6, roll=0.012, drift=0.02),
     'L Glass': dict(spread=0.014, behind=0.0, vel=7),
     'L Guitar': dict(spread=0.010, behind=0.004, vel=7, roll=0.022, drift=0.015),
+    'L Requinto': dict(spread=0.008, behind=0.006, vel=6, drift=0.012),
     'L Candle pad': dict(spread=0.006, behind=0.0, vel=3, drift=0.02),
     'L Trumpet': dict(spread=0.012, behind=0.02, vel=6, drift=0.03, breath=True),
     'H Pleading': dict(spread=0.01, behind=0.0, vel=4),

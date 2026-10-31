@@ -87,7 +87,7 @@ class MetroPartsTest(unittest.TestCase):
 
     def test_lane_is_sixteen_bars_of_c_dorian_with_its_haunts(self):
         parts = {p['name']: p for p in self.compose.lane('C')}
-        for name in ('L Sub', 'L Bass', 'L Kit', 'L Keys', 'L Glass', 'L Guitar', 'L Candle pad',
+        for name in ('L Sub', 'L Bass', 'L Kit', 'L Keys', 'L Glass', 'L Guitar', 'L Requinto', 'L Candle pad',
                      'L Trumpet', 'L Backbeat', 'H Pleading', 'H Dragged', 'H Swarm'):
             self.assertIn(name, parts)
         # C Dorian, with the Db and Ab the deep layers lean on.
@@ -107,6 +107,26 @@ class MetroPartsTest(unittest.TestCase):
         for name, low, high in bands:
             median = statistics.median(n[2] for n in parts[name]['notes'])
             self.assertTrue(low <= median <= high, f'{name} median {median}')
+
+    def test_requinto_follows_the_chords_and_answers_in_the_gaps(self):
+        import statistics
+        compose = self.compose
+        requinto = [p for p in compose.lane('C') if p['name'] == 'L Requinto'][0]['notes']
+        self.assertTrue(74 <= statistics.median(n[2] for n in requinto) <= 86)
+        # On the beats, it plays the bar's chord.
+        for start, _, pitch, _ in requinto:
+            if abs(start - round(start)) < 1e-6:
+                _, root, tones = compose.LANE_CHORDS[int(start // 4)]
+                self.assertIn((pitch - root) % 12, {t % 12 for t in tones}, (start, pitch))
+        # Louder where the melody rests than under it.
+        sounding = set()
+        for bar, beat, length, _ in compose.LANE_MELODY:
+            for b in (bar, bar + 8):
+                at = b * 4 + beat
+                sounding.update(round(at + k * 0.5, 1) for k in range(int(length * 2)))
+        under = [v for s, _, _, v in requinto if round(s, 1) in sounding]
+        gaps = [v for s, _, _, v in requinto if round(s, 1) not in sounding]
+        self.assertGreater(statistics.mean(gaps), statistics.mean(under) + 12)
 
     def test_trip_hop_backbeat_sits_late_on_two_and_four(self):
         parts = {p['name']: p for p in self.compose.lane('C')}
