@@ -105,8 +105,9 @@ func _judder() -> void:
 	var found := {}
 	var ticks_were := Engine.physics_ticks_per_second
 	Engine.physics_ticks_per_second = 20
+	# (And the station: its hall and a platform, where the Company's arcs and lamps move.)
 	for spot in [Vector3(-9.0, -11.0, 70.0), Vector3(-2.0, -11.0, 75.45), Vector3(19.0, -11.0, 78.0),
-			Vector3(-10.0, -11.0, 40.0), Vector3(-9.0, -11.0, 105.0)]:
+			Vector3(-10.0, -11.0, 40.0), Vector3(-9.0, -11.0, 105.0), Vector3(4.0, -8.0, 3.0), Vector3(10.0, -14.0, -10.0)]:
 		map.player.global_position = spot + Vector3(0.0, 1.05, 0.0)
 		await _frames(30)
 		var was := {}
@@ -124,9 +125,12 @@ func _judder() -> void:
 					continue
 				var node := key as Node3D
 				var now := node.global_transform
+				# (A physics body's own visuals move with it, on its ticks; the tick counter can read a frame late, so
+				# they are left to their body.)
 				if not ticked and node.is_visible_in_tree() and node.is_physics_interpolated_and_enabled() \
-						and not now.is_equal_approx(was[node]):
-					found[String(map.get_path_to(node))] = true
+						and not node.get_parent() is PhysicsBody3D and not now.is_equal_approx(was[node]):
+					found["%s at %s (frame %d, moved %s)" % [map.get_path_to(node), spot, i,
+						now.origin - (was[node] as Transform3D).origin]] = true
 				was[node] = now
 	Engine.physics_ticks_per_second = ticks_were
 	map.player.global_position = map.spawn_point() + Vector3(0.0, 1.05, 0.0)
