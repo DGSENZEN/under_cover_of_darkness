@@ -410,7 +410,10 @@ func _intrusions(meshes: Array, own: Array) -> Array:
 		for mesh: MeshInstance3D in meshes:
 			var box: AABB = mesh.global_transform * mesh.get_aabb()
 			var cut := box.intersection(room)
-			if cut.has_volume() and minf(cut.size.x, minf(cut.size.y, cut.size.z)) > 0.06:
+			# (Its box first; then its faces, past the 6 cm a seam may give: a long cable's box clips corners its tube
+			# never reaches.)
+			if cut.has_volume() and minf(cut.size.x, minf(cut.size.y, cut.size.z)) > 0.06 \
+					and _faces_inside(mesh.mesh, mesh.global_transform, room.grow(-0.06)):
 				into.append("%s into %s %s" % [mesh.name, s["name"], cut.size])
 	return into
 

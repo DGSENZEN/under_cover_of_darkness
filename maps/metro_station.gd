@@ -83,6 +83,9 @@ var sign_boards: Array[Transform3D] = []
 var sign_spaces: Array[String] = []
 var sign_leads: Array[String] = []
 var neon: Array[Node3D] = []
+## The Company's cable runs (each with metas "points", "to", "cables") and its pipe racks on the walls.
+var runs: Array[Node3D] = []
+var racks: Array[Node3D] = []
 ## Its own light (the dressing's fluorescents; the big pieces' brass lamps join them).
 var lights: Array[Light3D] = []
 ## Its flights' ramps: [their ends, as built, and their width]; the ramps themselves.

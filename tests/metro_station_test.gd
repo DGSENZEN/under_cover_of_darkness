@@ -5,6 +5,8 @@ extends Node3D
 
 const STATION := preload("res://maps/metro_station.tscn")
 const Layers := preload("res://scripts/Visual/Layers.gd")
+const StationDressing := preload("res://maps/metro_station_dressing.gd")
+const TeslaArcScript := preload("res://scripts/Visual/TeslaArc.gd")
 ## The MP-68's running pads, centred this far either side of a track's centre (m).
 const PAD_FROM_CENTRE := 1.0
 
@@ -27,6 +29,7 @@ func _ready() -> void:
 	_taquillas()
 	await _turnstiles()
 	_neon()
+	_runs()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -108,6 +111,99 @@ func _taquillas() -> void:
 	_check("S7 the taquillas against their walls, their windows facing the hall", wrong.is_empty(), "%s" % [wrong])
 	_check("S7b a queue's room in front of every window", crowded.is_empty() and not (booths as Array).is_empty(),
 		"%s" % [crowded.slice(0, 6)])
+
+
+## Task 4: the Company's cable runs.
+## S10: six runs, each from the engine's crown junction to the piece it powers (its last point within 1 m of that
+## piece), an arc riding it in the Company's blue, its light among the station's lights. S10b: every point of every run,
+## and every 0.25 m between, at least 2.4 m over the floor under it (the booths' roofs looked through).
+const ENGINE_TERMINAL := Vector3(0.0, 9.9, 0.0)
+
+
+func _runs() -> void:
+	var runs = station.get("runs")
+	var wrong := []
+	var low := []
+	if runs == null or (runs as Array).size() != 6:
+		_check("S10 the Company's six cable runs from the engine", false, "runs %s" % [runs])
+		return
+	# (A booth's roof and a turnstile pylon are no walks: looked through to the floor.)
+	var roofs := []
+	for piece: Node3D in station.taquillas + station.turnstiles:
+		for body: StaticBody3D in piece.find_children("*", "StaticBody3D", true, false):
+			roofs.append(body.get_rid())
+	for run: Node3D in runs:
+		var points: PackedVector3Array = run.get_meta("points", PackedVector3Array())
+		var to := String(run.get_meta("to", ""))
+		var arc = run.get_meta("arc") if run.has_meta("arc") else null
+		if points.is_empty() or points[0].distance_to(ENGINE_TERMINAL) > 0.05:
+			wrong.append("%s starts at %s" % [run.name, points[0] if not points.is_empty() else null])
+			continue
+		var end := points[points.size() - 1]
+		var near := station.find_children(to + "*", "Node3D", true, false).filter(func(n):
+			if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+				var box: AABB = station.global_transform.affine_inverse() * (n as Node3D).global_transform * (n as MeshInstance3D).mesh.get_aabb()
+				return box.grow(1.0).has_point(end)
+			return (n as Node3D).position.distance_to(end) < 1.0)
+		if near.is_empty():
+			wrong.append("%s ends at %s, no %s there" % [run.name, end, to])
+		# (The user, Oct 31: "remove the tesla arcs, add more cables": a bundle of cables, no arc.)
+		if arc != null or int(run.get_meta("cables", 0)) < 3:
+			wrong.append("%s: arc %s, %d cables" % [run.name, arc, int(run.get_meta("cables", 0))])
+		for k in points.size() - 1:
+			var a := points[k]
+			var b := points[k + 1]
+			var steps := maxi(1, int(ceil(a.distance_to(b) / 0.25)))
+			for j in steps + 1:
+				var p := a.lerp(b, float(j) / steps)
+				var under := _floor_under(p, roofs)
+				if under != -INF and p.y - under < 2.4:
+					low.append("%s at %s: %.2f over the floor" % [run.name, p, p.y - under])
+	# S10c: no run through a hanging board (its cable's tube clear of every neon board's box by 3 cm).
+	var boards := station.find_children("*", "MeshInstance3D", true, false).filter(func(m):
+		return m.get_meta("kind", "") == "neon_board")
+	var through := []
+	for run: Node3D in runs:
+		var points: PackedVector3Array = run.get_meta("points", PackedVector3Array())
+		for k in points.size() - 1:
+			for j in 9:
+				var p := points[k].lerp(points[k + 1], j / 8.0)
+				for board: MeshInstance3D in boards:
+					var box: AABB = station.global_transform.affine_inverse() * board.global_transform * board.mesh.get_aabb()
+					if box.grow(0.032 + 0.03).has_point(p):
+						through.append("%s at %s by %s" % [run.name, p, board.name])
+	_check("S10c no run through a hanging board", through.is_empty(), "%d: %s" % [through.size(), through.slice(0, 4)])
+	_check("S10 the Company's six cable runs from the engine", wrong.is_empty(), "%s" % [wrong.slice(0, 6)])
+	_check("S10b every run 2.4 m over the walks", low.is_empty(), "%d: %s" % [low.size(), low.slice(0, 5)])
+	var arcs := station.find_children("*", "Node3D", true, false).filter(func(n): return n.get_script() == TeslaArcScript)
+	_check("S10d no tesla arc in the station", arcs.is_empty(), "%d" % arcs.size())
+
+	# S10e: the Company's pipe racks along the hall's long walls and the platforms' back walls: on their wall's face
+	# (within 0.6 m), 2.4 m over the floor at least, clear of every run and every hanging board.
+	var racks = station.get("racks")
+	var bad := []
+	if racks == null or (racks as Array).size() < 6:
+		bad.append("racks %s" % [racks])
+		racks = []
+	for rack: MeshInstance3D in racks:
+		var box: AABB = station.global_transform.affine_inverse() * rack.global_transform * rack.mesh.get_aabb()
+		var face := 14.0 - float(station.WALL) - 0.032
+		var wall_z := box.end.z if box.get_center().z > 0.0 else box.position.z
+		if absf(absf(wall_z) - face) > 0.6:
+			bad.append("%s off its wall: z %.2f" % [rack.name, wall_z])
+		var under := _floor_under(Vector3(box.get_center().x, box.position.y - 0.01, box.get_center().z), roofs)
+		if under != -INF and box.position.y - under < 2.4:
+			bad.append("%s %.2f over the floor" % [rack.name, box.position.y - under])
+		for run: Node3D in runs:
+			for p: Vector3 in run.get_meta("points", PackedVector3Array()):
+				if box.grow(0.05).has_point(p):
+					bad.append("%s crosses %s at %s" % [rack.name, run.name, p])
+					break
+		for board: MeshInstance3D in boards:
+			var other: AABB = station.global_transform.affine_inverse() * board.global_transform * board.mesh.get_aabb()
+			if other.intersects(box):
+				bad.append("%s through %s" % [rack.name, board.name])
+	_check("S10e the Company's pipe racks on the walls", bad.is_empty(), "%s" % [bad.slice(0, 6)])
 
 
 ## The neon boards' faces (tools/eclipse/station_neon.py's NEON_FACE, and its middle under the ceiling).

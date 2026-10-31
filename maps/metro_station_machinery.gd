@@ -9,6 +9,10 @@ const Painterly := preload("res://scripts/Visual/Painterly.gd")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 
 const NEON_KIT := "res://assets/eclipse/kit/station_neon.glb"
+const RUNS_KIT := "res://assets/eclipse/kit/station_runs.glb"
+const RUNS_JSON := "res://assets/eclipse/kit/station_runs.json"
+const PIPES_KIT := "res://assets/eclipse/kit/station_pipes.glb"
+
 ## The neon's own hanging board (station_neon's neon_board, in place of the shell's sign_board where neon hangs: the
 ## user, Oct 31, "enlarge the symbols" and "make sure they fit on the board"): its face's middle under the ceiling and
 ## its half-width (m); the arrow and the symbol at its ends, half again their drawn size, their whole tube inside the
@@ -43,6 +47,50 @@ const BLADE_SYMBOL_KIND := "eye"
 
 static func dress(station, root: Node3D) -> void:
 	_neon(station, root)
+	_runs(station, root)
+	_racks(station, root)
+
+
+## The Company's pipe racks on the hall's long walls and the platforms' back walls (station_pipes: one piece each in the
+## set's frame).
+static func _racks(station, root: Node3D) -> void:
+	if not ResourceLoader.exists(PIPES_KIT):
+		return
+	var kit := SetKit.kit(PIPES_KIT)
+	var look := Painterly.material(SetKit.painted(["station_pipes.png", "station_pipes_base.png"]), &"bespoke")
+	look.set_shader_parameter("painted_light", 0.0)
+	look.set_shader_parameter("ramp_amount", 0.0)
+	for kind: String in kit:
+		if not kind.begins_with("rack_"):
+			continue
+		var rack := SetKit.place(root, kit[kind], look, kind, Vector3.ZERO, 0.0, false)
+		rack.layers = Layers.STATION_HALL if kind.begins_with("rack_hall") else Layers.STATION_BELOW
+		station.racks.append(rack)
+
+
+## The Company's cable runs from the engine's crown (station_runs: one piece each in the set's frame, a bundle of
+## cables; the user dropped the tesla arcs, Oct 31).
+static func _runs(station, root: Node3D) -> void:
+	if not ResourceLoader.exists(RUNS_KIT) or not FileAccess.file_exists(RUNS_JSON):
+		return
+	var kit := SetKit.kit(RUNS_KIT)
+	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(RUNS_JSON))
+	var look := Painterly.material(SetKit.painted(["station_runs.png", "station_runs_base.png"]), &"bespoke")
+	look.set_shader_parameter("painted_light", 0.0)
+	look.set_shader_parameter("ramp_amount", 0.0)
+	for name: String in data:
+		var kind := "run_" + name
+		if not kit.has(kind):
+			continue
+		var run := SetKit.place(root, kit[kind], look, kind, Vector3.ZERO, 0.0, false)
+		run.layers = Layers.STATION_HALL | Layers.STATION_STAIRS | Layers.STATION_BELOW
+		var points := PackedVector3Array()
+		for p: Array in data[name]["points"]:
+			points.append(Vector3(p[0], p[1], p[2]))
+		run.set_meta("points", points)
+		run.set_meta("to", String(data[name]["to"]))
+		run.set_meta("cables", int(data[name].get("cables", 1)))
+		station.runs.append(run)
 
 
 ## A silent neon sign of `mesh` in `colour` at `place` (the set's frame), its light on `level` and the movers; listed

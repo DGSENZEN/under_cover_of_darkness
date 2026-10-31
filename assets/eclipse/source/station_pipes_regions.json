@@ -1,0 +1,10 @@
+{
+ "slots": [
+  "brass",
+  "iron",
+  "pipe_red",
+  "pipe_green"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 68.69
+}

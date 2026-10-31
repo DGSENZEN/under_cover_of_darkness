@@ -3371,6 +3371,82 @@ class StationNeon(unittest.TestCase):
             self.assertEqual(slot, "sign", side)
 
 
+class StationRuns(unittest.TestCase):
+    """The Company's cable runs (tools/eclipse/station_runs.py; docs/superpowers/plans/2026-10-31-station-machinery.md
+    Task 4): one piece per run in the set's frame, its cable chunky brass sagging between its hangers, an insulator bell
+    at each; every run from the engine's crown junction; its sampled path written to station_runs.json for the arcs."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_runs
+        cls.kit = station_runs
+        station_runs.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_six_runs_from_the_engine_chunky(self):
+        self.assertEqual(len(self.kit.RUNS), 6)
+        self.assertGreaterEqual(self.kit.CABLE_R, 0.03)
+        for name, run in self.kit.RUNS.items():
+            path = self.kit.path(name)
+            start = Vector(path[0])
+            self.assertLessEqual((start - Vector(self.kit.ENGINE_TERMINAL)).length, 0.05, name)
+            self.assertIn("to", run)
+            # (Its cable within its hangers' sag of the line between its anchors: no kinks, no loops.)
+            self.assertGreater(len(path), len(run["anchors"]), name)
+
+    def test_each_run_a_bundle_of_cables(self):
+        # (The user, Oct 31: "add more cables": each run three cables side by side, held by its hangers.)
+        self.assertGreaterEqual(len(self.kit.BUNDLE), 3)
+        offsets = sorted(self.kit.BUNDLE)
+        self.assertTrue(all(b - a >= 2 * self.kit.CABLE_R + 0.02 for a, b in zip(offsets, offsets[1:])))
+
+    def test_the_json_carries_each_runs_path(self):
+        import json
+        self.kit.write_json()
+        data = json.loads(self.kit.JSON.read_text())
+        self.assertEqual(sorted(data), sorted(self.kit.RUNS))
+        for name in data:
+            self.assertEqual(data[name]["to"], self.kit.RUNS[name]["to"])
+            self.assertEqual(len(data[name]["points"]), len(self.kit.path(name)))
+
+
+class StationPipes(unittest.TestCase):
+    """The Company's pipe racks (tools/eclipse/station_pipes.py; the user, Oct 31: "add more cables, piping around"):
+    big pipes along the hall's long walls and the platforms' back walls on iron brackets, each rack a piece of its own in
+    the set's frame; closed, in budget, through the gate."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_pipes
+        cls.kit = station_pipes
+        station_pipes.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_big_pipes_on_brackets(self):
+        self.assertGreaterEqual(len(self.kit.PIPES), 3)
+        self.assertGreaterEqual(max(r for _, r, _ in self.kit.PIPES), 0.08)
+        self.assertLessEqual(self.kit.BRACKET_EVERY, 2.4)
+        self.assertGreaterEqual(len(self.kit.RACKS), 6)
+
+
 class YourShapes(unittest.TestCase):
     """The user's shapes kept through a kit's rebuild (tools/eclipse/your_shapes.py; docs/superpowers/plans/
     2026-10-30-metro-station.md Task 2): a vertex the user moved in a piece's .blend survives the next build; an
