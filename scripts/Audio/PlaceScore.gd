@@ -6,7 +6,8 @@ extends Node
 ## set of stems on a player of its own, started on one of the bed's phrase
 ## lines and faded by how much it is where you stand (PlaceZones). Depth turns
 ## the bed's drone from city to deep and thins the themes' city parts. A theme
-## you stay with grows full, then after a while rests on its bass alone.
+## you stay with grows full, then after a while rests on its bass alone. What
+## you have done picks a theme's variants (PeopleState), on its phrase lines.
 ## Everything is timed by the bed's audio position, never by frame time, so
 ## slow motion and hit-stops leave the music alone.
 ## Loads score.json (tools/prepare_place_score.py) and the .tres it names.
@@ -41,6 +42,8 @@ var position_source: Callable
 ## The bed's position where its next mixed chunk starts (s): themes start from it.
 var raw_source: Callable
 var zones: PlaceZones
+## What the people of the city remember (a PeopleState, or null).
+var people_source: Callable
 var available := false
 var score := {}
 var depth := 0.0
@@ -65,6 +68,8 @@ func _ready() -> void:
 		return
 	if zones == null and FileAccess.file_exists(plan_path):
 		zones = PlaceZones.from_plan(JSON.parse_string(FileAccess.get_file_as_string(plan_path)), score.get("spaces", {}), score.get("circles", []))
+	if not people_source.is_valid():
+		people_source = func() -> Variant: return CityState.people
 	if not listener_source.is_valid():
 		listener_source = _listener
 	if not raw_source.is_valid():
@@ -114,6 +119,11 @@ func theme_started_at(theme: StringName) -> float:
 ## How much the theme is where you are now, glided (0..1).
 func theme_weight(theme: StringName) -> float:
 	return float(_themes[theme].weight) if _themes.has(theme) else 0.0
+
+
+## The stem playing a part of a theme now (its variant, or its default).
+func part_choice(theme: StringName, part: StringName) -> StringName:
+	return StringName(_themes[theme].choice.get(part, &"")) if _themes.has(theme) else &""
 
 
 ## &"calm", &"full" or &"rest".
@@ -200,7 +210,8 @@ func _make_set(set_name: StringName, entry: Dictionary) -> Dictionary:
 		stream.set_sync_stream_volume(int(stem.index), OUT)
 	return {"name": set_name, "entry": entry, "stream": stream, "player": player, "gains": gains,
 		"loop": float(entry.loop_seconds), "weight": 0.0, "playing": false, "scheduled_at": -1.0,
-		"started_at": -1.0, "silent_for": 0.0, "held": 0.0, "away": 0.0, "intensity": &"calm", "rest_left": 0.0}
+		"started_at": -1.0, "silent_for": 0.0, "held": 0.0, "away": 0.0, "intensity": &"calm", "rest_left": 0.0,
+		"choice": {}, "line": -1}
 
 
 func _mix_bed(dt: float) -> void:
@@ -228,8 +239,15 @@ func _step_theme(set: Dictionary, dt: float) -> void:
 			return
 		_start(set)
 	_grow(set, dt)
+	# Its variants change on its phrase lines only, never mid-phrase.
+	var line := floori((_time - float(set.started_at) + MenuClock.SLACK) / _phrase)
+	if line != int(set.line):
+		set.line = line
+		_choose(set)
 	for stem in set.entry.stems:
-		_slide(set, StringName(stem.id), _target(set, stem), dt)
+		var id := StringName(stem.id)
+		var swapped_out: bool = stem.has("part") and set.choice.get(StringName(stem.part), id) != id
+		_slide(set, id, OUT if swapped_out else _target(set, stem), dt, 1 if swapped_out else FADE_BARS)
 	_apply(set)
 	# A phrase at silence and nothing calling it back: let go of its player.
 	if theme_gain_db(StringName(set.name)) <= OUT + 0.5 and float(set.weight) <= NONE:
@@ -259,6 +277,24 @@ func _start(set: Dictionary) -> void:
 	set.held = 0.0
 	set.away = 0.0
 	set.intensity = &"calm"
+	set.line = -1
+
+
+## For each part: the first of its variants whose condition holds, else the one with none.
+func _choose(set: Dictionary) -> void:
+	var people: Variant = people_source.call() if people_source.is_valid() else null
+	var chosen := {}
+	for stem in set.entry.stems:
+		if not stem.has("part"):
+			continue
+		var part := StringName(stem.part)
+		if chosen.has(part):
+			continue
+		if not stem.has("variant"):
+			chosen[part] = StringName(stem.id)
+		elif people != null and people.holds(String(stem.variant.when), String(stem.variant.character)):
+			chosen[part] = StringName(stem.id)
+	set.choice = chosen
 
 
 ## Calm, then full after a while with you, then a rest on its bass alone.
@@ -298,15 +334,15 @@ func _target(set: Dictionary, stem: Dictionary) -> float:
 	return maxf(target, OUT)
 
 
-## A gain sliding toward its target: up over SWELL_BARS from ENTRY, down to OUT over FADE_BARS.
-func _slide(set: Dictionary, id: StringName, target: float, dt: float) -> void:
+## A gain sliding toward its target: up over SWELL_BARS from ENTRY, down to OUT over fade_bars.
+func _slide(set: Dictionary, id: StringName, target: float, dt: float, fade_bars := FADE_BARS) -> void:
 	var gain := float(set.gains[id])
 	if target > gain:
 		if gain < ENTRY:
 			gain = ENTRY
 		gain = move_toward(gain, target, (0.0 - ENTRY) / (SWELL_BARS * _bar) * dt)
 	else:
-		gain = move_toward(gain, target, (0.0 - OUT) / (FADE_BARS * _bar) * dt)
+		gain = move_toward(gain, target, (0.0 - OUT) / (fade_bars * _bar) * dt)
 	set.gains[id] = gain
 
 

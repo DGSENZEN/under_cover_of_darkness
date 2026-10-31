@@ -59,6 +59,7 @@ func _ready() -> void:
 	clock_checks()
 	zone_checks()
 	score_checks()
+	variant_checks()
 	await get_tree().process_frame
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failures else 0)
@@ -192,4 +193,29 @@ func score_checks() -> void:
 	score = make_score("res://tests/fixtures/place_score/nowhere.json")
 	check(not score.available, "S13 no score, silent")
 	run_for(score, 1.0)
+	score.free()
+
+func variant_checks() -> void:
+	var people: RefCounted = preload("res://scripts/Level/PeopleState.gd").new()
+	var score := make_score()
+	var zones := score.zones as StubZones
+	score.people_source = func() -> RefCounted: return people
+	zones.w = {"b": 1.0}
+	run_for(score, PHRASE + 2.0)
+	check(score.part_choice(&"b", &"lead") == &"lead", "V1 not met: the plain lead")
+	people.meet("curandera")
+	run_for(score, 1.0)
+	check(score.part_choice(&"b", &"lead") == &"lead", "V2 met mid-phrase: no change before the line")
+	run_for(score, 1.05)
+	check(score.part_choice(&"b", &"lead") == &"lead_met", "V2 on the next phrase line, her variant")
+	run_for(score, BAR)
+	check(score.stem_gain_db(&"b", &"lead_met") >= -1.0 and score.stem_gain_db(&"b", &"lead") <= -79.0, "V3 a bar after the switch: %.1f / %.1f" % [score.stem_gain_db(&"b", &"lead_met"), score.stem_gain_db(&"b", &"lead")])
+	score.free()
+
+	score = make_score()
+	zones = score.zones as StubZones
+	score.people_source = func() -> Variant: return null
+	zones.w = {"b": 1.0}
+	run_for(score, PHRASE + 2.0)
+	check(score.part_choice(&"b", &"lead") == &"lead" and score.stem_gain_db(&"b", &"lead") >= -1.0, "V4 no one remembered: the defaults")
 	score.free()
