@@ -24,6 +24,7 @@ func _ready() -> void:
 	_track()
 	_dressed()
 	_lit()
+	_taquillas()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -44,6 +45,79 @@ func _track() -> void:
 				if absf(top - float(station.PAD_TOP)) > 0.01:
 					wrong.append("pad at x %d, z %.1f: %.2f" % [x, pad_z, top])
 	_check("S5 two tracks laid end to end", wrong.is_empty(), "%d: %s" % [wrong.size(), wrong.slice(0, 6)])
+
+
+## Task 7: the taquillas.
+## The booths' places (the plan's): the east against the hall's north wall at x 16…24 (the plan's ticket booth), the
+## west against its south wall at x −24…−16; the windows each has.
+const TAQUILLAS := {"east": [16.0, 24.0, -1.0, 3], "west": [-24.0, -16.0, 1.0, 2]}
+## How far in front of a window the queue stands clear, and how wide (m).
+const QUEUE := Vector2(2.0, 1.0)
+
+
+## S7: each booth stands against its wall (its back on the wall's tiles), within its x range, its windows facing into
+## the hall. S7b: 2 m of clear floor in front of each window, nothing solid in it and no dressing drawn in it.
+func _taquillas() -> void:
+	var booths = station.get("taquillas")
+	var wrong := []
+	var crowded := []
+	var tiles := 14.0 - float(station.WALL) - 0.067
+	var hall_floor: float = station.spaces()["hall"]["floor"]
+	var drawn := _drawn()
+	if booths == null or (booths as Array).size() != TAQUILLAS.size():
+		wrong.append("booths: %s" % [booths])
+		booths = []
+	for booth: Node3D in booths:
+		var place: Array = TAQUILLAS.get(booth.get_meta("side", ""), [])
+		if place.is_empty():
+			wrong.append("%s: no side" % booth.name)
+			continue
+		var box := _box_of(booth)
+		var back := box.position.z if place[2] < 0.0 else box.end.z
+		if absf(absf(back) - tiles) > 0.02 or signf(back) != place[2]:
+			wrong.append("%s: back at z %.3f, the tiles at %.3f" % [booth.name, back, place[2] * tiles])
+		if box.position.x < place[0] - 0.01 or box.end.x > place[1] + 0.01:
+			wrong.append("%s: x %.2f…%.2f" % [booth.name, box.position.x, box.end.x])
+		var windows: Array = booth.get_meta("windows", [])
+		if windows.size() != place[3]:
+			wrong.append("%s: %d windows" % [booth.name, windows.size()])
+		var facing: Vector3 = booth.get_meta("facing", Vector3.ZERO)
+		if facing.distance_to(Vector3(0.0, 0.0, -place[2])) > 0.01:
+			wrong.append("%s: facing %s" % [booth.name, facing])
+		for w: Vector3 in windows:
+			# (The queue's room: from the counter's edge out, a window wide, a head tall.)
+			var room := AABB(Vector3(w.x - QUEUE.y / 2.0, hall_floor + 0.1, minf(w.z, w.z + facing.z * QUEUE.x)),
+				Vector3(QUEUE.y, 1.9, QUEUE.x))
+			var shape := BoxShape3D.new()
+			shape.size = room.size
+			var q := PhysicsShapeQueryParameters3D.new()
+			q.shape = shape
+			q.transform = station.global_transform * Transform3D(Basis.IDENTITY, room.get_center())
+			var player: CharacterBody3D = station.get("player")
+			if player != null:
+				q.exclude = [player.get_rid()]
+			if not station.get_world_3d().direct_space_state.intersect_shape(q, 1).is_empty():
+				crowded.append("%s at x %.1f: solid" % [booth.name, w.x])
+			for b: Dictionary in drawn["boxes"]:
+				if (b["aabb"] as AABB).intersects(room):
+					crowded.append("%s at x %.1f: %s" % [booth.name, w.x, b["kind"]])
+	_check("S7 the taquillas against their walls, their windows facing the hall", wrong.is_empty(), "%s" % [wrong])
+	_check("S7b a queue's room in front of every window", crowded.is_empty() and not (booths as Array).is_empty(),
+		"%s" % [crowded.slice(0, 6)])
+
+
+## A node's meshes' box in the set's frame.
+func _box_of(node: Node3D) -> AABB:
+	var box := AABB()
+	var first := true
+	for m in node.find_children("*", "MeshInstance3D", true, false) + ([node] if node is MeshInstance3D else []):
+		var mesh := (m as MeshInstance3D).mesh
+		if mesh == null:
+			continue
+		var aabb: AABB = station.global_transform.affine_inverse() * (m as Node3D).global_transform * mesh.get_aabb()
+		box = aabb if first else box.merge(aabb)
+		first = false
+	return box
 
 
 ## S1: the shell at the plan's measure: its floors, its ceilings, and every gap of its spaces open (a ray through its
@@ -181,6 +255,11 @@ func _dressed() -> void:
 	_check("S4b no word on it", words.is_empty(), "%s" % [words.slice(0, 4)])
 
 	var low := []
+	# (A booth's roof is no walk: its bodies are looked through to the floor.)
+	var roofs := []
+	for booth: Node3D in station.get("taquillas") if station.get("taquillas") != null else []:
+		for body: StaticBody3D in booth.find_children("*", "StaticBody3D", true, false):
+			roofs.append(body.get_rid())
 	var floors := {}
 	for name: String in station.spaces():
 		floors[name] = station.spaces()[name]
@@ -190,7 +269,7 @@ func _dressed() -> void:
 		var aabb: AABB = box["aabb"]
 		if box["kind"] == "line_map":
 			continue
-		var under := _floor_under(Vector3(aabb.get_center().x, aabb.position.y, aabb.get_center().z))
+		var under := _floor_under(Vector3(aabb.get_center().x, aabb.position.y, aabb.get_center().z), roofs)
 		if aabb.position.y - under < 2.4:
 			low.append("%s at %s, %.2f over its floor" % [box["kind"], aabb.get_center().snapped(Vector3.ONE * 0.1),
 				aabb.position.y - under])
@@ -458,8 +537,8 @@ func _covered(drawn: Dictionary, at: Vector3) -> bool:
 
 
 ## The floor under `at` (the shell's), its height; -INF if none.
-func _floor_under(at: Vector3) -> float:
-	var hit := _ray(at, at - Vector3(0.0, 20.0, 0.0))
+func _floor_under(at: Vector3, skip: Array = []) -> float:
+	var hit := _ray(at, at - Vector3(0.0, 20.0, 0.0), skip)
 	return hit.y if hit != at - Vector3(0.0, 20.0, 0.0) else -INF
 
 
@@ -474,12 +553,11 @@ func _edge_of(outline: Array, a: Vector2, b: Vector2) -> Array:
 	return []
 
 
-func _ray(from: Vector3, to: Vector3) -> Vector3:
+func _ray(from: Vector3, to: Vector3, skip: Array = []) -> Vector3:
 	var space := station.get_world_3d().direct_space_state
 	var q := PhysicsRayQueryParameters3D.create(station.to_global(from), station.to_global(to))
 	var player: CharacterBody3D = station.get("player")
-	if player != null:
-		q.exclude = [player.get_rid()]
+	q.exclude = skip + ([player.get_rid()] if player != null else [])
 	var hit := space.intersect_ray(q)
 	return station.to_local(hit.position) if not hit.is_empty() else to
 

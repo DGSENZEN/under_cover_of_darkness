@@ -15,6 +15,7 @@ const Layers := preload("res://scripts/Visual/Layers.gd")
 const SHELL_KIT := "res://assets/eclipse/kit/station_shell.glb"
 const TRACK_KIT := "res://assets/eclipse/kit/station_track.glb"
 const WALLS_KIT := "res://assets/eclipse/kit/underground_walls.glb"
+const TAQUILLAS_KIT := "res://assets/eclipse/kit/station_taquillas.glb"
 ## station_shell's measures (tools/eclipse/station_shell.py): a panel's width, the tiled panels' height, the tiles' face
 ## off the wall, a floor slab's and a ceiling panel's side, the coping's reach, a coffer's side, a pit face's height, a
 ## tread's depth and rise and a flight's width, a handrail's run, the line map's width.
@@ -75,6 +76,19 @@ const STAIR_LAMPS := [Vector3(-4.0, 3.5, -27.0), Vector3(-4.0, 3.5, -19.0), Vect
 	Vector3(4.0, 3.5, 27.0), Vector3(4.0, 3.5, 19.0), Vector3(4.0, 9.5, 17.0)]
 const STAIR_LAMP := Vector2(1.2, 9.0)
 const TUBE_GLOW := 2.5
+## The taquillas (tools/eclipse/station_taquillas.py's measures): each booth's middle along x, its windows' count, the
+## wall it stands on (-1 the north, 1 the south); a window's width and the pier between two, the corner post's; how far
+## the counter's edge stands out from the wall and its height; the ward lamp's globe out from the wall and up.
+const TAQUILLAS := {"east": [20.0, 3, -1.0], "west": [-20.0, 2, 1.0]}
+const TAQUILLA_WINDOW := 1.4
+const TAQUILLA_PIER := 0.4
+const TAQUILLA_POST := 0.36
+const TAQUILLA_COUNTER := Vector2(2.32, 1.05)
+const TAQUILLA_LAMP := Vector2(2.45, 2.86)
+## The Company's ward light (KitLoader's ward_cage_lamp), its energy and reach, and its globe's glow.
+const WARD := Color("#CFE8F0")
+const WARD_LAMP := Vector2(0.6, 4.5)
+const WARD_GLOW := 2.0
 
 
 static func dress(station) -> void:
@@ -105,6 +119,7 @@ static func dress(station) -> void:
 			_many(root, key, kind, kit[kind], look, batches[key])
 	_track(station, root)
 	_tablets(station, root)
+	_taquillas(station, root)
 	_light(station, root)
 	_shell_layers(station)
 
@@ -655,6 +670,69 @@ static func _tablets(station, root: Node3D) -> void:
 			var start := Vector3(x, TABLET_FOOT, face_z) - along * 0.5
 			transforms.append(Transform3D(Basis(along, Vector3.UP, inward), start))
 	_many(root, "name_tablet@platform_n", "name_tablet", walls["name_tablet"], look, transforms)
+
+
+## The Company's taquillas, where it sells the rides through brass bars: the east booth's three windows on the north
+## wall on the unpaid side of the east bank, the west booth's two on the south wall; each solid (its own faces), on the
+## hall's layer, a ward lamp over each window lit in the Company's cold light.
+static func _taquillas(station, root: Node3D) -> void:
+	if not ResourceLoader.exists(TAQUILLAS_KIT):
+		return
+	var kit := SetKit.kit(TAQUILLAS_KIT)
+	var look := Painterly.material(SetKit.painted(["station_taquillas.png", "station_taquillas_base.png"]), &"bespoke")
+	_plainly_lit(look)
+	var globe := _ward_globe()
+	var hall_floor: float = station.spaces()["hall"]["floor"]
+	var tiles: float = 14.0 - float(station.WALL) - FACE
+	for side: String in TAQUILLAS:
+		var spec: Array = TAQUILLAS[side]
+		var wall: float = spec[2]
+		var kind := "taquilla_" + side
+		if not kit.has(kind):
+			continue
+		# (The kit faces +z; on the south wall it is turned to face north.)
+		var yaw := 0.0 if wall < 0.0 else PI
+		var booth := SetKit.place(root, kit[kind], look, kind, Vector3(spec[0], hall_floor, wall * tiles), yaw, true,
+			true)
+		booth.layers = Layers.STATION_HALL
+		for i in booth.mesh.get_surface_count():
+			var slot: Material = booth.mesh.surface_get_material(i)
+			if slot != null and slot.resource_name.begins_with("glass"):
+				booth.set_surface_override_material(i, globe)
+		var facing := Vector3(0.0, 0.0, -wall)
+		var count: int = spec[1]
+		var length := count * TAQUILLA_WINDOW + (count - 1) * TAQUILLA_PIER + 2.0 * TAQUILLA_POST
+		var windows: Array[Vector3] = []
+		for k in count:
+			var along := -length / 2.0 + TAQUILLA_POST + TAQUILLA_WINDOW / 2.0 + k * (TAQUILLA_WINDOW + TAQUILLA_PIER)
+			var x: float = spec[0] + along * (1.0 if wall < 0.0 else -1.0)
+			windows.append(Vector3(x, hall_floor + TAQUILLA_COUNTER.y, wall * tiles + facing.z * TAQUILLA_COUNTER.x))
+			var lamp := OmniLight3D.new()
+			lamp.name = "ward_lamp"
+			lamp.light_color = WARD
+			lamp.light_energy = WARD_LAMP.x
+			lamp.omni_range = WARD_LAMP.y
+			lamp.shadow_enabled = false
+			lamp.light_cull_mask = Layers.STATION_HALL | Layers.WORLD | Layers.ACTORS | Layers.VIEWMODEL | Layers.FX \
+				| Layers.GEM_PROBE
+			root.add_child(lamp, true)
+			lamp.position = Vector3(x, hall_floor + TAQUILLA_LAMP.y, wall * tiles + facing.z * TAQUILLA_LAMP.x)
+			station.lights.append(lamp)
+		booth.set_meta("side", side)
+		booth.set_meta("windows", windows)
+		booth.set_meta("facing", facing)
+		station.taquillas.append(booth)
+
+
+## A ward lamp's globe: the Company's cold light through its glass.
+static func _ward_globe() -> StandardMaterial3D:
+	var glow := StandardMaterial3D.new()
+	glow.albedo_color = WARD
+	glow.emission_enabled = true
+	glow.emission = WARD
+	glow.emission_energy_multiplier = WARD_GLOW
+	glow.roughness = 0.3
+	return glow
 
 
 static func _many(root: Node3D, key: String, kind: String, mesh: Mesh, look: Material, transforms: Array) -> void:

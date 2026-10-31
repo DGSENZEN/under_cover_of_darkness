@@ -1,0 +1,22 @@
+{
+ "slots": [
+  "wood",
+  "chiluca",
+  "tezontle",
+  "brass",
+  "iron",
+  "obsidian",
+  "mortar",
+  "talavera_cobalt",
+  "talavera_glaze",
+  "talavera_yellow",
+  "paper",
+  "sign",
+  "print_saint",
+  "tin",
+  "marigold",
+  "glass"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 132.63
+}

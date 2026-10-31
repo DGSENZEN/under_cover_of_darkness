@@ -2795,6 +2795,205 @@ class StationTrack(unittest.TestCase):
             self.assertAlmostEqual(_hit(o, ((x0 + x1) / 2, y, 1.0), (0.0, 0.0, -1.0)).z, 0.0, delta=0.001, msg=y)
 
 
+class StationTaquillas(unittest.TestCase):
+    """The taquillas (tools/eclipse/station_taquillas.py; docs/superpowers/plans/2026-10-30-metro-station.md Task 7):
+    the Light Company's two booths, each closed, in budget, through the gate; standing on the floor with its back on the
+    wall's face (y = 0), its windows facing the hall (-y); through each window the seller's side seen between brass bars,
+    a dished cash slot let into its chiluca counter under them, a blank sign and the Company's ward lamp over it. Built to
+    the house's inspirations: a tezontle plinth, estípites between the windows, Talavera under them, a stepped fret and a
+    stepped chiluca crown, a crest over the middle bearing the Company's emblem (the user's), the seller's own things."""
+
+    @classmethod
+    def setUpClass(cls):
+        import station_taquillas
+        cls.kit = station_taquillas
+        station_taquillas.build()
+        cls.objects = {o.name: o for o in bpy.context.scene.objects if o.type == "MESH"}
+
+    def _extent(self, name):
+        vs = _world(self.objects[name])
+        return [(min(v[i] for v in vs), max(v[i] for v in vs)) for i in range(3)]
+
+    def _slot(self, o, hit_index):
+        return o.data.materials[o.data.polygons[hit_index].material_index].name
+
+    def _ray(self, o, at, way):
+        tree = BVHTree.FromObject(o, bpy.context.evaluated_depsgraph_get())
+        found = tree.ray_cast(Vector(at), Vector(way), 20.0)
+        return (found[0], self._slot(o, found[2])) if found[0] is not None else (None, None)
+
+    def test_pieces_closed_in_budget_through_the_gate(self):
+        import common
+        import gate
+        self.assertEqual(sorted(self.objects), sorted(n for n, _ in self.kit.PIECES))
+        self.assertEqual({n: _closed(o) for n, o in self.objects.items() if _closed(o)}, {})
+        for n, o in self.objects.items():
+            faces, tris, _ = common.dump_faces([o])
+            self.assertEqual(gate.check(faces, tris, [], budget=self.kit.BUDGET[n], sliver=self.kit.SLIVER[n])[:3], [], n)
+
+    def test_a_booth_stands_on_the_floor_its_back_on_the_wall(self):
+        # (8 m of wall each, the hall's 5 m clear over it for its coffers' fittings.)
+        for n, count in self.kit.WINDOWS.items():
+            (x0, x1), (y0, y1), (z0, z1) = self._extent(n)
+            self.assertAlmostEqual(z0, 0.0, delta=0.001, msg=n)
+            self.assertAlmostEqual(y1, 0.0, delta=0.001, msg=n)
+            self.assertLessEqual(x1 - x0, 8.0, n)
+            self.assertAlmostEqual(x0, -x1, delta=0.01, msg=n)
+            # (Its crest under the hall's coffers and their fittings, 4.4 m up.)
+            self.assertLessEqual(z1, 3.8, n)
+            self.assertEqual(len(self.kit.window_xs(count)), count, n)
+            self.assertIn(count, (2, 3), n)
+
+    def test_through_every_window_the_seller_is_seen_between_brass_bars(self):
+        front = -self.kit.DEPTH
+        z = self.kit.COUNTER + (self.kit.WINDOW[1] - self.kit.COUNTER) * 0.4
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for k, cx in enumerate(self.kit.window_xs(count)):
+                bars = self.kit.bar_xs(cx)
+                self.assertGreaterEqual(len(bars), 6, (n, k))
+                for a, b in zip(bars, bars[1:]):
+                    hit, _ = self._ray(o, ((a + b) / 2, -5.0, z), (0.0, 1.0, 0.0))
+                    self.assertGreater(hit.y, front + 0.1, (n, k, a))
+                    # (Between two bars a hand's width at most.)
+                    self.assertLessEqual(b - a, 0.13, (n, k, a))
+                hit, slot = self._ray(o, (bars[1], -5.0, z), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "brass", (n, k))
+                self.assertLess(hit.y, front + 0.1, (n, k))
+
+    def test_the_counter_carries_a_dished_slot_under_the_bars(self):
+        front = -self.kit.DEPTH
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count):
+                # (The counter's stone out in front of the window, at its height.)
+                # (Rays down from inside the window's head, under the cornice and the lamp.)
+                top = self.kit.WINDOW[1] - 0.05
+                hit, slot = self._ray(o, (cx + 0.4, front - self.kit.COUNTER_OUT * 0.75, top), (0.0, 0.0, -1.0))
+                self.assertAlmostEqual(hit.z, self.kit.COUNTER, delta=0.002, msg=(n, cx))
+                self.assertEqual(slot, "chiluca", (n, cx))
+                # (The dish under the slot sunk in it, brass worn by the coins; through the slot the seller's side.)
+                hit, slot = self._ray(o, (cx, front - 0.05, top), (0.0, 0.0, -1.0))
+                self.assertEqual(slot, "brass", (n, cx))
+                self.assertLess(hit.z, self.kit.COUNTER - 0.03, (n, cx))
+                hit, _ = self._ray(o, (cx, -5.0, self.kit.COUNTER + self.kit.SLOT[1] / 2), (0.0, 1.0, 0.0))
+                self.assertGreater(hit.y, front + 0.1, (n, cx))
+
+    def test_a_blank_sign_and_the_companys_lamp_over_every_window(self):
+        front = -self.kit.DEPTH
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count):
+                _, slot = self._ray(o, (cx, -5.0, sum(self.kit.SIGN) / 2), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "sign", (n, cx))
+                hit, slot = self._ray(o, (cx, self.kit.LAMP[0], 3.6), (0.0, 0.0, -1.0))
+                self.assertIn(slot, ("brass", "glass"), (n, cx))
+                self.assertGreater(hit.z, self.kit.WINDOW[1], (n, cx))
+                self.assertLess(self.kit.LAMP[0], front, n)
+
+    def _clear_of_lamps(self, count, x):
+        return all(abs(x - cx) > 0.3 for cx in self.kit.window_xs(count))
+
+    def test_it_stands_on_tezontle_under_a_stepped_chiluca_crown(self):
+        # (Mayan-Revival setbacks: the cornice out over the frieze, each tier over it set further back.)
+        front = -self.kit.DEPTH
+        self.assertGreaterEqual(len(self.kit.CROWN), 3)
+        outs = [out for _, _, out in sorted(self.kit.CROWN)]
+        self.assertEqual(outs[1:], sorted(outs[1:], reverse=True))
+        self.assertTrue(all(a > b for a, b in zip(outs[1:], outs[2:])), outs)
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            x = self.kit.window_xs(count)[0] - 0.45
+            _, slot = self._ray(o, (x, -5.0, self.kit.PLINTH[0] / 2), (0.0, 1.0, 0.0))
+            self.assertEqual(slot, "tezontle", n)
+            for z0, z1, out in self.kit.CROWN:
+                hit, slot = self._ray(o, (x, -5.0, (z0 + z1) / 2), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "chiluca", (n, z0))
+                self.assertAlmostEqual(hit.y, front - out, delta=0.003, msg=(n, z0))
+
+    def test_a_stepped_fret_runs_the_frieze(self):
+        # (A greca along the frieze over the signs: raised steps on the frieze's ground, read in and out along it.)
+        front = -self.kit.DEPTH
+        z = sum(self.kit.FRET) / 2
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            half = self.kit.length(count) / 2
+            depths = []
+            for i in range(int((2 * half - 0.6) * 100)):
+                x = -half + 0.3 + i / 100.0
+                if not self._clear_of_lamps(count, x):
+                    continue
+                hit, slot = self._ray(o, (x, -5.0, z), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "chiluca", (n, x))
+                depths.append(round(hit.y - front, 3))
+            self.assertEqual(set(depths), {0.0, -self.kit.FRET_PROUD}, n)
+            turns = sum(1 for a, b in zip(depths, depths[1:]) if a != b)
+            self.assertGreaterEqual(turns, 4 * (2 * half - 0.6) * 0.5, n)
+
+    def test_estipites_stand_between_the_windows(self):
+        # (Inverted pyramids of chiluca: narrow at the counter, broad under the frieze.)
+        front = -self.kit.DEPTH
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count)[:-1]:
+                low, slot = self._ray(o, (cx, front - 0.03, self.kit.COUNTER + 0.15), (1.0, 0.0, 0.0))
+                self.assertEqual(slot, "chiluca", (n, cx))
+                high, slot = self._ray(o, (cx, front - 0.03, self.kit.TRANSOM - 0.05), (1.0, 0.0, 0.0))
+                self.assertEqual(slot, "chiluca", (n, cx))
+                self.assertLess(high.x, low.x - 0.05, (n, cx))
+
+    def test_a_stepped_crest_over_the_middle_bears_the_companys_emblem(self):
+        front = -self.kit.DEPTH
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            hit, _ = self._ray(o, (0.0, front + 0.2, 5.0), (0.0, 0.0, -1.0))
+            self.assertGreaterEqual(hit.z, self.kit.TOP + 0.3, n)
+            hit, _ = self._ray(o, (self.kit.window_xs(count)[0] - 0.45, front + 0.2, 5.0), (0.0, 0.0, -1.0))
+            self.assertAlmostEqual(hit.z, self.kit.TOP, delta=0.002, msg=n)
+            # (Beside the middle lamp's rod.)
+            _, slot = self._ray(o, (0.2, -5.0, sum(self.kit.EMBLEM) / 2), (0.0, 1.0, 0.0))
+            self.assertEqual(slot, "sign", n)
+
+    def test_the_companys_lamps_are_wards(self):
+        # (Its lamps keep the dead off the till: caged, obsidian lenses on their four sides.)
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count):
+                _, slot = self._ray(o, (cx, -5.0, self.kit.LAMP[1]), (0.0, 1.0, 0.0))
+                self.assertEqual(slot, "obsidian", (n, cx))
+
+    def test_talavera_under_every_window(self):
+        talavera = {"talavera_cobalt", "talavera_glaze", "talavera_yellow"}
+        # (Along the middle of a row of tiles, under the panel's middle: not along a joint.)
+        rows = self.kit.TILE_GRID[1]
+        z = self.kit.TILES[0] + (self.kit.TILES[1] - self.kit.TILES[0]) * (rows // 2 - 0.5) / rows
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count):
+                found = []
+                for i in range(-50, 51, 5):
+                    _, slot = self._ray(o, (cx + i / 100.0, -5.0, z), (0.0, 1.0, 0.0))
+                    found.append(slot)
+                tiled = [f for f in found if f in talavera]
+                self.assertGreaterEqual(len(tiled), len(found) * 0.6, (n, cx, found))
+                self.assertGreaterEqual(len(set(tiled)), 2, (n, cx))
+
+    def test_the_seller_keeps_their_own_things(self):
+        # (A saint's card on the boards, marigolds in a tin on the desk.)
+        for n, o in self.objects.items():
+            self.assertLessEqual({"print_saint", "marigold", "tin"}, {m.name for m in o.data.materials}, n)
+
+    def test_the_seller_stands_raised_behind_the_counter(self):
+        # (Inside, the booth's boarded floor raised so the seller looks down over the counter; the desk behind each
+        # window at the counter's height.)
+        for n, count in self.kit.WINDOWS.items():
+            o = self.objects[n]
+            for cx in self.kit.window_xs(count):
+                hit, slot = self._ray(o, (cx + 0.5, -0.5, 2.0), (0.0, 0.0, -1.0))
+                self.assertAlmostEqual(hit.z, self.kit.FLOOR, delta=0.002, msg=(n, cx))
+                self.assertEqual(slot, "wood", (n, cx))
+
+
 class YourShapes(unittest.TestCase):
     """The user's shapes kept through a kit's rebuild (tools/eclipse/your_shapes.py; docs/superpowers/plans/
     2026-10-30-metro-station.md Task 2): a vertex the user moved in a piece's .blend survives the next build; an
