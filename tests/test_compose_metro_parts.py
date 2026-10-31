@@ -88,7 +88,7 @@ class MetroPartsTest(unittest.TestCase):
     def test_lane_is_sixteen_bars_of_c_dorian_with_its_haunts(self):
         parts = {p['name']: p for p in self.compose.lane('C')}
         for name in ('L Sub', 'L Bass', 'L Kit', 'L Keys', 'L Glass', 'L Guitar', 'L Requinto', 'L Candle pad',
-                     'L Trumpet', 'L Backbeat', 'H Pleading', 'H Dragged', 'H Swarm'):
+                     'L Trumpet', 'L Backbeat', 'H Pleading', 'H Dragged', 'H Swarm', 'H Swarm drums'):
             self.assertIn(name, parts)
         # C Dorian, with the Db and Ab the deep layers lean on.
         allowed = {0, 1, 2, 3, 5, 7, 8, 9, 10}
@@ -152,10 +152,24 @@ class MetroPartsTest(unittest.TestCase):
         thirds = [ps for ps in starts.values() if len(ps) == 2 and 3 <= abs(ps[0] - ps[1]) <= 4]
         self.assertGreater(len(thirds), 8)
 
-    def test_pleading_sighs_bend_down(self):
-        pleading = [p for p in self.compose.lane('C') if p['name'] == 'H Pleading'][0]
-        bends = [v for _, k, v in pleading['controls'] if k == 'bend']
-        self.assertLess(min(bends), -0.5)
+    def test_the_haunts_are_low_key_latin_jazz(self):
+        import statistics
+        parts = {p['name']: p for p in self.compose.lane('C')}
+        for name in ('H Pleading', 'H Dragged', 'H Swarm', 'H Swarm drums'):
+            self.assertLess(statistics.mean(n[3] for n in parts[name]['notes']), 60, name)
+        # The flute sighs: two notes falling a step, easing down a half step at the end.
+        flute = sorted(parts['H Pleading']['notes'])
+        pairs = [(a, b) for a, b in zip(flute, flute[1:]) if 0 < b[0] - a[0] <= 1.0]
+        self.assertTrue(pairs and all(1 <= a[2] - b[2] <= 2 for a, b in pairs))
+        bends = [v for _, k, v in parts['H Pleading']['controls'] if k == 'bend']
+        self.assertTrue(-0.6 <= min(bends) <= -0.4)
+        # The trombone falls about a fifth, not an octave.
+        smear = [v for _, k, v in parts['H Dragged']['controls'] if k == 'bend']
+        self.assertTrue(-0.65 <= min(smear) <= -0.5)
+        # The vibes' montuno is off the beat as much as on it; congas and bongos under it.
+        vibes = parts['H Swarm']['notes']
+        self.assertGreater(sum(1 for n in vibes if abs(n[0] % 1 - 0.5) < 1e-6), len(vibes) // 3)
+        self.assertTrue({60, 62, 63, 64} & {n[2] for n in parts['H Swarm drums']['notes']})
 
     def test_performance_moves_notes_only_a_little_and_the_same_each_time(self):
         raw = {p['name']: p for p in self.compose.lane('C')}

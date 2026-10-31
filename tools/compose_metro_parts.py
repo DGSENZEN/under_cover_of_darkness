@@ -31,8 +31,9 @@ Every part is judged by ear in Logic: these are starting points, not the music.
         stepping out with passing notes where the melody rests). Full: the backbeat (a heavy late snare on 2 and 4 with a clap under
         it, ghosts, fills), his harmon trumpet (bars 1-8, scoops and fall-offs bent in); her
         guitar answers him in thirds (9-16).
-        Haunts, silent until the anima act: H Pleading (wordless sighs bending down),
-        H Dragged (a low slide an octave down), H Swarm (glass trembling in a cluster).
+        Haunts, silent until the anima act, low key and Latin jazz: H Pleading (a charanga
+        flute's sighs, falling a step, easing down), H Dragged (a trombone smear falling a
+        fifth), H Swarm (a vibraphone montuno) with H Swarm drums (conga tumbao, bongos, shaker).
 """
 import argparse
 from pathlib import Path
@@ -320,24 +321,41 @@ def lane(pedal):
         if bar % 8 == 7:
             backbeat += [(at + 3.5, 0.2, 38, 52), (at + 3.625, 0.2, 38, 64), (at + 3.75, 0.2, 38, 80), (at + 3.875, 0.2, 38, 96)]
 
-    # The haunts. Pleading: sighs, a wordless voice bending down a tone, every two bars.
-    pleading, pleading_moves = [], [(0.0, 'bend_range', 2), (0.0, 11, 0)]
+    # The haunts: Latin jazz players answering the animas, low key. Pleading: a charanga
+    # flute sighing, a colour tone falling a step onto the next, easing down a half step.
+    pleading, pleading_moves = [], [(0.0, 'bend_range', 2), (0.0, 11, 90)]
     for k in range(8):
-        at = k * 8.0 + 1.0
-        root, tones = LANE_CHORDS[k * 2][1], LANE_CHORDS[k * 2][2]
-        pitch = 72 + (c + root + tones[(k + 2) % len(tones)]) % 12
-        pleading.append((at, 5.5, pitch, 70))
-        pleading_moves += [(at, 'bend', 0.0)] + _ramp(at + 1.5, at + 5.0, 'bend', 0.0, -1.0, 12, 1.5)
-        pleading_moves += _ramp(at, at + 1.5, 11, 0, 110, 6) + _ramp(at + 4.0, at + 5.5, 11, 110, 0, 6)
-    # Dragged: something low hauled down an octave, every four bars.
+        bar = k * 2 + 1
+        at = bar * BEATS + 2.5
+        _, root, tones = LANE_CHORDS[bar]
+        top = 74 + (c + root + tones[-1 - k % 2] - 74) % 12
+        degree = (top - c) % 12
+        if degree in DORIAN:
+            # The mode's step below (from C, down to Bb).
+            step = degree - max((d for d in DORIAN if d < degree), default=DORIAN[-1] - 12)
+        else:
+            step = 1
+        pleading += [(at, 0.9, top, 50 + rng.randint(-4, 4)), (at + 1.0, 1.5, top - step, 44 + rng.randint(-4, 4))]
+        pleading_moves += [(at + 1.0, 'bend', 0.0)] + _ramp(at + 1.9, at + 2.5, 'bend', 0.0, -0.5, 6, 1.5)
+        pleading_moves.append((at + 2.55, 'bend', 0.0))
+    # Dragged: a trombone's soft smear, a low note falling about a fifth, twice.
     dragged, dragged_moves = [], [(0.0, 'bend_range', 12)]
-    for k in range(4):
-        at = k * 16.0
-        dragged.append((at, 8.0, 36 + c, 96))
-        dragged_moves += [(at, 'bend', 0.0)] + _ramp(at + 1.0, at + 8.0, 'bend', 0.0, -1.0, 24, 1.6)
-    # Swarm: the votives' glass trembling in a cluster, thirty-seconds the whole way.
-    cluster = [84 + (c + n) % 12 for n in (0, 1, 2, 3, 7, 8)]
-    swarm = [(round(i * 0.125, 4), 0.12, rng.choice(cluster), rng.randint(14, 44)) for i in range(int(end * 8))]
+    for at in (2 * BEATS + 1.0, 10 * BEATS + 1.0):
+        dragged.append((at, 3.0, 48 + c, 48))
+        dragged_moves += [(at, 'bend', 0.0)] + _ramp(at + 1.5, at + 3.0, 'bend', 0.0, -7 / 12, 12, 1.4)
+        dragged_moves.append((at + 3.05, 'bend', 0.0))
+    # Swarm: a vibraphone montuno on the chord tones, quiet, as much off the beat as on,
+    # and hand drums under it: a conga tumbao, a bongo's martillo, a shaker.
+    swarm, swarm_drums = [], []
+    for bar, (_, root, tones) in enumerate(LANE_CHORDS):
+        at = bar * BEATS
+        ring = sorted({67 + (c + root + t - 67) % 12 for t in tones})
+        for k, beat in enumerate((0.0, 0.5, 1.5, 2.0, 2.5, 3.5)):
+            swarm.append((at + beat, 0.4, ring[(k * 2 + bar) % len(ring)], 34 + rng.randint(-5, 6)))
+        swarm_drums += [(at, 0.2, 62, 34), (at + 1.0, 0.2, 63, 44), (at + 2.0, 0.2, 62, 32), (at + 3.0, 0.2, 63, 42),
+                        (at + 3.5, 0.3, 64, 50)]
+        swarm_drums += [(at + h * 0.5, 0.15, 60 if h % 2 == 0 else 61, 26 + (8 if h % 4 == 0 else 0)) for h in range(8)]
+        swarm_drums += [(at + q * 0.25 + (0.03 if q % 2 else 0.0), 0.1, 82, 22 + (6 if q % 4 == 2 else 0)) for q in range(16)]
 
     return [{'name': 'L Sub', 'channel': 8, 'program': 38, 'notes': sub},
             {'name': 'L Bass', 'channel': 0, 'program': 32, 'notes': bass, 'controls': bass_moves},
@@ -349,9 +367,10 @@ def lane(pedal):
             {'name': 'L Candle pad', 'channel': 3, 'program': 89, 'notes': pad, 'controls': pad_moves},
             {'name': 'L Trumpet', 'channel': 4, 'program': 59, 'notes': trumpet, 'controls': trumpet_moves},
             {'name': 'L Backbeat', 'channel': 9, 'notes': backbeat},
-            {'name': 'H Pleading', 'channel': 5, 'program': 52, 'notes': pleading, 'controls': pleading_moves},
-            {'name': 'H Dragged', 'channel': 6, 'program': 38, 'notes': dragged, 'controls': dragged_moves},
-            {'name': 'H Swarm', 'channel': 7, 'program': 14, 'notes': swarm}]
+            {'name': 'H Pleading', 'channel': 5, 'program': 73, 'notes': pleading, 'controls': pleading_moves},
+            {'name': 'H Dragged', 'channel': 6, 'program': 57, 'notes': dragged, 'controls': dragged_moves},
+            {'name': 'H Swarm', 'channel': 7, 'program': 11, 'notes': swarm},
+            {'name': 'H Swarm drums', 'channel': 9, 'notes': swarm_drums}]
 
 
 # How each player plays (beats at 72 bpm: 0.012 is 10 ms): timing spread, how far behind the
@@ -370,7 +389,8 @@ PLAYERS = {
     'L Trumpet': dict(spread=0.012, behind=0.02, vel=6, drift=0.03, breath=True),
     'H Pleading': dict(spread=0.01, behind=0.0, vel=4),
     'H Dragged': dict(spread=0.006, behind=0.0, vel=3),
-    'H Swarm': dict(spread=0.01, behind=0.0, vel=6),
+    'H Swarm': dict(spread=0.01, behind=0.004, vel=6),
+    'H Swarm drums': dict(spread=0.006, behind=0.0, vel=5),
 }
 
 
