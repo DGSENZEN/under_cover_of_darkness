@@ -223,8 +223,10 @@ fight the score sinks under the combat score as today, and the beds sink with Am
   tables in `prepare_sfx.py`, `audio/sfx/metro_*`, `audio/ambience/metro_*`, tests.
 - Hooks, one each: `maps/metro.gd` adds the director beside PlaceScore; `Sfx.gd` gains the `tile` acoustics and steps;
   `NeonSign`, `PipeSounds`, `BookSounds` read their new names; `candle_lane._hush()` turns selective.
-- The station set (`maps/metro_station.tscn`) and its machine are on `metro-standard`. Until the branches meet, the
-  station's spaces sound from the greybox; its pieces get their tags when the user has the branches merged.
+- The station set (`maps/metro_station.tscn`) and its machine came in from `metro-standard` (merged into `metro-sound`
+  on the user's word, Oct 31, at its commit 0adfe1b8). The station's pieces (Company lamps, mains, risers, vents, wall
+  boxes) get their `metro_sound` tags on this branch, one line each. `metro-standard` keeps moving in its own session;
+  this branch takes its later commits by merging again, never by editing its files ahead of it beyond those tags.
 
 ## Order of work
 
