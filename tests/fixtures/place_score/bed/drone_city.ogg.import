@@ -2,10 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
+uid="uid://cpcxevaevmu46"
+path="res://.godot/imported/drone_city.ogg-606ed46af0342c48f7b19b7d64512267.oggvorbisstr"
 
 [deps]
 
 source_file="res://tests/fixtures/place_score/bed/drone_city.ogg"
+dest_files=["res://.godot/imported/drone_city.ogg-606ed46af0342c48f7b19b7d64512267.oggvorbisstr"]
 
 [params]
 

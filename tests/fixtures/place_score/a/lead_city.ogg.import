@@ -2,10 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
+uid="uid://be52d5hrak2ni"
+path="res://.godot/imported/lead_city.ogg-6e4130ccb4beb3bec4f4ac49705d806d.oggvorbisstr"
 
 [deps]
 
 source_file="res://tests/fixtures/place_score/a/lead_city.ogg"
+dest_files=["res://.godot/imported/lead_city.ogg-6e4130ccb4beb3bec4f4ac49705d806d.oggvorbisstr"]
 
 [params]
 

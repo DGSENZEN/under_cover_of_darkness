@@ -120,6 +120,9 @@ class PlaceScorePreparationTest(unittest.TestCase):
         self.assertEqual(lead_met['variant'], {'character': 'curandera', 'when': 'met'})
         haunt = [s for s in report['themes']['a']['stems'] if s['id'] == 'haunt'][0]
         self.assertEqual(haunt['haunted'], 'pleading')
+        self.assertEqual(report['themes']['a']['bed'], ['drone_city'])
+        self.assertEqual(report['themes']['a']['haunt_bed'], ['drone_deep'])
+        self.assertNotIn('bed', report['themes']['b'])
         self.assertTrue(report['cue']['path'].endswith('cue.ogg'))
         self.assertAlmostEqual(report['cue']['seconds'], 1.0, places=2)
 

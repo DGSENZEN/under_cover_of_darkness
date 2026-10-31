@@ -87,6 +87,10 @@ def prepare(source, out, prefix):
         write_resource(out, f'{prefix}/{name}', entry['stems'])
         (out / 'score.tres').replace(out / f'{name}.tres')
         made = dict(bars=bars, loop_seconds=bars * bar_seconds, resource=f'{prefix}/{name}.tres', stems=stems)
+        # A theme's own say over the bed: which bed roles play under it, which its haunts bring back.
+        for key in ('bed', 'haunt_bed'):
+            if name != 'bed' and key in entry:
+                made[key] = list(entry[key])
         if name == 'bed':
             report['bed'] = made
         else:

@@ -2,10 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
+uid="uid://dlp7i52vljniw"
+path="res://.godot/imported/lead_full.ogg-7b0ddd8d6e13e9ed03c6dfe32a18b9a6.oggvorbisstr"
 
 [deps]
 
 source_file="res://tests/fixtures/place_score/a/lead_full.ogg"
+dest_files=["res://.godot/imported/lead_full.ogg-7b0ddd8d6e13e9ed03c6dfe32a18b9a6.oggvorbisstr"]
 
 [params]
 

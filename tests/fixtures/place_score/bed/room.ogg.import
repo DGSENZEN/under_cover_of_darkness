@@ -2,10 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
+uid="uid://b1t4krq4hfxpe"
+path="res://.godot/imported/room.ogg-9341e380ca6fb3d6754beb42f360df92.oggvorbisstr"
 
 [deps]
 
 source_file="res://tests/fixtures/place_score/bed/room.ogg"
+dest_files=["res://.godot/imported/room.ogg-9341e380ca6fb3d6754beb42f360df92.oggvorbisstr"]
 
 [params]
 

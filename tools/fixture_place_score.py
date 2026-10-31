@@ -34,7 +34,7 @@ MAP = {
         {'id': 'room', 'file': 'bed/room.wav', 'role': 'room'}]},
     'cue': {'file': 'cue/enter.wav', 'lands_bar': 1},
     'themes': {
-        'a': {'bars': 8, 'stems': [
+        'a': {'bars': 8, 'bed': ['drone_city'], 'haunt_bed': ['drone_deep'], 'stems': [
             {'id': 'bass', 'file': 'a/bass.wav', 'part': 'bass'},
             {'id': 'lead', 'file': 'a/lead.wav', 'part': 'lead', 'intensity': 'calm'},
             {'id': 'lead_city', 'file': 'a/lead_city.wav', 'part': 'lead_city', 'intensity': 'calm', 'city': True},

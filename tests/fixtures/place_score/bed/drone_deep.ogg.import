@@ -2,10 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
+uid="uid://dcg3wf8bsw6ed"
+path="res://.godot/imported/drone_deep.ogg-cfbfdb89de777c311214b0812011cb58.oggvorbisstr"
 
 [deps]
 
 source_file="res://tests/fixtures/place_score/bed/drone_deep.ogg"
+dest_files=["res://.godot/imported/drone_deep.ogg-cfbfdb89de777c311214b0812011cb58.oggvorbisstr"]
 
 [params]
 

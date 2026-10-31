@@ -2,10 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
+uid="uid://cvsqaxws43q8d"
+path="res://.godot/imported/haunt.ogg-e80faafb7263e16a558ba72ca09964f7.oggvorbisstr"
 
 [deps]
 
 source_file="res://tests/fixtures/place_score/a/haunt.ogg"
+dest_files=["res://.godot/imported/haunt.ogg-e80faafb7263e16a558ba72ca09964f7.oggvorbisstr"]
 
 [params]
 

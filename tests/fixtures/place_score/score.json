@@ -86,6 +86,12 @@
           "peak_db": -24.622226642454798,
           "sha256": "e767e6431d227b8e0ae5f8f588a494467a2fb64c2f276c4c3551cea07b679214"
         }
+      ],
+      "bed": [
+        "drone_city"
+      ],
+      "haunt_bed": [
+        "drone_deep"
       ]
     },
     "b": {

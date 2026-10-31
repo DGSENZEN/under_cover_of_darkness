@@ -2,10 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
+uid="uid://lc0nu7ubg180"
+path="res://.godot/imported/bass.ogg-264b2f9abef8c038d9b25257b6ce0697.oggvorbisstr"
 
 [deps]
 
 source_file="res://tests/fixtures/place_score/a/bass.ogg"
+dest_files=["res://.godot/imported/bass.ogg-264b2f9abef8c038d9b25257b6ce0697.oggvorbisstr"]
 
 [params]
 

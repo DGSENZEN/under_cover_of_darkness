@@ -5,7 +5,8 @@ extends Node
 ## long as you are in the place; every space has a theme of its own, a locked
 ## set of stems on a player of its own, started on one of the bed's phrase
 ## lines and faded by how much it is where you stand (PlaceZones). Depth turns
-## the bed's drone from city to deep and thins the themes' city parts. A theme
+## the bed's drone from city to deep and thins the themes' city parts. A theme may keep
+## only some of the bed under it (the candle lane: the city drone, no pulse). A theme
 ## you stay with grows full, then after a while rests on its bass alone. What
 ## you have done picks a theme's variants (PeopleState), on its phrase lines.
 ## What the ánimas do near you (never their being near) bends it: one begging
@@ -321,11 +322,34 @@ func _mix_bed(dt: float, at_once := false) -> void:
 				target = _db(depth)
 			"pulse":
 				target = PULSE_FALTER_DB * maxf(float(_haunt[&"straining"]), float(_haunt[&"dragged"]))
+		target = maxf(target + _db(_bed_share(String(stem.get("role", "")))), OUT)
 		if at_once:
 			_bed.gains[StringName(stem.id)] = target
 		else:
 			_slide(_bed, StringName(stem.id), target, dt)
 	_apply(_bed)
+
+
+## How much of a bed role plays now (0..1): all of it outside any theme; under a theme
+## that names its bed (score.json `bed`), only the roles it names, and those its haunts
+## bring back (`haunt_bed`) while an anima act is on.
+func _bed_share(role: String) -> float:
+	var taken := 0.0
+	var kept := 0.0
+	var haunting := 0.0
+	for act in ACTS:
+		haunting = maxf(haunting, float(_haunt[act]))
+	for name in _themes:
+		var set: Dictionary = _themes[name]
+		var w := float(set.weight)
+		if w <= NONE or not set.entry.has("bed"):
+			continue
+		taken += w
+		if role in set.entry.bed:
+			kept += w
+		elif role in set.entry.get("haunt_bed", []):
+			kept += w * haunting
+	return clampf(1.0 - minf(taken, 1.0) + kept, 0.0, 1.0)
 
 
 func _step_theme(set: Dictionary, dt: float) -> void:

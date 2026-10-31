@@ -63,6 +63,7 @@ func _ready() -> void:
 	score_checks()
 	variant_checks()
 	anima_checks()
+	bed_rule_checks()
 	cue_checks()
 	await metro_checks()
 	await get_tree().process_frame
@@ -377,3 +378,28 @@ func metro_checks() -> void:
 	check(again != first and again.cue_playing() and not again.bed_playing(), "M3 coming back, the cue again, the bed from its top")
 	map.queue_free()
 	await get_tree().process_frame
+
+## Theme a keeps only the city drone under it; its haunts bring the deep one back.
+func bed_rule_checks() -> void:
+	var near_souls := []
+	var score := make_score()
+	var zones := score.zones as StubZones
+	score.animas_source = func() -> Array: return near_souls
+	zones.d = 0.5
+	zones.w = {"a": 0.0}
+	run_for(score, 4.0)
+	var deep_alone := score.stem_gain_db(&"bed", &"drone_deep")
+	check(score.stem_gain_db(&"bed", &"pulse") >= -1.0 and deep_alone > -12.0, "B0 outside the lane, the whole bed: pulse %.1f, deep %.1f" % [score.stem_gain_db(&"bed", &"pulse"), deep_alone])
+	zones.w = {"a": 1.0}
+	run_for(score, 4.0)
+	check(score.stem_gain_db(&"bed", &"pulse") <= -79.0 and score.stem_gain_db(&"bed", &"drone_deep") <= -79.0, "B1 in the lane: no pulse, no deep drone")
+	check(near(score.stem_gain_db(&"bed", &"drone_city"), linear_to_db(0.5), 0.6), "B1 the city drone stays (at its depth): %.1f" % score.stem_gain_db(&"bed", &"drone_city"))
+	near_souls.append({"state": "pleading", "at": Vector3.ZERO})
+	run_for(score, 3.0)
+	check(near(score.stem_gain_db(&"bed", &"drone_deep"), deep_alone, 1.0) and score.stem_gain_db(&"bed", &"pulse") <= -79.0, "B2 a haunt brings the deep drone back, never the pulse: %.1f" % score.stem_gain_db(&"bed", &"drone_deep"))
+	near_souls.clear()
+	zones.w = {"a": 0.5}
+	run_for(score, 6.0)
+	var pulse := score.stem_gain_db(&"bed", &"pulse")
+	check(pulse > -12.0 and pulse < -3.0, "B3 half in the lane, the pulse half there: %.1f" % pulse)
+	score.free()

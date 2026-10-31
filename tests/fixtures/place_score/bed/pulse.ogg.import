@@ -2,10 +2,13 @@
 
 importer="oggvorbisstr"
 type="AudioStreamOggVorbis"
+uid="uid://bbctxvoq28ehm"
+path="res://.godot/imported/pulse.ogg-f29abc3e0c2abff48e79c0dc53e4dbf0.oggvorbisstr"
 
 [deps]
 
 source_file="res://tests/fixtures/place_score/bed/pulse.ogg"
+dest_files=["res://.godot/imported/pulse.ogg-f29abc3e0c2abff48e79c0dc53e4dbf0.oggvorbisstr"]
 
 [params]
 
