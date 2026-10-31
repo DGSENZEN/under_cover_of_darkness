@@ -292,11 +292,23 @@ func anima_checks() -> void:
 
 func cue_checks() -> void:
 	var score := make_score(FIXTURE, true)
+	# The bed's own clock starts at 0 when the bed does (the cue lands at 1 s).
+	score.position_source = func() -> float: return maxf(0.0, pos - 1.0)
 	check(score.cue_playing() and not score.bed_playing(), "C1 the entrance cue first, the bed not yet")
 	run_for(score, 0.9)
 	check(not score.bed_playing(), "C1 not before the cue lands")
 	run_for(score, 0.15)
 	check(score.bed_playing(), "C1 the bed comes in where the cue lands (bar 1)")
+	check(score.stem_gain_db(&"bed", &"drone_city") >= -1.0, "C4 landing from the cue, the bed is there at once, no swell: %.1f" % score.stem_gain_db(&"bed", &"drone_city"))
+	score.free()
+
+	# Landing deep down: the bed lands already at the place's depth.
+	score = make_score(FIXTURE, true)
+	score.position_source = func() -> float: return maxf(0.0, pos - 1.0)
+	(score.zones as StubZones).w = {"a": 0.0}
+	(score.zones as StubZones).d = 1.0
+	run_for(score, 1.05)
+	check(score.stem_gain_db(&"bed", &"drone_deep") >= -1.0 and score.stem_gain_db(&"bed", &"drone_city") <= -79.0, "C5 landing deep, the deep drone at once: %.1f" % score.stem_gain_db(&"bed", &"drone_deep"))
 	score.free()
 
 	# A cue that lands on its own last sound ends there: no frame may see it land.
@@ -333,7 +345,7 @@ func metro_checks() -> void:
 	var mine := map.get_node_or_null("PlaceScore")
 	var under_lane: Array = map.get_node("candle_lane").find_children("*", "PlaceScore", true, false)
 	check(mine is PlaceScore and under_lane.is_empty(), "M1 the Metro has its score at its root, none under the lane")
-	check(mine != null and not mine.available, "M1 with no Metro score yet, it is silent")
+	check(mine != null and mine.available and mine.score_json_path == "res://audio/music/metro/score.json", "M1 it plays the Metro's own score")
 	map.queue_free()
 	await get_tree().process_frame
 

@@ -32,6 +32,25 @@ off, effects on, the user's fader balance.
 No room texture yet (the user approved the bed without one); it can be added as a
 fourth stem with role `room`.
 
+## The entrance cue
+
+`cue/enter.wav`: take 3, "under the floor", from `parts/cue_C_2.mid` (written by
+`tools/compose_metro_parts.py --piece cue`), chosen by the user on 2026-10-31 and
+finished by them in Logic (`~/Music/Logic/metro_score/bed/metro_cue.logicx`):
+
+| Track | Sound and effects |
+|---|---|
+| 3 Wheels | Vintage Breaks+: Channel EQ, Compressor, Overdrive, ChromaVerb, Pitch Shifter, Distortion; send to the Large Room |
+| 3 Brake | Wooden Plank Keys: Multipressor, Channel EQ, AutoFilter; send to the Large Room |
+| 3 Rumble | Deep Sub Bass |
+| Large Room (bus 12) | ChromaVerb |
+
+A train braking under the floor: the wheels' double clack slows until its last pair
+lands on bar 5, where the bed comes in (`lands_bar` 4 in `map.json`: four bars after
+the cue starts). Bounced alone, bars 1-7 (20 s, so the tails ring out), WAVE 24-bit
+48 kHz, normalise off. The first two takes (tape sink, pressure change) stay in the
+Logic project, muted.
+
 ## Regenerating the game files
 
 ```sh

@@ -34,7 +34,11 @@
     ]
   },
   "themes": {},
-  "cue": null,
+  "cue": {
+    "path": "res://audio/music/metro/cue.ogg",
+    "seconds": 20.0,
+    "lands_bar": 4
+  },
   "spaces": {},
   "circles": []
 }

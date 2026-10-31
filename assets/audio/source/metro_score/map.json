@@ -3,11 +3,31 @@
  "beats_per_bar": 4,
  "phrase_bars": 4,
  "placeholder": false,
- "bed": {"bars": 16, "stems": [
-  {"id": "drone_city", "file": "bed/drone_city.wav", "role": "drone_city"},
-  {"id": "drone_deep", "file": "bed/drone_deep.wav", "role": "drone_deep"},
-  {"id": "pulse", "file": "bed/pulse.wav", "role": "pulse"}]},
+ "bed": {
+  "bars": 16,
+  "stems": [
+   {
+    "id": "drone_city",
+    "file": "bed/drone_city.wav",
+    "role": "drone_city"
+   },
+   {
+    "id": "drone_deep",
+    "file": "bed/drone_deep.wav",
+    "role": "drone_deep"
+   },
+   {
+    "id": "pulse",
+    "file": "bed/pulse.wav",
+    "role": "pulse"
+   }
+  ]
+ },
  "themes": {},
  "spaces": {},
- "circles": []
+ "circles": [],
+ "cue": {
+  "file": "cue/enter.wav",
+  "lands_bar": 4
+ }
 }

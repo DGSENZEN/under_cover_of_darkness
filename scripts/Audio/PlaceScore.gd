@@ -141,6 +141,12 @@ func step(_delta: float) -> void:
 		# The entrance cue: the bed comes in where it lands, the themes after it.
 		# (A cue landing on its own end stops there: its having ended is landing too.)
 		if cue_player != null and (not cue_player.playing or float(cue_source.call()) + MenuClock.SLACK >= int(score.cue.lands_bar) * _bar):
+			# The cue lands on the bed's first downbeat: it is there at once, at full,
+			# already at the depth of where you stand.
+			var here: Variant = listener_source.call()
+			if zones != null and here is Vector3 and not zones.weights_at(here).is_empty():
+				depth = zones.depth_at(here)
+			_mix_bed(0.0, true)
 			_bed.player.play()
 		return
 	var before := _time
@@ -305,7 +311,7 @@ func _make_set(set_name: StringName, entry: Dictionary) -> Dictionary:
 		"choice": {}, "line": -1, "offset": 0.0}
 
 
-func _mix_bed(dt: float) -> void:
+func _mix_bed(dt: float, at_once := false) -> void:
 	for stem in _bed.entry.stems:
 		var target := 0.0
 		match String(stem.get("role", "")):
@@ -315,7 +321,10 @@ func _mix_bed(dt: float) -> void:
 				target = _db(depth)
 			"pulse":
 				target = PULSE_FALTER_DB * maxf(float(_haunt[&"straining"]), float(_haunt[&"dragged"]))
-		_slide(_bed, StringName(stem.id), target, dt)
+		if at_once:
+			_bed.gains[StringName(stem.id)] = target
+		else:
+			_slide(_bed, StringName(stem.id), target, dt)
 	_apply(_bed)
 
 
