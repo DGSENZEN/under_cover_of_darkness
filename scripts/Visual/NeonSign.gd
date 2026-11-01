@@ -43,6 +43,9 @@ const TICK_APART := 5.0
 ## strikes on again with its ignition.
 const OUT_BELOW := 0.3
 const BACK_ABOVE := 0.6
+## Ignitions this many frames apart at least, across every sign: a row of signs coming back is heard as one striking on,
+## not a wall of them. (Frames, not seconds: the same in every run of a suite.)
+const IGNITE_APART := 45
 
 ## How much of its power reaches it (a brownout when a train passes: 1 full).
 var dim := 1.0
@@ -60,6 +63,11 @@ var _was_lit := true
 var _last_tick := -INF
 var _zap := false
 var _out := false
+## Fed from the Company's line (the station's signs, PlaceSound): only then is it a train's draw that puts it out and
+## an ignition that brings it back. (The lane's and the bay's are dimmed by the dark train's cold too: no ignition.)
+var on_line := false
+## The frame a sign last struck on (shared by all signs).
+static var _ignited_at := -IGNITE_APART
 
 
 func _init() -> void:
@@ -155,8 +163,14 @@ func _sound() -> void:
 		_out = true
 	elif _out and dim > BACK_ABOVE:
 		_out = false
+		var now := Engine.get_process_frames()
 
-		if Focus.allow(self, &"detail", global_position):
+		var eye := get_viewport().get_camera_3d() if is_inside_tree() else null
+		var heard := eye == null or eye.global_position.distance_to(global_position) <= Focus.HEAR
+
+		# (Only a sign within hearing strikes on aloud: from across the hall a dozen of them took every voice there was.)
+		if on_line and heard and now - _ignited_at >= IGNITE_APART and Focus.allow(self, &"detail", global_position):
+			_ignited_at = now
 			Sfx.play(self, &"neon_ignite", global_position)
 
 

@@ -268,3 +268,15 @@ fight the score sinks under the combat score as today, and the beds sink with Am
 - **Beds are one loop each**, their dB in BEDS offsets against each loop's LOOP_GAIN.
 - **Levels await the user's ear:** the listening files (`prepare_sfx.py --metro --listen=DIR`) and the walk
   (`tests/diag_metro_sound_walk.tscn`).
+- **The final review's fixes:** the rumble voiced on the nearer track and flat through the walls (it was dropped past
+  Sfx's 45 m reach), the station's signs out of step and only those on the Company's line striking on, the held depth
+  in no space.
+- **The Company's engine** (merged from `metro-standard` e2628a55 on the user's ask, Oct 31): the user's nine engine takes
+  on its real parts (body, clockwork at the gear trains, gears at the flywheels, governor; valves at the cylinders, the
+  lever), labouring at a train's peak and catching up after it. Its sustained parts sit in the score's key: the hum rule
+  widened from G to C or G (tonic and fifth), the gears taken down to C.
+- **Presence** (the user, Nov 1: "tactile ... presence instead of just playing an audio file on a specific cue";
+  "make it so the audio follows the engine"): the engine played from its parts (strokes at the cranks' dead centres,
+  ticks and clunks with the gears' teeth, the governor's whir at its spin); the rumble muffled through walls; your steps
+  taking up the Metro's rooms (Sfx.body_room); the low end felt (CameraJuice.hold_trauma). Dust from the ceiling under
+  a train waits for a VFX pass with the user.

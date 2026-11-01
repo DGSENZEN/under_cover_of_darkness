@@ -81,6 +81,14 @@ class MetroLayeringTest(unittest.TestCase):
         x = self.prep.retune(self.hum100, self.prep.g_of(self.prep.hum_hz(self.hum100)))
         self.assertLess(abs(1200 * np.log2(self.prep.hum_hz(x) / 98.0)), 20.0)
 
+    def test_a_hum_is_put_in_the_scores_key(self):
+        # C or G (the Metro score's tonic and fifth), whichever is nearer; or the one a row asks for.
+        self.assertAlmostEqual(self.prep.key_of(65.1), 65.406, places=2)
+        self.assertAlmostEqual(self.prep.key_of(126.4), 130.813, places=2)
+        self.assertAlmostEqual(self.prep.key_of(200.0), 196.0, places=2)
+        self.assertAlmostEqual(self.prep.key_of(103.0), 98.0, places=2)
+        self.assertAlmostEqual(self.prep.key_of(81.7, 'C'), 65.406, places=2)
+
     def test_shots_are_seeded_and_matched(self):
         self.assertEqual(len(self.hits), 5)
         a = self.prep.layered_shots(self.hits, 10, np.random.default_rng(1931))
@@ -132,6 +140,31 @@ class MetroTablesTest(unittest.TestCase):
             for take in row[1]:
                 self.assertTrue(os.path.exists(prep._take_path(prep.METRO_SOURCE, take)), take)
 
+    def test_the_engine_is_in_the_tables(self):
+        prep = self.prep
+        names = [r[0] for r in prep.METRO_SHOTS] + [r[0] for r in prep.METRO_LOOPS]
+        for name in ['engine_body', 'engine_clockwork', 'engine_gears', 'engine_governor',
+                     'engine_valve', 'engine_lever', 'engine_labour', 'engine_start',
+                     'engine_stroke', 'engine_tick', 'engine_clunk']:
+            self.assertIn(name, names)
+
+    def test_real_engine_lands_in_key(self):
+        prep = self.prep
+        out = Path(tempfile.mkdtemp())
+        try:
+            keyed = [r for r in prep.METRO_LOOPS if r[3].get('key')]
+            keyed_shots = [r for r in prep.METRO_SHOTS if len(r) > 3 and r[3].get('key')]
+            self.assertEqual(sorted(r[0] for r in keyed + keyed_shots),
+                             ['engine_body', 'engine_clockwork', 'engine_gears', 'engine_governor', 'engine_labour'])
+            written = prep.prepare_metro(shots=keyed_shots, loops=keyed, sfx_out=str(out), ambience_out=str(out))
+            for name, paths in written.items():
+                row = next(r for r in keyed + keyed_shots if r[0] == name)
+                for path in paths:
+                    hz = prep.hum_hz(prep._decode_take(path))
+                    want = prep.key_of(hz, row[3].get('to'))
+                    self.assertLess(abs(1200 * np.log2(hz / want)), prep.HUM_CENTS, path)
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
     def test_real_takes_hold_the_hits_asked(self):
         # Each split take gives as many separate hits as its row asks for: no group's variations are one hit
         # pitched over and over.
@@ -144,6 +177,23 @@ class MetroTablesTest(unittest.TestCase):
                 x = prep._decode_take(prep._take_path(prep.METRO_SOURCE, take))
                 found = prep.split_hits(x, split, **options.get('split', {}))
                 self.assertEqual(len(found), split, '%s %s: %d of %d' % (group, take, len(found), split))
+
+    def test_the_engines_hits_ring_out(self):
+        # A stroke, tick or clunk is cut from running machinery: each must die away before it ends (24 dB under its
+        # peak in its last 60 ms), as a step or a knock does, not stop mid-sound.
+        prep = self.prep
+        out = Path(tempfile.mkdtemp())
+        try:
+            rows = [r for r in prep.METRO_SHOTS if r[0] in ('engine_stroke', 'engine_tick', 'engine_clunk')]
+            for name, paths in prep.prepare_metro(shots=rows, loops=[], sfx_out=str(out), ambience_out=str(out)).items():
+                for path in paths:
+                    x = prep._read_wav(path)
+                    w = int(0.01 * prep.RATE)
+                    env = np.convolve(np.abs(x), np.ones(w) / w, mode='same')
+                    end = 20 * np.log10(env[-int(0.06 * prep.RATE):].max() / env.max() + 1e-12)
+                    self.assertLess(end, -24.0, '%s ends %.0f dB under its peak' % (path, end))
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
 
     def test_real_hums_land_on_g(self):
         prep = self.prep

@@ -1275,7 +1275,7 @@ def prepare_score(only=None):
 # The Metro (docs/superpowers/specs/2026-10-31-metro-sound-design.md): the user's ElevenLabs takes (generated on a
 # paid plan, Oct 31 2026), each named by its id (the number after its last "-"), layered into seeded variations and
 # seamless loops (prepare_metro), every hum on G (the Metro score's bed is in C). Nothing reverbed: the room is the game's.
-METRO_SOURCE = os.path.expanduser("~/Downloads/AUCOD ElevenLabs/ucod_sounds/")
+METRO_SOURCE = os.path.expanduser("~/Downloads/AUCOD ElevenLabs/")
 # A shot: (group, [(take, hits to split, or None for the whole take)], variations[, options]). A take is split into
 # as many hits as it truly holds (split_hits; test_real_takes_hold_the_hits_asked): a lone tick, hiss or stutter is
 # taken whole, and its group's variations are that one sound pitched until more takes come.
@@ -1287,7 +1287,7 @@ METRO_SHOTS = [
     # The neon: its stutters, the short ones ticking off, the long ones striking back; switching on.
     ("neon_tick", [("1793485274299", 1), ("1793485286256", 3)], 6, {"pick": "short"}),
     ("neon_zap", [("1793485274299", 1), ("1793485286256", 3)], 6, {"pick": "long"}),
-    ("neon_ignite", [("1793485326156", None)], 3),
+    ("neon_ignite", [("1793485326156", None)], 3, {"first": 1.3, "ring": 0.3}),
     # The Company's cables under a train's draw, on G.
     ("cable_surge", [("1793485423078", 3)], 6, {"hum": True}),
     # A train through the rock, the length of a pass (TrainPass: 5 + 3 + 6 s); the air it pushes out.
@@ -1301,6 +1301,17 @@ METRO_SHOTS = [
     ("book_open", [("1793485586835", 4), (FOUR_ITEMS + "Items/book_open.wav", None), (RPG80 + "book_03.ogg", None)], 6),
     ("book_shut", [("1793485606047", 3), (SONIC_TABLE, None)], 6),
     ("book_riffle", [("1793485667655", 2), ("1793485652718", 4)], 8),
+    # The Company's engine (the station's hall): steam let off at a cylinder, a lever thrown and its relays, the engine
+    # labouring under a train's draw (in key: it is long, and sags as it goes) and catching up to its beat after.
+    ("engine_valve", [("1793496948482", None)], 3),
+    ("engine_lever", [("1793496965594", None)], 3),
+    ("engine_labour", [("1793497041680", None)], 3, {"key": True}),
+    ("engine_start", [("1793497085575", None)], 3),
+    # The engine played from its parts (PlaceSound): a piston's stroke (the body takes' own), a tick of the clockwork
+    # (a tooth of the big gear), a clunk of the middle gear's teeth.
+    ("engine_stroke", [("1793496843068", 12), ("1793496875177", 12)], 12, {"ring": 0.3}),
+    ("engine_tick", [("1793496884448", 12)], 12, {"ring": 0.3}),
+    ("engine_clunk", [("1793496905564", 12)], 10, {"ring": 0.3}),
 ]
 # A loop: (name, [takes], seconds, options).
 METRO_LOOPS = [
@@ -1314,10 +1325,19 @@ METRO_LOOPS = [
     ("transformer_hum", ["1793485379139"], 12.0, {"hum": True}),
     # A wall vent breathing: the tunnel's draught, dulled.
     ("vent_hum", ["1793484872682"], 10.0, {"lowpass": 2400}),
+    # The Company's engine, each part in the score's key: its body (steam and dynamo, the two takes laid together), its
+    # clockwork regulator, its great gears (taken down to C: heavier), its governor.
+    ("engine_body", ["1793496843068", "1793496875177"], 24.0, {"key": True}),
+    ("engine_clockwork", ["1793496884448"], 12.0, {"key": True}),
+    ("engine_gears", ["1793496905564"], 12.0, {"key": True, "to": "C"}),
+    ("engine_governor", ["1793496915477"], 8.0, {"key": True}),
 ]
-# The options: stereo (kept stereo: a bed, or a gust played flat; the game's named sounds are all mono), folder
+# The options: hum (onto the nearest G) or key (onto the nearer of C and G, the score's tonic and fifth; `to` "C" or "G"
+# forces one); stereo (kept stereo: a bed, or a gust played flat; the game's named sounds are all mono), folder
 # ("ambience": with the beds, not a named sound in audio/sfx/), pitch, lowpass (Hz), hum (pitched onto the nearest G),
-# a hum's shots are not pitched apart; pick ("short" or "long": only that half of the hits, by length), split (split_events' own arguments: sharp, short hits),
+# a hum's shots are not pitched apart; ring (s: a hit cut from running machinery rings out that long after it, dying
+# away); first (s: of a whole take only its opening, the strike: the rest is a sign's own hum); pick ("short" or "long":
+# only that half of the hits, by length), split (split_events' own arguments: sharp, short hits),
 # count (loops: name_1..name_n; one is name itself).
 METRO_SEED = 1931
 # The silence between variations in a listening file (s).
@@ -1330,6 +1350,34 @@ METRO_LOOP_IMPORT = FIRE_IMPORT.replace("force/mono=true", "force/mono={mono}")
 def g_of(hz):
     """The G nearest `hz`: 98 Hz an octave up or down."""
     return 98.0 * 2.0 ** round(np.log2(hz / 98.0))
+
+
+def key_of(hz, to=None):
+    """The C or G (the Metro score's tonic and fifth, any octave) nearest `hz`, or the one `to` names."""
+    names = {"C": 65.406, "G": 98.0}
+    best = None
+
+    for name, base in names.items():
+        if to is not None and name != to:
+            continue
+
+        near = base * 2.0 ** round(np.log2(hz / base))
+
+        if best is None or abs(np.log2(hz / near)) < abs(np.log2(hz / best)):
+            best = near
+
+    return best
+
+
+def _tuned(x, options):
+    """`x` with its hum put where its options say (hum: on G; key: in the score's key), else as it is."""
+    if options.get("hum"):
+        return retune(x, g_of(hum_hz(x)))
+
+    if options.get("key"):
+        return retune(x, key_of(hum_hz(x), options.get("to")))
+
+    return x
 
 
 def hum_hz(x, lo=40.0, hi=420.0):
@@ -1361,6 +1409,21 @@ def retune(x, to_hz, lo=40.0, hi=420.0):
         raise ValueError("a hum landed %.0f cents off %.1f Hz" % (off, to_hz))
 
     return y
+
+
+def _rung(x, start, end, ring):
+    """The hit of `x` from `start` to `end` (s), ringing out: `ring` s more of the take after it, dying away (an
+    exponential, 32 dB down by its end) as a struck part does, not stopping mid-sound where running machinery goes on."""
+    last = min(int((end + ring) * RATE), len(x))
+    hit = x[int(start * RATE):last].copy()
+    cut = int((end - start) * RATE)
+
+    if cut < len(hit):
+        t = np.arange(len(hit) - cut) / RATE
+        decay = np.exp(-t / (ring / 3.75))
+        hit[cut:] *= decay if hit.ndim == 1 else decay[:, None]
+
+    return hit
 
 
 def _loud(x):
@@ -1434,7 +1497,7 @@ def _take_path(source, take):
         if os.path.exists(os.path.join(source, name)):
             return os.path.join(source, name)
 
-    found = glob.glob(os.path.join(source, "*-%s.mp3" % take))
+    found = glob.glob(os.path.join(source, "**", "*-%s.mp3" % take), recursive=True)
 
     if len(found) != 1:
         raise FileNotFoundError("take %s: %d files in %s" % (take, len(found), source))
@@ -1485,23 +1548,25 @@ def prepare_metro(source=METRO_SOURCE, sfx_out=OUT, ambience_out=AMBIENCE_OUT, l
             x = _decode_take(_take_path(source, take), stereo, options.get("pitch", 1.0), options.get("lowpass"))
 
             mono = x if x.ndim == 1 else x.mean(axis=1)
-            spans = [[a / RATE, b / RATE] for a, b in [auto_bounds(mono)]] if split is None \
+            spans = [[a / RATE, min(b / RATE, a / RATE + options.get("first", 1e9))] for a, b in [auto_bounds(mono)]] \
+                if split is None \
                 else split_hits(mono, split, **options.get("split", {}))
-            hits += [x[int(a * RATE):int(b * RATE)] for a, b in spans]
+            hits += [_rung(x, a, b, options["ring"]) if options.get("ring") else x[int(a * RATE):int(b * RATE)]
+                     for a, b in spans]
 
         if not hits:
             raise ValueError("%s: no hits found in its takes" % group)
 
-        # A hum's hits each put on G (a surge sags as it goes: the whole take's pitch is not each hit's), and kept there.
-        if options.get("hum"):
-            hits = [retune(h, g_of(hum_hz(h))) for h in hits]
+        # A hum's hits each tuned (a surge sags as it goes: the whole take's pitch is not each hit's), and kept there.
+        hits = [_tuned(h, options) for h in hits]
+        tuned = options.get("hum") or options.get("key")
 
         if options.get("pick"):
             hits.sort(key=len)
             half = max(len(hits) // 2, 1)
             hits = hits[:half] if options["pick"] == "short" else hits[-half:]
 
-        variations = layered_shots(hits, count, rng, pitch=0.0 if options.get("hum") else 0.06)
+        variations = layered_shots(hits, count, rng, pitch=0.0 if tuned else 0.06)
 
         folder = ambience_out if options.get("folder") == "ambience" else sfx_out
 
@@ -1530,7 +1595,7 @@ def prepare_metro(source=METRO_SOURCE, sfx_out=OUT, ambience_out=AMBIENCE_OUT, l
 
         for take in takes:
             x = _decode_take(_take_path(source, take), stereo, options.get("pitch", 1.0), options.get("lowpass"))
-            decoded.append(retune(x, g_of(hum_hz(x))) if options.get("hum") else x)
+            decoded.append(_tuned(x, options))
 
         count = options.get("count", 1)
         names = [name] if count == 1 else ["%s_%d" % (name, k) for k in range(1, count + 1)]
@@ -1540,9 +1605,8 @@ def prepare_metro(source=METRO_SOURCE, sfx_out=OUT, ambience_out=AMBIENCE_OUT, l
         for each in names:
             x = layered_loop(decoded, seconds, rng, stereo)
 
-            # (A hum drifts as it runs: the stretch a loop takes is put on G again, whole, so its seam stays seamless.)
-            if options.get("hum"):
-                x = retune(x, g_of(hum_hz(x)))
+            # (A hum drifts as it runs: the stretch a loop takes is tuned again, whole, so its seam stays seamless.)
+            x = _tuned(x, options)
             path = os.path.join(ambience_out, each + ".wav")
             _write_any(path, x)
             importer = path + ".import"

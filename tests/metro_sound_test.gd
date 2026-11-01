@@ -8,6 +8,11 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
 const METRO := preload("res://maps/metro.tscn")
 const PLAYER := preload("res://Player.tscn")
+const EngineCrank := preload("res://scripts/Visual/EngineCrank.gd")
+const Clockwork := preload("res://scripts/Visual/Clockwork.gd")
+const CameraJuice := preload("res://scripts/PlayerUtils/CameraJuice.gd")
+## A listener with the player's view springs (its shake), as the player is.
+const EAR_SOURCE := "extends Node3D\nvar juice := preload(\"res://scripts/PlayerUtils/CameraJuice.gd\").new()\n"
 
 ## A plan of its own: the hall (the station), the Pasaje beyond its east door (the market layer), the vaults beyond
 ## that (the old layer), the shop north of the hall; each 10 m square, floors at 0.
@@ -31,7 +36,8 @@ const NOWHERE := Vector3(-40, 1, -40)
 const PLATFORM_MID := Vector3(5, 1, -5)
 ## A station set's lists, as the real one keeps them (maps/metro_station.gd), and a lane with its train.
 const STATION_SOURCE := "extends Node3D\nvar mouth_runs: Array = []\nvar runs: Array = []\nvar neon: Array = []\n" \
-	+ "var mains: Array = []\nvar risers: Array = []\nvar mouths: Array = []\nvar floor_mains: Array = []\n"
+	+ "var mains: Array = []\nvar risers: Array = []\nvar mouths: Array = []\nvar floor_mains: Array = []\n" \
+	+ "var engine: Node3D\n"
 const LANE_SOURCE := "extends Node\nvar train: TrainPass\n"
 
 var results: Array[String] = []
@@ -46,6 +52,8 @@ func _ready() -> void:
 	await _director()
 	await _floors()
 	await _trains()
+	await _engine_beat()
+	await _presence()
 	await _in_the_metro()
 	Focus.reset()
 	Sfx.silence()
@@ -92,8 +100,10 @@ func _sfx() -> void:
 	_check("S2 the acoustics blend by weight", tiled > stoned and absf(half - (tiled + stoned) / 2.0) < 0.02,
 		"%.3f %.3f %.3f" % [tiled, stoned, half])
 
-	var shots := [&"pipe_tick", &"neon_ignite", &"cable_surge", &"train_far"]
-	var loops := [&"metro_room", &"metro_room_deep", &"metro_crowd", &"junction_hum", &"transformer_hum"]
+	var shots := [&"pipe_tick", &"neon_ignite", &"cable_surge", &"train_far", &"engine_valve", &"engine_lever",
+		&"engine_labour", &"engine_start"]
+	var loops := [&"metro_room", &"metro_room_deep", &"metro_crowd", &"junction_hum", &"transformer_hum", &"engine_body",
+		&"engine_clockwork", &"engine_gears", &"engine_governor"]
 	_check("S3 every Metro name has a gain", shots.all(func(n): return Sfx.GAIN.has(n))
 		and loops.all(func(n): return Sfx.LOOP_GAIN.has(n)),
 		"missing %s" % str((shots.filter(func(n): return not Sfx.GAIN.has(n))
@@ -239,6 +249,88 @@ func _in_the_metro() -> void:
 		and counts.hisses == station.mouths.size(),
 		"%s; neon %d runs %d mains %d risers %d floor mains %d mouths %d" % [str(counts), station.neon.size(), station.runs.size(),
 			station.mains.size(), station.risers.size(), station.floor_mains.size(), station.mouths.size()])
+	var engine: Node3D = station.engine
+	_check("S28 the Company's engine sounds: its body and governor, a stroke at every crank, ticks and clunks at its gears, its valves and lever",
+		engine != null and counts.engine_loops == 2 and counts.engine_strokes == (engine.get_meta("cranks") as Array).size()
+		and counts.engine_gears == 2 and counts.engine_events == (engine.get_meta("cranks") as Array).size() + 1,
+		str(counts))
+	# S36-S37: by the engine as a train passes (the player carried there, its body still).
+	var you: Node3D = metro.get("player")
+	you.process_mode = Node.PROCESS_MODE_DISABLED
+	you.global_position = engine.global_position + Vector3(6.0, 1.05, 0.0)
+	# (The player's camera is top level: it follows the player only in the player's own update, stopped here.)
+	var eye := get_viewport().get_camera_3d()
+	eye.global_position = you.global_position + Vector3(0.0, 0.6, 0.0)
+	eye.look_at(engine.global_position + Vector3(0.0, 1.5, 0.0))
+	await _frames(2)
+	# (Judged in game time: under --fixed-fps the run outruns the audio, so a voice's own playback says nothing here;
+	# tests/diag_metro_voices.tscn measures the same in real time.)
+	Sfx.recording = true
+	Sfx.recorded.clear()
+	sound.train.start_pass()
+	var cut := 0
+	var played := 0
+	var last := {}
+	var ignited: Array[int] = []
+	for f in 12 * 60:
+		var before := Sfx.recorded.size()
+		await get_tree().process_frame
+		for voice: AudioStreamPlayer3D in sound.engine_voices():
+			var plays := int(voice.get_meta(&"plays", 0))
+			var then: Array = last.get(voice, [0, -INF, 0.0])
+			if plays != int(then[0]):
+				played += 1
+				# Started again before its last sound had run its length.
+				if f / 60.0 - float(then[1]) < float(then[2]) - 0.05:
+					cut += 1
+				last[voice] = [plays, f / 60.0, voice.stream.get_length() / voice.pitch_scale]
+		if Sfx.recorded.slice(before).any(func(e): return e[0] == &"neon_ignite"):
+			ignited.append(f)
+	var pooled := Sfx.recorded.filter(func(e): return e[0] in [&"engine_stroke", &"engine_tick", &"engine_clunk"]).size()
+	Sfx.recording = false
+	_check("S36 by the engine as a train passes, none of its strokes, ticks or clunks is cut short, and none takes a world voice",
+		played >= 10 and cut == 0 and pooled == 0, "%d played, %d cut, %d in the world's pool" % [played, cut, pooled])
+	var apart := 9999
+	for k in range(1, ignited.size()):
+		apart = mini(apart, ignited[k] - ignited[k - 1])
+	var longest := 0.0
+	for k in range(1, 9):
+		if ResourceLoader.exists("res://audio/sfx/neon_ignite_%d.wav" % k):
+			longest = maxf(longest, (load("res://audio/sfx/neon_ignite_%d.wav" % k) as AudioStream).get_length())
+	_check("S37 a passing train's signs strike on as a strike, spaced: never more than two sounding at once",
+		longest <= 1.7 and apart >= NeonSign.IGNITE_APART and longest / (NeonSign.IGNITE_APART / 60.0) <= 2.5,
+		"%d ignitions, %d frames apart at least, takes %.2f s" % [ignited.size(), apart, longest])
+	# S38: 6 m off the engine in the open hall, its sounds come through its own body (the parts sit inside its housing).
+	var crank: Node3D = (engine.get_meta("cranks") as Array)[0]
+	var blocked := Sfx.occlusion_at(sound, crank.global_position)
+	var through := Sfx.occlusion_at(sound, crank.global_position, sound.engine_bodies())
+	var dulled := sound.engine_voices().filter(func(v): return v.get_meta(&"plays", 0) > 0 and v.attenuation_filter_cutoff_hz < Sfx.AIR_CUTOFF - 1.0).size()
+	var runs: Array = sound.get("_pipes").get("_runs")
+	var body_run: Dictionary = runs.filter(func(r): return r["loop"] == &"engine_body")[0]
+	_check("S38 the engine's sounds pass through its own body: by it in the open, none is muffled",
+		blocked >= 1.0 and through == 0.0 and dulled == 0 and is_equal_approx(float(body_run["cutoff_to"]), Sfx.AIR_CUTOFF),
+		"its own body blocks %.2f, passed through %.2f; %d voices dulled; body run cut at %.0f Hz" % [blocked, through, dulled,
+			float(body_run["cutoff_to"])])
+	# S39: the engine's running sound on a bus of its own: the room's reverb and the hurt's dulling as the world's, but
+	# not the world the beds and the score duck under (its strokes would pump them twice a second).
+	var machine := AudioServer.get_bus_index(&"Machine")
+	var on_machine := sound.engine_voices().all(func(v): return v.bus == &"Machine")
+	var machine_runs := runs.filter(func(r): return r["loop"] in [&"engine_body", &"engine_governor"] and r["player"] != null and r["player"].bus == &"Machine").size()
+	var keyed_by := []
+	for bus in [Sfx.BUS_AMBIENCE, Sfx.BUS_MUSIC]:
+		var i := AudioServer.get_bus_index(bus)
+		for k in range(AudioServer.get_bus_effect_count(i)):
+			var duck := AudioServer.get_bus_effect(i, k) as AudioEffectCompressor
+			if duck != null and duck.sidechain != &"":
+				keyed_by.append(duck.sidechain)
+	var machine_room: AudioEffectReverb = null
+	for k in range(AudioServer.get_bus_effect_count(machine) if machine >= 0 else 0):
+		if AudioServer.get_bus_effect(machine, k) is AudioEffectReverb:
+			machine_room = AudioServer.get_bus_effect(machine, k)
+	_check("S39 the engine runs on a bus of its own, in the world's room, keying no duck",
+		machine >= 0 and AudioServer.get_bus_send(machine) == &"Master" and on_machine and machine_runs == 2
+		and not (&"Machine" in keyed_by) and machine_room != null and is_equal_approx(machine_room.room_size, _world_reverb().room_size),
+		"bus %d, voices on it %s, runs %d, ducks keyed by %s" % [machine, on_machine, machine_runs, keyed_by])
 	var lane: Node3D = metro.get_node("candle_lane")
 	var vent: AudioStreamPlayer3D = lane.get("vent_hum")
 	var rumble: AudioStreamPlayer = lane.get("rumble")
@@ -298,15 +390,35 @@ func _script(source: String) -> GDScript:
 	return script
 
 
-## A station whose track mouth runs west of the platform, with two cable runs: one ending by the platform, one by the
-## vaults.
+
+
+## A station whose track runs past the platform, its two mouths 60 and more metres off (past Sfx's reach), with a dozen
+## signs on the line and two cable runs: one ending by the platform, one by the vaults.
 func _fake_station() -> Node3D:
 	var station: Node3D = _script(STATION_SOURCE).new()
 	add_child(station)
-	station.mouth_runs = [[-5.0, 0.0, -5.0, -1.0, 4.0]]
-	var sign := NeonSign.new()
-	station.add_child(sign)
-	station.neon.append(sign)
+	station.mouth_runs = [[-65.0, -55.0, -5.0, -1.0, 4.0], [65.0, 75.0, -5.0, -1.0, 4.0]]
+	for k in 12:
+		var sign := NeonSign.new()
+		sign.seed = k
+		station.add_child(sign)
+		# (Within hearing, 14 m: a sign further off strikes on silently.)
+		sign.position = Vector3(k * 0.8, 3.0, -9.0)
+		station.neon.append(sign)
+	# Its engine: two gear trains' turners, the governor last (as the set lists them), two flywheels' cranks.
+	var engine := Node3D.new()
+	station.add_child(engine)
+	engine.position = Vector3(10.0, 0.0, -3.0)
+	var parts := {}
+	for part in [["gear", Vector3(-1, 1, 0)], ["gear_b", Vector3(1, 1, 0)], ["governor", Vector3(0, 2.5, 0)],
+			["crank", Vector3(-1, 1, -1)], ["crank_b", Vector3(1, 1, -1)]]:
+		var piece := Node3D.new()
+		engine.add_child(piece)
+		piece.position = part[1]
+		parts[part[0]] = piece
+	engine.set_meta("spinners", [parts.gear, parts.gear_b, parts.governor])
+	engine.set_meta("cranks", [parts.crank, parts.crank_b])
+	station.engine = engine
 	for end in [Vector3(1, 1, -9), Vector3(25, 1, 5)]:
 		var run := Node3D.new()
 		run.set_meta("points", PackedVector3Array([Vector3.ZERO, end]))
@@ -315,7 +427,7 @@ func _fake_station() -> Node3D:
 	return station
 
 
-## S16-S19: one train for the Metro.
+## S16-S19, S23, S25-S27: one train for the Metro.
 func _trains() -> void:
 	var lane: Node = _script(LANE_SOURCE).new()
 	var lane_train := TrainPass.new()
@@ -327,40 +439,204 @@ func _trains() -> void:
 	var ear := Node3D.new()
 	add_child(ear)
 	ear.global_position = PLATFORM_MID
+	# (The ear hears through a camera, as the player does: Focus and Sfx measure from it.)
+	var eye := Camera3D.new()
+	ear.add_child(eye)
+	eye.make_current()
 	var sound := PlaceSound.new()
 	add_child(sound)
 	sound.setup(PLAN, ear, station, lane)
 	_check("S16 with a lane, the Metro's train is the lane's", sound.train == lane_train, str(sound.train))
 
 	await _frames(5)
+	Sfx.recording = true
+	Sfx.recorded.clear()
 	sound.train.start_pass()
-	var sign: NeonSign = station.neon[0]
-	var sign_lowest := 1.0
-	for f in int(1.3 * 60):
+	var lowest := {}
+	var most_at_once := 0
+	var struck := 0
+	for f in int(15.0 * 60):
+		var before := Sfx.recorded.size()
 		await get_tree().process_frame
-		sign_lowest = minf(sign_lowest, sign.dim)
-	var heard: Array = sound.train_heard().duplicate()
-	var rumbles := heard.filter(func(h): return h[0] == &"train_far" and float(h[2]) > -10.0)
-	var gusts := heard.filter(func(h): return h[0] == &"metro_draught")
-	_check("S17 a train heard from a platform: its rumble from the mouth, its draught", rumbles.size() == station.mouth_runs.size() and gusts.size() == 1,
-		str(heard))
-
-	for f in int(5.0 * 60):
-		await get_tree().process_frame
-		sign_lowest = minf(sign_lowest, sign.dim)
-	var surges := sound.train_heard().filter(func(h): return h[0] == &"cable_surge")
-	_check("S19 at the peak the cables surge, from the run end nearest the ear", surges.size() == 1
-		and (surges[0][1] as Vector3).distance_to(Vector3(1, 1, -9)) < 0.01, str(surges))
-
-	await _frames(int(10.0 * 60))
+		var now := Sfx.recorded.slice(before).filter(func(e): return e[0] == &"neon_ignite").size()
+		most_at_once = maxi(most_at_once, now)
+		struck += now
+		for sign: NeonSign in station.neon:
+			lowest[sign] = minf(float(lowest.get(sign, 1.0)), sign.dim)
+		if f == int(1.3 * 60):
+			var near: AudioStreamPlayer3D = sound.get("rumble_near")
+			var far: AudioStreamPlayer = sound.get("rumble_far")
+			var gusts := sound.train_heard().filter(func(h): return h[0] == &"metro_draught")
+			_check("S17 a train heard from a platform 60 m and more from the mouths: its rumble voiced on the track nearest you, through the walls too, and its draught",
+				near != null and near.playing and near.stream != null and near.max_distance >= 60.0
+				and near.global_position.distance_to(Vector3(5.0, 0.5, -5.0)) < 0.5 and far != null and far.playing and gusts.size() == 1,
+				"near %s at %s, far %s, gusts %d" % [near.playing if near else null, near.global_position if near else null,
+					far.playing if far else null, gusts.size()])
+		if f == int(6.0 * 60):
+			var labours := sound.train_heard().filter(func(h): return h[0] == &"engine_labour")
+			_check("S29 at a train's peak the engine labours under its draw", labours.size() == 1
+				and (labours[0][1] as Vector3).distance_to(Vector3(10.0, 0.0, -3.0)) < 0.01, str(labours))
+			var surges := sound.train_heard().filter(func(h): return h[0] == &"cable_surge")
+			_check("S19 at the peak the cables surge, from the run end nearest the ear, though signs go out round it", surges.size() == 1
+				and (surges[0][1] as Vector3).distance_to(Vector3(1, 1, -9)) < 0.01, str(surges))
+	Sfx.recording = false
+	var caught := sound.train_heard().filter(func(h): return h[0] == &"engine_start")
+	_check("S29b once the train has gone the engine catches back up to its beat, once", caught.size() == 1, str(caught))
+	var out := lowest.values().filter(func(v): return v < NeonSign.OUT_BELOW).size()
 	_check("S23 the station's signs sag with the train, some far enough to go out, and come back",
-		sign_lowest < NeonSign.OUT_BELOW and is_equal_approx(sign.dim, 1.0), "lowest %.2f, now %.2f" % [sign_lowest, sign.dim])
+		out > 0 and station.neon.all(func(s): return is_equal_approx(s.dim, 1.0)), "%d of 12 out" % out)
+	_check("S25b the signs go out and strike back on out of step: one at a time, never more than one at once",
+		struck >= 1 and most_at_once <= 1,
+		"%d ignitions, at most %d in a frame" % [struck, most_at_once])
+
 	ear.global_position = OLD_MID
 	await _frames(5)
 	sound.train.start_pass()
 	await _frames(int(1.3 * 60))
 	var deep := sound.train_heard().filter(func(h): return h[0] == &"train_far" or h[0] == &"metro_draught")
-	_check("S18 in the old layer the train is not heard", deep.is_empty(), str(deep))
+	var near_deep: AudioStreamPlayer3D = sound.get("rumble_near")
+	_check("S18 in the old layer the train is not heard",
+		deep.is_empty() and (near_deep == null or not near_deep.playing or near_deep.volume_db <= -79.0), str(deep))
+	await _frames(int(14.0 * 60))
+	ear.global_position = NOWHERE
+	await _frames(5)
+	sound.train.start_pass()
+	await _frames(int(1.3 * 60))
+	var lost := sound.train_heard().filter(func(h): return h[0] == &"train_far" or h[0] == &"metro_draught")
+	_check("S26 fallen out of every space from the old layer, the train is still not heard", lost.is_empty(), str(lost))
+	# S27: two tracks (the station's north and south), their mouths at both ends: the rumble rides the nearer track.
+	station.mouth_runs = [[-65.0, -55.0, -5.0, -1.0, 4.0], [-65.0, -55.0, 5.0, -1.0, 4.0], [65.0, 75.0, -5.0, -1.0, 4.0],
+		[65.0, 75.0, 5.0, -1.0, 4.0]]
+	ear.global_position = Vector3(5.0, 1.0, -8.0)
+	await _frames(3)
+	var rode: Vector3 = sound.call("_on_track")
+	_check("S27 with two tracks the rumble rides the one nearer you", rode.distance_to(Vector3(5.0, 0.5, -5.0)) < 0.1, str(rode))
 	for node in [sound, ear, station, lane]:
 		node.queue_free()
 	await _frames(3)
+
+
+## S30-S32: the engine's sound follows its parts.
+func _engine_beat() -> void:
+	var station: Node3D = _script(STATION_SOURCE).new()
+	add_child(station)
+	var engine := Node3D.new()
+	station.add_child(engine)
+	engine.position = Vector3(5.0, 0.0, 5.0)
+	var cranks: Array = []
+	for k in 2:
+		var crank: Node3D = EngineCrank.new()
+		crank.turns = 0.25
+		crank.start = k * PI / 2.0
+		engine.add_child(crank)
+		crank.position = Vector3(k * 2.0 - 1.0, 1.0, 0.0)
+		cranks.append(crank)
+	var spinners: Array = []
+	for spec in [[0.06, Vector3(0, 2, 1)], [-0.088, Vector3(1, 2, 1)], [0.7, Vector3(0, 3, 0)]]:
+		var turner: Node3D = Clockwork.new()
+		turner.turns = spec[0]
+		engine.add_child(turner)
+		turner.position = spec[1]
+		spinners.append(turner)
+	engine.set_meta("cranks", cranks)
+	engine.set_meta("spinners", spinners)
+	station.engine = engine
+	var ear := Node3D.new()
+	add_child(ear)
+	ear.global_position = HALL_MID
+	var sound := PlaceSound.new()
+	add_child(sound)
+	sound.setup(PLAN, ear, station)
+	await _frames(2)
+	sound.engine_heard().clear()
+	await _frames(8 * 60)
+	var heard: Array = sound.engine_heard().duplicate()
+	var strokes := heard.filter(func(h): return h[0] == &"engine_stroke")
+	# (A stroke sounds on the frame its crank crosses: within a frame's turn past the dead centre.)
+	var on_centre := strokes.all(func(h):
+		var angle := fposmod(float(h[2]), PI)
+		return minf(angle, PI - angle) < TAU * 0.25 / 60.0 + 0.001)
+	_check("S30 a piston stroke sounds at each crank as it passes its dead centre, twice a turn",
+		strokes.size() >= 7 and strokes.size() <= 9 and on_centre and strokes.any(func(h): return h[1] == cranks[0])
+		and strokes.any(func(h): return h[1] == cranks[1]), "%d strokes, on centre %s" % [strokes.size(), on_centre])
+	var ticks := heard.filter(func(h): return h[0] == &"engine_tick").size()
+	var clunks := heard.filter(func(h): return h[0] == &"engine_clunk").size()
+	_check("S31 the clockwork ticks with its big gear's teeth, the middle gear clunks with its own",
+		absi(ticks - roundi(0.06 * PlaceSound.TICK_TEETH * 8.0)) <= 1 and absi(clunks - roundi(0.088 * PlaceSound.CLUNK_TEETH * 8.0)) <= 1,
+		"%d ticks, %d clunks" % [ticks, clunks])
+	var whir_full: float = sound.governor_pitch()
+	spinners[2].turns = 0.35
+	await _frames(2)
+	_check("S32 the governor's whir follows its spin", is_equal_approx(whir_full, 1.0) and is_equal_approx(sound.governor_pitch(), 0.5),
+		"%.2f, then %.2f" % [whir_full, sound.governor_pitch()])
+	for node in [sound, ear, station]:
+		node.queue_free()
+	await _frames(3)
+
+
+## S33-S35: presence: the rumble through a wall, your steps in the room, the low end felt.
+func _presence() -> void:
+	var station := _fake_station()
+	var ear: Node3D = _script(EAR_SOURCE).new()
+	add_child(ear)
+	ear.global_position = Vector3(5.0, 1.0, 5.0)
+	var eye := Camera3D.new()
+	ear.add_child(eye)
+	eye.make_current()
+	var wall := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(200.0, 6.0, 0.4)
+	shape.shape = box
+	wall.add_child(shape)
+	add_child(wall)
+	wall.global_position = Vector3(0.0, 2.0, 0.0)
+	var sound := PlaceSound.new()
+	add_child(sound)
+	sound.setup(PLAN, ear, station)
+	await _frames(3)
+	sound.train.start_pass()
+	await _frames(90)
+	var near: AudioStreamPlayer3D = sound.get("rumble_near")
+	var walled := [near.volume_db, near.attenuation_filter_cutoff_hz]
+	wall.queue_free()
+	await _frames(90)
+	var open := [near.volume_db, near.attenuation_filter_cutoff_hz]
+	_check("S33 a train behind a wall is heard through it: quieter and duller", float(walled[0]) <= float(open[0]) - 6.0
+		and float(walled[1]) < float(open[1]) - 1000.0, "walled %s, open %s" % [str(walled), str(open)])
+
+	var body := AudioServer.get_bus_index(Sfx.BUS_BODY)
+	var room: AudioEffectReverb = null
+	for i in range(AudioServer.get_bus_effect_count(body)):
+		if AudioServer.get_bus_effect(body, i) is AudioEffectReverb:
+			room = AudioServer.get_bus_effect(body, i)
+	# (A tiled hall as the room's probe finds one: big, closed in.)
+	Sfx.shape_room(Vector2(0.7, 1.0))
+	Sfx.set_acoustics_mix({"tile": 1.0})
+	var ringing := [room.room_size, room.wet]
+	_check("S34 in the Metro's tiled halls your own steps ring in the room", float(ringing[0]) > 0.4 and float(ringing[1]) > 0.08,
+		str(ringing))
+
+	ear.global_position = PLATFORM_MID
+	await _frames(int(4.0 * 60))
+	sound.train.start_pass()
+	var shaken := 0.0
+	for f in int(8.0 * 60):
+		await get_tree().process_frame
+		shaken = maxf(shaken, float(ear.juice.get("_trauma")))
+	ear.global_position = OLD_MID
+	await _frames(int(10.0 * 60))
+	# (The fake ear runs no view springs of its own: the last pass's shake would never decay.)
+	ear.juice.set("_trauma", 0.0)
+	sound.train.start_pass()
+	var deep := 0.0
+	for f in int(8.0 * 60):
+		await get_tree().process_frame
+		deep = maxf(deep, float(ear.juice.get("_trauma")))
+	_check("S35 a train passing by the platform is felt underfoot; in the old layer, not", shaken >= 0.2 and deep <= 0.001,
+		"%.2f, %.3f" % [shaken, deep])
+	for node in [sound, ear, station]:
+		node.queue_free()
+	await _frames(3)
+	_check("S34b out of the Metro your steps are as dry as ever", is_equal_approx(room.room_size, 0.25) and is_equal_approx(room.wet, 0.05),
+		"%.2f %.2f" % [room.room_size, room.wet])

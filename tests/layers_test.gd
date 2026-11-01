@@ -175,9 +175,20 @@ func _neon() -> void:
 		await get_tree().process_frame
 	_check("N4 a brownout or the dark train dims the hum but never ticks the tube off", sign.ticks == steady,
 		"%d ticks" % [sign.ticks - steady])
-	# Put out (the dark train's sinking above left it so), then back: it strikes on with its ignition, once; a shallow
-	# sag after does not.
+	# A sign off the Company's line (the lane's, the bay's) put out (the dark train's sinking above left it so) and back:
+	# no ignition, the dark train's cold is no draw on the line.
 	Sfx.recording = true
+	Sfx.recorded.clear()
+	for f in 10:
+		sign.dim = 0.2
+		await get_tree().process_frame
+	for f in 10:
+		sign.dim = 1.0
+		await get_tree().process_frame
+	_check("N7 a sign off the line put out and back does not strike on",
+		Sfx.recorded.filter(func(entry): return entry[0] == &"neon_ignite").is_empty(), "")
+	# On the Company's line, put out, then back: it strikes on with its ignition, once; a shallow sag after does not.
+	sign.on_line = true
 	Sfx.recorded.clear()
 	for f in 10:
 		sign.dim = 0.2

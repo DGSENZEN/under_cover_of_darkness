@@ -28,6 +28,9 @@ const BUS_MUSIC := &"Music"
 const BUS_AMBIENCE := &"Ambience"
 ## The ánimas' voices (Animas.gd): a long dark tail of their own, then the room's (sent to World).
 const BUS_SOULS := &"Souls"
+## A machine's running sound (the Company's engine: its strokes, ticks, body): the world's room and the hurt's dulling,
+## sent straight to Master, so the beds and the score do not duck under it (they duck under World: the fight first).
+const BUS_MACHINE := &"Machine"
 ## Played on the Music bus rather than your Body's.
 const MUSICAL := [&"sting_suspicious", &"sting_combat", &"sting_escalate", &"sting_goal"]
 ## The room: [room size, damping, wet, spread, hi-pass] for each "acoustics".
@@ -258,6 +261,15 @@ const GAIN := {
 	&"neon_ignite": -6.0,
 	&"cable_surge": -8.0,
 	&"train_far": -4.0,
+	# The Company's engine: steam let off at a cylinder, a lever thrown and its relays, labouring under a train's draw,
+	# catching back up to its beat.
+	&"engine_valve": -8.0,
+	&"engine_lever": -6.0,
+	&"engine_labour": -6.0,
+	&"engine_start": -6.0,
+	&"engine_stroke": -6.0,
+	&"engine_tick": -10.0,
+	&"engine_clunk": -8.0,
 }
 
 ## The layers' loops (in audio/ambience/), how loud each plays (dB: target LUFS less measured; a neon's hum -36,
@@ -269,6 +281,12 @@ const LOOP_GAIN := {
 	&"metro_crowd": -16.0,
 	&"junction_hum": -22.0,
 	&"transformer_hum": -20.0,
+	# The Company's engine at the hall's middle: its body, its clockwork regulator, its great gears, its governor.
+	# (Its body a breath under the strokes its cranks play: PlaceSound.)
+	&"engine_body": -22.0,
+	&"engine_clockwork": -12.0,
+	&"engine_gears": -14.0,
+	&"engine_governor": -18.0,
 	&"neon_buzz_1": -21.1,
 	&"neon_buzz_2": -17.2,
 	&"neon_buzz_3": -16.3,
@@ -358,6 +376,10 @@ static var _material := "stone"
 static var _mix: Array = []
 ## The room as last sounded out ([size, enclosed]), for a blend to reshape.
 static var _shape := Vector2(0.5, 1.0)
+## How much of the room your own sounds (the Body bus: your steps, your breath) take up: 0 close and dry as ever, 1 the
+## room's own reverb, a little under the world's (PlaceSound sets it in the Metro's tiled halls).
+static var body_room := 0.0
+const BODY_ROOM := [0.25, 0.7, 0.05]
 ## How deadened your hearing is by the last heavy blow (0..1, fading).
 static var _ringing := 0.0
 var _heart_in := 0.0
@@ -373,7 +395,9 @@ var _task := -1
 
 ## Plays a named recording at world at; volume is additional dB, pitch is a multiplier, jitter is fractional pitch variation.
 ## Uses a level-owned positional pool; disabled audio, detached context, or missing recordings produce no playback.
-static func play(context: Node, sound: StringName, at: Vector3, volume := 0.0, pitch := 1.0, jitter := 0.04) -> void:
+## `through`: bodies the sound comes through rather than from behind (the thing making it: an engine's own housing).
+static func play(context: Node, sound: StringName, at: Vector3, volume := 0.0, pitch := 1.0, jitter := 0.04,
+		through: Array = []) -> void:
 	if recording:
 		recorded.append([sound, volume, true])
 
@@ -383,7 +407,8 @@ static func play(context: Node, sound: StringName, at: Vector3, volume := 0.0, p
 		return
 
 	# A hair different each time: pitch, and a decibel either way.
-	node._play_3d(sound, at, volume + float(GAIN.get(sound, 0.0)) + randf_range(-1.0, 1.0), pitch * (1.0 + randf_range(-jitter, jitter)))
+	node._play_3d(sound, at, volume + float(GAIN.get(sound, 0.0)) + randf_range(-1.0, 1.0), pitch * (1.0 + randf_range(-jitter, jitter)),
+		through)
 
 
 ## Plays a non-positional recording; volume is additional dB and pitch/jitter are multipliers.
@@ -570,7 +595,7 @@ static func _ensure_limiter() -> void:
 ## close), Music and Ambience (each pressed down a little while the World is
 ## loud: the fight comes first).
 static func _ensure_buses() -> void:
-	for bus in [BUS_WORLD, BUS_FAR, BUS_BODY, BUS_MUSIC, BUS_AMBIENCE, BUS_SOULS]:
+	for bus in [BUS_WORLD, BUS_FAR, BUS_BODY, BUS_MUSIC, BUS_AMBIENCE, BUS_SOULS, BUS_MACHINE]:
 		if AudioServer.get_bus_index(bus) >= 0:
 			continue
 
@@ -580,7 +605,7 @@ static func _ensure_buses() -> void:
 		AudioServer.set_bus_send(index, BUS_WORLD if bus == BUS_SOULS else &"Master")
 
 		match bus:
-			BUS_WORLD:
+			BUS_WORLD, BUS_MACHINE:
 				AudioServer.add_bus_effect(index, AudioEffectReverb.new())
 				AudioServer.add_bus_effect(index, _hurt_filter())
 			BUS_FAR:
@@ -722,7 +747,7 @@ static func shape_room(shape: Vector2) -> void:
 	_shape = shape
 	var stuff: Array = _mix if not _mix.is_empty() else ACOUSTICS.get(_material, ACOUSTICS["stone"])
 
-	for bus in [BUS_WORLD, BUS_FAR]:
+	for bus in [BUS_WORLD, BUS_FAR, BUS_MACHINE]:
 		var index := AudioServer.get_bus_index(bus)
 
 		if index < 0:
@@ -742,6 +767,18 @@ static func shape_room(shape: Vector2) -> void:
 			reverb.hipass = stuff[4]
 			reverb.dry = 1.0 - 0.3 * far
 			reverb.predelay_msec = lerpf(6.0, 40.0, shape.x)
+
+	# Your own sounds in the room, as much as body_room says.
+	var body := AudioServer.get_bus_index(BUS_BODY)
+
+	for i in range(AudioServer.get_bus_effect_count(body) if body >= 0 else 0):
+		var near := AudioServer.get_bus_effect(body, i) as AudioEffectReverb
+
+		if near != null:
+			near.room_size = lerpf(BODY_ROOM[0], clampf(lerpf(0.18, float(stuff[0]) + 0.2, shape.x), 0.0, 1.0), body_room)
+			near.damping = lerpf(BODY_ROOM[1], float(stuff[1]), body_room)
+			near.wet = lerpf(BODY_ROOM[2], maxf(BODY_ROOM[2], 0.6 * clampf(lerpf(0.035, float(stuff[2]), shape.y), 0.0, 0.6)),
+				body_room)
 
 
 static func _level_of(context: Node) -> Node:
@@ -783,7 +820,7 @@ static func _let_go() -> void:
 	_mutex.unlock()
 
 
-func _play_3d(sound: StringName, at: Vector3, volume: float, pitch: float) -> void:
+func _play_3d(sound: StringName, at: Vector3, volume: float, pitch: float, through: Array = []) -> void:
 	# Asked for while the level is still being set up: nothing can play yet.
 	if not is_inside_tree():
 		return
@@ -807,7 +844,7 @@ func _play_3d(sound: StringName, at: Vector3, volume: float, pitch: float) -> vo
 
 	# Through a wall: muffled and quieter; round a corner, a little. In the
 	# open: only the air dulls it with distance.
-	var hidden := _occlusion(at)
+	var hidden := _occlusion(at, through)
 
 	if hidden >= 1.0:
 		player.volume_db = volume + volume_db + OCCLUDED_DB
@@ -834,9 +871,10 @@ func _play_3d(sound: StringName, at: Vector3, volume: float, pitch: float) -> vo
 
 ## How much stands between you and `at` (_occlusion): 0, 0.5 a corner, 1 a
 ## wall. 0 with sound off.
-static func occlusion_at(context: Node, at: Vector3) -> float:
+## (`through`: bodies it comes through, not from behind: the thing making the sound, Sfx.play's.)
+static func occlusion_at(context: Node, at: Vector3, through: Array = []) -> float:
 	var node := _node_for(context)
-	return node._occlusion(at) if node != null else 0.0
+	return node._occlusion(at, through) if node != null else 0.0
 
 
 ## Whether something solid (the level, a closed door) stands between the
@@ -848,13 +886,18 @@ func _occluded(at: Vector3) -> bool:
 ## How much stands between the listener and `at`: 0 nothing; 0.5 a corner (a
 ## way round to it along the floor, not much longer than straight: it comes
 ## through the doorway); 1 solid wall.
-func _occlusion(at: Vector3) -> float:
+func _occlusion(at: Vector3, through: Array = []) -> float:
 	var camera := get_viewport().get_camera_3d() if is_inside_tree() else null
 
 	if camera == null or camera.global_position.distance_to(at) < 1.5:
 		return 0.0
 
-	var query := PhysicsRayQueryParameters3D.create(camera.global_position, at, 1, _listener_exclude())
+	var exclude := _listener_exclude()
+
+	for body in through:
+		exclude.append(body)
+
+	var query := PhysicsRayQueryParameters3D.create(camera.global_position, at, 1, exclude)
 	query.collide_with_areas = false
 	var hit := camera.get_world_3d().direct_space_state.intersect_ray(query)
 
@@ -940,7 +983,7 @@ func _process(_delta: float) -> void:
 	_ringing = maxf(_ringing - real / 0.8, 0.0)
 	var cutoff := world_cutoff_for(health, _ringing, ward_muffle)
 
-	for bus in [BUS_WORLD, BUS_FAR, BUS_AMBIENCE]:
+	for bus in [BUS_WORLD, BUS_FAR, BUS_AMBIENCE, BUS_MACHINE]:
 		var index := AudioServer.get_bus_index(bus)
 
 		for i in range(AudioServer.get_bus_effect_count(index) if index >= 0 else 0):

@@ -23,3 +23,5 @@ res://scripts/Visual/CompanyLamp.gd  # its breath is worked out each frame from 
 res://scripts/Level/TurnstileLane.gd  # its arms rest on a third's turn, and three arms look alike at every third
 res://scripts/Audio/PlaceScore.gd  # its themes are picked again from where you stand, its variants from PeopleState (saved)
 res://scripts/Audio/PlaceSound.gd  # its beds are worked out each frame from where you stand; its train is the lane's (saved)
+res://scripts/Visual/Clockwork.gd  # a gear's or the governor's turn on its own clock; a load starts it again, which no one can see
+res://scripts/Visual/EngineCrank.gd  # a flywheel's turn and its linkage on its own clock; a load starts it again, which no one can see

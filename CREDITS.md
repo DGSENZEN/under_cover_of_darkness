@@ -18,7 +18,8 @@ Every sound in the game is a recording, cut and levelled from the packs below by
 - **The Metro's sound** (its station hall's room, the crowd, the trains and their
   draught, the pipes' knocks, ticks and valves, the neon's buzz, stutters and
   ignition, the junction boxes, the transformer and the cables' surge, the tile
-  and carpet steps, the books opening, shutting and turning): generated with
+  and carpet steps, the books opening, shutting and turning, the Company's engine
+  with its clockwork, gears, governor, valves, lever, labouring and catching up): generated with
   **ElevenLabs** Sound Effects by Diego Gaytan on a paid plan (commercial use),
   Oct 31 2026, and layered by `tools/prepare_sfx.py --metro`.
 
