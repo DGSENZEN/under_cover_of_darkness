@@ -3669,6 +3669,16 @@ class StationEngine(unittest.TestCase):
         for name in ("flywheel", "conrod", "crosshead", "governor"):
             self.assertIn(name, self.objects)
 
+    def test_json_gives_its_heads_and_dome(self):
+        """What it breathes out of (the engine's presence): each cylinder's head, the dome's crown, set frame."""
+        data = self.kit.json_data()
+        heads = data.get("heads", [])
+        self.assertEqual(len(heads), 4, heads)
+        for head in heads:
+            self.assertTrue(2.9 <= head["y"] - 6.0 <= 3.3, head)
+            self.assertGreater(math.hypot(head["x"], head["z"]), 2.4, head)
+        self.assertAlmostEqual(data.get("dome", {}).get("y", 0.0) - 6.0, 3.8, delta=0.05)
+
     def test_it_takes_the_runs_and_the_trays(self):
         # (The runs' meeting point is inside the dome: every way out of it meets the engine.)
         for way in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):

@@ -1285,6 +1285,47 @@ func _engine_fx() -> void:
 	if beat.physics_interpolation_mode != Node.PHYSICS_INTERPOLATION_MODE_OFF:
 		wrong.append("the beat interpolated")
 	_check("S12 the engine keeps one beat; its core breathes on it", wrong.is_empty(), "%s" % [wrong.slice(0, 6)])
+	await _engine_breath(engine, beat, fx)
+
+
+## S13: it breathes: on each stroke that crank's head bursts steam and no other's; a plume off its dome; a heat shimmer
+## over its drum (the screen bent, unshaded, no shadow, on the hall's layer only, faded out near the eye).
+func _engine_breath(engine: Node3D, beat: Node, fx: Dictionary) -> void:
+	var wrong := []
+	var steam: Array = fx.get("steam", [])
+	if steam.size() != 4:
+		wrong.append("%d steam heads" % steam.size())
+	else:
+		var counts := steam.map(func(f): return int(f.bursts))
+		var stroked := []
+		var on_stroke := func(index: int) -> void: stroked.append(index)
+		beat.stroke.connect(on_stroke)
+		await _frames(130)
+		beat.stroke.disconnect(on_stroke)
+		for k in 4:
+			var want := stroked.count(k)
+			if int(steam[k].bursts) - int(counts[k]) != want:
+				wrong.append("head %d burst %d times for %d strokes" % [k, int(steam[k].bursts) - int(counts[k]), want])
+		if stroked.is_empty():
+			wrong.append("no strokes")
+	var plume = fx.get("plume")
+	if plume == null or not plume.visible or plume.puffer == null or not plume.puffer.emitting:
+		wrong.append("no plume breathing")
+	var shimmer: MeshInstance3D = fx.get("shimmer")
+	if shimmer == null:
+		wrong.append("no shimmer")
+	else:
+		var look := shimmer.material_override as ShaderMaterial
+		var code := look.shader.code if look != null and look.shader != null else ""
+		if not ("hint_screen_texture" in code and "unshaded" in code):
+			wrong.append("the shimmer does not bend the screen, unshaded")
+		if shimmer.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or shimmer.layers != Layers.STATION_HALL:
+			wrong.append("shimmer shadow %d, layers %d" % [shimmer.cast_shadow, shimmer.layers])
+		if look == null or absf(float(look.get_shader_parameter("near_fade")) - EngineFx.NEAR_FADE) > 0.001 \
+				or EngineFx.NEAR_FADE != 1.5:
+			wrong.append("the shimmer does not fade near the eye")
+	_check("S13 the engine breathes: steam on each stroke, its plume, heat over its drum", wrong.is_empty(),
+		"%s" % [wrong.slice(0, 6)])
 
 
 ## Walks the set's player from `start` along `way`, turning toward each point; arrived at each within 0.3 m.
