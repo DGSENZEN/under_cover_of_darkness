@@ -640,6 +640,10 @@ def json_data():
     gears = [dict(piece=p, heading=angle, turns=turns, **at_set(at)) for p, at, angle, turns in gear_spots()]
     crank = [dict(heading=angle, turns=turns, start=start, **at_set(at)) for angle, at, turns, start in CRANKS]
     blades = [dict(heading=angle, **at_set(_at(angle, r, DECK))) for angle, r in BLADES]
+    lo, hi = OPENING[0][1], OPENING[-1][1]
+    wide = 2.0 * max(-u for u, _ in OPENING)
+    windows = [dict(heading=angle, width=wide, height=hi - lo, **at_set(_on_face(angle, FACE + 0.06, 0.0, (lo + hi) / 2)))
+               for angle in WINDOW_ANGLES]
     heads = [at_set(_on_face(angle, WHEEL[0] + CONROD_OUT, 0.0, CYLINDER_SPAN[1] + 0.04)) for angle in CRANK_ANGLES]
     return {
         "gears": gears, "cranks": crank, "blades": blades,
@@ -647,6 +651,7 @@ def json_data():
         "governor": dict(turns=0.7, **at_set((0.0, 0.0, GOVERNOR_AT))),
         "heads": heads,
         "dome": at_set((0.0, 0.0, DOME[-1][1])),
+        "windows": windows,
     }
 
 

@@ -695,7 +695,8 @@ func _mouths() -> void:
 ## S4: every run of wall the shell stands in its spaces dressed, tiled or plastered, every 1.2 m along it from a metre
 ## up to near its top (a run under 0.25 m, a jamb its reveal covers, excepted): sampled just in front of its face
 ## against where the dressing is drawn.
-## S4b: no word on it: no Label3D or Decal under the set (its signs' faces are the kit's blank `sign` slot).
+## S4b: no word on it: no Label3D or Decal from an image under the set (its signs' faces are the kit's blank `sign`
+## slot).
 ## S4c: nothing hung over a walk lower than 2.4 m over its floor.
 func _dressed() -> void:
 	var drawn := _drawn()
@@ -720,8 +721,15 @@ func _dressed() -> void:
 	_check("S4 tiled to every gap and corner, no run of wall left bare", not faces.is_empty() and bare.is_empty(),
 		"%d faces; %d bare: %s" % [faces.size(), bare.size(), bare.slice(0, 6)])
 
-	# (The player's own, standing in it when it stands alone, are not the set's.)
-	var words: Array = (station.find_children("*", "Label3D", true, false) + station.find_children("*", "Decal", true, false)) \
+	# (The player's own, standing in it when it stands alone, are not the set's. A decal drawn only from textures made
+	# here (a gradient, noise: the engine's light pool, its soot) carries no word; one from an image file might.)
+	var from_image := func(decal: Decal) -> bool:
+		for texture: Texture2D in [decal.texture_albedo, decal.texture_emission, decal.texture_normal, decal.texture_orm]:
+			if texture != null and not texture.resource_path.is_empty():
+				return true
+		return false
+	var words: Array = (station.find_children("*", "Label3D", true, false)
+		+ station.find_children("*", "Decal", true, false).filter(from_image)) \
 		.filter(func(n): return not station.player.is_ancestor_of(n))
 	_check("S4b no word on it", words.is_empty(), "%s" % [words.slice(0, 4)])
 
@@ -1325,6 +1333,58 @@ func _engine_breath(engine: Node3D, beat: Node, fx: Dictionary) -> void:
 				or EngineFx.NEAR_FADE != 1.5:
 			wrong.append("the shimmer does not fade near the eye")
 	_check("S13 the engine breathes: steam on each stroke, its plume, heat over its drum", wrong.is_empty(),
+		"%s" % [wrong.slice(0, 6)])
+	_engine_light(engine, beat, fx)
+
+
+## S14: its light leaves its four windows as a shadowless spot each, aimed down and out, and as soft shafts (additive, unshaded, no shadow, softened where they touch) and
+## lies round it in a pool on the floor and the ceiling, both breathing on its swell, capped, none of it past 7 m.
+func _engine_light(engine: Node3D, beat: Node, fx: Dictionary) -> void:
+	var wrong := []
+	var swell := float(beat.swell())
+	var shafts: Array = fx.get("shafts", [])
+	if shafts.size() != 4:
+		wrong.append("%d shafts" % shafts.size())
+	if EngineFx.SHAFT_STRENGTH > 0.35:
+		wrong.append("shaft strength %.2f" % EngineFx.SHAFT_STRENGTH)
+	var middle := engine.global_position
+	for shaft: MeshInstance3D in shafts:
+		var look := shaft.material_override as ShaderMaterial
+		var code := look.shader.code if look != null and look.shader != null else ""
+		if not ("blend_add" in code and "unshaded" in code) or float(look.get_shader_parameter("soft_depth")) <= 0.0:
+			wrong.append("%s not additive, unshaded, softened" % shaft.name)
+		if shaft.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+			wrong.append("%s casts a shadow" % shaft.name)
+		if look != null and absf(float(look.get_shader_parameter("strength")) - EngineFx.SHAFT_STRENGTH * lerpf(0.6, 1.0, swell)) > 0.001:
+			wrong.append("%s strength %.3f at swell %.2f" % [shaft.name, float(look.get_shader_parameter("strength")), swell])
+		var box := shaft.global_transform * shaft.get_aabb()
+		for i in 8:
+			var corner := box.get_endpoint(i) - middle
+			if Vector2(corner.x, corner.z).length() > 7.0:
+				wrong.append("%s reaches %.2f m" % [shaft.name, Vector2(corner.x, corner.z).length()])
+				break
+	var spots: Array = fx.get("spots", [])
+	if spots.size() != 4:
+		wrong.append("%d window lights" % spots.size())
+	for spot: SpotLight3D in spots:
+		if spot.shadow_enabled or spot.spot_range > EngineFx.SPOT_RANGE + 0.001 or EngineFx.SPOT_RANGE > 6.5 \
+				or absf(spot.light_energy - EngineFx.SPOT_ENERGY * lerpf(0.6, 1.0, swell)) > 0.01 or EngineFx.SPOT_ENERGY > 5.0:
+			wrong.append("%s shadow %s, range %.1f, energy %.2f at swell %.2f" % [spot.name, spot.shadow_enabled,
+				spot.spot_range, spot.light_energy, swell])
+		if (-spot.global_basis.z).y > -0.2:
+			wrong.append("%s not aimed down" % spot.name)
+	var pools: Array = fx.get("pool", [])
+	if pools.size() != 2:
+		wrong.append("%d pools" % pools.size())
+	for pool: Decal in pools:
+		var blue := StationDressing.COMPANY_BLUE
+		if pool.emission_energy > 0.6 or not Color(pool.modulate, 1.0).is_equal_approx(Color(blue, 1.0)):
+			wrong.append("%s energy %.2f, colour %s" % [pool.name, pool.emission_energy, pool.modulate])
+		if absf(pool.modulate.a - lerpf(0.5, 1.0, swell)) > 0.01:
+			wrong.append("%s alpha %.2f at swell %.2f" % [pool.name, pool.modulate.a, swell])
+		if pool.size.x / 2.0 > 7.0 or pool.size.z / 2.0 > 7.0:
+			wrong.append("%s %s wide" % [pool.name, pool.size])
+	_check("S14 its light leaves its windows and lies round it, breathing, capped", wrong.is_empty(),
 		"%s" % [wrong.slice(0, 6)])
 
 
