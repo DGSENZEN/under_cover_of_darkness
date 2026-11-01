@@ -22,6 +22,11 @@ func _ready() -> void:
 	player.revolver._pull(player.revolver.weapon())
 	state = readout.snapshot()
 	_check("firing updates loaded ammo immediately", state.get("loaded") == 5 and state.get("reserve") == 24)
+	_check("the readout names the round", state.get("round") == &"lead")
+	player.inventory.ammo[&"copal_rounds"] = 12
+	player.revolver.cylinder_round = &"copal"
+	_check("the reserve is the round's own pouch", readout.snapshot().get("reserve") == 12)
+	player.revolver.cylinder_round = &"lead"
 	player.revolver._start_loading(player.revolver.weapon())
 	_check("reload indicator follows actual reload", readout.snapshot().get("reloading", false))
 	player.revolver._stop_loading()

@@ -16,14 +16,18 @@ const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
+const Rounds := preload("res://scripts/Combat/Rounds.gd")
 
 ## A shot: `barrel` is "cylinder" or "shot"; `hits` what each ball or pellet
 ## struck ({target, point, damage, headshot}; target null for the world).
 signal fired(barrel: StringName, hits: Array)
 ## The hammer fell on a spent chamber.
 signal clicked_empty
-## A shot found a man: "shot" (the body), "headshot", or "kill".
+## A shot found a man: "shot" (the body), "headshot", or "kill"; or a monster:
+## "weak" or "resisted" (or "kill").
 signal hit_confirmed(kind: StringName)
+## The cylinder goes over to another round.
+signal round_switched(id: StringName)
 
 ## Stand-ins until the user's recordings (docs/superpowers/refs/
 ## revolver_sounds.md): each of the revolver's own sounds as [an existing
@@ -128,6 +132,8 @@ var loading := Load.NONE
 var barrel: StringName = &"cylinder"
 ## What the cylinder is loaded with (Rounds.gd).
 var cylinder_round: StringName = &"lead"
+## The round types you have with you (Loadout.gd); T goes through them.
+var packed_rounds: Array[StringName] = [&"lead"]
 ## Up at the eye, both hands on the gun (right mouse held, fully raised).
 var aimed := false
 
@@ -189,17 +195,19 @@ func _ready() -> void:
 	player = get_parent() as CharacterBody3D
 	_ensure_action(&"barrel", KEY_X)
 	_ensure_action(&"reload", KEY_R)
+	_ensure_action(&"switch_round", KEY_T)
 	_ensure_action(&"aim", KEY_NONE, MOUSE_BUTTON_RIGHT)
 
 
 ## Its load and which barrel is up (the player's save_state).
 func save_state() -> Dictionary:
-	return {"loaded": loaded.duplicate(), "barrel": barrel}
+	return {"loaded": loaded.duplicate(), "barrel": barrel, "cylinder_round": cylinder_round}
 
 
 func load_state(state: Dictionary) -> void:
 	loaded = (state.get("loaded", loaded) as Dictionary).duplicate()
 	barrel = StringName(state.get("barrel", barrel))
+	cylinder_round = StringName(state.get("cylinder_round", &"lead"))
 	loading = Load.NONE
 
 
@@ -229,6 +237,9 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("barrel"):
 		_stop_loading()
 		flip_barrel()
+
+	if Input.is_action_just_pressed("switch_round"):
+		switch_round()
 
 	if Input.is_action_just_pressed("reload") and loading == Load.NONE:
 		_start_loading(gun)
@@ -464,9 +475,52 @@ func _update_whip(delta: float) -> void:
 
 ## R: the selected barrel. The cylinder through the gate, round by round
 ## while there are rounds and room; the shot barrel's one shell.
-func _start_loading(gun: Resource) -> void:
+## The pouch the cylinder loads from.
+func stock_id() -> StringName:
+	return Rounds.info(cylinder_round).get("stock", &"rounds")
+
+
+## The cylinder over to the next packed round with any left: what is unfired
+## goes back in its pouch, the cylinder is emptied, and it loads again. It is a
+## reload, and costs what one costs. False, with a dry click, if there is
+## nothing else to load.
+func switch_round() -> bool:
+	if packed_rounds.size() < 2:
+		return false
+
+	var at := packed_rounds.find(cylinder_round)
+	var next := &""
+
+	for step in range(1, packed_rounds.size()):
+		var other: StringName = packed_rounds[(at + step) % packed_rounds.size()]
+
+		if int(player.inventory.ammo.get(Rounds.info(other).get("stock", &"rounds"), 0)) > 0:
+			next = other
+			break
+
+	if next == &"":
+		_sound(&"click_empty")
+		return false
+
+	_stop_loading()
+	var gun: Resource = weapon()
+	var spent: int = int(gun.rounds) - int(loaded[&"cylinder"]) if gun != null else 0
+	player.inventory.add_ammo(stock_id(), int(loaded[&"cylinder"]))
+	loaded[&"cylinder"] = 0
+	cylinder_round = next
+	barrel = &"cylinder"
+	round_switched.emit(next)
+
+	if gun != null:
+		_start_loading(gun, spent)
+
+	return true
+
+
+## `spent`: how much brass falls as the gate opens, if not all that is missing.
+func _start_loading(gun: Resource, spent := -1) -> void:
 	if barrel == &"cylinder":
-		if int(loaded[&"cylinder"]) >= int(gun.rounds) or int(player.inventory.ammo.get(&"rounds", 0)) <= 0:
+		if int(loaded[&"cylinder"]) >= int(gun.rounds) or int(player.inventory.ammo.get(stock_id(), 0)) <= 0:
 			return
 
 		loading = Load.GATE
@@ -474,7 +528,9 @@ func _start_loading(gun: Resource) -> void:
 		drop_aim()
 
 		# The spent brass falls out of the gate as it opens.
-		var spent: int = int(gun.rounds) - int(loaded[&"cylinder"])
+		if spent < 0:
+			spent = int(gun.rounds) - int(loaded[&"cylinder"])
+
 		var hand: Node = player.hand
 
 		if hand != null and hand.has_method("gate_world_position"):
@@ -512,11 +568,11 @@ func _update_loading(delta: float, gun: Resource) -> void:
 			# Each round is taken from the stock as it goes in, not before.
 			_load_t = 0.0
 
-			if player.inventory.take_ammo(&"rounds", 1) == 1:
+			if player.inventory.take_ammo(stock_id(), 1) == 1:
 				loaded[&"cylinder"] = int(loaded[&"cylinder"]) + 1
 				_sound(&"round_in")
 
-			if int(loaded[&"cylinder"]) >= int(gun.rounds) or int(player.inventory.ammo.get(&"rounds", 0)) <= 0:
+			if int(loaded[&"cylinder"]) >= int(gun.rounds) or int(player.inventory.ammo.get(stock_id(), 0)) <= 0:
 				loading = Load.GATE
 				_gate_shutting = true
 		Load.SHELL:

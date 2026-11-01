@@ -11,8 +11,8 @@ func snapshot() -> Dictionary:
 	if not is_instance_valid(player) or player.is_dead or not player.combat.gun_drawn():
 		return {}
 	var gun: Node = player.revolver
-	return {"barrel": gun.barrel, "loaded": int(gun.loaded[gun.barrel]),
-		"reserve": int(player.inventory.ammo.get(&"shells" if gun.barrel == &"shot" else &"rounds", 0)),
+	return {"barrel": gun.barrel, "round": gun.cylinder_round, "loaded": int(gun.loaded[gun.barrel]),
+		"reserve": int(player.inventory.ammo.get(&"shells" if gun.barrel == &"shot" else gun.stock_id(), 0)),
 		"capacity": 1 if gun.barrel == &"shot" else int(gun.weapon().rounds), "reloading": gun.is_reloading()}
 
 

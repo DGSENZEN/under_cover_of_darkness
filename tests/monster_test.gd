@@ -168,6 +168,59 @@ func _rounds() -> void:
 	_check("M10 a target that is no monster takes a copal round as a bullet (%s)" % [kinds], kinds == [&"bullet"])
 	g.cylinder_round = &"lead"
 	dummy.queue_free()
+	await _switching()
+
+
+func _switching() -> void:
+	var inv: Node = p.inventory
+	g.reset_for_practice()
+	g.packed_rounds = [&"lead"] as Array[StringName]
+	_check("R6 with only lead packed, T does nothing", not g.switch_round())
+	g.packed_rounds = [&"lead", &"copal"] as Array[StringName]
+	inv.ammo[&"copal_rounds"] = 12
+	var lead_was: int = inv.ammo[&"rounds"]
+	g.loaded[&"cylinder"] = 4
+	Input.action_press("switch_round")
+	await _frames(2)
+	Input.action_release("switch_round")
+	_check("R1 T switches to copal and starts a reload", g.cylinder_round == &"copal" and g.is_reloading())
+	_check("R2 unfired lead goes back to its pouch", inv.ammo[&"rounds"] == lead_was + 4 and int(g.loaded[&"cylinder"]) == 0)
+	await _frames(240)
+	_check("R3 a reload takes from the round's own pouch", inv.ammo[&"copal_rounds"] == 6 and int(g.loaded[&"cylinder"]) == 6 and inv.ammo[&"rounds"] == lead_was + 4)
+	_check("R3b stock_id follows the round", g.stock_id() == &"copal_rounds")
+
+	# Mid-reload, back to lead: nothing lost in the count.
+	g.loaded[&"cylinder"] = 2
+	inv.ammo[&"copal_rounds"] = 10
+	g._start_loading(g.weapon())
+	await _frames(40)
+	var total_before: int = int(inv.ammo[&"copal_rounds"]) + int(g.loaded[&"cylinder"])
+	g.switch_round()
+	_check("R5 switching mid-reload keeps what is loaded counted", int(inv.ammo[&"copal_rounds"]) == total_before and g.cylinder_round == &"lead")
+	g._stop_loading()
+
+	inv.ammo[&"copal_rounds"] = 0
+	g.loaded[&"cylinder"] = 3
+	var switched: bool = g.switch_round()
+	_check("R4 an empty next pouch refuses, nothing moves", not switched and g.cylinder_round == &"lead" and int(g.loaded[&"cylinder"]) == 3)
+
+	g.load_state({"loaded": {&"cylinder": 2, &"shot": 1}, "barrel": &"cylinder"})
+	_check("R7 a save with no cylinder_round loads as lead", g.cylinder_round == &"lead")
+	inv.ammo[&"copal_rounds"] = 6
+	var kept: Dictionary = inv.save_state()
+	inv.load_state(kept)
+	_check("R9 stocks of every kind survive save and load", inv.ammo[&"copal_rounds"] == 6)
+	kept["ammo"] = {"rounds": 3, "shells": 1}
+	inv.load_state(kept)
+	_check("R8 a save with no new stocks loads them empty", int(inv.ammo.get(&"copal_rounds", 0)) == 0 and inv.ammo[&"rounds"] == 3)
+	g.cylinder_round = &"copal"
+	var roundtrip: Dictionary = g.save_state()
+	g.cylinder_round = &"lead"
+	g.load_state(roundtrip)
+	_check("R10 a save keeps the round", g.cylinder_round == &"copal")
+	g.cylinder_round = &"lead"
+	g.packed_rounds = [&"lead"] as Array[StringName]
+	await _frames(40)
 
 
 ## A monster straight down the sights, `reach` metres off.

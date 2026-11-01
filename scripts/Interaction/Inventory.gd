@@ -16,8 +16,8 @@ var keys: Array[StringName] = []
 ## Each entry: { "id": StringName, "name": String, "mesh": Mesh, "count": int }
 var belt: Array[Dictionary] = []
 var belt_index := -1
-## The revolver's stocks: loose rounds for the cylinder, shells for the shot
-## barrel. Carried, not on the belt.
+## The revolver's stocks: a pouch of loose rounds for each round type
+## (Rounds.gd), shells for the shot barrel. Carried, not on the belt.
 var ammo := {&"rounds": 0, &"shells": 0}
 
 
@@ -163,7 +163,12 @@ func save_state() -> Dictionary:
 	for entry in belt:
 		items.append({"id": entry["id"], "name": entry["name"], "count": int(entry["count"])})
 
-	return {"purse": purse, "keys": keys.duplicate(), "belt": items, "belt_index": belt_index, "ammo": {"rounds": int(ammo[&"rounds"]), "shells": int(ammo[&"shells"])}}
+	var stocks := {}
+
+	for id in ammo:
+		stocks[String(id)] = int(ammo[id])
+
+	return {"purse": purse, "keys": keys.duplicate(), "belt": items, "belt_index": belt_index, "ammo": stocks}
 
 
 ## Carries what was saved (save_state): the belt rebuilt with each item's
@@ -176,7 +181,11 @@ func load_state(state: Dictionary) -> void:
 		keys.append(StringName(key))
 
 	var stocks: Dictionary = state.get("ammo", {})
-	ammo = {&"rounds": int(stocks.get("rounds", 0)), &"shells": int(stocks.get("shells", 0))}
+	ammo = {&"rounds": 0, &"shells": 0}
+
+	for id in stocks:
+		ammo[StringName(id)] = int(stocks[id])
+
 	belt.clear()
 
 	for item in state.get("belt", []):
