@@ -254,3 +254,17 @@ fight the score sinks under the combat score as today, and the beds sink with Am
 - Which space joins which family where the table is unclear (the light gallery, the grate room, the loft).
 - The exact counts of variations, the layering ranges, the compressor's numbers, every level: by ear.
 - How the director finds the track's tunnel mouths (the plan's `track` polygon ends, most likely).
+
+## As built (Oct 31, the plan's calls)
+
+- **The station's sources come from the lists the set keeps** (`neon`, `runs`, `mains`, `risers`, `mouths`, `floor_mains`,
+  `mouth_runs`), not `metro_sound` tags: nothing in the map's files changed.
+- **The Metro's one train is the lane's own `TrainPass`** (already saved); the director makes its own only without a lane.
+- **No "sign that starts dark":** none exists. Ignition plays on coming back from a deep brownout; the station's signs sag
+  on the line with each pass (STATION_BROWNOUT), the deepest dips putting a sign out.
+- **The draught is stereo** (the user, Oct 31: "wouldn't it being stereo make our sound design better?"): it plays flat,
+  so it is kept with the beds in `audio/ambience/` and levelled by the director; the named sounds, placed in the world,
+  stay mono.
+- **Beds are one loop each**, their dB in BEDS offsets against each loop's LOOP_GAIN.
+- **Levels await the user's ear:** the listening files (`prepare_sfx.py --metro --listen=DIR`) and the walk
+  (`tests/diag_metro_sound_walk.tscn`).
