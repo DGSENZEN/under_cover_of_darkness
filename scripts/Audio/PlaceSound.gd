@@ -299,21 +299,37 @@ func _city_here() -> float:
 	return city_of(zones.depth_at(at) if not family_weights_at(at).is_empty() else _depth)
 
 
-## The track's line through the station: from its westmost mouth to its eastmost.
-func _track() -> Array[Vector3]:
-	var mouths := _mouths()
+## The station's tracks, each a line from its westmost mouth to its eastmost (the mouths of one track share its z).
+func _tracks() -> Array:
+	var by_line := {}
 
-	if mouths.is_empty():
-		return []
+	for mouth in _mouths():
+		var key := snappedf(mouth.z, 0.5)
+		by_line[key] = by_line.get(key, []) + [mouth]
 
-	mouths.sort_custom(func(a: Vector3, b: Vector3): return a.x < b.x)
-	return [mouths[0], mouths[mouths.size() - 1]]
+	var tracks := []
+
+	for key in by_line:
+		var ends: Array = by_line[key]
+		ends.sort_custom(func(a: Vector3, b: Vector3): return a.x < b.x)
+		tracks.append([ends[0], ends[ends.size() - 1]])
+
+	return tracks
 
 
-## The point on the track nearest you.
+## The point on the track nearest you (of the nearest track).
 func _on_track() -> Vector3:
-	var track := _track()
-	return Geometry3D.get_closest_point_to_segment(listener.global_position, track[0], track[1]) if not track.is_empty() else Vector3.ZERO
+	var best := Vector3.ZERO
+	var nearest := INF
+
+	for track: Array in _tracks():
+		var point := Geometry3D.get_closest_point_to_segment(listener.global_position, track[0], track[1])
+
+		if point.distance_to(listener.global_position) < nearest:
+			nearest = point.distance_to(listener.global_position)
+			best = point
+
+	return best
 
 
 ## Where the station's track mouths are (their runs' middles, over their beds).
@@ -336,7 +352,7 @@ func _on_train_began() -> void:
 	if city <= 0.001:
 		return
 
-	if not _track().is_empty():
+	if not _tracks().is_empty():
 		var db := RUMBLE_DB + linear_to_db(city)
 		_heard.append([&"train_far", _on_track(), db])
 		_rumble(city)

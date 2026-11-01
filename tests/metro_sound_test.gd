@@ -308,7 +308,7 @@ func _fake_station() -> Node3D:
 	return station
 
 
-## S16-S19, S23, S25-S26: one train for the Metro.
+## S16-S19, S23, S25-S27: one train for the Metro.
 func _trains() -> void:
 	var lane: Node = _script(LANE_SOURCE).new()
 	var lane_train := TrainPass.new()
@@ -379,6 +379,13 @@ func _trains() -> void:
 	await _frames(int(1.3 * 60))
 	var lost := sound.train_heard().filter(func(h): return h[0] == &"train_far" or h[0] == &"metro_draught")
 	_check("S26 fallen out of every space from the old layer, the train is still not heard", lost.is_empty(), str(lost))
+	# S27: two tracks (the station's north and south), their mouths at both ends: the rumble rides the nearer track.
+	station.mouth_runs = [[-65.0, -55.0, -5.0, -1.0, 4.0], [-65.0, -55.0, 5.0, -1.0, 4.0], [65.0, 75.0, -5.0, -1.0, 4.0],
+		[65.0, 75.0, 5.0, -1.0, 4.0]]
+	ear.global_position = Vector3(5.0, 1.0, -8.0)
+	await _frames(3)
+	var rode: Vector3 = sound.call("_on_track")
+	_check("S27 with two tracks the rumble rides the one nearer you", rode.distance_to(Vector3(5.0, 0.5, -5.0)) < 0.1, str(rode))
 	for node in [sound, ear, station, lane]:
 		node.queue_free()
 	await _frames(3)
