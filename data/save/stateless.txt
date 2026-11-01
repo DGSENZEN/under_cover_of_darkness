@@ -25,3 +25,5 @@ res://scripts/Audio/PlaceScore.gd  # its themes are picked again from where you 
 res://scripts/Audio/PlaceSound.gd  # its beds are worked out each frame from where you stand; its train is the lane's (saved)
 res://scripts/Visual/Clockwork.gd  # a gear's or the governor's turn on its own clock; a load starts it again, which no one can see
 res://scripts/Visual/EngineCrank.gd  # a flywheel's turn and its linkage on its own clock; a load starts it again, which no one can see
+res://scripts/Visual/EngineBeat.gd  # the engine's beat on its own clock, started with its cranks'; a load starts both again together, in step, which no one can see
+res://maps/metro_station_engine_fx.gd  # what the engine gives off, worked out each frame from its beat; its steam in flight is stage 2's
