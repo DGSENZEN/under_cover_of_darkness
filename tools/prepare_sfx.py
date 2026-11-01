@@ -1253,7 +1253,7 @@ METRO_SHOTS = [
     ("cable_surge", [("1793485423078", 3)], 6, {"hum": True}),
     # A train through the rock, the length of a pass (TrainPass: 5 + 3 + 6 s); the air it pushes out.
     ("train_far", [("1793484809228", None), ("1793484821215", None), ("1793484826366", None)], 8),
-    ("metro_draught", [("1793484872682", None), ("1793484877298", None)], 6, {"stereo": True}),
+    ("metro_draught", [("1793484872682", None), ("1793484877298", None)], 6, {"stereo": True, "folder": "ambience"}),
     # Leather soles on tile; on the shop's carpet; a body stopping and turning.
     ("step_tile", [("1793485480540", 10)], 10),
     ("step_carpet", [("1793485499577", 8)], 8),
@@ -1276,7 +1276,8 @@ METRO_LOOPS = [
     # A wall vent breathing: the tunnel's draught, dulled.
     ("vent_hum", ["1793484872682"], 10.0, {"lowpass": 2400}),
 ]
-# The options: stereo (kept stereo: a bed, a flat gust), pitch, lowpass (Hz), hum (pitched onto the nearest G),
+# The options: stereo (kept stereo: a bed, or a gust played flat; the game's named sounds are all mono), folder
+# ("ambience": with the beds, not a named sound in audio/sfx/), pitch, lowpass (Hz), hum (pitched onto the nearest G),
 # a hum's shots are not pitched apart; pick ("short" or "long": only that half of the hits, by length), split (split_events' own arguments: sharp, short hits),
 # count (loops: name_1..name_n; one is name itself).
 METRO_SEED = 1931
@@ -1463,8 +1464,10 @@ def prepare_metro(source=METRO_SOURCE, sfx_out=OUT, ambience_out=AMBIENCE_OUT, l
 
         variations = layered_shots(hits, count, rng, pitch=0.0 if options.get("hum") else 0.06)
 
+        folder = ambience_out if options.get("folder") == "ambience" else sfx_out
+
         # A variation past the new count goes, its importer with it; the rest are written over, their importers kept.
-        for old in glob.glob(os.path.join(sfx_out, group + "_[0-9]*.wav*")):
+        for old in glob.glob(os.path.join(folder, group + "_[0-9]*.wav*")):
             found = re.fullmatch(re.escape(group) + r"_(\d+)\.wav(\.import)?", os.path.basename(old))
 
             if found and int(found.group(1)) > count:
@@ -1473,7 +1476,7 @@ def prepare_metro(source=METRO_SOURCE, sfx_out=OUT, ambience_out=AMBIENCE_OUT, l
         written[group] = []
 
         for k, x in enumerate(variations, start=1):
-            path = os.path.join(sfx_out, "%s_%d.wav" % (group, k))
+            path = os.path.join(folder, "%s_%d.wav" % (group, k))
             _write_any(path, x)
             written[group].append(path)
 

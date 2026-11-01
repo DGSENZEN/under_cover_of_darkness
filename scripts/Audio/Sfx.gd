@@ -253,12 +253,11 @@ const GAIN := {
 	&"book_riffle": -4.6,
 	&"book_shut": -6.5,
 	# The Metro (prepare_sfx.py --metro): a pipe cooling, a sign striking on, the cables under a train's draw, a train
-	# through the rock, the air it pushes out. (Starting points; set by ear.)
+	# through the rock. (Starting points; set by ear. The air a train pushes out is PlaceSound's, stereo, played flat.)
 	&"pipe_tick": -10.0,
 	&"neon_ignite": -6.0,
 	&"cable_surge": -8.0,
 	&"train_far": -4.0,
-	&"metro_draught": -10.0,
 }
 
 ## The layers' loops (in audio/ambience/), how loud each plays (dB: target LUFS less measured; a neon's hum -36,

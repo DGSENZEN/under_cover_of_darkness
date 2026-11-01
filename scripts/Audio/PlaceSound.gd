@@ -63,6 +63,9 @@ const SEED := 1987
 const RUMBLE_DB := -4.0
 const MOUTH_UP := 1.5
 const DRAUGHT_AFTER := 1.0
+## The draught's level (dB, at a platform's full), and its stereo takes, kept with the beds.
+const DRAUGHT_DB := -10.0
+const DRAUGHT_TAKES := "res://audio/ambience/metro_draught_%d.wav"
 const TRAIN_SEED := 31
 ## The station's machine: how far a junction box and the transformer are heard (m); how often a knock runs down a main
 ## or riser, a riser ticks, a mouth hisses (s), and how far under its gain the tick and the hiss sit (dB); how high
@@ -312,7 +315,7 @@ func _on_train_began() -> void:
 
 ## The air a train pushes out, gusting flat on the beds' bus.
 func _gust(amount: float) -> void:
-	var db := float(Sfx.GAIN.get(&"metro_draught", 0.0)) + linear_to_db(amount)
+	var db := DRAUGHT_DB + linear_to_db(amount)
 	_heard.append([&"metro_draught", Vector3.ZERO, db])
 
 	if not Sfx.enabled:
@@ -326,13 +329,13 @@ func _gust(amount: float) -> void:
 
 	var takes := 0
 
-	while ResourceLoader.exists("res://audio/sfx/metro_draught_%d.wav" % (takes + 1)):
+	while ResourceLoader.exists(DRAUGHT_TAKES % (takes + 1)):
 		takes += 1
 
 	if takes == 0:
 		return
 
-	_draught.stream = load("res://audio/sfx/metro_draught_%d.wav" % (1 + _rng.randi() % takes))
+	_draught.stream = load(DRAUGHT_TAKES % (1 + _rng.randi() % takes))
 	_draught.volume_db = db
 	_draught.play()
 

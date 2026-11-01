@@ -92,12 +92,21 @@ func _sfx() -> void:
 	_check("S2 the acoustics blend by weight", tiled > stoned and absf(half - (tiled + stoned) / 2.0) < 0.02,
 		"%.3f %.3f %.3f" % [tiled, stoned, half])
 
-	var shots := [&"pipe_tick", &"neon_ignite", &"cable_surge", &"train_far", &"metro_draught"]
+	var shots := [&"pipe_tick", &"neon_ignite", &"cable_surge", &"train_far"]
 	var loops := [&"metro_room", &"metro_room_deep", &"metro_crowd", &"junction_hum", &"transformer_hum"]
 	_check("S3 every Metro name has a gain", shots.all(func(n): return Sfx.GAIN.has(n))
 		and loops.all(func(n): return Sfx.LOOP_GAIN.has(n)),
 		"missing %s" % str((shots.filter(func(n): return not Sfx.GAIN.has(n))
 			+ loops.filter(func(n): return not Sfx.LOOP_GAIN.has(n)))))
+	# The draught plays flat across both ears: stereo, kept with the beds (the named sounds, placed in the world, are mono).
+	var gusts := []
+	var k := 1
+	while ResourceLoader.exists("res://audio/ambience/metro_draught_%d.wav" % k):
+		gusts.append(load("res://audio/ambience/metro_draught_%d.wav" % k))
+		k += 1
+	_check("S24 the draught is stereo, with the beds, not a named sound", gusts.size() >= 4
+		and gusts.all(func(g): return (g as AudioStreamWAV).stereo) and not Sfx.GAIN.has(&"metro_draught")
+		and not ResourceLoader.exists("res://audio/sfx/metro_draught_1.wav"), "%d takes" % gusts.size())
 
 
 func _near(value: float, want: float, within: float) -> bool:
