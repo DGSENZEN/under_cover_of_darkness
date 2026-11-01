@@ -30,7 +30,7 @@ const STATUS_TIME := 4.0
 const PUSH := {&"bullet": 3.0, &"shot": 1.0, &"blast": 9.0, &"shard": 3.0}
 const PUSH_DEFAULT := 2.0
 const PUSH_FADE := 12.0
-const SAVED := ["health", "dead"]
+const SAVED := ["health", "dead", "asleep", "global_position"]
 
 @export var kind: StringName
 var health := 0.0
@@ -39,6 +39,8 @@ var eye_height := 99.0
 ## The round about to hit it (Revolver, just before take_hit).
 var round_hint: StringName = &"lead"
 var dead := false
+## Not in play yet (a wave to come): hidden, and it does nothing until woken.
+var asleep := false
 var statuses: Node
 
 var _push := Vector3.ZERO
@@ -81,7 +83,7 @@ func _body_shape() -> Shape3D:
 func _physics_process(delta: float) -> void:
 	_game_time += delta
 
-	if dead:
+	if dead or asleep:
 		return
 
 	_meet_player()
@@ -168,9 +170,25 @@ func _die(by: Node3D) -> void:
 
 func _lay_down() -> void:
 	dead = true
+	_put_out()
+
+
+func _put_out() -> void:
 	visible = false
 	velocity = Vector3.ZERO
 	get_child(0).set_deferred(&"disabled", true)
+
+
+## Out of play until wake().
+func sleep() -> void:
+	asleep = true
+	_put_out()
+
+
+func wake() -> void:
+	asleep = false
+	visible = true
+	get_child(0).set_deferred(&"disabled", false)
 
 
 func save_state() -> Dictionary:
@@ -185,3 +203,7 @@ func load_state(state: Dictionary) -> void:
 
 	if dead:
 		_lay_down()
+	elif asleep:
+		sleep()
+	else:
+		wake()

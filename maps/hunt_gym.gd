@@ -9,7 +9,9 @@ const Lights := preload("res://scripts/Visual/Lights/Lights.gd")
 const RetroScript := preload("res://scripts/Visual/Retro.gd")
 const SafePlace := preload("res://scripts/Hunt/SafePlace.gd")
 const KitTable := preload("res://scripts/Hunt/KitTable.gd")
-const MonsterScript := preload("res://scripts/Monsters/Monster.gd")
+const EyeScript := preload("res://scripts/Monsters/FloatingEye.gd")
+const NavBakerScript := preload("res://scripts/AISystem/NavBaker.gd")
+const GUARD := preload("res://Guard.tscn")
 
 const STONE := Color(0.4, 0.38, 0.36)
 const DARK := Color(0.22, 0.21, 0.23)
@@ -25,11 +27,20 @@ const BEAM_AT := Vector3(10.0, 0.0, -20.0)
 const BEAM_WIDTH := 5.0
 const BEAM_CLEAR := 1.4
 ## What each kind's spawn is made of.
-const KINDS := {&"floating_eye": MonsterScript}
+const KINDS := {&"floating_eye": EyeScript}
+## Each wave: how many eyes, and whether a man comes too. They are placed
+## asleep from the start, so a save knows them.
+const WAVES := [{"eyes": 3}, {"eyes": 5}, {"eyes": 6, "guard": true}]
+## How long after one is cleared the next comes.
+const WAVE_GAP := 5.0
 
 var safe_place: Area3D
 var kit_table: Node3D
 var player: CharacterBody3D
+## The wave under way (0: none yet), and what is in each.
+var wave_now := 0
+var _waves: Array = []
+var _next_wave_in := -1.0
 
 
 func _ready() -> void:
@@ -45,6 +56,11 @@ func _ready() -> void:
 	player.inventory.select_by_id(&"revolver")
 	safe_place = SafePlace.build(self, Vector3(0, ROOM.y * 0.5, 0), Vector3(ROOM.x * 2.0, ROOM.y, ROOM.z * 2.0))
 	kit_table = KitTable.build(self, Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 2.8)))
+	var baker := NavigationRegion3D.new()
+	baker.set_script(NavBakerScript)
+	add_child(baker)
+	_lay_out_waves()
+	SaveGame.register(self)
 
 
 ## A monster of `kind` at `at`.
@@ -54,6 +70,75 @@ func spawn(kind: StringName, at: Vector3) -> Node3D:
 	add_child(monster)
 	monster.global_position = at
 	return monster
+
+
+func _lay_out_waves() -> void:
+	var seed_value := 1
+
+	for number in WAVES.size():
+		var eyes: Array = []
+
+		for i in int(WAVES[number]["eyes"]):
+			var eye: Node3D = EyeScript.new()
+			eye.seed_value = seed_value
+			eye.name = "Eye%d" % seed_value
+			seed_value += 1
+			var turn := float(i) / float(WAVES[number]["eyes"]) * TAU
+			eye.position = Vector3(cos(turn) * 8.0, 3.0, -24.0 + sin(turn) * 8.0)
+			add_child(eye)
+			eye.sleep()
+			eyes.append(eye)
+
+		_waves.append(eyes)
+
+
+## Wave `number` (from 1) comes.
+func wave(number: int) -> void:
+	if number < 1 or number > _waves.size():
+		return
+
+	wave_now = number
+
+	for eye in _waves[number - 1]:
+		eye.wake()
+		eye.state = eye.State.CIRCLE
+
+	if WAVES[number - 1].get("guard", false) and is_inside_tree():
+		var man: CharacterBody3D = GUARD.instantiate()
+		add_child(man)
+		man.global_position = Vector3(-10, 0.1, -32)
+
+
+func _wave_cleared() -> bool:
+	return wave_now > 0 and _waves[wave_now - 1].all(func(eye): return eye.dead)
+
+
+func _physics_process(delta: float) -> void:
+	if not is_instance_valid(player) or player.is_dead:
+		return
+
+	# Into the yard, the first time: they come.
+	if wave_now == 0:
+		if player.global_position.z <= YARD_START:
+			wave(1)
+
+		return
+
+	if _next_wave_in >= 0.0:
+		_next_wave_in -= delta
+
+		if _next_wave_in < 0.0:
+			wave(wave_now + 1)
+	elif _wave_cleared() and wave_now < _waves.size():
+		_next_wave_in = WAVE_GAP
+
+
+func save_state() -> Dictionary:
+	return {"wave_now": wave_now}
+
+
+func load_state(state: Dictionary) -> void:
+	wave_now = int(state.get("wave_now", 0))
 
 
 func _room() -> void:
@@ -125,3 +210,5 @@ func _environment() -> void:
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F5:
 		get_tree().reload_current_scene()
+	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F6:
+		wave(wave_now + 1)

@@ -36,6 +36,10 @@ func _ready() -> void:
 	_check("H2 the player reaches the yard on foot from spawn (%.1f s)" % t, p.global_position.z <= gym.YARD_START)
 	_check("H4 walking out locks and restocks", p.loadout.locked and p.inventory.ammo[&"copal_rounds"] == 12)
 
+	await _frames(2)
+	_check("H9 stepping into the yard, the first wave comes", gym.wave_now == 1 and gym.get_node("Eye1").visible and not gym.get_node("Eye1").asleep)
+	_check("H9b the next waves wait", gym.get_node("Eye4").asleep)
+
 	var scanner = p.scanner
 	var under: Vector3 = gym.BEAM_AT + Vector3(0, 1.0, 0)
 	_check("H5 the slide beam is only for a crouch", not scanner.fits(under, false) and scanner.fits(under, true))

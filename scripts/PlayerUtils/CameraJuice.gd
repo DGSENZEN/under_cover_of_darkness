@@ -123,6 +123,9 @@ var shake_offset := 0.022
 var trauma_decay := 1.7
 var _trauma := 0.0
 var _shake_time := 0.0
+const UNSTEADY_DEGREES := 0.8
+var _unsteady := 0.0
+var _unsteady_time := 0.0
 var _last_real := -1.0
 var _yaw := 0.0
 var _yaw_velocity := 0.0
@@ -235,6 +238,15 @@ func on_throw(strength := 1.0) -> void:
 
 
 ## Adds view-shake trauma, clamped to 0..1.
+## The evil eye: the view drifts, slowly, by up to UNSTEADY_DEGREES. 0 ends it.
+func set_unsteady(amount: float) -> void:
+	_unsteady = amount
+
+
+func unsteady() -> float:
+	return _unsteady
+
+
 func add_trauma(amount: float) -> void:
 	_trauma = clampf(_trauma + amount, 0.0, 1.0)
 
@@ -393,6 +405,12 @@ func update(
 	var shake := _trauma * _trauma
 	var shake_pitch := _noise(_shake_time, 1.3) * shake * deg_to_rad(shake_degrees)
 	var shake_yaw := _noise(_shake_time, 7.1) * shake * deg_to_rad(shake_degrees)
+
+	if _unsteady > 0.0:
+		_unsteady_time += real_delta
+		shake_pitch += sin(_unsteady_time * 0.9) * _unsteady * deg_to_rad(UNSTEADY_DEGREES)
+		shake_yaw += sin(_unsteady_time * 0.63 + 1.0) * _unsteady * deg_to_rad(UNSTEADY_DEGREES)
+
 	var shake_roll := _noise(_shake_time, 13.7) * shake * deg_to_rad(shake_degrees) * 0.8
 
 	# --- head bob ---------------------------------------------------------

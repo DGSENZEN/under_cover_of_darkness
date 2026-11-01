@@ -1219,7 +1219,19 @@ func _update_jump_windows(delta: float) -> void:
 		coyote_timer = max(coyote_timer - delta, 0.0)
 
 
+## What the evil eye does to you, for as long as it lies on you.
+func _feel_statuses() -> void:
+	var cursed: bool = statuses != null and statuses.has(&"evil_eye")
+
+	if power != null:
+		power.refill_scale = 0.5 if cursed else 1.0
+
+	if juice != null:
+		juice.set_unsteady(1.0 if cursed else 0.0)
+
+
 func _update_timers(delta: float) -> void:
+	_feel_statuses()
 	_regrab_timer = maxf(_regrab_timer - delta, 0.0)
 	_climb_reattach_timer = maxf(_climb_reattach_timer - delta, 0.0)
 	_failed_plan_cooldown = maxf(_failed_plan_cooldown - delta, 0.0)

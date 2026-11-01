@@ -51,6 +51,8 @@ const SOUNDS := {
 const RANGE := 120.0
 ## One-handed, at the top of the kick, a shot strays this far (degrees).
 const SPREAD_ONE_HAND := 2.5
+## Under the evil eye, every shot strays this far, even at the sights.
+const EVIL_EYE_STRAY := 1.5
 ## Where a stray shot goes, in turn: a fixed ring, so a run is repeatable.
 const ROSETTE := [Vector2(0.0, 1.0), Vector2(0.87, -0.5), Vector2(-0.87, -0.5), Vector2(0.5, 0.87), Vector2(-1.0, 0.0), Vector2(0.5, -0.87)]
 ## The camera's kick for a shot from the cylinder, in one hand.
@@ -728,10 +730,13 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 func _stray(aim_basis: Basis) -> Vector3:
 	var forward := -aim_basis.z
 
-	if aimed or _heat <= 0.001:
+	var cursed: bool = player.statuses != null and player.statuses.has(&"evil_eye")
+	var spread := (0.0 if aimed else SPREAD_ONE_HAND * _heat) + (EVIL_EYE_STRAY if cursed else 0.0)
+
+	if spread <= 0.001:
 		return forward
 
-	var offset: Vector2 = ROSETTE[_shots % ROSETTE.size()] * deg_to_rad(SPREAD_ONE_HAND) * _heat
+	var offset: Vector2 = ROSETTE[_shots % ROSETTE.size()] * deg_to_rad(spread)
 	return (aim_basis * Vector3(offset.x, offset.y, -1.0)).normalized()
 
 
