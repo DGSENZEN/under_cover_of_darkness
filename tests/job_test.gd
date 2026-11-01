@@ -71,7 +71,7 @@ func _files() -> void:
 	_check("J4 conditions: the words a goal may use, and no others", good == "" and bad != "", "good '%s', bad '%s'" % [good, bad])
 
 	var words: Array = JobBook.placeholders(lib)
-	var placed := words.all(func(w): return String(w).begins_with("harbour.job:") or String(w).begins_with("mission.job:"))
+	var placed := words.all(func(w): return String(w).begins_with("harbour.job:") or String(w).begins_with("mission.job:") or String(w).begins_with("hunt_gym.job:"))
 
 	for w in words:
 		print("WORDS: %s" % w)

@@ -1,0 +1,12 @@
+# The hunt gym's words: the clue to the floating eyes. Every text in <<...>>
+# is still to write; replace it, keep the rest.
+
+== note eye_weakness
+intent: What the clue teaches, in the Exsecrator's own pencil: eyes come in packs, a single ball won't do it, copal and shot will, and an egg takes the eye off you.
+text: <<pencil: what the eyes fear>>
+
+== readable eye_clue
+note: eye_weakness
+intent: A curandera's note pinned in the kit room, the first clue of the first hunt: the eyes are mal de ojo got loose, envy made flesh. They come in packs and swoop, a single ball hardly marks one, copal smoke or a charge of shot will, and if one has looked at you too long, an egg rolled over you draws it off.
+text:
+<<the curandera's note on the eyes>>
