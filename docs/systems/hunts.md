@@ -1,0 +1,59 @@
+# Hunts: monsters, weaknesses and the loadout
+
+A hunt is prepared for, then fought (`docs/superpowers/specs/2026-11-01-hunt-combat-design.md`). You pack a few things at a safe place, and in the fight you switch between them. Each monster kind has weaknesses and resistances, and hitting a weakness pays you back in power.
+
+Play it: `maps/hunt_gym.tscn`. Past the kit room's door the first wave comes. F5 restarts, F6 brings the next wave.
+
+| Key | Does |
+|---|---|
+| Alt | Dodge with the revolver drawn (Q stays Blink) |
+| Ctrl at a sprint | Slide (at a ledge, sprint + crouch still climbs down) |
+| T | Switch round type: a reload |
+| V | Use a prep item, if you have what it cures on you |
+
+## Where things live
+
+| File | What it owns |
+|---|---|
+| `scripts/Monsters/Bestiary.gd` | Each kind's health, weak and resisted sources, and what a hit counts as (`source_of`) |
+| `scripts/Monsters/Statuses.gd` | What lies on a bearer, and for how long. What a status does is the bearer's business |
+| `scripts/Monsters/Monster.gd` | What every kind shares: `take_hit`, exposure, the power refund, saving, sleeping |
+| `scripts/Monsters/FloatingEye.gd` | The first kind |
+| `scripts/Combat/Rounds.gd` | Round types: pouch, source, colour, status |
+| `scripts/Hunt/PrepItems.gd` | Prep items: what each cures, its use time, how many you carry |
+| `scripts/Hunt/Loadout.gd` | The player's pack, what they own, restocking, using items |
+| `scripts/Hunt/KitTable.gd`, `KitPiece.gd` | The table you pack at |
+| `scripts/Hunt/SafePlace.gd` | Leaving locks the pack and saves; coming back restores shields and restocks |
+| `scripts/UI/HuntReadout.gd`, `evil_eye_view.gdshader` | The painted cylinder and the evil eye's lids |
+
+## How a hit works
+
+Everything that hurts calls `take_hit(damage, attacker, kind, point, direction)`, the same for monsters and guards. The revolver first sets `round_hint` on a target that has one (`Revolver._hint_round`), so a monster knows the round and a guard takes every round as a bullet.
+
+`take_hit` returns `&"none"`, `&"killed"`, `&"weak"`, `&"resisted"` or `&"hit"`. The revolver turns that into the hit mark, the hold and the sound (`Revolver._confirm`).
+
+- **Weak:** scaled by the table, exposes it for 0.8 s (any hit in that time is doubled), and refunds 8 power, once per 0.25 s so a shell pays once.
+- **Resisted:** scaled by the table, no hold, a dull sound.
+
+## Adding a monster
+
+1. Add its row to `Bestiary.TABLE`. Add new sources to `source_of` if it needs them.
+2. Write its suite first (see `tests/floating_eye_test.gd`).
+3. Extend `Monster.gd` by path, set `kind` in `_init`, and return the velocity it wants from `_brain(delta)`.
+4. Add it to `KINDS` in `maps/hunt_gym.gd`.
+5. Pass the spec's "How monsters must look and feel" gate before showing it: closed topology, a working rig, its own silhouette, judged in a fight.
+
+A variant is a row with changed numbers and one trick.
+
+## Things to know
+
+- **Spawn exception:** `Monster._ready` adds the collision exception with the player at once. A body that begins under the player and is then moved launches them, as a moving platform would (check M0).
+- **A monster never frees itself.** Dead or asleep it hides and stays, so a save can keep it. Place them from the start and `wake()` them.
+- **Off a hunt nothing changes.** The default pack is lead only, unlocked, and restocks nothing. PowerPool's refill runs as it always did.
+- **Words are the user's.** Stand-ins are listed in `docs/superpowers/refs/hunt/words_needed.md`, poses in `poses_needed.md`, sounds in `sounds_needed.md`.
+
+## Suites
+
+`fight_move_test`, `bestiary_test`, `monster_test`, `loadout_test`, `safe_place_test`, `hunt_gym_test`, `floating_eye_test`, `hunt_loop_test`, `ammo_ui_test`.
+
+`tests/diag_fight_moves.tscn` measures every fight move. `tests/diag_hunt_stills.tscn` takes stills of the marks from the real game, windowed.

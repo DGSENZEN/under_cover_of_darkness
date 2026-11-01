@@ -6,6 +6,7 @@ These guides document the current first-party implementation. Each covers source
 | --- | --- | --- |
 | [Movement and traversal](movement.md) | Player state, scanning, planning, ledge hangs, climbing, swimming and camera motion. | `PlayerController`, `PlayerUtils` |
 | [Combat](combat.md) | Weapons, attacks, defenses, posture, hit contracts, projectiles and hazards. | `Combat`, guard fighter integration |
+| [Hunts](hunts.md) | Monsters, weaknesses, statuses, round types, the loadout and safe places. | `Monsters`, `Hunt` |
 | [Interaction](interaction.md) | Frob protocol, inventory, carrying, lockpicking, tools, doors and mechanisms. | `Interaction` |
 | [AI](ai.md) | Guard perception/intent, navigation, combat, life, squads, rota and conversation. | `AISystem` |
 | [Stealth](stealth.md) | Player visibility/noise, light measurement, sound events, hearing and investigations. | `StimuliSystem`, `light_gem`, guard perception |
