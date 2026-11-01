@@ -3,7 +3,8 @@ extends Node
 ## of work" 8): the real map (maps/metro.tscn: its beds, train, station machine, lane, shop and score), the player
 ## carried along the plan's own walks at a walking pace (its body still, only where it stands moving), Master written
 ## to a WAV. A train is sent through at the start, on the platform. Runs in real time (the audio's own).
-##   Godot --headless --path . res://tests/diag_metro_sound_walk.tscn -- [--out=<file.wav>]
+##   Godot --headless --path . res://tests/diag_metro_sound_walk.tscn -- [--out=<file.wav>] [--stand=engine]
+## --stand=engine stands 6 m off the Company's engine for STAY_ENGINE s instead of walking (the train still at the start).
 ## Prints `WALK ok seconds=<n> -> <path>`, then each family as it is entered (`ENTER <s> <family>`, in the recording's own
 ## seconds: headless, the dummy driver mixes slower than the clock, more so the more is sounding).
 
@@ -14,10 +15,12 @@ const PLAN := "res://assets/eclipse/metro/plan.json"
 const PACE := 1.6
 const STAY := 6.0
 const STAND := 1.05
+const STAY_ENGINE := 30.0
 ## The candle lane after the market walk ends at its mouth: her stall, the shop's door, inside the shop, out again.
 const LANE := [Vector3(12.8, -11.0, 74.2), Vector3(19.0, -11.0, 78.4), Vector3(19.0, -11.0, 82.0), Vector3(19.0, -11.0, 78.4)]
 
 var out_path := "user://metro_sound_walk.wav"
+var stand := ""
 var _points: Array[Vector3] = []
 var _stays: Array[float] = []
 var _started := 0
@@ -27,6 +30,8 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):
 			out_path = arg.get_slice("=", 1)
+		elif arg.begins_with("--stand="):
+			stand = arg.get_slice("=", 1)
 	# (Sound is off headless by default: there it is what is being recorded.)
 	preload("res://scripts/Audio/Sfx.gd").enabled = true
 	var plan: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(PLAN))
@@ -38,6 +43,10 @@ func _ready() -> void:
 	var player: Node3D = metro.get("player")
 	player.process_mode = Node.PROCESS_MODE_DISABLED
 	var sound: PlaceSound = metro.get_node("PlaceSound")
+	if stand == "engine":
+		var at: Vector3 = (metro.get_node("metro_station").engine as Node3D).global_position + Vector3(6.0, 0.0, 0.0)
+		_points = [at, at]
+		_stays = [STAY_ENGINE, 0.0]
 	var record := AudioEffectRecord.new()
 	record.format = AudioStreamWAV.FORMAT_16_BITS
 	AudioServer.add_bus_effect(AudioServer.get_bus_index(&"Master"), record)
