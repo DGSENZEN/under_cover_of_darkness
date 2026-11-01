@@ -62,6 +62,11 @@ const SEED := 1987
 ## begins its draught gusts out (s); the seed of a train of its own.
 const RUMBLE_DB := -4.0
 const MOUTH_UP := 1.5
+## The rumble is one take a pass, voiced two ways: from the track line at its point nearest you, heard this far (m), and
+## flat through the walls this far under it (dB), both thinned by depth as the city is.
+const RUMBLE_REACH := 90.0
+const RUMBLE_SIZE := 8.0
+const RUMBLE_FAR_DB := -16.0
 const DRAUGHT_AFTER := 1.0
 ## The draught's level (dB, at a platform's full), and its stereo takes, kept with the beds.
 const DRAUGHT_DB := -10.0
@@ -82,6 +87,8 @@ const MOUTH_BREATH := 0.9
 ## line's dips: the deepest put a sign out), how fast the dips come and go.
 const STATION_BROWNOUT := Vector2(0.35, 0.45)
 const DIP_RATES := Vector2(23.0, 7.3)
+## How far apart the signs' dips are in time (s): no two share one.
+const SIGN_PHASE := 0.613
 
 var zones: PlaceZones
 var listener: Node3D
@@ -89,8 +96,10 @@ var station: Node3D
 var lane: Node
 ## The beds playing, by loop name.
 var beds := {}
-## The Metro's one train.
+## The Metro's one train, and its rumble's two voices (on the track nearest you; flat through the walls).
 var train: TrainPass
+var rumble_near: AudioStreamPlayer3D
+var rumble_far: AudioStreamPlayer
 var _levels := {}
 var _weights := {}
 var _depth := 0.0
@@ -189,11 +198,13 @@ func _sag(delta: float) -> void:
 
 	_sag_clock += delta
 	var s := train.strength()
-	var dip := clampf(0.5 + 0.5 * sin(_sag_clock * DIP_RATES.x) * sin(_sag_clock * DIP_RATES.y + 1.1), 0.0, 1.0)
-	var sag := 1.0 - s * (STATION_BROWNOUT.x + STATION_BROWNOUT.y * dip)
+	var signs: Array = station.get("neon")
 
-	for sign: Node in station.get("neon"):
-		sign.set("dim", sag)
+	# Each sign dips on its own phase of the line's flutter: they go out and come back one by one, not as a wall.
+	for i in range(signs.size()):
+		var t := _sag_clock + float(i) * SIGN_PHASE
+		var dip := clampf(0.5 + 0.5 * sin(t * DIP_RATES.x) * sin(t * DIP_RATES.y + 1.1), 0.0, 1.0)
+		signs[i].set("dim", 1.0 - s * (STATION_BROWNOUT.x + STATION_BROWNOUT.y * dip))
 
 
 ## The station set's machine given its sounds, from the lists it keeps.
@@ -205,6 +216,7 @@ func _station_machine() -> void:
 
 	for i in range(signs.size()):
 		signs[i].set("buzz", StringName("neon_buzz_%d" % (1 + i % 3)))
+		signs[i].set("on_line", true)
 
 	_sources.neon = signs.size()
 	_pipes = (load("res://scripts/Audio/PipeSounds.gd") as GDScript).new()
@@ -278,8 +290,30 @@ func _take_train() -> void:
 	train.peaked.connect(_on_train_peaked)
 
 
+## How much of the city is heard where you are: in no space (a gap, a fall), as where you last stood.
 func _city_here() -> float:
-	return city_of(zones.depth_at(listener.global_position)) if listener != null and is_instance_valid(listener) else 0.0
+	if listener == null or not is_instance_valid(listener):
+		return 0.0
+
+	var at := listener.global_position
+	return city_of(zones.depth_at(at) if not family_weights_at(at).is_empty() else _depth)
+
+
+## The track's line through the station: from its westmost mouth to its eastmost.
+func _track() -> Array[Vector3]:
+	var mouths := _mouths()
+
+	if mouths.is_empty():
+		return []
+
+	mouths.sort_custom(func(a: Vector3, b: Vector3): return a.x < b.x)
+	return [mouths[0], mouths[mouths.size() - 1]]
+
+
+## The point on the track nearest you.
+func _on_track() -> Vector3:
+	var track := _track()
+	return Geometry3D.get_closest_point_to_segment(listener.global_position, track[0], track[1]) if not track.is_empty() else Vector3.ZERO
 
 
 ## Where the station's track mouths are (their runs' middles, over their beds).
@@ -302,15 +336,54 @@ func _on_train_began() -> void:
 	if city <= 0.001:
 		return
 
-	for mouth in _mouths():
+	if not _track().is_empty():
 		var db := RUMBLE_DB + linear_to_db(city)
-		Sfx.play(self, &"train_far", mouth, db)
-		_heard.append([&"train_far", mouth, db])
+		_heard.append([&"train_far", _on_track(), db])
+		_rumble(city)
 
 	var gust := float(family_weights_at(listener.global_position).get("platforms", 0.0)) * city
 
 	if gust > 0.0:
 		get_tree().create_timer(DRAUGHT_AFTER, false).timeout.connect(_gust.bind(gust))
+
+
+## The pass's rumble, one take, started on both its voices (Sfx's pool would drop it past its reach: the track's mouths
+## lie 50 m and more from most of the station).
+func _rumble(city: float) -> void:
+	if not Sfx.enabled:
+		return
+
+	var take := Sfx.stream(&"train_far")
+
+	if take == null:
+		return
+
+	if rumble_near == null:
+		rumble_near = AudioStreamPlayer3D.new()
+		rumble_near.name = "rumble_near"
+		rumble_near.bus = Sfx.BUS_WORLD
+		rumble_near.max_distance = RUMBLE_REACH
+		rumble_near.unit_size = RUMBLE_SIZE
+		rumble_near.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
+		add_child(rumble_near)
+		rumble_far = AudioStreamPlayer.new()
+		rumble_far.name = "rumble_far"
+		rumble_far.bus = BUS
+		add_child(rumble_far)
+
+	for voice: Node in [rumble_near, rumble_far]:
+		voice.set("stream", take)
+		voice.call("play")
+
+	_voice_rumble(city)
+
+
+## The rumble's voices where you are now: the near one on the track's nearest point, both thinned by depth.
+func _voice_rumble(city: float) -> void:
+	var gain := float(Sfx.GAIN.get(&"train_far", 0.0)) + RUMBLE_DB
+	rumble_near.global_position = _on_track()
+	rumble_near.volume_db = maxf(gain + linear_to_db(maxf(city, 0.0001)), OUT)
+	rumble_far.volume_db = maxf(gain + RUMBLE_FAR_DB + linear_to_db(maxf(city, 0.0001)), OUT)
 
 
 ## The air a train pushes out, gusting flat on the beds' bus.
@@ -382,6 +455,9 @@ func _process(delta: float) -> void:
 	var real := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
 	_last_real = TimeFx.real_time()
 	_sag(delta)
+
+	if rumble_near != null and rumble_near.playing:
+		_voice_rumble(_city_here())
 
 	if listener == null or not is_instance_valid(listener) or zones == null:
 		return

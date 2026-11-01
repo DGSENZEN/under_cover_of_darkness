@@ -285,15 +285,21 @@ func _script(source: String) -> GDScript:
 	return script
 
 
-## A station whose track mouth runs west of the platform, with two cable runs: one ending by the platform, one by the
-## vaults.
+
+
+## A station whose track runs past the platform, its two mouths 60 and more metres off (past Sfx's reach), with a dozen
+## signs on the line and two cable runs: one ending by the platform, one by the vaults.
 func _fake_station() -> Node3D:
 	var station: Node3D = _script(STATION_SOURCE).new()
 	add_child(station)
-	station.mouth_runs = [[-5.0, 0.0, -5.0, -1.0, 4.0]]
-	var sign := NeonSign.new()
-	station.add_child(sign)
-	station.neon.append(sign)
+	station.mouth_runs = [[-65.0, -55.0, -5.0, -1.0, 4.0], [65.0, 75.0, -5.0, -1.0, 4.0]]
+	for k in 12:
+		var sign := NeonSign.new()
+		sign.seed = k
+		station.add_child(sign)
+		# (Past Focus's hearing, 14 m: there nothing counts them.)
+		sign.position = Vector3(20.0 + k * 2.0, 3.0, -9.0)
+		station.neon.append(sign)
 	for end in [Vector3(1, 1, -9), Vector3(25, 1, 5)]:
 		var run := Node3D.new()
 		run.set_meta("points", PackedVector3Array([Vector3.ZERO, end]))
@@ -302,7 +308,7 @@ func _fake_station() -> Node3D:
 	return station
 
 
-## S16-S19: one train for the Metro.
+## S16-S19, S23, S25-S26: one train for the Metro.
 func _trains() -> void:
 	var lane: Node = _script(LANE_SOURCE).new()
 	var lane_train := TrainPass.new()
@@ -314,40 +320,65 @@ func _trains() -> void:
 	var ear := Node3D.new()
 	add_child(ear)
 	ear.global_position = PLATFORM_MID
+	# (The ear hears through a camera, as the player does: Focus and Sfx measure from it.)
+	var eye := Camera3D.new()
+	ear.add_child(eye)
+	eye.make_current()
 	var sound := PlaceSound.new()
 	add_child(sound)
 	sound.setup(PLAN, ear, station, lane)
 	_check("S16 with a lane, the Metro's train is the lane's", sound.train == lane_train, str(sound.train))
 
 	await _frames(5)
+	Sfx.recording = true
+	Sfx.recorded.clear()
 	sound.train.start_pass()
-	var sign: NeonSign = station.neon[0]
-	var sign_lowest := 1.0
-	for f in int(1.3 * 60):
+	var lowest := {}
+	var most_at_once := 0
+	var struck := 0
+	for f in int(15.0 * 60):
+		var before := Sfx.recorded.size()
 		await get_tree().process_frame
-		sign_lowest = minf(sign_lowest, sign.dim)
-	var heard: Array = sound.train_heard().duplicate()
-	var rumbles := heard.filter(func(h): return h[0] == &"train_far" and float(h[2]) > -10.0)
-	var gusts := heard.filter(func(h): return h[0] == &"metro_draught")
-	_check("S17 a train heard from a platform: its rumble from the mouth, its draught", rumbles.size() == station.mouth_runs.size() and gusts.size() == 1,
-		str(heard))
-
-	for f in int(5.0 * 60):
-		await get_tree().process_frame
-		sign_lowest = minf(sign_lowest, sign.dim)
-	var surges := sound.train_heard().filter(func(h): return h[0] == &"cable_surge")
-	_check("S19 at the peak the cables surge, from the run end nearest the ear", surges.size() == 1
-		and (surges[0][1] as Vector3).distance_to(Vector3(1, 1, -9)) < 0.01, str(surges))
-
-	await _frames(int(10.0 * 60))
+		var now := Sfx.recorded.slice(before).filter(func(e): return e[0] == &"neon_ignite").size()
+		most_at_once = maxi(most_at_once, now)
+		struck += now
+		for sign: NeonSign in station.neon:
+			lowest[sign] = minf(float(lowest.get(sign, 1.0)), sign.dim)
+		if f == int(1.3 * 60):
+			var near: AudioStreamPlayer3D = sound.get("rumble_near")
+			var far: AudioStreamPlayer = sound.get("rumble_far")
+			var gusts := sound.train_heard().filter(func(h): return h[0] == &"metro_draught")
+			_check("S17 a train heard from a platform 60 m and more from the mouths: its rumble voiced on the track nearest you, through the walls too, and its draught",
+				near != null and near.playing and near.stream != null and near.max_distance >= 60.0
+				and near.global_position.distance_to(Vector3(5.0, 0.5, -5.0)) < 0.5 and far != null and far.playing and gusts.size() == 1,
+				"near %s at %s, far %s, gusts %d" % [near.playing if near else null, near.global_position if near else null,
+					far.playing if far else null, gusts.size()])
+		if f == int(6.0 * 60):
+			var surges := sound.train_heard().filter(func(h): return h[0] == &"cable_surge")
+			_check("S19 at the peak the cables surge, from the run end nearest the ear, though signs go out round it", surges.size() == 1
+				and (surges[0][1] as Vector3).distance_to(Vector3(1, 1, -9)) < 0.01, str(surges))
+	Sfx.recording = false
+	var out := lowest.values().filter(func(v): return v < NeonSign.OUT_BELOW).size()
 	_check("S23 the station's signs sag with the train, some far enough to go out, and come back",
-		sign_lowest < NeonSign.OUT_BELOW and is_equal_approx(sign.dim, 1.0), "lowest %.2f, now %.2f" % [sign_lowest, sign.dim])
+		out > 0 and station.neon.all(func(s): return is_equal_approx(s.dim, 1.0)), "%d of 12 out" % out)
+	_check("S25 the signs go out and strike back on out of step: never more than two at once", struck >= 1 and most_at_once <= 2,
+		"%d ignitions, at most %d in a frame" % [struck, most_at_once])
+
 	ear.global_position = OLD_MID
 	await _frames(5)
 	sound.train.start_pass()
 	await _frames(int(1.3 * 60))
 	var deep := sound.train_heard().filter(func(h): return h[0] == &"train_far" or h[0] == &"metro_draught")
-	_check("S18 in the old layer the train is not heard", deep.is_empty(), str(deep))
+	var near_deep: AudioStreamPlayer3D = sound.get("rumble_near")
+	_check("S18 in the old layer the train is not heard",
+		deep.is_empty() and (near_deep == null or not near_deep.playing or near_deep.volume_db <= -79.0), str(deep))
+	await _frames(int(14.0 * 60))
+	ear.global_position = NOWHERE
+	await _frames(5)
+	sound.train.start_pass()
+	await _frames(int(1.3 * 60))
+	var lost := sound.train_heard().filter(func(h): return h[0] == &"train_far" or h[0] == &"metro_draught")
+	_check("S26 fallen out of every space from the old layer, the train is still not heard", lost.is_empty(), str(lost))
 	for node in [sound, ear, station, lane]:
 		node.queue_free()
 	await _frames(3)
