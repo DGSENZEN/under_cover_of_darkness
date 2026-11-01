@@ -1,0 +1,15 @@
+{
+ "slots": [
+  "iron",
+  "brass",
+  "copper",
+  "steel",
+  "talavera_cobalt",
+  "glass_core",
+  "glass_gauge",
+  "glass_lamp",
+  "glass_dial"
+ ],
+ "atlas_px": 4096,
+ "px_per_m": 166.02
+}
