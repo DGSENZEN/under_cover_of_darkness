@@ -11,7 +11,10 @@ extends Node
 ## station's track mouths, its draught gusting on the platforms, the cables surging at its peak, all thinned away on the
 ## way into the old layer. The station set's machine sounds from the lists the set keeps (no tags in its files): its
 ## neon buzzing, a junction box at each cable run's end, the transformer along its floor mains, knocks down its mains and
-## risers, its risers ticking as they cool, its fuming floor mouths breathing out. Everything else here runs on real time (TimeFx), so slow motion leaves the place alone.
+## risers, its risers ticking as they cool, its fuming floor mouths breathing out; and the Company's engine at the hall's
+## middle: its body, its clockwork at the gear trains, its great gears at the flywheels, its governor, steam let off at
+## its cylinders, its lever thrown now and then, labouring at a train's peak and catching back up to its beat when the
+## train has gone. Everything else here runs on real time (TimeFx), so slow motion leaves the place alone.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
@@ -83,6 +86,15 @@ const TICK_DB := -8.0
 const HISS_EVERY := Vector2(18.0, 40.0)
 const HISS_DB := -6.0
 const MOUTH_BREATH := 0.9
+## The engine: its body heard from its middle (this high over its foot, this far: the whole hall), its clockwork, gears
+## and governor close to them (m); how often a cylinder lets off steam and the lever is thrown (s).
+const ENGINE_BODY_UP := 2.5
+const ENGINE_BODY_REACH := 36.0
+const ENGINE_CLOCKWORK_REACH := 10.0
+const ENGINE_GEARS_REACH := 16.0
+const ENGINE_GOVERNOR_REACH := 8.0
+const VALVE_EVERY := Vector2(60.0, 140.0)
+const LEVER_EVERY := Vector2(50.0, 120.0)
 ## The station's signs on the Company's line while a train draws on it: how far they sag (at its full, and more on the
 ## line's dips: the deepest put a sign out), how fast the dips come and go.
 const STATION_BROWNOUT := Vector2(0.35, 0.45)
@@ -108,7 +120,9 @@ var _last_real := -1.0
 var _built := false
 var _rng := RandomNumberGenerator.new()
 var _heard: Array = []
-var _sources := {"neon": 0, "junctions": 0, "transformer_runs": 0, "knock_runs": 0, "ticks": 0, "hisses": 0}
+var _sources := {"neon": 0, "junctions": 0, "transformer_runs": 0, "knock_runs": 0, "ticks": 0, "hisses": 0,
+	"engine_loops": 0, "engine_events": 0}
+var _was_passing := false
 var _pipes: Node3D
 var _sag_clock := 0.0
 var _draught: AudioStreamPlayer
@@ -191,6 +205,17 @@ func station_sources() -> Dictionary:
 	return _sources
 
 
+## The train gone, the engine catches back up to its beat.
+func _after_train() -> void:
+	var passing := train != null and train.passing()
+
+	if _was_passing and not passing and _engine() != null and _city_here() > 0.001:
+		Sfx.play(self, &"engine_start", _engine().global_position)
+		_heard.append([&"engine_start", _engine().global_position, 0.0])
+
+	_was_passing = passing
+
+
 ## The station's signs sagging as a train draws on the line (unevenly, as the lane's lights do), on game time.
 func _sag(delta: float) -> void:
 	if station == null or not is_instance_valid(station) or station.get("neon") == null or train == null:
@@ -249,6 +274,51 @@ func _station_machine() -> void:
 	for mouth: Node3D in station.get("mouths"):
 		_pipes.call("events", &"pipe_hiss", mouth.global_position + Vector3(0.0, MOUTH_BREATH, 0.0), HISS_EVERY, HISS_DB)
 		_sources.hisses += 1
+
+	_engine_works()
+
+
+## The Company's engine given its sounds, from what the set lists of it ("spinners": its gear trains, the governor last;
+## "cranks": its flywheels).
+func _engine_works() -> void:
+	var engine: Node3D = station.get("engine")
+
+	if engine == null:
+		return
+
+	var spinners: Array = engine.get_meta("spinners", [])
+	var cranks: Array = engine.get_meta("cranks", [])
+	var body := engine.global_position + Vector3(0.0, ENGINE_BODY_UP, 0.0)
+	_pipes.call("run", &"engine_body", body, body, ENGINE_BODY_REACH)
+	var parts: Array[Array] = [[&"engine_clockwork", spinners.slice(0, maxi(spinners.size() - 1, 0)), ENGINE_CLOCKWORK_REACH],
+		[&"engine_gears", cranks, ENGINE_GEARS_REACH], [&"engine_governor", spinners.slice(spinners.size() - 1), ENGINE_GOVERNOR_REACH]]
+	_sources.engine_loops = 1
+
+	for part: Array in parts:
+		var pieces: Array = part[1]
+
+		if pieces.is_empty():
+			continue
+
+		var middle := Vector3.ZERO
+
+		for piece: Node3D in pieces:
+			middle += piece.global_position / pieces.size()
+
+		_pipes.call("run", part[0], middle, middle, part[2])
+		_sources.engine_loops += 1
+
+	for crank: Node3D in cranks:
+		_pipes.call("events", &"engine_valve", crank.global_position + Vector3.UP, VALVE_EVERY)
+		_sources.engine_events += 1
+
+	_pipes.call("events", &"engine_lever", body, LEVER_EVERY)
+	_sources.engine_events += 1
+
+
+## The engine, where it is (null without one).
+func _engine() -> Node3D:
+	return station.get("engine") if station != null and is_instance_valid(station) else null
 
 
 ## A piece's two ends along its longest side (world): its drawn box's, at the middles of its two smallest faces.
@@ -429,10 +499,17 @@ func _gust(amount: float) -> void:
 	_draught.play()
 
 
-## At the train's peak the Company's cables surge: from the end of the station's cable run nearest you.
+## At the train's peak the Company's cables surge, from the end of the station's cable run nearest you; the engine
+## labours under the draw.
 func _on_train_peaked() -> void:
 	if station == null or not is_instance_valid(station) or _city_here() <= 0.001:
 		return
+
+	var engine := _engine()
+
+	if engine != null:
+		Sfx.play(self, &"engine_labour", engine.global_position)
+		_heard.append([&"engine_labour", engine.global_position, 0.0])
 
 	var ear := listener.global_position
 	var nearest := Vector3.INF
@@ -471,6 +548,7 @@ func _process(delta: float) -> void:
 	var real := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
 	_last_real = TimeFx.real_time()
 	_sag(delta)
+	_after_train()
 
 	if rumble_near != null and rumble_near.playing:
 		_voice_rumble(_city_here())

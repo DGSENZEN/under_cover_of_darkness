@@ -258,6 +258,12 @@ const GAIN := {
 	&"neon_ignite": -6.0,
 	&"cable_surge": -8.0,
 	&"train_far": -4.0,
+	# The Company's engine: steam let off at a cylinder, a lever thrown and its relays, labouring under a train's draw,
+	# catching back up to its beat.
+	&"engine_valve": -8.0,
+	&"engine_lever": -6.0,
+	&"engine_labour": -6.0,
+	&"engine_start": -6.0,
 }
 
 ## The layers' loops (in audio/ambience/), how loud each plays (dB: target LUFS less measured; a neon's hum -36,
@@ -269,6 +275,11 @@ const LOOP_GAIN := {
 	&"metro_crowd": -16.0,
 	&"junction_hum": -22.0,
 	&"transformer_hum": -20.0,
+	# The Company's engine at the hall's middle: its body, its clockwork regulator, its great gears, its governor.
+	&"engine_body": -14.0,
+	&"engine_clockwork": -12.0,
+	&"engine_gears": -14.0,
+	&"engine_governor": -18.0,
 	&"neon_buzz_1": -21.1,
 	&"neon_buzz_2": -17.2,
 	&"neon_buzz_3": -16.3,

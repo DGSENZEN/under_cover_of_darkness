@@ -65,6 +65,14 @@ class MetroLayeringTest(unittest.TestCase):
         x = self.prep.retune(self.hum100, self.prep.g_of(self.prep.hum_hz(self.hum100)))
         self.assertLess(abs(1200 * np.log2(self.prep.hum_hz(x) / 98.0)), 20.0)
 
+    def test_a_hum_is_put_in_the_scores_key(self):
+        # C or G (the Metro score's tonic and fifth), whichever is nearer; or the one a row asks for.
+        self.assertAlmostEqual(self.prep.key_of(65.1), 65.406, places=2)
+        self.assertAlmostEqual(self.prep.key_of(126.4), 130.813, places=2)
+        self.assertAlmostEqual(self.prep.key_of(200.0), 196.0, places=2)
+        self.assertAlmostEqual(self.prep.key_of(103.0), 98.0, places=2)
+        self.assertAlmostEqual(self.prep.key_of(81.7, 'C'), 65.406, places=2)
+
     def test_shots_are_seeded_and_matched(self):
         self.assertEqual(len(self.hits), 5)
         a = self.prep.layered_shots(self.hits, 10, np.random.default_rng(1931))
@@ -115,6 +123,31 @@ class MetroTablesTest(unittest.TestCase):
         for row in prep.METRO_LOOPS:
             for take in row[1]:
                 self.assertTrue(os.path.exists(prep._take_path(prep.METRO_SOURCE, take)), take)
+
+    def test_the_engine_is_in_the_tables(self):
+        prep = self.prep
+        names = [r[0] for r in prep.METRO_SHOTS] + [r[0] for r in prep.METRO_LOOPS]
+        for name in ['engine_body', 'engine_clockwork', 'engine_gears', 'engine_governor',
+                     'engine_valve', 'engine_lever', 'engine_labour', 'engine_start']:
+            self.assertIn(name, names)
+
+    def test_real_engine_lands_in_key(self):
+        prep = self.prep
+        out = Path(tempfile.mkdtemp())
+        try:
+            keyed = [r for r in prep.METRO_LOOPS if r[3].get('key')]
+            keyed_shots = [r for r in prep.METRO_SHOTS if len(r) > 3 and r[3].get('key')]
+            self.assertEqual(sorted(r[0] for r in keyed + keyed_shots),
+                             ['engine_body', 'engine_clockwork', 'engine_gears', 'engine_governor', 'engine_labour'])
+            written = prep.prepare_metro(shots=keyed_shots, loops=keyed, sfx_out=str(out), ambience_out=str(out))
+            for name, paths in written.items():
+                row = next(r for r in keyed + keyed_shots if r[0] == name)
+                for path in paths:
+                    hz = prep.hum_hz(prep._decode_take(path))
+                    want = prep.key_of(hz, row[3].get('to'))
+                    self.assertLess(abs(1200 * np.log2(hz / want)), prep.HUM_CENTS, path)
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
 
     def test_real_hums_land_on_g(self):
         prep = self.prep

@@ -31,7 +31,8 @@ const NOWHERE := Vector3(-40, 1, -40)
 const PLATFORM_MID := Vector3(5, 1, -5)
 ## A station set's lists, as the real one keeps them (maps/metro_station.gd), and a lane with its train.
 const STATION_SOURCE := "extends Node3D\nvar mouth_runs: Array = []\nvar runs: Array = []\nvar neon: Array = []\n" \
-	+ "var mains: Array = []\nvar risers: Array = []\nvar mouths: Array = []\nvar floor_mains: Array = []\n"
+	+ "var mains: Array = []\nvar risers: Array = []\nvar mouths: Array = []\nvar floor_mains: Array = []\n" \
+	+ "var engine: Node3D\n"
 const LANE_SOURCE := "extends Node\nvar train: TrainPass\n"
 
 var results: Array[String] = []
@@ -92,8 +93,10 @@ func _sfx() -> void:
 	_check("S2 the acoustics blend by weight", tiled > stoned and absf(half - (tiled + stoned) / 2.0) < 0.02,
 		"%.3f %.3f %.3f" % [tiled, stoned, half])
 
-	var shots := [&"pipe_tick", &"neon_ignite", &"cable_surge", &"train_far"]
-	var loops := [&"metro_room", &"metro_room_deep", &"metro_crowd", &"junction_hum", &"transformer_hum"]
+	var shots := [&"pipe_tick", &"neon_ignite", &"cable_surge", &"train_far", &"engine_valve", &"engine_lever",
+		&"engine_labour", &"engine_start"]
+	var loops := [&"metro_room", &"metro_room_deep", &"metro_crowd", &"junction_hum", &"transformer_hum", &"engine_body",
+		&"engine_clockwork", &"engine_gears", &"engine_governor"]
 	_check("S3 every Metro name has a gain", shots.all(func(n): return Sfx.GAIN.has(n))
 		and loops.all(func(n): return Sfx.LOOP_GAIN.has(n)),
 		"missing %s" % str((shots.filter(func(n): return not Sfx.GAIN.has(n))
@@ -226,6 +229,10 @@ func _in_the_metro() -> void:
 		and counts.hisses == station.mouths.size(),
 		"%s; neon %d runs %d mains %d risers %d floor mains %d mouths %d" % [str(counts), station.neon.size(), station.runs.size(),
 			station.mains.size(), station.risers.size(), station.floor_mains.size(), station.mouths.size()])
+	var engine: Node3D = station.engine
+	_check("S28 the Company's engine sounds: its body, clockwork, gears and governor, its valves and its lever",
+		engine != null and counts.engine_loops == 4 and counts.engine_events == (engine.get_meta("cranks") as Array).size() + 1,
+		"%d loops, %d events" % [counts.get("engine_loops", 0), counts.get("engine_events", 0)])
 	var lane: Node3D = metro.get_node("candle_lane")
 	var vent: AudioStreamPlayer3D = lane.get("vent_hum")
 	var rumble: AudioStreamPlayer = lane.get("rumble")
@@ -300,6 +307,20 @@ func _fake_station() -> Node3D:
 		# (Past Focus's hearing, 14 m: there nothing counts them.)
 		sign.position = Vector3(20.0 + k * 2.0, 3.0, -9.0)
 		station.neon.append(sign)
+	# Its engine: two gear trains' turners, the governor last (as the set lists them), two flywheels' cranks.
+	var engine := Node3D.new()
+	station.add_child(engine)
+	engine.position = Vector3(10.0, 0.0, -3.0)
+	var parts := {}
+	for part in [["gear", Vector3(-1, 1, 0)], ["gear_b", Vector3(1, 1, 0)], ["governor", Vector3(0, 2.5, 0)],
+			["crank", Vector3(-1, 1, -1)], ["crank_b", Vector3(1, 1, -1)]]:
+		var piece := Node3D.new()
+		engine.add_child(piece)
+		piece.position = part[1]
+		parts[part[0]] = piece
+	engine.set_meta("spinners", [parts.gear, parts.gear_b, parts.governor])
+	engine.set_meta("cranks", [parts.crank, parts.crank_b])
+	station.engine = engine
 	for end in [Vector3(1, 1, -9), Vector3(25, 1, 5)]:
 		var run := Node3D.new()
 		run.set_meta("points", PackedVector3Array([Vector3.ZERO, end]))
@@ -354,10 +375,15 @@ func _trains() -> void:
 				"near %s at %s, far %s, gusts %d" % [near.playing if near else null, near.global_position if near else null,
 					far.playing if far else null, gusts.size()])
 		if f == int(6.0 * 60):
+			var labours := sound.train_heard().filter(func(h): return h[0] == &"engine_labour")
+			_check("S29 at a train's peak the engine labours under its draw", labours.size() == 1
+				and (labours[0][1] as Vector3).distance_to(Vector3(10.0, 0.0, -3.0)) < 0.01, str(labours))
 			var surges := sound.train_heard().filter(func(h): return h[0] == &"cable_surge")
 			_check("S19 at the peak the cables surge, from the run end nearest the ear, though signs go out round it", surges.size() == 1
 				and (surges[0][1] as Vector3).distance_to(Vector3(1, 1, -9)) < 0.01, str(surges))
 	Sfx.recording = false
+	var caught := sound.train_heard().filter(func(h): return h[0] == &"engine_start")
+	_check("S29b once the train has gone the engine catches back up to its beat, once", caught.size() == 1, str(caught))
 	var out := lowest.values().filter(func(v): return v < NeonSign.OUT_BELOW).size()
 	_check("S23 the station's signs sag with the train, some far enough to go out, and come back",
 		out > 0 and station.neon.all(func(s): return is_equal_approx(s.dim, 1.0)), "%d of 12 out" % out)
