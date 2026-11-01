@@ -28,7 +28,7 @@ const SETS := {"candle_lane": ["res://maps/candle_lane.tscn", ["candle_lane", "l
 	"metro_station": ["res://maps/metro_station.tscn", ["hall", "stairs_n", "stairs_s", "platform_n", "platform_s", "track",
 		"track_notch_n", "track_notch_s", "stairs_n_flight", "stairs_s_flight", "track_steps_n", "track_steps_s"]]}
 
-## The Metro's score (PlaceScore), added at the map's root once the sets are in:
+## The Metro's score (PlaceScore) and its sound (PlaceSound), added at the map's root once the sets are in:
 ## under a set, candle_lane._hush() would stop its players.
 @export var score_path := "res://audio/music/metro/score.json"
 var plan: Dictionary
@@ -40,6 +40,8 @@ var lamps: Array[OmniLight3D] = []
 
 
 func _ready() -> void:
+	# Its own place's sound (PlaceSound), not the default night ambience under it.
+	set_meta(&"ambience", "")
 	# Saved and loaded in play (SaveGame: quicksave, the autosave on arriving).
 	add_to_group(&"game_map")
 	reset_physics_interpolation.call_deferred()
@@ -77,6 +79,10 @@ func _sets() -> void:
 	music.name = "PlaceScore"
 	music.score_json_path = score_path
 	add_child(music)
+	var sound := PlaceSound.new()
+	sound.name = "PlaceSound"
+	add_child(sound)
+	sound.setup(plan, player, get_node_or_null("metro_station"), lane)
 	_station_lit_alone()
 
 

@@ -3,7 +3,7 @@ extends Node3D
 
 const SaveFields := preload("res://scripts/Save/SaveFields.gd")
 ## What a save keeps of it (SaveFields): its clock, ticks and zap.
-const SAVED := ["_time", "ticks", "_was_lit", "_last_tick", "_zap"]
+const SAVED := ["_time", "ticks", "_was_lit", "_last_tick", "_zap", "_out"]
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
@@ -39,6 +39,10 @@ const Focus := preload("res://scripts/Audio/Focus.gd")
 const HUM_REACH := 4.5
 const TICK_CHANCE := 0.35
 const TICK_APART := 5.0
+## Its power this low and the tube is out (a train's draw on the line, at its deepest); coming back past BACK_ABOVE it
+## strikes on again with its ignition.
+const OUT_BELOW := 0.3
+const BACK_ABOVE := 0.6
 
 ## How much of its power reaches it (a brownout when a train passes: 1 full).
 var dim := 1.0
@@ -55,6 +59,7 @@ var _sound_rng := RandomNumberGenerator.new()
 var _was_lit := true
 var _last_tick := -INF
 var _zap := false
+var _out := false
 
 
 func _init() -> void:
@@ -106,7 +111,8 @@ static func hum_db(gain: float, level: float) -> float:
 	return gain + linear_to_db(maxf(level, 0.02))
 
 
-## The hum following the tube (and a brownout); a stutter off now and then ticking, the strike back zapping.
+## The hum following the tube (and a brownout); a stutter off now and then ticking, the strike back zapping; put out by
+## a deep brownout, its ignition on coming back.
 func _sound() -> void:
 	if buzz == &"" or not Sfx.enabled:
 		return
@@ -143,6 +149,15 @@ func _sound() -> void:
 		Sfx.play(self, &"neon_zap", global_position)
 
 	_was_lit = lit >= 0.5
+
+	# Put out by its power sinking, it strikes back on (its ignition's tail is the hum coming in).
+	if dim < OUT_BELOW:
+		_out = true
+	elif _out and dim > BACK_ABOVE:
+		_out = false
+
+		if Focus.allow(self, &"detail", global_position):
+			Sfx.play(self, &"neon_ignite", global_position)
 
 
 ## The tube's own material (a look-dev bay's form light swaps it out and back).

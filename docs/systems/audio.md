@@ -8,7 +8,7 @@
 | --- | --- |
 | `audio/sfx/<name>.wav` or `<name>_1.wav`, `<name>_2.wav`, … | Named effect takes, prepared/levelled by tools/prepare_sfx.py. A missing name is silent; numbered files are loaded as variations. See CREDITS.md for source licences. |
 | `audio/ambience/<name>.ogg` | Level loop chosen by current scene root ambience metadata. Default interior_night; empty disables it. Examples include cave and forest_night, with rain variants where present. |
-| root acoustics metadata | stone (default), cave, wood, outdoors; unknown values fall back to stone. Determines material damping/reverb character, while geometry probes determine room size/enclosure. |
+| root acoustics metadata | stone (default), cave, wood, outdoors, tile (the Metro's tiled halls); unknown values fall back to stone. Determines material damping/reverb character, while geometry probes determine room size/enclosure. |
 | `audio/music/<layer>.ogg` | music_drone, music_pulse, music_drums, music_severe; all available loops start synchronized at the fight's start and change gain independently. |
 | `audio/weather/*.wav` | NightSound rain_calm/rain_strong/wind/drip loops, plus thunder variations; missing streams are skipped. |
 | `audio/ambience` burner loops | LightFixture recipe loop/chimney names search WAV then OGG; empty/missing resolves to silence. Torch distance/occlusion controls local playback. |
@@ -30,12 +30,13 @@ Defaults using `:=` have inferred GDScript types; bare parameters without an ann
 | `warm(context: Node) -> void` | In-tree context. | Creates playback helper, starts background loading and ambience/score/acoustics; duplicate loading task is avoided. |
 | `takes(sound: StringName) -> Array` | Name. | Cached AudioStream takes, synchronously loads absent bank entry, returns [] if no recordings. Treat returned bank collection as read-only. |
 | `stream(sound: StringName) -> AudioStream` | Name. | Selects a variation, avoids immediate repeat, or null for missing recordings. |
-| `step(surface: String, running := false, what := "step", mail := false) -> StringName` | Surface, gait, action step/jump/land, chainmail flag. | Pure recording-name mapping. Grass/gravel -> dirt; unknown -> stone. Metal/carpet only have plain steps; other actions/mail use stone. |
+| `step(surface: String, running := false, what := "step", mail := false) -> StringName` | Surface, gait, action step/jump/land, chainmail flag. | Pure recording-name mapping. Grass/gravel -> dirt; unknown -> stone. Metal/carpet/tile only have plain steps; other actions/mail use stone. |
 | `loudness(noise_db: float) -> float` | SoundBus-style gameplay level. | Extra playback dB = clamp((noise_db-50)*.45, -14, 6). Does not publish the noise. |
 | `occlusion_at(context: Node, at: Vector3) -> float` | Live listener context and source point. | Continuous wall/corner occlusion measure from manager queries, or fallback when playback context unavailable. Callers can use this for local-loop gain/filtering. |
 | `probe_room(space: PhysicsDirectSpaceState3D, origin: Vector3, exclude: Array[RID]) -> Vector2` | Valid physics space and world origin. | Twelve layer-1 rays return normalized room size/enclosure. No hits -> (1,0), representing open space. No resource/tree mutations. |
 | `shape_room(shape: Vector2) -> void` | Size/enclosure each [0,1]. | Sets bus reverb/damping using current acoustic material; helper eases probe values during updates. |
-| `set_acoustics(kind: String) -> void` | ACOUSTICS key. | Updates static room material, applies baseline shape; unknown -> stone. |
+| `set_acoustics(kind: String) -> void` | ACOUSTICS key. | Updates static room material, clears any blend, applies baseline shape; unknown -> stone. |
+| `set_acoustics_mix(weights: Dictionary) -> void` | {ACOUSTICS key: weight}. | Blends the rows by normalised weight in place of the material's and reshapes the room as last probed; unknown keys and zero weights ignored, an empty blend no-op. PlaceSound drives it from the Metro's families. |
 | `bus_for_distance(distance: float) -> StringName` | World source/listener distance. | WorldFar above FAR, otherwise World. |
 | `world_cutoff_for(health: float, ringing: float) -> float` | Normalized health/ringing. | Low-pass cutoff frequency for world hearing; applies injury dulling. |
 | `body_hit(amount: float) -> void` | Impact strength. | Raises global ringing envelope used by injury/hearing feedback. |
@@ -61,6 +62,12 @@ Music's `LAYERS` rows are `[name:StringName, starts_at:float, fully_at:float, au
 
 Sfx/Ambience/Music envelopes read TimeFx.real_time/real_since, avoiding delta/time_scale spikes when hitstop changes midframe. TimeFx lowers overall AudioServer playback speed for non-hitstop requests, partially following cinematic slow motion. Weather sound volume envelopes use scaled frame delta; scheduled thunder is also weather/game time. Real-time clocks do not override a node's pause process mode.
 
+## The Metro's sound
+
+[PlaceSound](../../scripts/Audio/PlaceSound.gd) (spec docs/superpowers/specs/2026-10-31-metro-sound-design.md) is added by maps/metro.gd beside the score, which also sets the Metro's ambience metadata to "" so the default loop does not play under it. It builds its own PlaceZones from the plan with FAMILIES (space -> hall, platforms, market, lane, shop, old) and crossfades each family's BEDS (loops in audio/ambience, dB against their LOOP_GAIN) through the openings; `city_of(depth)` keeps the city's beds (the crowd, the trains) full through the station and the market and thins them to nothing on the way into the old layer. Beds play on the MetroBed bus (sent to Ambience: its duck and hurt filter apply), whose low-pass darkens with depth. While it is in the tree, Master carries a gentle glue compressor (meta metro_glue, before the limiter) and the room is `Sfx.set_acoustics_mix` of the families' FAMILY_ACOUSTICS; leaving removes the glue and the bus and resets stone. A floor with no "surface" meta asks `surface_at` (PlayerController): tile in the station and market, carpet in the shop.
+
+Its train is the candle lane's own TrainPass (saved), or one of its own: `train_far` from each of the station's track mouths, `metro_draught` flat on MetroBed by the platforms' weight, `cable_surge` at the nearest cable run's end at the peak, the station's neon dimmed on the line (a sign put out strikes back on with `neon_ignite`). The station set's lists (neon, runs, mains, risers, mouths, floor_mains) give its machine its sounds through one PipeSounds child (junction boxes, transformer runs, knocks, ticks, hisses); nothing in the set's files is tagged. Beds run on TimeFx real time, the train on game time. `tools/prepare_sfx.py --metro [--listen=DIR]` cuts every Metro sound from the user's ElevenLabs takes (METRO_SHOTS, METRO_LOOPS): seeded layered variations, seamless loops, every hum on G within 20 cents.
+
 ## Inventory and integration constraints
 
 | Script | Owner / read inputs / output |
@@ -68,6 +75,7 @@ Sfx/Ambience/Music envelopes read TimeFx.real_time/real_since, avoiding delta/ti
 | [Sfx](../../scripts/Audio/Sfx.gd) | Scene helper requested by PlayerController, guards, combat, interactions, HUD, burners, and maps. Reads recordings/listener/physics/player injury; outputs pooled audio/bus effects. |
 | [Ambience](../../scripts/Audio/Ambience.gd) | Started by Sfx.warm; reads scene ambience and Music intensity; outputs one listener loop. |
 | [Music](../../scripts/Audio/Music.gd) | Started by Sfx.warm; reads guard/player/squad pressure and Sfx sting timing; outputs synchronized adaptive loops. |
+| [PlaceSound](../../scripts/Audio/PlaceSound.gd) | Added by maps/metro.gd; reads the plan, the listener, the station set's lists and the lane's train; outputs the Metro's beds, its train's sounds, the station machine's sources, the glue and the room. |
 | [NightSound](../../scripts/Night/NightSound.gd) | Night child; reads eased weather/shelter and scheduled thunder; outputs weather loops/effects only. |
 
 These scripts declare no public signals; callers query state or request playback. Weather timing/signals belong to Night, and gameplay noise delivery belongs to SoundBus. NightSound uses its own seeded variation RNG; Sfx ordinary playback uses global random draws. A caller requiring deterministic gameplay must account for these existing sound draws rather than assuming playback is RNG-free.

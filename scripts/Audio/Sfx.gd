@@ -36,6 +36,8 @@ const ACOUSTICS := {
 	"cave": [0.9, 0.25, 0.32, 1.0, 0.05],
 	"wood": [0.42, 0.7, 0.12, 0.8, 0.15],
 	"outdoors": [0.2, 0.85, 0.05, 0.6, 0.2],
+	# The Metro's tiled halls: bigger and brighter than stone.
+	"tile": [0.72, 0.3, 0.24, 1.0, 0.1],
 }
 ## A sound heard through a wall: this much quieter, and cut above this; one
 ## heard round a corner, less so.
@@ -250,11 +252,23 @@ const GAIN := {
 	&"book_open": -3.9,
 	&"book_riffle": -4.6,
 	&"book_shut": -6.5,
+	# The Metro (prepare_sfx.py --metro): a pipe cooling, a sign striking on, the cables under a train's draw, a train
+	# through the rock. (Starting points; set by ear. The air a train pushes out is PlaceSound's, stereo, played flat.)
+	&"pipe_tick": -10.0,
+	&"neon_ignite": -6.0,
+	&"cable_surge": -8.0,
+	&"train_far": -4.0,
 }
 
 ## The layers' loops (in audio/ambience/), how loud each plays (dB: target LUFS less measured; a neon's hum -36,
 ## the trickle in a main -40, the air line's breath -42, a floating book's pages -40).
 const LOOP_GAIN := {
+	# The Metro's rooms and its crowd (PlaceSound's beds), its junction boxes and the transformer in its floor mains.
+	&"metro_room": -18.0,
+	&"metro_room_deep": -20.0,
+	&"metro_crowd": -16.0,
+	&"junction_hum": -22.0,
+	&"transformer_hum": -20.0,
 	&"neon_buzz_1": -21.1,
 	&"neon_buzz_2": -17.2,
 	&"neon_buzz_3": -16.3,
@@ -265,7 +279,7 @@ const LOOP_GAIN := {
 
 
 ## Floors the footstep recordings know. Anything else is walked on as the
-## nearest of them (grass and gravel as dirt); carpet and metal have steps
+## nearest of them (grass and gravel as dirt); carpet, metal and tile have steps
 ## of their own but no runs, jumps, landings or mail.
 const FLOORS := ["stone", "wood", "dirt", "water"]
 
@@ -282,10 +296,10 @@ static func step(surface: String, running := false, what := "step", mail := fals
 			floor_name = "dirt"
 		"water":
 			floor_name = "water"
-		"carpet", "metal":
+		"carpet", "metal", "tile":
 			floor_name = surface
 
-	# Carpet and metal: only steps of their own.
+	# Carpet, metal and tile: only steps of their own.
 	if not (floor_name in FLOORS):
 		if what == "step" and not mail:
 			return StringName("step_" + floor_name)
@@ -340,6 +354,10 @@ var _probe_in := 0.0
 var _last_real := -1.0
 ## The level's stuff (ACOUSTICS): the room's size and walls come from probing.
 static var _material := "stone"
+## A blend of ACOUSTICS rows (set_acoustics_mix) in place of the material's own; empty when one material rules.
+static var _mix: Array = []
+## The room as last sounded out ([size, enclosed]), for a blend to reshape.
+static var _shape := Vector2(0.5, 1.0)
 ## How deadened your hearing is by the last heavy blow (0..1, fading).
 static var _ringing := 0.0
 var _heart_in := 0.0
@@ -674,14 +692,35 @@ static func bus_for_distance(distance: float) -> StringName:
 ## as you go (shape_room).
 static func set_acoustics(kind: String) -> void:
 	_material = kind if ACOUSTICS.has(kind) else "stone"
+	_mix = []
 	shape_room(Vector2(0.5, 1.0))
+
+
+## Several kinds at once ({kind: weight}, the weights normalised): their ACOUSTICS rows blended, the room reshaped as
+## last sounded out (a place passing from one kind into another: the Metro's tiled halls into the lane's stone).
+static func set_acoustics_mix(weights: Dictionary) -> void:
+	var total := 0.0
+	var blend := [0.0, 0.0, 0.0, 0.0, 0.0]
+
+	for kind in weights:
+		if ACOUSTICS.has(kind) and float(weights[kind]) > 0.0:
+			total += float(weights[kind])
+			for i in 5:
+				blend[i] += float(weights[kind]) * float(ACOUSTICS[kind][i])
+
+	if total <= 0.0:
+		return
+
+	_mix = blend.map(func(v): return v / total)
+	shape_room(_shape)
 
 
 ## The reverb for a room of `shape` ([size, enclosed], probe_room) made of
 ## the level's stuff: bigger rooms ring longer, the open air barely at all;
 ## far off, everything is wetter.
 static func shape_room(shape: Vector2) -> void:
-	var stuff: Array = ACOUSTICS.get(_material, ACOUSTICS["stone"])
+	_shape = shape
+	var stuff: Array = _mix if not _mix.is_empty() else ACOUSTICS.get(_material, ACOUSTICS["stone"])
 
 	for bus in [BUS_WORLD, BUS_FAR]:
 		var index := AudioServer.get_bus_index(bus)

@@ -59,6 +59,11 @@ only the Underground's layers (LAYER_LOOPS, BEDS, LAYER_SHOTS: neon, pipes, book
 
 only the ánimas' voices (SOULS);
 
+    python3 tools/prepare_sfx.py --metro [--listen=DIR]
+
+only the Metro's sounds (METRO_SHOTS, METRO_LOOPS: the user's ElevenLabs takes,
+layered), and with --listen a listening file per sound in DIR;
+
     python3 tools/prepare_sfx.py --weather
 
 only the weather's loops (WEATHER_LOOPS: the NOX Essentials' rain and wind,
@@ -245,19 +250,14 @@ SOUNDS += [
     ("ting_1", W(KENNEY_IMPACT + "impactPlate_light_000.ogg"), None, None, 0.08),
     ("ting_2", W(KENNEY_IMPACT + "impactPlate_light_002.ogg"), None, None, 0.08),
     ("ting_3", W(KENNEY_IMPACT + "impactPlate_light_003.ogg"), None, None, 0.08),
-    # Carpet and metal underfoot; a boot scuffing stone.
-    ("step_carpet_1", W(KENNEY_IMPACT + "footstep_carpet_000.ogg"), None, None, 0.03),
-    ("step_carpet_2", W(KENNEY_IMPACT + "footstep_carpet_001.ogg"), None, None, 0.03),
-    ("step_carpet_3", W(KENNEY_IMPACT + "footstep_carpet_003.ogg"), None, None, 0.03),
+    # Metal underfoot.
+    # (Carpet steps and the scuff: the Metro's now, cut by --metro from the user's takes: METRO_SHOTS / METRO_LOOPS.)
     ("step_metal_1", W("footsteps_congusbongus/footsteps/metal/0.ogg"), None, None, 0.05),
     ("step_metal_2", W("footsteps_congusbongus/footsteps/metal/1.ogg"), None, None, 0.05),
     ("step_metal_3", W("footsteps_congusbongus/footsteps/metal/2.ogg"), None, None, 0.05),
     ("step_metal_4", W("footsteps_congusbongus/footsteps/metal/3.ogg"), None, None, 0.05),
     ("step_metal_5", W("footsteps_congusbongus/footsteps/metal/4.ogg"), None, None, 0.05),
     ("step_metal_6", W("footsteps_congusbongus/footsteps/metal/5.ogg"), None, None, 0.05),
-    ("scuff_1", W(KENNEY_IMPACT + "footstep_concrete_000.ogg"), None, None, 0.03),
-    ("scuff_2", W(KENNEY_IMPACT + "footstep_concrete_003.ogg"), None, None, 0.03),
-    ("scuff_3", W(KENNEY_IMPACT + "footstep_concrete_004.ogg"), None, None, 0.03),
     # Cloth and leather: moving, taking hold, picking up.
     ("cloth_1", W(KENNEY_RPG + "cloth1.ogg"), None, None, 0.05),
     ("cloth_2", W(KENNEY_RPG + "cloth2.ogg"), None, None, 0.05),
@@ -466,13 +466,11 @@ WEATHER_OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "au
 # neon sign's hum and an electrical box's (NOX's Electromagnetic, CC0; Oct 17
 # 2026, in place of FilmCow's ventilation hum pitched up).
 NOX_ELECTRIC = os.path.expanduser("~/Downloads/Essentials_Series_NOX_SOUND/Electromagnetic_NOX_SOUND/")
-NOX_TILE = os.path.expanduser("~/Downloads/Essentials_Series_NOX_SOUND/Footsteps_Essentials_NOX_SOUND/"
-                              "Footsteps_Tile/Footsteps_Tile_Walk/")
 UNDERGROUND_LOOPS = [
     ("neon_hum", NOX_ELECTRIC + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_01.wav", None, 1.0, 8.0),
     ("electric_box", NOX_ELECTRIC + "Electromagnetic_Electric_Box_Loop_Mono_Elektrousi_02.wav", None, 1.0, 8.0),
-    # The warm air breathing out of a wall vent; a tamale steamer's soft hiss under its lid.
-    ("vent_hum", FILMCOW + "ventilation hum.wav", 2400, 1.0, 10.0),
+    # A tamale steamer's soft hiss under its lid.
+    # (The wall vent's breath: the Metro's now, cut by --metro from the user's takes: METRO_SHOTS / METRO_LOOPS.)
     ("steam_hiss", FILMCOW + "gas leak.wav", 2200, 0.85, 7.0),
 ]
 # The crowd heard down the Underground's corridors: the game's own murmurs,
@@ -519,14 +517,7 @@ SONIC_TABLE = os.path.expanduser("~/Downloads/Sonic_Soundfx_household_book_paper
 FOUR_ITEMS = os.path.expanduser("~/Downloads/400 Sounds Pack/")
 RPG80 = os.path.expanduser("~/Downloads/AUCOD Web SFX/80-CC0-RPG-SFX/")
 LAYER_LOOPS = [
-    # A tube's hum (the mains' 50 Hz and its overtones) under the gas's fizz; each sign one of three.
-    ("neon_buzz_1", [(NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_03.wav", 0.0, 45, 900, 1.0),
-                     (NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_04.wav", -9.0, 1800, 9000, 1.0)], 7.0),
-    ("neon_buzz_2", [(NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_02.wav", 0.0, 45, 1200, 1.0),
-                     (NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_05.wav", -6.0, 400, 6000, 1.0)], 7.5),
-    ("neon_buzz_3", [(NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_03.wav", 0.0, 45, 900, 1.06),
-                     (NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_05.wav", -8.0, 400, 6000, 0.94),
-                     (NOX_EM + "Electromagnetic_Neon_Light_Loop_Mono_Elektrousi_04.wav", -12.0, 1800, 9000, 1.0)], 7.0),
+    # (The neon's buzz: the Metro's now, cut by --metro from the user's takes: METRO_SHOTS / METRO_LOOPS.)
     # The air line's breath: the ventilation hum taken down and dulled, as if heard through the pipe's wall.
     ("pipe_air", [(FILMCOW + "ventilation hum.wav", 0.0, 60, 700, 0.8)], 9.0),
 ]
@@ -542,17 +533,11 @@ BEDS = [
 ]
 # One-shots: (group, takes [(source, start, end, pitch, low-pass, high-pass)], fade-out s).
 LAYER_SHOTS = [
-    # The tube stuttering off (a relay's tick) and striking back (a short zap of the razor's buzz).
-    ("neon_tick", [(NOX_EM + "Electromagnetic_Nuc_On_Mono_Elektrousi.wav", 3.82, 3.92, p, 7000, 900) for p in (1.0, 0.9, 1.1)], 0.03),
-    ("neon_zap", [(FOUR_ITEMS + "Machines/razor_buzz.wav", 0.04, 0.22, p, 5000, 300) for p in (1.0, 0.92, 1.08)], 0.06),
-    # A main knocking (a hammer on iron, far down and dulled: heard through water and plaster), a gulp in it.
-    ("pipe_knock", [(FILMCOW + "metal hit with hammer %d.wav" % k, 0.0, None, p, 1500, 60)
-                    for k, p in ((3, 0.5), (4, 0.46), (6, 0.55), (7, 0.5), (10, 0.42), (14, 0.52))], 0.4),
+    # (The neon's tick and zap, the mains' knock and the valve's hiss: the Metro's now, cut by --metro from the user's takes: METRO_SHOTS / METRO_LOOPS.)
+    # A gulp in a main.
     ("pipe_gurgle", [(FILMCOW + "pipe backup 1.wav", None, None, 0.75, 1800, 70), (FILMCOW + "pipe backup 2.wav", None, None, 0.7, 1800, 70),
                      (FILMCOW + "water moving through 9.wav", None, None, 0.62, 1500, 70),
                      (FILMCOW + "water moving through 11.wav", None, None, 0.66, 1500, 70)], 0.3),
-    # Its gate valve breathing out a little.
-    ("pipe_hiss", [(FILMCOW + "gas leak.wav", a, a + 1.6, 0.85, 3000, 500) for a in (0.5, 2.6, 4.9)], 0.6),
     # The books: on the shelves while no one looks; floating down, up, open, shut.
     ("shelf_slide", [(SONIC_SHELF, 0.0, None, 1.0, None, 120), (SONIC_SHELF, 0.0, None, 0.9, 6000, 120),
                      (FOUR_ITEMS + "Materials/paper_move.wav", None, None, 0.7, 5000, 150)], 0.15),
@@ -562,11 +547,7 @@ LAYER_SHOTS = [
      + [(RPG80 + "book_01.ogg", None, None, 0.9, None, 90)], 0.2),
     ("book_land", [(SONIC_TABLE, None, None, p, 7000, 80) for p in (0.88, 0.95)] + [(RPG80 + "book_04.ogg", None, None, 0.9, 7000, 80)], 0.1),
     ("book_lift", [(SONIC_SHELF, 0.0, None, p, 7000, 120) for p in (1.0, 1.08)], 0.15),
-    ("book_open", [(FOUR_ITEMS + "Items/book_open.wav", None, None, p, None, 90) for p in (0.9, 1.0)]
-     + [(RPG80 + "book_03.ogg", None, None, 0.92, None, 90)], 0.15),
-    ("book_riffle", [(FILMCOW + "paper handled %d.wav" % k, None, None, 1.0, 9000, 200) for k in (3, 7)]
-     + [(FOUR_ITEMS + "Items/page_turn.wav", None, None, 0.9, 9000, 200)], 0.15),
-    ("book_shut", [(RPG80 + "book_02.ogg", 0.5, None, p, None, 80) for p in (0.9, 1.0)] + [(SONIC_TABLE, None, None, 1.1, 5000, 80)], 0.08),
+    # (A book opening, shutting and riffled: the Metro's now, cut by --metro from the user's takes: METRO_SHOTS / METRO_LOOPS.)
 ]
 # The weeping joint's drops, split out of FilmCow's dripping water.
 LAYER_DRIPS = ("pipe_drip", FILMCOW + "ambience - dripping water 1.wav", 6)
@@ -1065,7 +1046,7 @@ def _dull(x, hz):
 
 
 def prepare_underground():
-    """The Underground's crowd bed (a loop) and its tile footsteps."""
+    """The Underground's crowd bed (a loop)."""
     import glob
     import random
 
@@ -1107,13 +1088,7 @@ def prepare_underground():
 
     print("%-12s crowd bed, %.1f s, %d events, %.1f LUFS" % ("crowd_murmur", CROWD_SECONDS, CROWD_EVENTS, loudness(room)))
 
-    # Tile footsteps: each a step, as the game's other steps are.
-    for k, path in enumerate(sorted(glob.glob(NOX_TILE + "Footsteps_Tile_Walk_*.wav")), start=1):
-        x = fade(decode(path, None, None), 0.003, 0.05)
-        x = peak_normalise(x, PEAK_LIMIT_DB)
-        write_wav(os.path.join(OUT, "step_tile_%d.wav" % k), x)
-
-    print("step_tile    %d file(s)" % k)
+    # (Its tile footsteps are the Metro's now: --metro, METRO_SHOTS.)
 
 
 def prepare_layers():
@@ -1260,9 +1235,302 @@ def prepare_score(only=None):
         print("%-18s loop, %.3f s (%.2f bars), %.1f LUFS" % (name, len(x) / RATE, len(x) / RATE / BAR, loudness_stereo(x)))
 
 
+# The Metro (docs/superpowers/specs/2026-10-31-metro-sound-design.md): the user's ElevenLabs takes (generated on a
+# paid plan, Oct 31 2026), each named by its id (the number after its last "-"), layered into seeded variations and
+# seamless loops (prepare_metro), every hum on G (the Metro score's bed is in C). Nothing reverbed: the room is the game's.
+METRO_SOURCE = os.path.expanduser("~/Downloads/AUCOD ElevenLabs/ucod_sounds/")
+# A shot: (group, [(take, hits to split, or None for the whole take)], variations[, options]).
+METRO_SHOTS = [
+    # The pipes: water hammer and a knock running down the line; cooling iron ticking; a brass valve letting go.
+    ("pipe_knock", [("1793485028335", 3), ("1793485034866", 3), ("1793485078302", 5)], 10),
+    ("pipe_tick", [("1793485036928", 6), ("1793485046858", 7), ("1793485054268", 6)], 12),
+    ("pipe_hiss", [("1793485126062", 3), ("1793485122863", 3)], 8),
+    # The neon: its stutters, the short ones ticking off, the long ones striking back; switching on.
+    ("neon_tick", [("1793485274299", 6), ("1793485286256", 6)], 6, {"pick": "short"}),
+    ("neon_zap", [("1793485274299", 6), ("1793485286256", 6)], 6, {"pick": "long"}),
+    ("neon_ignite", [("1793485326156", None)], 3),
+    # The Company's cables under a train's draw, on G.
+    ("cable_surge", [("1793485423078", 3)], 6, {"hum": True}),
+    # A train through the rock, the length of a pass (TrainPass: 5 + 3 + 6 s); the air it pushes out.
+    ("train_far", [("1793484809228", None), ("1793484821215", None), ("1793484826366", None)], 8),
+    ("metro_draught", [("1793484872682", None), ("1793484877298", None)], 6, {"stereo": True, "folder": "ambience"}),
+    # Leather soles on tile; on the shop's carpet; a body stopping and turning.
+    ("step_tile", [("1793485480540", 10)], 10),
+    ("step_carpet", [("1793485499577", 8)], 8),
+    ("scuff", [("1793485549125", 8)], 8, {"split": {"shortest": 0.02, "tail": 0.3}}),
+    # The books, the new takes laid with the ones the shop has had.
+    ("book_open", [("1793485586835", 4), (FOUR_ITEMS + "Items/book_open.wav", None), (RPG80 + "book_03.ogg", None)], 6),
+    ("book_shut", [("1793485606047", 3), (SONIC_TABLE, None)], 6),
+    ("book_riffle", [("1793485667655", 4), ("1793485652718", 4)], 8),
+]
+# A loop: (name, [takes], seconds, options).
+METRO_LOOPS = [
+    # The station hall's room; the same taken far down for the old layer until its own take comes; the crowd.
+    ("metro_room", ["1793484770277"], 24.0, {"stereo": True}),
+    ("metro_room_deep", ["1793484770277"], 24.0, {"stereo": True, "pitch": 0.72, "lowpass": 700}),
+    ("metro_crowd", ["1793484944353", "1793484985187"], 26.0, {"stereo": True}),
+    # The neon's buzz, one of three a sign; the junction boxes; the transformer in the floor mains: all on G.
+    ("neon_buzz", ["1793485295398", "1793485246893"], 8.0, {"hum": True, "count": 3}),
+    ("junction_hum", ["1793485369165"], 10.0, {"hum": True}),
+    ("transformer_hum", ["1793485379139"], 12.0, {"hum": True}),
+    # A wall vent breathing: the tunnel's draught, dulled.
+    ("vent_hum", ["1793484872682"], 10.0, {"lowpass": 2400}),
+]
+# The options: stereo (kept stereo: a bed, or a gust played flat; the game's named sounds are all mono), folder
+# ("ambience": with the beds, not a named sound in audio/sfx/), pitch, lowpass (Hz), hum (pitched onto the nearest G),
+# a hum's shots are not pitched apart; pick ("short" or "long": only that half of the hits, by length), split (split_events' own arguments: sharp, short hits),
+# count (loops: name_1..name_n; one is name itself).
+METRO_SEED = 1931
+# The silence between variations in a listening file (s).
+LISTEN_GAP = 0.4
+# How far off G a hum may land (cents).
+HUM_CENTS = 20.0
+METRO_LOOP_IMPORT = FIRE_IMPORT.replace("force/mono=true", "force/mono={mono}")
+
+
+def g_of(hz):
+    """The G nearest `hz`: 98 Hz an octave up or down."""
+    return 98.0 * 2.0 ** round(np.log2(hz / 98.0))
+
+
+def hum_hz(x, lo=40.0, hi=420.0):
+    """The strongest pitch in `x` between `lo` and `hi` Hz."""
+    m = x if x.ndim == 1 else x.mean(axis=1)
+    spectrum = np.abs(np.fft.rfft(m * np.hanning(len(m))))
+    hz = np.fft.rfftfreq(len(m), 1.0 / RATE)
+    band = (hz >= lo) & (hz <= hi)
+    return float(hz[band][np.argmax(spectrum[band])])
+
+
+def _resample(x, ratio):
+    """Faster by `ratio` (pitch and speed together, a tape's way); mono or stereo."""
+    at = np.arange(0.0, len(x) - 1, ratio)
+    old = np.arange(len(x))
+
+    if x.ndim == 1:
+        return np.interp(at, old, x)
+
+    return np.stack([np.interp(at, old, x[:, c]) for c in range(x.shape[1])], axis=1)
+
+
+def retune(x, to_hz, lo=40.0, hi=420.0):
+    """`x` pitched so its hum lands on `to_hz`; refused more than HUM_CENTS off after."""
+    y = _resample(x, to_hz / hum_hz(x, lo, hi))
+    off = 1200.0 * np.log2(hum_hz(y, lo, hi) / to_hz)
+
+    if abs(off) > HUM_CENTS:
+        raise ValueError("a hum landed %.0f cents off %.1f Hz" % (off, to_hz))
+
+    return y
+
+
+def _loud(x):
+    return loudness(x if x.ndim == 1 else x.mean(axis=1))
+
+
+def _fade_any(x, fade_in, fade_out):
+    return fade(x, fade_in, fade_out) if x.ndim == 1 else fade_stereo(x, fade_in, fade_out)
+
+
+def layered_shots(hits, count, rng, under_chance=0.5, under_db=(-12.0, -6.0), under_late=(0.002, 0.012), pitch=0.06):
+    """`count` variations of `hits`: each hit in turn at a pitch of its own, now and then another hit laid under it a
+    few ms late; all matched in loudness to their median, and the loudest peaking at PEAK_LIMIT_DB (the game's GAIN sets the level)."""
+    out = []
+
+    for k in range(count):
+        main = _resample(hits[k % len(hits)], rng.uniform(1.0 - pitch, 1.0 + pitch))
+
+        if len(hits) > 1 and rng.random() < under_chance:
+            other = hits[(k % len(hits) + 1 + int(rng.integers(0, len(hits) - 1))) % len(hits)]
+            under = _resample(other, rng.uniform(1.0 - pitch, 1.0 + pitch)) * 10 ** (rng.uniform(*under_db) / 20)
+            late = int(rng.uniform(*under_late) * RATE)
+            length = max(len(main), late + len(under))
+            both = np.zeros((length,) + main.shape[1:])
+            both[:len(main)] += main
+            both[late:late + len(under)] += under
+            main = both
+
+        out.append(_fade_any(main, 0.003, min(0.05, len(main) / RATE / 4)))
+
+    levels = [_loud(v) for v in out]
+    middle = float(np.median(levels))
+    out = [v * 10 ** ((middle - level) / 20) for v, level in zip(out, levels)]
+    peak = max(np.abs(v).max() for v in out)
+    return [v * (10 ** (PEAK_LIMIT_DB / 20) / peak) for v in out]
+
+
+def layered_loop(takes, seconds, rng, stereo=False):
+    """`seconds` of `takes` laid over each other, each from a place of its own (the first at full, the others a few dB
+    under), its end laid over its start equal-power: a seamless loop, peaking at -3 dB."""
+    n = int(seconds * RATE)
+    tail = int(1.5 * RATE)
+    shape = (n + tail, 2) if stereo else (n + tail,)
+    bed = np.zeros(shape)
+
+    for k, take in enumerate(takes):
+        take = (np.stack([take, take], axis=1) if take.ndim == 1 else take) if stereo else \
+            (take if take.ndim == 1 else take.mean(axis=1))
+
+        while len(take) < n + tail:
+            take = np.concatenate([take, take])
+
+        at = int(rng.integers(0, len(take) - (n + tail) + 1))
+        bed += take[at:at + n + tail] * (1.0 if k == 0 else 10 ** (rng.uniform(-6.0, -2.0) / 20))
+
+    t = np.linspace(0.0, np.pi * 0.5, tail)
+
+    if stereo:
+        t = t[:, None]
+
+    bed[:tail] = bed[n:n + tail] * np.cos(t) + bed[:tail] * np.sin(t)
+    return peak_normalise(bed[:n], -3.0)
+
+
+def _take_path(source, take):
+    """A take: a file the game already cuts from (an absolute path), a name in `source`, or an id."""
+    if os.path.isabs(take) and os.path.exists(take):
+        return take
+
+    for name in (take, take + ".wav", take + ".mp3"):
+        if os.path.exists(os.path.join(source, name)):
+            return os.path.join(source, name)
+
+    found = glob.glob(os.path.join(source, "*-%s.mp3" % take))
+
+    if len(found) != 1:
+        raise FileNotFoundError("take %s: %d files in %s" % (take, len(found), source))
+
+    return found[0]
+
+
+def _decode_take(path, stereo=False, pitch=1.0, lowpass=None):
+    command = ["ffmpeg", "-v", "error", "-i", path]
+    filters = _filters(lowpass, pitch)
+
+    if filters:
+        command += ["-af", ",".join(filters)]
+
+    raw = subprocess.run(command + ["-f", "f32le", "-ac", "2", "-ar", str(RATE), "-"], capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).astype(np.float64)
+    return x if stereo else x.mean(axis=1)
+
+
+def _write_any(path, x):
+    (write_wav if x.ndim == 1 else write_wav_stereo)(path, x)
+
+
+def _listening(listen, name, pieces):
+    os.makedirs(listen, exist_ok=True)
+    gap = np.zeros((int(LISTEN_GAP * RATE),) + pieces[0].shape[1:])
+    _write_any(os.path.join(listen, name + ".wav"), np.concatenate([part for x in pieces for part in (x, gap)]))
+
+
+def prepare_metro(source=METRO_SOURCE, sfx_out=OUT, ambience_out=AMBIENCE_OUT, listen=None, shots=None, loops=None,
+                  seed=METRO_SEED):
+    """The Metro's shots to `sfx_out` (each group's old files removed first) and its loops to `ambience_out`; with
+    `listen`, a listening file per name there. Returns {name: [paths written]}."""
+    shots = METRO_SHOTS if shots is None else shots
+    loops = METRO_LOOPS if loops is None else loops
+    rng = np.random.default_rng(seed)
+    written = {}
+    os.makedirs(sfx_out, exist_ok=True)
+    os.makedirs(ambience_out, exist_ok=True)
+
+    for row in shots:
+        group, takes, count = row[:3]
+        options = row[3] if len(row) > 3 else {}
+        stereo = options.get("stereo", False)
+        hits = []
+
+        for take, split in takes:
+            x = _decode_take(_take_path(source, take), stereo, options.get("pitch", 1.0), options.get("lowpass"))
+
+            mono = x if x.ndim == 1 else x.mean(axis=1)
+            spans = [[a / RATE, b / RATE] for a, b in [auto_bounds(mono)]] if split is None \
+                else split_events(mono, split, **options.get("split", {}))
+            hits += [x[int(a * RATE):int(b * RATE)] for a, b in spans]
+
+        if not hits:
+            raise ValueError("%s: no hits found in its takes" % group)
+
+        # A hum's hits each put on G (a surge sags as it goes: the whole take's pitch is not each hit's), and kept there.
+        if options.get("hum"):
+            hits = [retune(h, g_of(hum_hz(h))) for h in hits]
+
+        if options.get("pick"):
+            hits.sort(key=len)
+            half = max(len(hits) // 2, 1)
+            hits = hits[:half] if options["pick"] == "short" else hits[-half:]
+
+        variations = layered_shots(hits, count, rng, pitch=0.0 if options.get("hum") else 0.06)
+
+        folder = ambience_out if options.get("folder") == "ambience" else sfx_out
+
+        # A variation past the new count goes, its importer with it; the rest are written over, their importers kept.
+        for old in glob.glob(os.path.join(folder, group + "_[0-9]*.wav*")):
+            found = re.fullmatch(re.escape(group) + r"_(\d+)\.wav(\.import)?", os.path.basename(old))
+
+            if found and int(found.group(1)) > count:
+                os.remove(old)
+
+        written[group] = []
+
+        for k, x in enumerate(variations, start=1):
+            path = os.path.join(folder, "%s_%d.wav" % (group, k))
+            _write_any(path, x)
+            written[group].append(path)
+
+        if listen:
+            _listening(listen, group, variations)
+
+        print("%-16s %2d shot(s), %.1f LUFS" % (group, count, float(np.median([_loud(x) for x in variations]))))
+
+    for name, takes, seconds, options in loops:
+        stereo = options.get("stereo", False)
+        decoded = []
+
+        for take in takes:
+            x = _decode_take(_take_path(source, take), stereo, options.get("pitch", 1.0), options.get("lowpass"))
+            decoded.append(retune(x, g_of(hum_hz(x))) if options.get("hum") else x)
+
+        count = options.get("count", 1)
+        names = [name] if count == 1 else ["%s_%d" % (name, k) for k in range(1, count + 1)]
+        written[name] = []
+        made = []
+
+        for each in names:
+            x = layered_loop(decoded, seconds, rng, stereo)
+
+            # (A hum drifts as it runs: the stretch a loop takes is put on G again, whole, so its seam stays seamless.)
+            if options.get("hum"):
+                x = retune(x, g_of(hum_hz(x)))
+            path = os.path.join(ambience_out, each + ".wav")
+            _write_any(path, x)
+            importer = path + ".import"
+
+            if not os.path.exists(importer):
+                with open(importer, "w") as out:
+                    out.write(METRO_LOOP_IMPORT.format(name=each, mono="false" if stereo else "true"))
+
+            written[name].append(path)
+            made.append(x)
+
+        if listen:
+            _listening(listen, name, made)
+
+        print("%-16s %d loop(s), %.1f s, %.1f LUFS" % (name, count, seconds, _loud(made[0])))
+
+    return written
+
+
 def main():
     only = None
     args = []
+    listen = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--listen=")), None)
+
+    if "--metro" in sys.argv[1:]:
+        prepare_metro(listen=listen)
+        return
 
     for a in sys.argv[1:]:
         if a.startswith("--only="):
