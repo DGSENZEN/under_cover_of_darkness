@@ -275,3 +275,8 @@ fight the score sinks under the combat score as today, and the beds sink with Am
   on its real parts (body, clockwork at the gear trains, gears at the flywheels, governor; valves at the cylinders, the
   lever), labouring at a train's peak and catching up after it. Its sustained parts sit in the score's key: the hum rule
   widened from G to C or G (tonic and fifth), the gears taken down to C.
+- **Presence** (the user, Nov 1: "tactile ... presence instead of just playing an audio file on a specific cue";
+  "make it so the audio follows the engine"): the engine played from its parts (strokes at the cranks' dead centres,
+  ticks and clunks with the gears' teeth, the governor's whir at its spin); the rumble muffled through walls; your steps
+  taking up the Metro's rooms (Sfx.body_room); the low end felt (CameraJuice.hold_trauma). Dust from the ceiling under
+  a train waits for a VFX pass with the user.
