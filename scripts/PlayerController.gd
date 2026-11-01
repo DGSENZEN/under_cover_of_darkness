@@ -1543,8 +1543,13 @@ func _surface_name() -> String:
 
 	var floor_body: Object = under.get("collider")
 
-	if floor_body == null or not floor_body.has_meta(&"surface"):
+	if floor_body == null:
 		return ""
+
+	if not floor_body.has_meta(&"surface"):
+		# A floor that says nothing walks as its place (the Metro's PlaceSound: tile, carpet), else as stone.
+		var place := get_tree().get_first_node_in_group(&"place_sound")
+		return String(place.call("surface_at", feet)) if place != null else ""
 
 	return String(floor_body.get_meta(&"surface"))
 

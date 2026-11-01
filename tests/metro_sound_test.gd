@@ -1,11 +1,12 @@
 extends Node3D
 ## The Metro's sound (docs/superpowers/specs/2026-10-31-metro-sound-design.md), headless with --fixed-fps 60, sound on
 ## and Master muted: Sfx's tile steps, gains and blended rooms (S1-S3); the director on a plan of its own (S4-S12);
-## the director in the Metro (S13).
+## floors answering from the place (S14-S15); the director in the Metro (S13).
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
 const METRO := preload("res://maps/metro.tscn")
+const PLAYER := preload("res://Player.tscn")
 
 ## A plan of its own: the hall (the station), the Pasaje beyond its east door (the market layer), the vaults beyond
 ## that (the old layer), the shop north of the hall; each 10 m square, floors at 0.
@@ -35,6 +36,7 @@ func _ready() -> void:
 	Sfx._ensure_buses()
 	await _sfx()
 	await _director()
+	await _floors()
 	await _in_the_metro()
 	Focus.reset()
 	Sfx.silence()
@@ -197,4 +199,37 @@ func _in_the_metro() -> void:
 		metro.get_node_or_null("PlaceSound") is PlaceSound and String(metro.get_meta(&"ambience", "interior_night")) == "",
 		"%s, ambience %s" % [str(metro.get_node_or_null("PlaceSound")), str(metro.get_meta(&"ambience", "unset"))])
 	metro.queue_free()
+	await _frames(3)
+
+
+## S14-S15: a floor with no "surface" meta walks as its place.
+func _floors() -> void:
+	var made := _director_at(HALL_MID)
+	var sound: PlaceSound = made[0]
+	_check("S14 a bare floor in the hall walks as tile, in the shop as carpet, in the old layer as stone",
+		sound.surface_at(HALL_MID) == "tile" and sound.surface_at(SHOP_MID) == "carpet" and sound.surface_at(OLD_MID) == "",
+		"%s %s %s" % [sound.surface_at(HALL_MID), sound.surface_at(SHOP_MID), sound.surface_at(OLD_MID)])
+
+	var floor_body := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(10, 0.2, 10)
+	shape.shape = box
+	floor_body.add_child(shape)
+	add_child(floor_body)
+	floor_body.global_position = Vector3(5, -0.1, 5)
+	var player: CharacterBody3D = PLAYER.instantiate()
+	player.debug_traversal = false
+	add_child(player)
+	player.global_position = HALL_MID + Vector3(0, 0.05, 0)
+	await _frames(20)
+	var bare := String(player.call("_surface_name"))
+	floor_body.set_meta(&"surface", "wood")
+	var own := String(player.call("_surface_name"))
+	_check("S15 the player on a bare floor in the hall walks on tile; the floor's own meta still wins",
+		bare == "tile" and own == "wood", "%s, %s" % [bare, own])
+	player.queue_free()
+	floor_body.queue_free()
+	sound.queue_free()
+	made[1].queue_free()
 	await _frames(3)
