@@ -15,6 +15,8 @@ const PLAN := "res://assets/eclipse/metro/plan.json"
 const PACE := 1.6
 const STAY := 6.0
 const STAND := 1.05
+## The eye over the player's origin (m).
+const EYE_UP := 0.6
 const STAY_ENGINE := 30.0
 ## The candle lane after the market walk ends at its mouth: her stall, the shop's door, inside the shop, out again.
 const LANE := [Vector3(12.8, -11.0, 74.2), Vector3(19.0, -11.0, 78.4), Vector3(19.0, -11.0, 82.0), Vector3(19.0, -11.0, 78.4)]
@@ -42,6 +44,8 @@ func _ready() -> void:
 	await get_tree().process_frame
 	var player: Node3D = metro.get("player")
 	player.process_mode = Node.PROCESS_MODE_DISABLED
+	# (Its camera is top level, following the player only in the player's own update, stopped here: the ear is carried.)
+	var eye := get_viewport().get_camera_3d()
 	var sound: PlaceSound = metro.get_node("PlaceSound")
 	if stand == "engine":
 		var at: Vector3 = (metro.get_node("metro_station").engine as Node3D).global_position + Vector3(6.0, 0.0, 0.0)
@@ -58,6 +62,10 @@ func _ready() -> void:
 	var sent := false
 	while _now() < length:
 		player.global_position = _where(_now()) + Vector3(0.0, STAND, 0.0)
+		var ahead := _where(_now() + 1.0) - _where(_now())
+		eye.global_position = player.global_position + Vector3(0.0, EYE_UP, 0.0)
+		if Vector2(ahead.x, ahead.z).length() > 0.05:
+			eye.look_at(eye.global_position + Vector3(ahead.x, 0.0, ahead.z))
 		if not sent and _now() > 3.0:
 			sent = true
 			sound.train.start_pass()

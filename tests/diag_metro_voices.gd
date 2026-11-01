@@ -17,11 +17,16 @@ func _ready() -> void:
 	var engine: Node3D = metro.get_node("metro_station").engine
 	player.process_mode = Node.PROCESS_MODE_DISABLED
 	player.global_position = engine.global_position + Vector3(6.0, 1.05, 0.0)
+	# (Its camera is top level, following the player only in the player's own update, stopped here: the ear is carried.)
+	var eye := get_viewport().get_camera_3d()
+	eye.global_position = player.global_position + Vector3(0.0, 0.6, 0.0)
+	eye.look_at(engine.global_position + Vector3(0.0, 1.5, 0.0))
 	var s: PlaceSound = metro.get_node("PlaceSound")
 	await get_tree().process_frame
 	s.train.start_pass()
 	var busy_max := 0
 	var hogs := {}
+	var levels := {&"World": [], &"Machine": [], &"Ambience": [], &"Music": []}
 	var t0 := Time.get_ticks_msec()
 	var full_frames := 0
 	var stolen := {}
@@ -43,6 +48,9 @@ func _ready() -> void:
 				stolen[key] = int(stolen.get(key, 0)) + 1
 			last[v] = [v.stream, v.playing, v.get_playback_position() if v.playing else 0.0, v.stream.get_length() if v.stream != null else 0.0]
 		busy_max = maxi(busy_max, busy)
+		for bus: StringName in levels:
+			var b := AudioServer.get_bus_index(bus)
+			levels[bus].append(AudioServer.get_bus_peak_volume_left_db(b, 0))
 		for v: AudioStreamPlayer3D in node._players_3d:
 			if v.playing and v.stream != null:
 				var n := v.stream.resource_path.get_file().rsplit("_", true, 1)[0]
@@ -50,6 +58,16 @@ func _ready() -> void:
 		if busy >= node._players_3d.size():
 			full_frames += 1
 	print("HOGS ", hogs)
+	# How much each bus swings frame to frame (a bed ducked by every stroke swings with them).
+	for bus: StringName in levels:
+		var v: Array = levels[bus]
+		var swing := 0.0
+		for i in range(1, v.size()):
+			swing += absf(float(v[i]) - float(v[i - 1]))
+		var sorted := v.duplicate()
+		sorted.sort()
+		print("BUS %s median %.1f dB, 10-90 spread %.1f dB, mean swing %.2f dB a frame" % [bus, sorted[sorted.size() / 2],
+			sorted[sorted.size() * 9 / 10] - sorted[sorted.size() / 10], swing / maxf(v.size() - 1, 1)])
 	var by_name := {}
 	for entry: Array in s.engine_heard():
 		by_name[entry[0]] = int(by_name.get(entry[0], 0)) + 1

@@ -264,7 +264,7 @@ func _after_train() -> void:
 	var passing := train != null and train.passing()
 
 	if _was_passing and not passing and _engine() != null and _city_here() > 0.001:
-		Sfx.play(self, &"engine_start", _engine().global_position)
+		Sfx.play(self, &"engine_start", _engine().global_position, 0.0, 1.0, 0.04, engine_bodies())
 		_heard.append([&"engine_start", _engine().global_position, 0.0])
 
 	_was_passing = passing
@@ -343,23 +343,25 @@ func _engine_works() -> void:
 	var spinners: Array = engine.get_meta("spinners", [])
 	var cranks: Array = engine.get_meta("cranks", [])
 	var body := engine.global_position + Vector3(0.0, ENGINE_BODY_UP, 0.0)
-	_pipes.call("run", &"engine_body", body, body, ENGINE_BODY_REACH)
+	var own := engine_bodies()
+	_pipes.call("run", &"engine_body", body, body, ENGINE_BODY_REACH, own, Sfx.BUS_MACHINE)
 	_sources.engine_loops = 1
 
 	if not spinners.is_empty():
 		_governor = spinners[spinners.size() - 1]
 		_governor_run = (_pipes.get("_runs") as Array).size()
-		_pipes.call("run", &"engine_governor", _governor.global_position, _governor.global_position, ENGINE_GOVERNOR_REACH)
+		_pipes.call("run", &"engine_governor", _governor.global_position, _governor.global_position, ENGINE_GOVERNOR_REACH,
+			own, Sfx.BUS_MACHINE)
 		_sources.engine_loops += 1
 
 	_sources.engine_strokes = cranks.size()
 	_sources.engine_gears = mini(maxi(spinners.size() - 1, 0), 2)
 
 	for crank: Node3D in cranks:
-		_pipes.call("events", &"engine_valve", crank.global_position + Vector3.UP, VALVE_EVERY)
+		_pipes.call("events", &"engine_valve", crank.global_position + Vector3.UP, VALVE_EVERY, 0.0, 1.0, own)
 		_sources.engine_events += 1
 
-	_pipes.call("events", &"engine_lever", body, LEVER_EVERY)
+	_pipes.call("events", &"engine_lever", body, LEVER_EVERY, 0.0, 1.0, own)
 	_sources.engine_events += 1
 
 
@@ -441,7 +443,7 @@ func _engine_sound(sound: StringName, part: Node3D, angle: float) -> void:
 			for i in ENGINE_VOICES:
 				var voice := AudioStreamPlayer3D.new()
 				voice.name = "%s_voice" % String(sound)
-				voice.bus = Sfx.BUS_WORLD
+				voice.bus = Sfx.BUS_MACHINE
 				voice.max_distance = ENGINE_BODY_REACH
 				voice.attenuation_filter_cutoff_hz = Sfx.AIR_CUTOFF
 				voice.attenuation_filter_db = Sfx.AIR_DB
@@ -456,7 +458,7 @@ func _engine_sound(sound: StringName, part: Node3D, angle: float) -> void:
 		part.set_meta(&"next_voice", int(part.get_meta(&"next_voice", 0)) + 1)
 		voice.global_position = part.global_position
 		voice.stream = take
-		var hidden := Sfx.occlusion_at(self, part.global_position)
+		var hidden := Sfx.occlusion_at(self, part.global_position, engine_bodies())
 		voice.volume_db = float(Sfx.GAIN.get(sound, 0.0)) + Sfx.OCCLUDED_DB * hidden
 		voice.attenuation_filter_cutoff_hz = lerpf(Sfx.AIR_CUTOFF, Sfx.OCCLUDED_CUTOFF, hidden)
 		voice.pitch_scale = 1.0 + _rng.randf_range(-ENGINE_STRAY, ENGINE_STRAY)
@@ -466,6 +468,19 @@ func _engine_sound(sound: StringName, part: Node3D, angle: float) -> void:
 
 	if _engine_heard.size() > ENGINE_HEARD:
 		_engine_heard.pop_front()
+
+
+## The engine's own bodies (its housing, plinth and works): its sounds come through them, from inside it, never from
+## behind them.
+func engine_bodies() -> Array:
+	var engine := _engine()
+	var bodies := []
+
+	if engine != null:
+		for body: Node in engine.find_children("*", "CollisionObject3D", true, false):
+			bodies.append((body as CollisionObject3D).get_rid())
+
+	return bodies
 
 
 ## The engine, where it is (null without one).
@@ -667,7 +682,7 @@ func _on_train_peaked() -> void:
 	var engine := _engine()
 
 	if engine != null:
-		Sfx.play(self, &"engine_labour", engine.global_position)
+		Sfx.play(self, &"engine_labour", engine.global_position, 0.0, 1.0, 0.04, engine_bodies())
 		_heard.append([&"engine_labour", engine.global_position, 0.0])
 
 	var ear := listener.global_position

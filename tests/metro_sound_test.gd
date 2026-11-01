@@ -258,6 +258,10 @@ func _in_the_metro() -> void:
 	var you: Node3D = metro.get("player")
 	you.process_mode = Node.PROCESS_MODE_DISABLED
 	you.global_position = engine.global_position + Vector3(6.0, 1.05, 0.0)
+	# (The player's camera is top level: it follows the player only in the player's own update, stopped here.)
+	var eye := get_viewport().get_camera_3d()
+	eye.global_position = you.global_position + Vector3(0.0, 0.6, 0.0)
+	eye.look_at(engine.global_position + Vector3(0.0, 1.5, 0.0))
 	await _frames(2)
 	# (Judged in game time: under --fixed-fps the run outruns the audio, so a voice's own playback says nothing here;
 	# tests/diag_metro_voices.tscn measures the same in real time.)
@@ -296,6 +300,37 @@ func _in_the_metro() -> void:
 	_check("S37 a passing train's signs strike on as a strike, spaced: never more than two sounding at once",
 		longest <= 1.7 and apart >= NeonSign.IGNITE_APART and longest / (NeonSign.IGNITE_APART / 60.0) <= 2.5,
 		"%d ignitions, %d frames apart at least, takes %.2f s" % [ignited.size(), apart, longest])
+	# S38: 6 m off the engine in the open hall, its sounds come through its own body (the parts sit inside its housing).
+	var crank: Node3D = (engine.get_meta("cranks") as Array)[0]
+	var blocked := Sfx.occlusion_at(sound, crank.global_position)
+	var through := Sfx.occlusion_at(sound, crank.global_position, sound.engine_bodies())
+	var dulled := sound.engine_voices().filter(func(v): return v.get_meta(&"plays", 0) > 0 and v.attenuation_filter_cutoff_hz < Sfx.AIR_CUTOFF - 1.0).size()
+	var runs: Array = sound.get("_pipes").get("_runs")
+	var body_run: Dictionary = runs.filter(func(r): return r["loop"] == &"engine_body")[0]
+	_check("S38 the engine's sounds pass through its own body: by it in the open, none is muffled",
+		blocked >= 1.0 and through == 0.0 and dulled == 0 and is_equal_approx(float(body_run["cutoff_to"]), Sfx.AIR_CUTOFF),
+		"its own body blocks %.2f, passed through %.2f; %d voices dulled; body run cut at %.0f Hz" % [blocked, through, dulled,
+			float(body_run["cutoff_to"])])
+	# S39: the engine's running sound on a bus of its own: the room's reverb and the hurt's dulling as the world's, but
+	# not the world the beds and the score duck under (its strokes would pump them twice a second).
+	var machine := AudioServer.get_bus_index(&"Machine")
+	var on_machine := sound.engine_voices().all(func(v): return v.bus == &"Machine")
+	var machine_runs := runs.filter(func(r): return r["loop"] in [&"engine_body", &"engine_governor"] and r["player"] != null and r["player"].bus == &"Machine").size()
+	var keyed_by := []
+	for bus in [Sfx.BUS_AMBIENCE, Sfx.BUS_MUSIC]:
+		var i := AudioServer.get_bus_index(bus)
+		for k in range(AudioServer.get_bus_effect_count(i)):
+			var duck := AudioServer.get_bus_effect(i, k) as AudioEffectCompressor
+			if duck != null and duck.sidechain != &"":
+				keyed_by.append(duck.sidechain)
+	var machine_room: AudioEffectReverb = null
+	for k in range(AudioServer.get_bus_effect_count(machine) if machine >= 0 else 0):
+		if AudioServer.get_bus_effect(machine, k) is AudioEffectReverb:
+			machine_room = AudioServer.get_bus_effect(machine, k)
+	_check("S39 the engine runs on a bus of its own, in the world's room, keying no duck",
+		machine >= 0 and AudioServer.get_bus_send(machine) == &"Master" and on_machine and machine_runs == 2
+		and not (&"Machine" in keyed_by) and machine_room != null and is_equal_approx(machine_room.room_size, _world_reverb().room_size),
+		"bus %d, voices on it %s, runs %d, ducks keyed by %s" % [machine, on_machine, machine_runs, keyed_by])
 	var lane: Node3D = metro.get_node("candle_lane")
 	var vent: AudioStreamPlayer3D = lane.get("vent_hum")
 	var rumble: AudioStreamPlayer = lane.get("rumble")

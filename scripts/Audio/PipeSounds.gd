@@ -53,9 +53,11 @@ func _ready() -> void:
 	_rng.seed = seed
 
 
-## A main's `loop` heard along `from`-`to`, out to `reach` m.
-func run(loop: StringName, from: Vector3, to: Vector3, reach := 8.0) -> void:
-	_runs.append({"loop": loop, "from": from, "to": to, "reach": reach, "player": null, "hidden": 0.0,
+## A main's `loop` heard along `from`-`to`, out to `reach` m (through `through`, the bodies of what makes it; on `bus`,
+## World if none).
+func run(loop: StringName, from: Vector3, to: Vector3, reach := 8.0, through: Array = [], bus := &"") -> void:
+	_runs.append({"loop": loop, "from": from, "to": to, "reach": reach, "player": null, "hidden": 0.0, "through": through,
+		"bus": bus,
 		"level": float(Sfx.LOOP_GAIN[loop]), "target": float(Sfx.LOOP_GAIN[loop]), "cutoff": Sfx.AIR_CUTOFF,
 		"cutoff_to": Sfx.AIR_CUTOFF})
 
@@ -65,9 +67,9 @@ func knocks(from: Vector3, to: Vector3, every: Vector2) -> void:
 	_knocks.append({"from": from, "to": to, "every": every, "next": _rng.randf_range(every.x, every.y)})
 
 
-## `sound` at `at` every `every` s, `db` over its gain, at `pitch`.
-func events(sound: StringName, at: Vector3, every: Vector2, db := 0.0, pitch := 1.0) -> void:
-	_events.append({"sound": sound, "at": at, "every": every, "db": db, "pitch": pitch,
+## `sound` at `at` every `every` s, `db` over its gain, at `pitch` (through `through`, as run's).
+func events(sound: StringName, at: Vector3, every: Vector2, db := 0.0, pitch := 1.0, through: Array = []) -> void:
+	_events.append({"sound": sound, "at": at, "every": every, "db": db, "pitch": pitch, "through": through,
 		"next": _rng.randf_range(every.x, every.y)})
 
 
@@ -96,7 +98,7 @@ func _process(delta: float) -> void:
 	for e: Dictionary in _events:
 		if _clock >= e["next"]:
 			e["next"] = _clock + _rng.randf_range(e["every"].x, e["every"].y)
-			_play(e["sound"], to_global(e["at"]), e["db"], e["pitch"])
+			_play(e["sound"], to_global(e["at"]), e["db"], e["pitch"], true, e.get("through", []))
 
 	while not _strikes.is_empty() and _strikes[0][0] <= _clock:
 		var strike: Array = _strikes.pop_front()
@@ -130,7 +132,7 @@ func _slide(r: Dictionary, camera: Camera3D, look: bool, delta: float) -> void:
 		player = AudioStreamPlayer3D.new()
 		player.name = "run_%s" % r["loop"]
 		player.stream = load("res://audio/ambience/%s.wav" % r["loop"])
-		player.bus = Sfx.BUS_WORLD
+		player.bus = Sfx.BUS_WORLD if StringName(r.get("bus", &"")) == &"" else StringName(r["bus"])
 		player.unit_size = 1.2
 		player.max_distance = r["reach"]
 		player.attenuation_filter_cutoff_hz = Sfx.AIR_CUTOFF
@@ -148,7 +150,7 @@ func _slide(r: Dictionary, camera: Camera3D, look: bool, delta: float) -> void:
 		player.global_position = a.lerp(b, along)
 
 	if look:
-		var hidden := Sfx.occlusion_at(self, player.global_position)
+		var hidden := Sfx.occlusion_at(self, player.global_position, r.get("through", []))
 		r["target"] = float(Sfx.LOOP_GAIN[r["loop"]]) + (Sfx.OCCLUDED_DB if hidden >= 1.0 else (Sfx.AROUND_DB if hidden > 0.0 else 0.0))
 		r["cutoff_to"] = Sfx.OCCLUDED_CUTOFF if hidden >= 1.0 else (Sfx.AROUND_CUTOFF if hidden > 0.0 else Sfx.AIR_CUTOFF)
 
@@ -192,12 +194,12 @@ func _knock(k: Dictionary) -> void:
 
 
 ## Plays `sound` if Focus lets it (unless `ask` is false: a knock's later strikes); whether it played.
-func _play(sound: StringName, at: Vector3, db: float, pitch: float, ask := true) -> bool:
+func _play(sound: StringName, at: Vector3, db: float, pitch: float, ask := true, through: Array = []) -> bool:
 	if ask and not Focus.allow(self, &"detail", at):
 		played[&"refused"] = int(played.get(&"refused", 0)) + 1
 		return false
 
-	Sfx.play(self, sound, at, db, pitch)
+	Sfx.play(self, sound, at, db, pitch, 0.04, through)
 	played[sound] = int(played.get(sound, 0)) + 1
 	heard.append([_clock, sound, at])
 
