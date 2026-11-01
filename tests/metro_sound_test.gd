@@ -1,7 +1,7 @@
 extends Node3D
 ## The Metro's sound (docs/superpowers/specs/2026-10-31-metro-sound-design.md), headless with --fixed-fps 60, sound on
 ## and Master muted: Sfx's tile steps, gains and blended rooms (S1-S3); the director on a plan of its own (S4-S12);
-## floors answering from the place (S14-S15); one train for the Metro (S16-S19); the director in the Metro (S13) and
+## floors answering from the place (S14-S15); one train for the Metro (S16-S19, its signs sagging S23); the director in the Metro (S13) and
 ## the station's pieces sounding (S20).
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -267,6 +267,9 @@ func _fake_station() -> Node3D:
 	var station: Node3D = _script(STATION_SOURCE).new()
 	add_child(station)
 	station.mouth_runs = [[-5.0, 0.0, -5.0, -1.0, 4.0]]
+	var sign := NeonSign.new()
+	station.add_child(sign)
+	station.neon.append(sign)
 	for end in [Vector3(1, 1, -9), Vector3(25, 1, 5)]:
 		var run := Node3D.new()
 		run.set_meta("points", PackedVector3Array([Vector3.ZERO, end]))
@@ -294,19 +297,27 @@ func _trains() -> void:
 
 	await _frames(5)
 	sound.train.start_pass()
-	await _frames(int(1.3 * 60))
+	var sign: NeonSign = station.neon[0]
+	var sign_lowest := 1.0
+	for f in int(1.3 * 60):
+		await get_tree().process_frame
+		sign_lowest = minf(sign_lowest, sign.dim)
 	var heard: Array = sound.train_heard().duplicate()
 	var rumbles := heard.filter(func(h): return h[0] == &"train_far" and float(h[2]) > -10.0)
 	var gusts := heard.filter(func(h): return h[0] == &"metro_draught")
 	_check("S17 a train heard from a platform: its rumble from the mouth, its draught", rumbles.size() == station.mouth_runs.size() and gusts.size() == 1,
 		str(heard))
 
-	await _frames(int(5.0 * 60))
+	for f in int(5.0 * 60):
+		await get_tree().process_frame
+		sign_lowest = minf(sign_lowest, sign.dim)
 	var surges := sound.train_heard().filter(func(h): return h[0] == &"cable_surge")
 	_check("S19 at the peak the cables surge, from the run end nearest the ear", surges.size() == 1
 		and (surges[0][1] as Vector3).distance_to(Vector3(1, 1, -9)) < 0.01, str(surges))
 
 	await _frames(int(10.0 * 60))
+	_check("S23 the station's signs sag with the train, some far enough to go out, and come back",
+		sign_lowest < NeonSign.OUT_BELOW and is_equal_approx(sign.dim, 1.0), "lowest %.2f, now %.2f" % [sign_lowest, sign.dim])
 	ear.global_position = OLD_MID
 	await _frames(5)
 	sound.train.start_pass()

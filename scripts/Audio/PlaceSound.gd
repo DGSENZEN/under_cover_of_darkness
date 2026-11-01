@@ -75,6 +75,10 @@ const TICK_DB := -8.0
 const HISS_EVERY := Vector2(18.0, 40.0)
 const HISS_DB := -6.0
 const MOUTH_BREATH := 0.9
+## The station's signs on the Company's line while a train draws on it: how far they sag (at its full, and more on the
+## line's dips: the deepest put a sign out), how fast the dips come and go.
+const STATION_BROWNOUT := Vector2(0.35, 0.45)
+const DIP_RATES := Vector2(23.0, 7.3)
 
 var zones: PlaceZones
 var listener: Node3D
@@ -94,6 +98,7 @@ var _rng := RandomNumberGenerator.new()
 var _heard: Array = []
 var _sources := {"neon": 0, "junctions": 0, "transformer_runs": 0, "knock_runs": 0, "ticks": 0, "hisses": 0}
 var _pipes: Node3D
+var _sag_clock := 0.0
 var _draught: AudioStreamPlayer
 
 
@@ -172,6 +177,20 @@ func bed_db(loop: String, weights: Dictionary, depth: float) -> float:
 ## hisses).
 func station_sources() -> Dictionary:
 	return _sources
+
+
+## The station's signs sagging as a train draws on the line (unevenly, as the lane's lights do), on game time.
+func _sag(delta: float) -> void:
+	if station == null or not is_instance_valid(station) or station.get("neon") == null or train == null:
+		return
+
+	_sag_clock += delta
+	var s := train.strength()
+	var dip := clampf(0.5 + 0.5 * sin(_sag_clock * DIP_RATES.x) * sin(_sag_clock * DIP_RATES.y + 1.1), 0.0, 1.0)
+	var sag := 1.0 - s * (STATION_BROWNOUT.x + STATION_BROWNOUT.y * dip)
+
+	for sign: Node in station.get("neon"):
+		sign.set("dim", sag)
 
 
 ## The station set's machine given its sounds, from the lists it keeps.
@@ -356,9 +375,10 @@ func surface_at(point: Vector3) -> String:
 	return String(FAMILY_SURFACE.get(best, ""))
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	var real := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
 	_last_real = TimeFx.real_time()
+	_sag(delta)
 
 	if listener == null or not is_instance_valid(listener) or zones == null:
 		return
