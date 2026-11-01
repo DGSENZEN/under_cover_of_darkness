@@ -21,6 +21,7 @@ const PlayerCombat := preload("res://scripts/Combat/PlayerCombat.gd")
 const RevolverScript := preload("res://scripts/Combat/Revolver.gd")
 const PowerPoolScript := preload("res://scripts/Magic/PowerPool.gd")
 const CasterScript := preload("res://scripts/Magic/Caster.gd")
+const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
 const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -407,6 +408,8 @@ var revolver: Node = null
 var power: Node = null
 ## The left hand's magic (Caster.gd).
 var caster: Node = null
+## What lies on you (Statuses.gd): the evil eye.
+var statuses: Node = null
 var _hazard_cooldown := 0.0
 
 var coyote_timer := 0.0
@@ -618,6 +621,9 @@ func _ready() -> void:
 	caster = CasterScript.new()
 	caster.name = "Caster"
 	add_child(caster)
+	statuses = StatusesScript.new()
+	statuses.name = "Statuses"
+	add_child(statuses)
 
 	# Make the level's placeholder sounds now, in the background, not on the
 	# first footstep.
@@ -4213,6 +4219,9 @@ func save_state() -> Dictionary:
 	if caster != null:
 		state["caster"] = caster.save_state()
 
+	if statuses != null:
+		state["statuses"] = statuses.save_state()
+
 	return state
 
 
@@ -4249,6 +4258,9 @@ func load_state(state: Dictionary) -> void:
 	if caster != null and state.has("caster"):
 		caster.load_state(state["caster"])
 
+	if statuses != null and state.has("statuses"):
+		statuses.load_state(state["statuses"])
+
 
 ## Sets the world transform and clears movement, traversal, velocity, jump, and shove state.
 ## Releases a simulated-rope grip and resets interpolation. Registered overlaps remain;
@@ -4259,6 +4271,7 @@ func teleport(xform: Transform3D) -> void:
 
 	global_transform = xform
 	_teleport_contacts_until = Engine.get_physics_frames() + 1
+	_slide_left = 0.0
 	movement_state = MoveState.LOCOMOTION
 	current_move = null
 	move_elapsed = 0.0

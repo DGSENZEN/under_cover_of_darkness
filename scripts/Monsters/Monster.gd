@@ -1,0 +1,187 @@
+extends CharacterBody3D
+## What every monster shares. Its kind (Bestiary) says what each hit does to
+## it: a resisted hit barely tells, and a weak one exposes it for a moment and
+## pays the shooter back in power, so the right answer feeds the next one.
+## Takes blows as a guard does (take_hit), so the gun, the shard and the boot
+## reach it unchanged. A kind says how it moves in _brain. Dead, it hides and
+## stays, so a save can keep it. Stands on the guards' layer, so shots find
+## it, but neither it nor the player is stopped by the other.
+
+const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
+const Rounds := preload("res://scripts/Combat/Rounds.gd")
+const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
+const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+
+signal died(by: Node)
+signal exposed_now
+## Each hit: what it came to (Revolver's confirm words), and what it counted as.
+signal struck(result: StringName, source: StringName)
+
+## A weak hit leaves it open this long; any hit in that time is doubled.
+const EXPOSED_TIME := 0.8
+const EXPOSED_SCALE := 2.0
+## Power back for a weak hit, and how soon it can pay again, so a whole shell
+## pays once.
+const REFUND := 8.0
+const REFUND_GAP := 0.25
+## What a copal round's smoke lasts.
+const STATUS_TIME := 4.0
+## How hard each kind of hit throws it (m/s); how fast that dies away.
+const PUSH := {&"bullet": 3.0, &"shot": 1.0, &"blast": 9.0, &"shard": 3.0}
+const PUSH_DEFAULT := 2.0
+const PUSH_FADE := 12.0
+const SAVED := ["health", "dead"]
+
+@export var kind: StringName
+var health := 0.0
+## No headshots, unless a kind has a head.
+var eye_height := 99.0
+## The round about to hit it (Revolver, just before take_hit).
+var round_hint: StringName = &"lead"
+var dead := false
+var statuses: Node
+
+var _push := Vector3.ZERO
+var _game_time := 0.0
+var _refund_at := -100.0
+var _player: Node3D
+
+
+func _ready() -> void:
+	collision_layer = 2
+	collision_mask = 1
+	add_to_group(&"monsters")
+
+	if get_child_count() == 0 or not get_child(0) is CollisionShape3D:
+		var shape := CollisionShape3D.new()
+		shape.shape = _body_shape()
+		add_child(shape)
+		move_child(shape, 0)
+
+	statuses = StatusesScript.new()
+	statuses.name = "Statuses"
+	add_child(statuses)
+
+	if health <= 0.0:
+		health = float(Bestiary.info(kind).get("health", 1.0))
+
+	# At once: a body that starts where the player stands and is then moved
+	# carries them off like a lift.
+	_meet_player()
+	SaveGame.register(self)
+
+
+## What it is hit by, and stands in.
+func _body_shape() -> Shape3D:
+	var sphere := SphereShape3D.new()
+	sphere.radius = 0.3
+	return sphere
+
+
+func _physics_process(delta: float) -> void:
+	_game_time += delta
+
+	if dead:
+		return
+
+	_meet_player()
+	velocity = _brain(delta) + _push
+	_push = _push.move_toward(Vector3.ZERO, PUSH_FADE * delta)
+	move_and_slide()
+
+
+## The velocity it wants this tick. A kind's whole behaviour hangs off this.
+func _brain(_delta: float) -> Vector3:
+	return Vector3.ZERO
+
+
+## The player, once there is one: they pass through each other.
+func target() -> Node3D:
+	return _player
+
+
+func _meet_player() -> void:
+	if is_instance_valid(_player):
+		return
+
+	_player = get_tree().get_first_node_in_group(&"player") as Node3D
+
+	if _player != null:
+		add_collision_exception_with(_player)
+		_player.add_collision_exception_with(self)
+
+
+func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, _point: Vector3, direction: Vector3) -> StringName:
+	if dead:
+		return &"none"
+
+	var source := Bestiary.source_of(hit_kind, round_hint)
+	var weak := Bestiary.is_weak(kind, source)
+	var was_exposed := is_exposed()
+	health -= damage * Bestiary.scale_for(kind, source) * (EXPOSED_SCALE if was_exposed else 1.0)
+	_push += direction.normalized() * float(PUSH.get(hit_kind, PUSH_DEFAULT))
+
+	if hit_kind == &"bullet":
+		var status: StringName = Rounds.info(round_hint).get("status", &"")
+
+		if status != &"":
+			statuses.apply(status, STATUS_TIME)
+
+	if weak:
+		_pay_back(attacker)
+		statuses.apply(&"exposed", EXPOSED_TIME)
+		exposed_now.emit()
+
+	var result := &"hit"
+
+	if health <= 0.0:
+		result = &"killed"
+		_die(attacker)
+	elif weak:
+		result = &"weak"
+	elif Bestiary.is_resisted(kind, source):
+		result = &"resisted"
+
+	struck.emit(result, source)
+	return result
+
+
+func is_exposed() -> bool:
+	return statuses.has(&"exposed")
+
+
+func _pay_back(attacker: Node3D) -> void:
+	if not is_instance_valid(attacker) or _game_time - _refund_at < REFUND_GAP:
+		return
+
+	var pool: Node = attacker.get("power")
+
+	if pool != null:
+		pool.refund(REFUND)
+		_refund_at = _game_time
+
+
+func _die(by: Node3D) -> void:
+	_lay_down()
+	died.emit(by)
+
+
+func _lay_down() -> void:
+	dead = true
+	visible = false
+	velocity = Vector3.ZERO
+	get_child(0).set_deferred(&"disabled", true)
+
+
+func save_state() -> Dictionary:
+	var state := SaveFields.save(self, SAVED)
+	state["statuses"] = statuses.save_state()
+	return state
+
+
+func load_state(state: Dictionary) -> void:
+	SaveFields.restore(self, state, SAVED)
+	statuses.load_state(state.get("statuses", {}))
+
+	if dead:
+		_lay_down()

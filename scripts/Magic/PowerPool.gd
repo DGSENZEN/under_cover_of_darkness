@@ -13,6 +13,8 @@ const REFILL := 5.0
 const REFILL_DELAY := 2.0
 
 var power := MAX
+## What the refill runs at: the evil eye halves it.
+var refill_scale := 1.0
 
 var _since_spent := REFILL_DELAY
 
@@ -23,7 +25,7 @@ func _physics_process(delta: float) -> void:
 	if _since_spent > REFILL_DELAY:
 		# Only the part of this tick past the delay counts.
 		var refilling := minf(delta, _since_spent - REFILL_DELAY)
-		power = minf(power + REFILL * refilling, MAX)
+		power = minf(power + REFILL * refill_scale * refilling, MAX)
 
 
 func can_pay(cost: float) -> bool:
@@ -39,6 +41,12 @@ func pay(cost: float) -> bool:
 	power = clampf(power - cost, 0.0, MAX)
 	_since_spent = 0.0
 	return true
+
+
+## Power back for fighting well (a monster's weakness found). The refill's wait
+## stays as it was.
+func refund(amount: float) -> void:
+	power = minf(power + amount, MAX)
 
 
 ## A spell that could not be paid for: a dry click, and the arc flashes.

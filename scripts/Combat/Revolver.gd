@@ -39,6 +39,8 @@ const SOUNDS := {
 	&"shellshot_tail": [&"explosion", -13.0, 0.7],
 	&"hit_tick": [&"ting", -10.0, 1.8],
 	&"kill_tick": [&"thud", -6.0, 0.7],
+	&"hit_weak": [&"ting", -8.0, 1.5],
+	&"hit_resisted": [&"thud", -14.0, 0.6],
 }
 
 ## How far a ball carries, in metres.
@@ -77,6 +79,7 @@ const TAIL_ROOM := 8.0
 ## The hold on a hit, and on a kill (real seconds).
 const HIT_HITSTOP := 0.04
 const KILL_HITSTOP := 0.07
+const WEAK_HITSTOP := 0.09
 ## A ball this close by a man's chest is a near miss to him (metres).
 const NEAR_MISS := 1.5
 ## Aiming down the sights: seconds up and down, the view narrowed by this
@@ -123,6 +126,8 @@ var player: CharacterBody3D
 var loaded := {&"cylinder": 6, &"shot": 1}
 var loading := Load.NONE
 var barrel: StringName = &"cylinder"
+## What the cylinder is loaded with (Rounds.gd).
+var cylinder_round: StringName = &"lead"
 ## Up at the eye, both hands on the gun (right mouse held, fully raised).
 var aimed := false
 
@@ -602,19 +607,28 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 			var middle: Dictionary = group[0]
 			# Point-blank, or empowered: it bursts him if it kills him.
 			_hint_gib(target, true)
+			_hint_round(target)
 			_confirm(target.take_hit(total, player, &"blast", middle["point"], -at.basis.z), false)
 			_hint_gib(target, false)
 			continue
 
 		var felt := false
+		# Any pellet weak makes the shell weak; all resisted, resisted.
+		var any_weak := false
+		var all_resisted := true
 
 		for record in group:
 			if is_instance_valid(target) and float(record["damage"]) > 0.0:
-				_deal(target, record, record["direction"], record["damage"], &"shot", gun)
+				var result := _deal(target, record, record["direction"], record["damage"], &"shot", gun)
 				felt = true
+				any_weak = any_weak or result == &"weak"
+				all_resisted = all_resisted and result == &"resisted"
 
 		if felt:
-			_confirm(&"hit" if is_instance_valid(target) and float(target.get("health")) > 0.0 else &"killed", false)
+			if not is_instance_valid(target) or float(target.get("health")) <= 0.0:
+				_confirm(&"killed", false)
+			else:
+				_confirm(&"weak" if any_weak else (&"resisted" if all_resisted else &"hit"), false)
 
 	for record in records:
 		if record["target"] == null:
@@ -744,6 +758,12 @@ static func _hint_gib(target: Object, on: bool) -> void:
 		target.set("gib_hint", on)
 
 
+## Tells a monster which round is coming (a man takes them all as bullets).
+func _hint_round(target: Object) -> void:
+	if is_instance_valid(target) and target.get("round_hint") != null:
+		target.set("round_hint", cylinder_round)
+
+
 ## Every man the ball went close by and missed (within NEAR_MISS of his
 ## chest): he starts, and his squad reads the gun (Guard.near_miss).
 func _near_misses(from: Vector3, record: Dictionary) -> void:
@@ -762,23 +782,38 @@ func _near_misses(from: Vector3, record: Dictionary) -> void:
 
 ## Into a man: a ball in the head takes the headshot's multiple (not a
 ## pellet: a shell's harm is in how many find him).
-func _deal(target: Node3D, record: Dictionary, direction: Vector3, damage: float, kind: StringName, gun: Resource) -> void:
+func _deal(target: Node3D, record: Dictionary, direction: Vector3, damage: float, kind: StringName, gun: Resource) -> StringName:
 	var point: Vector3 = record["point"]
 	var eye: float = target.get("eye_height") if target.get("eye_height") != null else 1.65
 	var headshot := kind != &"shot" and point.y - target.global_position.y >= eye - 0.25
 	var dealt: float = damage * (gun.headshot_multiplier if headshot else 1.0)
 	record["damage"] = dealt
 	record["headshot"] = headshot
+	_hint_round(target)
 	var result: StringName = target.take_hit(dealt, player, kind, point, direction)
 
 	# A pellet's mark is the shell's, once (_shell).
 	if kind != &"shot":
 		_confirm(result, headshot)
 
+	return result
+
 
 ## A hit felt: the crosshair's mark, a tick, a hold (a kill's the longer).
 func _confirm(result: StringName, headshot: bool) -> void:
 	if result == &"none" or result == &"blocked" or result == &"parried":
+		return
+
+	# It barely told: no hold, and a dull sound.
+	if result == &"resisted":
+		_sound(&"hit_resisted")
+		hit_confirmed.emit(&"resisted")
+		return
+
+	if result == &"weak":
+		TimeFx.hitstop(get_tree(), WEAK_HITSTOP)
+		_sound(&"hit_weak")
+		hit_confirmed.emit(&"weak")
 		return
 
 	var killed := result == &"killed"
