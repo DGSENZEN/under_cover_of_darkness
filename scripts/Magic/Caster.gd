@@ -207,6 +207,10 @@ func can_cast(id: StringName) -> bool:
 	if info.is_empty() or player.is_dead or get_tree().paused:
 		return false
 
+	# The hand is busy with a prep item.
+	if info["tier"] != Spells.Tier.INNATE and player.loadout != null and player.loadout.is_using():
+		return false
+
 	var gun: bool = player.combat.gun_drawn()
 
 	match info["tier"]:

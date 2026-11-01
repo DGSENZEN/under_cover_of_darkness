@@ -274,7 +274,7 @@ func weapon() -> Resource:
 
 
 func ready_to_fire() -> bool:
-	return loading == Load.NONE and _whip_t < 0.0 and _game_time >= _ready_at and _game_time >= _flip_until and _up_in_hand() and _game_time - _ran_at >= RUN_RECOVER and player.combat.dodge_lets_fire()
+	return loading == Load.NONE and _whip_t < 0.0 and _game_time >= _ready_at and _game_time >= _flip_until and _up_in_hand() and _game_time - _ran_at >= RUN_RECOVER and player.combat.dodge_lets_fire() and not player.loadout.is_using()
 
 
 ## Drawn all the way up (not still coming from the holster).
@@ -515,6 +515,24 @@ func switch_round() -> bool:
 		_start_loading(gun, spent)
 
 	return true
+
+
+## Comes round to what is packed (Loadout.restock): a round left off goes back
+## in its pouch and the first packed takes its place, and the barrels are
+## loaded, for nothing, from the pouches. At a table, with time.
+func take_up(packed: Array[StringName]) -> void:
+	packed_rounds = packed.duplicate()
+	_stop_loading()
+	var inv: Node = player.inventory
+
+	if not packed_rounds.has(cylinder_round):
+		inv.add_ammo(stock_id(), int(loaded[&"cylinder"]))
+		loaded[&"cylinder"] = 0
+		cylinder_round = packed_rounds[0]
+
+	var gun: Resource = WeaponScript.find(&"revolver")
+	loaded[&"cylinder"] = int(loaded[&"cylinder"]) + inv.take_ammo(stock_id(), int(gun.rounds) - int(loaded[&"cylinder"]))
+	loaded[&"shot"] = int(loaded[&"shot"]) + inv.take_ammo(&"shells", int(gun.shells) - int(loaded[&"shot"]))
 
 
 ## `spent`: how much brass falls as the gate opens, if not all that is missing.

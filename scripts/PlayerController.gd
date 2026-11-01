@@ -22,6 +22,7 @@ const RevolverScript := preload("res://scripts/Combat/Revolver.gd")
 const PowerPoolScript := preload("res://scripts/Magic/PowerPool.gd")
 const CasterScript := preload("res://scripts/Magic/Caster.gd")
 const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
+const LoadoutScript := preload("res://scripts/Hunt/Loadout.gd")
 const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -410,6 +411,8 @@ var power: Node = null
 var caster: Node = null
 ## What lies on you (Statuses.gd): the evil eye.
 var statuses: Node = null
+## What you took on the hunt (Loadout.gd).
+var loadout: Node = null
 var _hazard_cooldown := 0.0
 
 var coyote_timer := 0.0
@@ -624,6 +627,9 @@ func _ready() -> void:
 	statuses = StatusesScript.new()
 	statuses.name = "Statuses"
 	add_child(statuses)
+	loadout = LoadoutScript.new()
+	loadout.name = "Loadout"
+	add_child(loadout)
 
 	# Make the level's placeholder sounds now, in the background, not on the
 	# first footstep.
@@ -4222,6 +4228,9 @@ func save_state() -> Dictionary:
 	if statuses != null:
 		state["statuses"] = statuses.save_state()
 
+	if loadout != null:
+		state["loadout"] = loadout.save_state()
+
 	return state
 
 
@@ -4260,6 +4269,9 @@ func load_state(state: Dictionary) -> void:
 
 	if statuses != null and state.has("statuses"):
 		statuses.load_state(state["statuses"])
+
+	if loadout != null and state.has("loadout"):
+		loadout.load_state(state["loadout"])
 
 
 ## Sets the world transform and clears movement, traversal, velocity, jump, and shove state.
