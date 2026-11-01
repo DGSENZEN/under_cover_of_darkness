@@ -5,6 +5,7 @@ extends Node
 ## See docs/systems/combat.md for controls, phases, attack schemas, and signals.
 
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
+const Spells := preload("res://scripts/Magic/Spells.gd")
 const ArrowScript := preload("res://scripts/Combat/Arrow.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -307,6 +308,8 @@ var _running := false
 var _perfect_riposte := false
 ## Which way the last dodge went (flat, world).
 var _dodge_direction := Vector3.ZERO
+## How long the dodge under way lasts.
+var _dodge_length := 0.0
 
 
 func _ready() -> void:
@@ -314,6 +317,7 @@ func _ready() -> void:
 	_ensure_action(&"block", KEY_NONE, MOUSE_BUTTON_RIGHT)
 	_ensure_action(&"kick", KEY_F)
 	_ensure_action(&"dodge", KEY_Q)
+	_ensure_action(&"gun_dodge", KEY_ALT)
 	stamina = stamina_max
 
 
@@ -342,6 +346,11 @@ func is_able() -> bool:
 	)
 
 
+## The dodge with the revolver drawn: free of power, and far enough to count.
+const GUN_DODGE_SPEED := 13.0
+const GUN_DODGE_TIME := 0.3
+## How far through a gun dodge the hammer may fall.
+const GUN_DODGE_FIRE_AT := 0.6
 ## An empowered kick's blow: the pistol-whip's three times over.
 const EMPOWERED_KICK := 60.0
 
@@ -462,7 +471,9 @@ func _physics_process(delta: float) -> void:
 	# Q dodges with a blade or bow in hand; otherwise it is Blink (Caster.gd).
 	var q_pressed := Input.is_action_just_pressed("dodge") or (InputMap.has_action("blink") and Input.is_action_just_pressed("blink"))
 
-	if not gun and weapon != null and q_pressed and phase != Phase.STAGGER and phase != Phase.KICK and phase != Phase.DODGE and player.is_on_floor() and stamina >= 1.0:
+	var asked_dodge := Input.is_action_just_pressed("gun_dodge") if gun else (weapon != null and q_pressed)
+
+	if asked_dodge and phase != Phase.STAGGER and phase != Phase.KICK and phase != Phase.DODGE and player.is_on_floor() and stamina >= 1.0:
 		_dodge_pressed_at = _game_time
 
 	_try_buffered_dodge()
@@ -512,7 +523,7 @@ func _physics_process(delta: float) -> void:
 		Phase.DODGE:
 			_t += delta
 
-			if _t >= dodge_time:
+			if _t >= _dodge_length:
 				_enter(Phase.IDLE)
 		Phase.STAGGER:
 			_t += delta
@@ -1485,6 +1496,10 @@ func _try_dodge() -> void:
 	if phase == Phase.RECOVER and _t < _recovery * 0.25:
 		return
 
+	# A tome spell holds you to it.
+	if _casting_tome():
+		return
+
 	# The way you are moving, or straight back.
 	var axis := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 
@@ -1498,8 +1513,10 @@ func _try_dodge() -> void:
 	_reset()
 	_spend(cost_dodge)
 	_dodge_direction = direction
-	player.shove(direction * dodge_speed, dodge_time)
-	_dodge_cooldown = dodge_time + dodge_cooldown
+	var gun := gun_drawn()
+	_dodge_length = GUN_DODGE_TIME if gun else dodge_time
+	player.shove(direction * (GUN_DODGE_SPEED if gun else dodge_speed), _dodge_length)
+	_dodge_cooldown = _dodge_length + dodge_cooldown
 	_dodged_at = _game_time
 	_enter(Phase.DODGE)
 	# Lean into it.
@@ -1509,6 +1526,20 @@ func _try_dodge() -> void:
 	Sfx.play_flat(player, &"cloth", -4.0)
 	SoundBus.emit_sound(player.global_position, 38.0, player, &"step")
 	dodged.emit(direction)
+
+
+func _casting_tome() -> bool:
+	var caster: Node = player.get("caster")
+
+	if caster == null or caster.casting() == &"":
+		return false
+
+	return Spells.info(caster.casting()).get("tier", -1) == Spells.Tier.TOME
+
+
+## Whether a dodge under way leaves the gun free to fire.
+func dodge_lets_fire() -> bool:
+	return phase != Phase.DODGE or _t >= _dodge_length * GUN_DODGE_FIRE_AT
 
 
 ## Whether you dodged in the last `seconds`.

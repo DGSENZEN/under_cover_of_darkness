@@ -258,7 +258,7 @@ func weapon() -> Resource:
 
 
 func ready_to_fire() -> bool:
-	return loading == Load.NONE and _whip_t < 0.0 and _game_time >= _ready_at and _game_time >= _flip_until and _up_in_hand() and _game_time - _ran_at >= RUN_RECOVER
+	return loading == Load.NONE and _whip_t < 0.0 and _game_time >= _ready_at and _game_time >= _flip_until and _up_in_hand() and _game_time - _ran_at >= RUN_RECOVER and player.combat.dodge_lets_fire()
 
 
 ## Drawn all the way up (not still coming from the holster).
