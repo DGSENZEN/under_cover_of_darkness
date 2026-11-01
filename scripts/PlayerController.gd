@@ -569,6 +569,19 @@ var _assist_left_ground := false
 var _assist_direction := Vector3.ZERO
 var _assist_speed := 0.0
 
+## A slide out of a sprint: seconds left of it, the way it goes, and the speed
+## it set off at.
+const SLIDE_BOOST := 1.5
+const SLIDE_TIME := 0.8
+const SLIDE_MIN_SPEED := 7.0
+const SLIDE_STEER := 3.0
+
+signal slid
+
+var _slide_left := 0.0
+var _slide_direction := Vector3.ZERO
+var _slide_speed := 0.0
+
 ## Shoved: a dodge, a kick, a blast. The legs have no say until it runs out.
 var _shove_velocity := Vector3.ZERO
 var _shove_time := 0.0
@@ -1210,6 +1223,7 @@ func _update_timers(delta: float) -> void:
 	# An armed catch is spent by any move (and a drop from it is no tap).
 	if movement_state != MoveState.LOCOMOTION:
 		_air_grab_armed = false
+		_slide_left = 0.0
 
 	var crouch_now := Input.is_action_pressed("crouch")
 	_crouch_just_pressed = crouch_now and not _crouch_held_last
@@ -1274,6 +1288,9 @@ func _apply_horizontal_movement(
 		velocity.x = carried.x
 		velocity.z = carried.z
 		_shove_time -= delta
+		return
+
+	if is_sliding() and _update_slide(wish_direction, delta):
 		return
 
 	# An assisted jump holds its solved speed until it lands or is cancelled.
@@ -2063,12 +2080,55 @@ func _update_crouch() -> bool:
 	):
 		return true
 
+	if _crouch_just_pressed and _held(&"sprint") and not is_crouched and not _is_carrying() and _on_floor_now():
+		_try_slide()
+
+	if not wants_crouch:
+		_slide_left = 0.0
+
 	if wants_crouch and not is_crouched:
 		_set_crouched(true)
 	elif not wants_crouch and is_crouched and _can_stand():
 		_set_crouched(false)
 
 	return false
+
+
+## Crouch at a run: down, and away on what speed you have.
+func _try_slide() -> void:
+	var flat := Vector3(velocity.x, 0.0, velocity.z)
+
+	if flat.length() < SLIDE_MIN_SPEED:
+		return
+
+	_slide_direction = flat.normalized()
+	_slide_speed = flat.length() + SLIDE_BOOST
+	_slide_left = SLIDE_TIME
+	Sfx.play_flat(self, &"cloth", -4.0)
+
+	if juice != null:
+		juice.punch(0.0, 0.0, -1.6)
+
+	slid.emit()
+
+
+func is_sliding() -> bool:
+	return _slide_left > 0.0
+
+
+## The slide's own tick, in place of the legs. False once it has ended.
+func _update_slide(wish_direction: Vector3, delta: float) -> bool:
+	if velocity.y > 0.0 or not _on_floor_now() or (is_on_wall() and _slide_direction.dot(get_wall_normal()) < -0.6):
+		_slide_left = 0.0
+		return false
+
+	var across := wish_direction - _slide_direction * wish_direction.dot(_slide_direction)
+	var speed := lerpf(crouch_speed, _slide_speed, _slide_left / SLIDE_TIME)
+	_slide_direction = (_slide_direction * speed + across * SLIDE_STEER * delta).normalized()
+	velocity.x = _slide_direction.x * speed
+	velocity.z = _slide_direction.z * speed
+	_slide_left = maxf(_slide_left - delta, 0.0)
+	return true
 
 
 func _can_stand() -> bool:

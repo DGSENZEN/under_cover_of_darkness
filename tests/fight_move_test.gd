@@ -12,7 +12,12 @@ var failed := 0
 
 
 func _ready() -> void:
-	Props.block(self, Vector3(0, -0.5, 0), Vector3(60, 1, 60))
+	Props.block(self, Vector3(0, -0.5, 0), Vector3(120, 1, 120))
+	# A beam to go under, a wall to run into, a platform with a drop.
+	Props.block(self, Vector3(0, 2.3, 12), Vector3(8, 2, 3))
+	Props.block(self, Vector3(-20, 1.5, 0), Vector3(6, 3, 1))
+	Props.block(self, Vector3(20, 1.5, 0), Vector3(10, 3, 20))
+	Props.block(self, Vector3(40, 1.5, 0), Vector3(10, 3, 20))
 	p = PLAYER.instantiate()
 	add_child(p)
 	p.debug_traversal = false
@@ -24,6 +29,7 @@ func _ready() -> void:
 	await _frames(60)
 	await _strafing()
 	await _gun_dodge()
+	await _slide()
 	print("==== RESULTS ====")
 	print("%d failed" % failed)
 	get_tree().quit(1 if failed > 0 else 0)
@@ -141,12 +147,93 @@ func _gun_dodge() -> void:
 	_check("FM15 Q with the gun is still Blink", p.power.power < power_was and p.global_position.distance_to(from) > 3.0)
 
 
-func _settle() -> void:
+func _sprint_for(frames: int, from := HOME, yaw := 0.0) -> void:
+	await _settle(from, yaw)
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	await _frames(frames)
+
+
+func _slide() -> void:
+	await _sprint_for(40)
+	var from: Vector3 = p.global_position
+	Input.action_press("crouch")
+	await _frames(2)
+	_check("FM16 crouch at a sprint on open floor slides", p.is_sliding() and p.is_crouched)
+	var ready_at := await _time_until(func(): return p.revolver.ready_to_fire(), 1.0)
+	_check("FM19 the gun is ready within 0.2 s of starting (%.3f)" % ready_at, ready_at >= 0.0 and ready_at <= 0.2)
+	await _time_until(func(): return not p.is_sliding(), 2.0)
+	_check("FM17 it carries at least 4 m (%.2f)" % from.distance_to(p.global_position), from.distance_to(p.global_position) >= 4.0)
+	_check("FM17b it ends in a crouch while crouch is held", p.is_crouched and not p.is_sliding())
+
+	await _settle()
+	Input.action_press("move_forward")
+	await _frames(40)
+	Input.action_press("crouch")
+	await _frames(3)
+	_check("FM18 crouch from a walk is only a crouch", not p.is_sliding() and p.is_crouched)
+
+	await _sprint_for(40)
+	Input.action_release("sprint")
+	Input.action_press("crouch")
+	await _frames(2)
+	_check("FM18b crouch just after letting go of sprint is only a crouch", not p.is_sliding())
+
+	await _sprint_for(40)
+	Input.action_press("crouch")
+	await _frames(10)
+	Input.action_press("jump")
+	await _frames(3)
+	Input.action_release("jump")
+	_check("FM20 jump ends it in a hop, keeping speed (%.2f)" % _flat(), not p.is_sliding() and not p.is_on_floor() and _flat() >= 6.0)
+
+	await _sprint_for(40)
+	Input.action_press("crouch")
+	await _frames(10)
+	Input.action_release("crouch")
+	await _frames(2)
+	_check("FM21 letting go of crouch ends it standing", not p.is_sliding() and not p.is_crouched)
+
+	# Under a beam 1.3 m clear: crouch let go beneath it.
+	await _sprint_for(20, Vector3(0, 1.05, 20))
+	Input.action_press("crouch")
+	await _time_until(func(): return p.global_position.z < 13.5, 2.0)
+	var sliding_under: bool = p.is_sliding() or p.is_crouched
+	Input.action_release("crouch")
+	await _frames(2)
+	var kept_low: bool = p.is_crouched
+	Input.action_release("sprint")
+	await _time_until(func(): return p.global_position.z < 9.0, 3.0)
+	await _frames(5)
+	_check("FM22 it goes under a 1.3 m beam and stays crouched until there is room", sliding_under and kept_low and p.global_position.z < 9.0 and not p.is_crouched)
+
+	# Into a wall.
+	await _sprint_for(30, Vector3(-20, 1.05, 12))
+	Input.action_press("crouch")
+	await _time_until(func(): return p.is_on_wall(), 2.0)
+	await _frames(3)
+	_check("FM23 into a wall it ends at once, no jitter (%.2f m/s)" % _flat(), not p.is_sliding() and _flat() < 0.5)
+
+	# Off a drop.
+	await _sprint_for(36, Vector3(20, 3.05, -1))
+	Input.action_press("crouch")
+	var fell := await _time_until(func(): return p.global_position.y < 2.5, 3.0)
+	_check("FM24 off a drop it ends and you fall", fell >= 0.0 and not p.is_sliding() and p.movement_state == p.MoveState.LOCOMOTION)
+
+	# At a ledge: sprint and crouch climb down, as they did.
+	await _settle(Vector3(40, 3.03, -9.3))
+	Input.action_press("sprint")
+	Input.action_press("crouch")
+	await _frames(20)
+	_check("FM25 at a ledge, sprint + crouch still climbs down", p.movement_state != p.MoveState.LOCOMOTION)
+
+
+func _settle(at := HOME, yaw := 0.0) -> void:
 	for action in ACTIONS:
 		if InputMap.has_action(action):
 			Input.action_release(action)
 
-	p.teleport(Transform3D(Basis.IDENTITY, HOME))
+	p.teleport(Transform3D(Basis(Vector3.UP, yaw), at))
 	p.power.power = p.power.MAX
 	p.combat.stamina = p.combat.stamina_max
 	await _frames(45)
