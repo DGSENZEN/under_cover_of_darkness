@@ -865,7 +865,7 @@ func _kicked(strength: float, gun: Resource) -> void:
 ## rolled to the gate while loading or checking (Tab), the thumb at the nose.
 func _send_pose(delta: float) -> void:
 	var poses: Dictionary = ViewPoses.REVOLVER
-	var sprinting: bool = player.has_method("_is_sprinting") and player._is_sprinting() and Vector2(player.velocity.x, player.velocity.z).length() > float(player.get("walk_speed")) + 0.3
+	var sprinting: bool = player.has_method("_is_sprinting") and player._is_sprinting() and player._sprint_counts(player._wish_direction()) and Vector2(player.velocity.x, player.velocity.z).length() > float(player.get("walk_speed")) + 0.3
 
 	if sprinting:
 		_ran_at = _game_time

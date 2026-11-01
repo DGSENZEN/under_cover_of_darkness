@@ -65,6 +65,8 @@ enum MoveState {
 ## pace a sprint gathers more slowly.
 @export var start_time := 0.12
 @export var sprint_build_time := 0.2
+## The same push with the revolver drawn: a fight wants a quick sidestep.
+@export var fight_start_time := 0.08
 ## Moving faster than asked (sprint let go, a guard raised): eased off.
 @export var slow_time := 0.15
 ## A planted stop with no input, from walking pace and from a sprint (s).
@@ -1253,7 +1255,7 @@ func _apply_horizontal_movement(
 
 	if is_crouched:
 		target_speed = crouch_speed
-	elif _held(&"sprint") and not shouldering and fighting_scale >= 1.0:
+	elif _sprint_counts(wish_direction) and not shouldering and fighting_scale >= 1.0:
 		target_speed = sprint_speed
 
 	if shouldering:
@@ -1314,6 +1316,22 @@ func _apply_horizontal_movement(
 	velocity.z = horizontal_velocity.z
 
 
+## Whether sprint held makes a sprint of going `wish`: with the revolver drawn
+## only near enough forward (within 60 degrees), so a strafe keeps the gun up.
+func _sprint_counts(wish: Vector3) -> bool:
+	if not _held(&"sprint"):
+		return false
+
+	if combat == null or not combat.gun_drawn() or wish == Vector3.ZERO:
+		return true
+
+	return wish.normalized().dot(_facing_direction()) >= 0.5
+
+
+func _start_time_now() -> float:
+	return fight_start_time if combat != null and combat.gun_drawn() else start_time
+
+
 ## Returns ground velocity with pace-dependent acceleration, braking, and turn drag.
 ## current/wish are horizontal world vectors; target_speed is m/s and delta is game seconds.
 func _ground_velocity(current: Vector3, wish: Vector3, target_speed: float, delta: float) -> Vector3:
@@ -1329,7 +1347,7 @@ func _ground_velocity(current: Vector3, wish: Vector3, target_speed: float, delt
 	var gap := target_speed - along
 
 	if gap > 0.0:
-		var build := start_time if along < walk_speed - 0.01 else sprint_build_time
+		var build := _start_time_now() if along < walk_speed - 0.01 else sprint_build_time
 		var push := clampf(gap / maxf(build, 0.01), 2.0, max_ground_acceleration)
 		along = minf(along + push * delta, target_speed)
 	elif gap < 0.0:
@@ -1341,7 +1359,7 @@ func _ground_velocity(current: Vector3, wish: Vector3, target_speed: float, delt
 	# wall that speed is the slide along it, made again every tick; taken
 	# away at a flat rate it braked the slide to a crawl.)
 	var turn := lerpf(turn_acceleration_walk, turn_acceleration_sprint, pace)
-	var shed := clampf(across.length() / maxf(start_time, 0.01), 2.0, turn)
+	var shed := clampf(across.length() / maxf(_start_time_now(), 0.01), 2.0, turn)
 	across = across.move_toward(Vector3.ZERO, shed * delta)
 
 	# Never faster than the pace asked for, or than you already were.
