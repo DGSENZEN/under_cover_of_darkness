@@ -3,7 +3,8 @@ extends CanvasLayer
 ## setup() binds the player and its component signals. Small Control subclasses draw individual indicators.
 ## Awareness/layout query methods expose current presentation for tests and callers.
 
-const AmmoReadoutScript := preload("res://scripts/UI/AmmoReadout.gd")
+const HuntReadoutScript := preload("res://scripts/UI/HuntReadout.gd")
+const EvilEyeView := preload("res://scripts/UI/evil_eye_view.gdshader")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const AdrenalineViewScript := preload("res://scripts/Visual/AdrenalineView.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -92,7 +93,10 @@ var _root: Control
 ## Everything but the pause screen (hidden while it is up).
 var _play: Control
 var _font: SystemFont
-var _ammo: AmmoReadoutScript
+var _ammo: HuntReadoutScript
+## The evil eye's lids of ink, and how far closed they are shown.
+var _curse_view: ColorRect
+var _curse_shown := 0.0
 var _crosshair: Crosshair
 var _prompts: HBoxContainer
 var _prompt_signature := ""
@@ -183,6 +187,10 @@ class Crosshair:
 	const KILL_HOLD := 0.35
 	var contact_amount := 0.0
 
+	## A hit mark's colour (the ones the hunts added).
+	func mark_ink(kind: StringName) -> Color:
+		return Color(1.0, 0.78, 0.36) if kind == &"weak" else Color(0.52, 0.5, 0.47)
+
 	func contact(kind: StringName) -> void:
 		contact_kind = kind
 		contact_amount = 1.0
@@ -227,7 +235,22 @@ class Crosshair:
 		if contact_amount > 0.01:
 			var ink := Color(0.92, 0.86, 0.76, contact_amount * 0.85)
 			var r := lerpf(12.0, 8.0, contact_amount)
-			if contact_kind in [&"shot", &"headshot", &"kill"]:
+			if contact_kind == &"weak":
+				# The right answer: a brass burst, the strokes thrown outward.
+				ink = mark_ink(&"weak")
+				ink.a = minf(contact_amount * 1.4, 1.0)
+
+				for i in 8:
+					var turn := TAU * i / 8.0 + 0.3
+					var way := Vector2(cos(turn), sin(turn))
+					var from := c + way * lerpf(10.0, 5.0, contact_amount)
+					draw_line(from, from + way * (10.0 if i % 2 == 0 else 6.0), ink, 2.2, true)
+			elif contact_kind == &"resisted":
+				# It barely told: one short dull stroke.
+				ink = mark_ink(&"resisted")
+				ink.a = contact_amount * 0.8
+				draw_line(c + Vector2(-5.0, 9.0), c + Vector2(5.0, 9.0), ink, 2.0, true)
+			elif contact_kind in [&"shot", &"headshot", &"kill"]:
 				# A shot that found him: four ticks out at the corners; longer
 				# and paler gold for the head; a kill a heavier X, held.
 				var long := 9.0 if contact_kind == &"headshot" else 7.0
@@ -695,7 +718,15 @@ func setup(p_player: CharacterBody3D) -> void:
 	_white.visible = false
 	_play.add_child(_white)
 
-	_ammo = AmmoReadoutScript.new()
+	_curse_view = ColorRect.new()
+	_curse_view.name = "EvilEye"
+	_curse_view.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_curse_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_curse_view.material = ShaderMaterial.new()
+	_curse_view.material.shader = EvilEyeView
+	_curse_view.visible = false
+	_play.add_child(_curse_view)
+	_ammo = HuntReadoutScript.new()
 	_ammo.name = "Ammo"
 	_ammo.player = player
 	_ammo.font = _font
@@ -812,6 +843,21 @@ func _build_pause() -> void:
 
 
 ## The player is dead and has fallen: what now (DeathPage).
+## The lids close in over a second or so, and draw back as it lifts.
+func _show_curse(delta: float) -> void:
+	var cursed: bool = player != null and player.statuses != null and player.statuses.has(&"evil_eye") and not player.is_dead
+	_curse_shown = move_toward(_curse_shown, 1.0 if cursed else 0.0, delta / (1.1 if cursed else 0.6))
+	_curse_view.visible = _curse_shown > 0.01
+
+	if _curse_view.visible:
+		(_curse_view.material as ShaderMaterial).set_shader_parameter(&"amount", _curse_shown)
+
+
+## The evil eye's lids are on screen.
+func curse_view_shown() -> bool:
+	return _curse_view.visible
+
+
 func show_death_page() -> void:
 	death_page.open()
 
@@ -848,8 +894,9 @@ func _process(delta: float) -> void:
 
 	var view := _root.size
 	var centre := view * 0.5
-	_ammo.position = Vector2(maxf(28.0, view.x - 136.0), maxf(0.0, view.y - 98.0))
-	_ammo.size = Vector2(108, 58)
+	_ammo.position = Vector2(maxf(28.0, view.x - 190.0), maxf(0.0, view.y - 140.0))
+	_ammo.size = Vector2(170, 120)
+	_show_curse(delta)
 	_ammo.visible = not _ammo.snapshot().is_empty()
 	_ammo.queue_redraw()
 

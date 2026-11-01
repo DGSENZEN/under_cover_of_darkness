@@ -190,6 +190,9 @@ func _yard() -> void:
 	Props.block(self, BEAM_AT + Vector3(BEAM_WIDTH * 0.5 + 1.25, 1.8, 0), Vector3(2.5, 3.6, 1.0), STONE)
 	Lights.torch_at(self, Vector3(-14.5, 3.0, -18), 2.4, 10.0, true)
 	Lights.torch_at(self, Vector3(14.5, 3.0, -28), 2.4, 10.0, true)
+	Lights.torch_at(self, Vector3(-14.5, 3.0, -33), 2.4, 10.0, true)
+	Lights.torch_at(self, Vector3(14.5, 3.0, -9), 2.4, 10.0, true)
+	Lights.torch_at(self, Vector3(-14.5, 3.0, -7), 2.4, 10.0, true)
 
 
 func _environment() -> void:

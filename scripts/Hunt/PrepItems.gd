@@ -4,7 +4,7 @@ extends RefCounted
 ## curanderas' limpia, rolled over you, draws the evil eye off into itself.
 
 const TABLE := {
-	&"egg": {"cures": &"evil_eye", "use_time": 0.8, "carry": 2},
+	&"egg": {"cures": &"evil_eye", "use_time": 0.8, "carry": 2, "colour": Color(0.9, 0.86, 0.76)},
 }
 
 
