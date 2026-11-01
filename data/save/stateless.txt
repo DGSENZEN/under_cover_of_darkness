@@ -22,3 +22,4 @@ res://maps/metro_station.gd  # builds the station set: its shell, flights, track
 res://scripts/Visual/CompanyLamp.gd  # its breath is worked out each frame from its seed on game time
 res://scripts/Level/TurnstileLane.gd  # its arms rest on a third's turn, and three arms look alike at every third
 res://scripts/Audio/PlaceScore.gd  # its themes are picked again from where you stand, its variants from PeopleState (saved)
+res://scripts/Audio/PlaceSound.gd  # its beds are worked out each frame from where you stand; its train is the lane's (saved)
