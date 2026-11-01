@@ -7,6 +7,7 @@ const STATION := preload("res://maps/metro_station.tscn")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const StationDressing := preload("res://maps/metro_station_dressing.gd")
 const TeslaArcScript := preload("res://scripts/Visual/TeslaArc.gd")
+const EngineFx := preload("res://maps/metro_station_engine_fx.gd")
 ## The MP-68's running pads, centred this far either side of a track's centre (m).
 const PAD_FROM_CENTRE := 1.0
 
@@ -31,6 +32,7 @@ func _ready() -> void:
 	_neon()
 	await _runs()
 	await _engine()
+	await _engine_fx()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -1224,6 +1226,66 @@ func _engine() -> void:
 			if part is Node3D and (part as Node3D).physics_interpolation_mode != Node.PHYSICS_INTERPOLATION_MODE_OFF:
 				faults.append("%s interpolated" % part.name)
 	_check("S11c the engine runs", faults.is_empty(), "%s" % [faults.slice(0, 6)])
+
+## The engine's presence (docs/superpowers/plans/2026-11-01-engine-presence.md).
+## S12: one beat: a stroke for each crank as its crosshead tops its travel, a second apart; the core's light and its
+## shader breathe on it (low between strokes, high just after one); paused, the beat holds.
+func _engine_fx() -> void:
+	var engine = station.get("engine")
+	var beat = engine.get_node_or_null("beat") if engine != null else null
+	if beat == null:
+		_check("S12 the engine keeps one beat", false, "no beat")
+		return
+	var fx: Dictionary = engine.get_meta("fx", {})
+	var cranks: Array = engine.get_meta("cranks", [])
+	var wrong := []
+	var strokes := []
+	var on_stroke := func(index: int) -> void:
+		strokes.append([index, float(beat.time)])
+		var crank: Node3D = cranks[index]
+		var top := float(crank.throw) + float(crank.conrod)
+		var height := float(crank.head_height(beat.angle(index)))
+		if absf(height - top) > 0.001:
+			wrong.append("crank %d stroked at %.4f of %.4f" % [index, height, top])
+	beat.stroke.connect(on_stroke)
+	var core: OmniLight3D = fx.get("core")
+	var look: ShaderMaterial = fx.get("core_look")
+	var base := float(fx.get("core_energy", 0.0))
+	var samples := []
+	for frame in 240:
+		await get_tree().process_frame
+		var swell := float(beat.swell())
+		samples.append([swell, float(beat.since_stroke())])
+		if core == null or absf(core.light_energy - base * (EngineFx.CORE_LOW + (1.0 - EngineFx.CORE_LOW) * swell)) > 0.01:
+			wrong.append("core light %.3f at swell %.2f" % [core.light_energy if core != null else -1.0, swell])
+		if look == null or absf(float(look.get_shader_parameter("swell")) - swell) > 0.001:
+			wrong.append("core shader's swell %s at %.2f" % [look.get_shader_parameter("swell") if look != null else null, swell])
+	beat.stroke.disconnect(on_stroke)
+	var indices := {}
+	for k in strokes.size():
+		indices[strokes[k][0]] = true
+		if k > 0 and absf(strokes[k][1] - strokes[k - 1][1] - 1.0) > 0.02:
+			wrong.append("strokes %.3f s apart" % (strokes[k][1] - strokes[k - 1][1]))
+	if strokes.size() < 4 or strokes.size() > 5 or indices.size() != 4:
+		wrong.append("strokes %s" % [strokes])
+	var lowest := 1.0
+	var highest := [0.0, 0.0]
+	for sample: Array in samples:
+		lowest = minf(lowest, sample[0])
+		if sample[0] > highest[0]:
+			highest = sample
+	if lowest > 0.2 or highest[0] < 0.8 or highest[1] > 0.15:
+		wrong.append("swell from %.2f to %.2f, its height %.2f s after a stroke" % [lowest, highest[0], highest[1]])
+	get_tree().paused = true
+	var held := float(beat.time)
+	await _frames(30)
+	if float(beat.time) != held:
+		wrong.append("paused, the beat ran on %.3f s" % (float(beat.time) - held))
+	get_tree().paused = false
+	if beat.physics_interpolation_mode != Node.PHYSICS_INTERPOLATION_MODE_OFF:
+		wrong.append("the beat interpolated")
+	_check("S12 the engine keeps one beat; its core breathes on it", wrong.is_empty(), "%s" % [wrong.slice(0, 6)])
+
 
 ## Walks the set's player from `start` along `way`, turning toward each point; arrived at each within 0.3 m.
 func _walk_path(start: Vector3, way: Array, frames: int) -> Dictionary:
