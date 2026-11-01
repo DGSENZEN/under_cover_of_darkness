@@ -242,6 +242,8 @@ var embedded := false
 var host_player: Node3D
 ## Its sounds silenced (the candle lane's, until the user's recordings): nothing arms one again.
 var hushed := false
+## Its jars rattling at a train's peak even hushed (the lane set into the Metro: their sound is the user's to judge).
+var keep_rattle := false
 
 
 func _ready() -> void:
@@ -730,7 +732,7 @@ func _train() -> void:
 	add_child(_rattle)
 	_rattle.position = SHELVES_AT
 	train.peaked.connect(func():
-		if hushed:
+		if hushed and not keep_rattle:
 			return
 		_rattle.stream = load(RATTLES[rattles % RATTLES.size()])
 		_rattle.play()

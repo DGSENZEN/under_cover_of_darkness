@@ -2,7 +2,7 @@ extends Node3D
 ## The Metro's sound (docs/superpowers/specs/2026-10-31-metro-sound-design.md), headless with --fixed-fps 60, sound on
 ## and Master muted: Sfx's tile steps, gains and blended rooms (S1-S3); the director on a plan of its own (S4-S12);
 ## floors answering from the place (S14-S15); one train for the Metro (S16-S19, its signs sagging S23); the director in the Metro (S13) and
-## the station's pieces sounding (S20).
+## the station's pieces sounding (S20), the candle lane un-hushed (S21-S22).
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
@@ -217,6 +217,21 @@ func _in_the_metro() -> void:
 		and counts.hisses == station.mouths.size(),
 		"%s; neon %d runs %d mains %d risers %d floor mains %d mouths %d" % [str(counts), station.neon.size(), station.runs.size(),
 			station.mains.size(), station.risers.size(), station.floor_mains.size(), station.mouths.size()])
+	var lane: Node3D = metro.get_node("candle_lane")
+	var vent: AudioStreamPlayer3D = lane.get("vent_hum")
+	var rumble: AudioStreamPlayer = lane.get("rumble")
+	var dark_wind: AudioStreamPlayer = lane.get("dark_wind")
+	var crowd: Node = lane.get("crowd")
+	_check("S21 set into the Metro the lane's vent breathes; its own rumble, crowd and dark wind stay hushed",
+		vent != null and vent.stream != null and vent.playing and rumble.stream == null and dark_wind.stream == null
+		and crowd.process_mode == Node.PROCESS_MODE_DISABLED,
+		"vent %s playing %s, rumble %s, wind %s, crowd %s" % [vent.stream if vent else null, vent.playing if vent else false,
+			rumble.stream, dark_wind.stream, crowd.process_mode])
+	lane.train.start_pass()
+	await _frames(int(5.5 * 60))
+	var rattle: AudioStreamPlayer3D = lane.get("_rattle")
+	_check("S22 at a train's peak the lane's jars rattle again", rattle != null and rattle.stream != null,
+		str(rattle.stream if rattle else null))
 	metro.queue_free()
 	await _frames(3)
 

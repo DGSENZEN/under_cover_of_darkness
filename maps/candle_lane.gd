@@ -430,16 +430,20 @@ func _people() -> void:
 
 ## The bay's sounds silenced here (all judged bad, Oct 17; the lane's are marked and wait for the user's recordings):
 ## its players emptied, its sound-only crowd stilled, nothing arming one again. (Before the shop comes in: its sounds
-## are its own. The ánimas' voices are kept: the user's pick, Oct 24.)
+## are its own. The ánimas' voices are kept: the user's pick, Oct 24.) Set into the Metro, its vent breathes again (the
+## user's takes, Oct 31) and its jars rattle on the train; the Metro's own train and crowd (PlaceSound) stand in for its
+## rumble and its crowd; its dark wind stays silent.
 func _hush() -> void:
 	hushed = true
+	keep_rattle = not standalone
+	var kept: Array = [] if standalone else [vent_hum, _rattle]
 	if crowd != null:
 		crowd.process_mode = Node.PROCESS_MODE_DISABLED
 	var voices := []
 	for souls: Node3D in find_children("*", "Node3D", true, false).filter(func(n): return n.get_script() == AnimasScript):
 		voices.append_array(souls.voices)
 	for sound: Node in find_children("*", "AudioStreamPlayer", true, false) + find_children("*", "AudioStreamPlayer3D", true, false):
-		if sound in voices:
+		if sound in voices or sound in kept:
 			continue
 		sound.call("stop")
 		sound.set("autoplay", false)
