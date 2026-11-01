@@ -9,7 +9,9 @@ extends Node
 ## through the openings); gone, both are as they were. A floor with no "surface" meta walks as its family's
 ## (surface_at). The Metro has one train (the lane's own TrainPass, saved, or one of its own): its rumble from the
 ## station's track mouths, its draught gusting on the platforms, the cables surging at its peak, all thinned away on the
-## way into the old layer. Everything else here runs on real time (TimeFx), so slow motion leaves the place alone.
+## way into the old layer. The station set's machine sounds from the lists the set keeps (no tags in its files): its
+## neon buzzing, a junction box at each cable run's end, the transformer along its floor mains, knocks down its mains and
+## risers, its risers ticking as they cool, its fuming floor mouths breathing out. Everything else here runs on real time (TimeFx), so slow motion leaves the place alone.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
@@ -62,6 +64,17 @@ const RUMBLE_DB := -4.0
 const MOUTH_UP := 1.5
 const DRAUGHT_AFTER := 1.0
 const TRAIN_SEED := 31
+## The station's machine: how far a junction box and the transformer are heard (m); how often a knock runs down a main
+## or riser, a riser ticks, a mouth hisses (s), and how far under its gain the tick and the hiss sit (dB); how high
+## over a mouth's foot its breath comes from (m).
+const JUNCTION_REACH := 6.0
+const TRANSFORMER_REACH := 7.0
+const KNOCK_EVERY := Vector2(40.0, 90.0)
+const TICK_EVERY := Vector2(6.0, 14.0)
+const TICK_DB := -8.0
+const HISS_EVERY := Vector2(18.0, 40.0)
+const HISS_DB := -6.0
+const MOUTH_BREATH := 0.9
 
 var zones: PlaceZones
 var listener: Node3D
@@ -79,6 +92,8 @@ var _last_real := -1.0
 var _built := false
 var _rng := RandomNumberGenerator.new()
 var _heard: Array = []
+var _sources := {"neon": 0, "junctions": 0, "transformer_runs": 0, "knock_runs": 0, "ticks": 0, "hisses": 0}
+var _pipes: Node3D
 var _draught: AudioStreamPlayer
 
 
@@ -101,6 +116,7 @@ func setup(plan: Dictionary, ear: Node3D, station_set: Node3D = null, lane_set: 
 	_ensure_bus()
 	_ensure_glue()
 	_take_train()
+	_station_machine()
 
 	if not Sfx.enabled:
 		return
@@ -150,6 +166,74 @@ func bed_db(loop: String, weights: Dictionary, depth: float) -> float:
 			level += float(weights[family]) * db_to_linear(gain) * (city_of(depth) if bool(bed[2]) else 1.0)
 
 	return maxf(linear_to_db(level), OUT) if level > 0.0 else OUT
+
+
+## How many of the station's pieces were given a sound, by kind (neon, junctions, transformer_runs, knock_runs, ticks,
+## hisses).
+func station_sources() -> Dictionary:
+	return _sources
+
+
+## The station set's machine given its sounds, from the lists it keeps.
+func _station_machine() -> void:
+	if station == null or not is_instance_valid(station) or station.get("neon") == null:
+		return
+
+	var signs: Array = station.get("neon")
+
+	for i in range(signs.size()):
+		signs[i].set("buzz", StringName("neon_buzz_%d" % (1 + i % 3)))
+
+	_sources.neon = signs.size()
+	_pipes = (load("res://scripts/Audio/PipeSounds.gd") as GDScript).new()
+	_pipes.name = "station_pipes"
+	add_child(_pipes)
+
+	for run: Node3D in station.get("runs"):
+		var points: PackedVector3Array = run.get_meta("points", PackedVector3Array())
+
+		if not points.is_empty():
+			var end := run.to_global(points[points.size() - 1])
+			_pipes.call("run", &"junction_hum", end, end, JUNCTION_REACH)
+			_sources.junctions += 1
+
+	for main: Node3D in station.get("floor_mains"):
+		var ends := _long_ends(main)
+		_pipes.call("run", &"transformer_hum", ends[0], ends[1], TRANSFORMER_REACH)
+		_sources.transformer_runs += 1
+
+	for piece: Node3D in station.get("mains") + station.get("risers"):
+		var ends := _long_ends(piece)
+		_pipes.call("knocks", ends[0], ends[1], KNOCK_EVERY)
+		_sources.knock_runs += 1
+
+	for riser: Node3D in station.get("risers"):
+		var ends := _long_ends(riser)
+		_pipes.call("events", &"pipe_tick", (ends[0] + ends[1]) / 2.0, TICK_EVERY, TICK_DB)
+		_sources.ticks += 1
+
+	for mouth: Node3D in station.get("mouths"):
+		_pipes.call("events", &"pipe_hiss", mouth.global_position + Vector3(0.0, MOUTH_BREATH, 0.0), HISS_EVERY, HISS_DB)
+		_sources.hisses += 1
+
+
+## A piece's two ends along its longest side (world): its drawn box's, at the middles of its two smallest faces.
+static func _long_ends(piece: Node3D) -> Array[Vector3]:
+	var drawn: MeshInstance3D = piece as MeshInstance3D
+
+	if drawn == null:
+		for child in piece.find_children("*", "MeshInstance3D", true, false):
+			drawn = child
+			break
+
+	if drawn == null or drawn.mesh == null:
+		return [piece.global_position, piece.global_position]
+
+	var box := drawn.mesh.get_aabb()
+	var axis := Vector3.ZERO
+	axis[box.size.max_axis_index()] = box.size[box.size.max_axis_index()] / 2.0
+	var middle := box.get_center()
+	return [drawn.to_global(middle - axis), drawn.to_global(middle + axis)]
 
 
 ## What this train's pass played: [[sound, where (Vector3; Vector3.ZERO for the flat draught), dB]], the last pass's.

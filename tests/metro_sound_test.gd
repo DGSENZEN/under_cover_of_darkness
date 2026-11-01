@@ -1,7 +1,8 @@
 extends Node3D
 ## The Metro's sound (docs/superpowers/specs/2026-10-31-metro-sound-design.md), headless with --fixed-fps 60, sound on
 ## and Master muted: Sfx's tile steps, gains and blended rooms (S1-S3); the director on a plan of its own (S4-S12);
-## floors answering from the place (S14-S15); one train for the Metro (S16-S19); the director in the Metro (S13).
+## floors answering from the place (S14-S15); one train for the Metro (S16-S19); the director in the Metro (S13) and
+## the station's pieces sounding (S20).
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
@@ -206,6 +207,16 @@ func _in_the_metro() -> void:
 	_check("S13 the Metro: the director is in, the default night ambience is not",
 		metro.get_node_or_null("PlaceSound") is PlaceSound and String(metro.get_meta(&"ambience", "interior_night")) == "",
 		"%s, ambience %s" % [str(metro.get_node_or_null("PlaceSound")), str(metro.get_meta(&"ambience", "unset"))])
+	var sound: PlaceSound = metro.get_node("PlaceSound")
+	var station: Node3D = metro.get_node("metro_station")
+	var counts: Dictionary = sound.station_sources()
+	_check("S20 the station's pieces sound: every sign buzzes, every run ends in a junction, the mains and vents are fed",
+		station.neon.size() > 0 and counts.neon == station.neon.size() and station.neon.all(func(s): return s.buzz != &"")
+		and counts.junctions == station.runs.size() and counts.knock_runs == station.mains.size() + station.risers.size()
+		and counts.transformer_runs == station.floor_mains.size() and counts.ticks == station.risers.size()
+		and counts.hisses == station.mouths.size(),
+		"%s; neon %d runs %d mains %d risers %d floor mains %d mouths %d" % [str(counts), station.neon.size(), station.runs.size(),
+			station.mains.size(), station.risers.size(), station.floor_mains.size(), station.mouths.size()])
 	metro.queue_free()
 	await _frames(3)
 
