@@ -254,6 +254,48 @@ func _in_the_metro() -> void:
 		engine != null and counts.engine_loops == 2 and counts.engine_strokes == (engine.get_meta("cranks") as Array).size()
 		and counts.engine_gears == 2 and counts.engine_events == (engine.get_meta("cranks") as Array).size() + 1,
 		str(counts))
+	# S36-S37: by the engine as a train passes (the player carried there, its body still).
+	var you: Node3D = metro.get("player")
+	you.process_mode = Node.PROCESS_MODE_DISABLED
+	you.global_position = engine.global_position + Vector3(6.0, 1.05, 0.0)
+	await _frames(2)
+	# (Judged in game time: under --fixed-fps the run outruns the audio, so a voice's own playback says nothing here;
+	# tests/diag_metro_voices.tscn measures the same in real time.)
+	Sfx.recording = true
+	Sfx.recorded.clear()
+	sound.train.start_pass()
+	var cut := 0
+	var played := 0
+	var last := {}
+	var ignited: Array[int] = []
+	for f in 12 * 60:
+		var before := Sfx.recorded.size()
+		await get_tree().process_frame
+		for voice: AudioStreamPlayer3D in sound.engine_voices():
+			var plays := int(voice.get_meta(&"plays", 0))
+			var then: Array = last.get(voice, [0, -INF, 0.0])
+			if plays != int(then[0]):
+				played += 1
+				# Started again before its last sound had run its length.
+				if f / 60.0 - float(then[1]) < float(then[2]) - 0.05:
+					cut += 1
+				last[voice] = [plays, f / 60.0, voice.stream.get_length() / voice.pitch_scale]
+		if Sfx.recorded.slice(before).any(func(e): return e[0] == &"neon_ignite"):
+			ignited.append(f)
+	var pooled := Sfx.recorded.filter(func(e): return e[0] in [&"engine_stroke", &"engine_tick", &"engine_clunk"]).size()
+	Sfx.recording = false
+	_check("S36 by the engine as a train passes, none of its strokes, ticks or clunks is cut short, and none takes a world voice",
+		played >= 10 and cut == 0 and pooled == 0, "%d played, %d cut, %d in the world's pool" % [played, cut, pooled])
+	var apart := 9999
+	for k in range(1, ignited.size()):
+		apart = mini(apart, ignited[k] - ignited[k - 1])
+	var longest := 0.0
+	for k in range(1, 9):
+		if ResourceLoader.exists("res://audio/sfx/neon_ignite_%d.wav" % k):
+			longest = maxf(longest, (load("res://audio/sfx/neon_ignite_%d.wav" % k) as AudioStream).get_length())
+	_check("S37 a passing train's signs strike on as a strike, spaced: never more than two sounding at once",
+		longest <= 1.7 and apart >= NeonSign.IGNITE_APART and longest / (NeonSign.IGNITE_APART / 60.0) <= 2.5,
+		"%d ignitions, %d frames apart at least, takes %.2f s" % [ignited.size(), apart, longest])
 	var lane: Node3D = metro.get_node("candle_lane")
 	var vent: AudioStreamPlayer3D = lane.get("vent_hum")
 	var rumble: AudioStreamPlayer = lane.get("rumble")
@@ -325,8 +367,8 @@ func _fake_station() -> Node3D:
 		var sign := NeonSign.new()
 		sign.seed = k
 		station.add_child(sign)
-		# (Past Focus's hearing, 14 m: there nothing counts them.)
-		sign.position = Vector3(20.0 + k * 2.0, 3.0, -9.0)
+		# (Within hearing, 14 m: a sign further off strikes on silently.)
+		sign.position = Vector3(k * 0.8, 3.0, -9.0)
 		station.neon.append(sign)
 	# Its engine: two gear trains' turners, the governor last (as the set lists them), two flywheels' cranks.
 	var engine := Node3D.new()
@@ -408,7 +450,8 @@ func _trains() -> void:
 	var out := lowest.values().filter(func(v): return v < NeonSign.OUT_BELOW).size()
 	_check("S23 the station's signs sag with the train, some far enough to go out, and come back",
 		out > 0 and station.neon.all(func(s): return is_equal_approx(s.dim, 1.0)), "%d of 12 out" % out)
-	_check("S25 the signs go out and strike back on out of step: never more than two at once", struck >= 1 and most_at_once <= 2,
+	_check("S25b the signs go out and strike back on out of step: one at a time, never more than one at once",
+		struck >= 1 and most_at_once <= 1,
 		"%d ignitions, at most %d in a frame" % [struck, most_at_once])
 
 	ear.global_position = OLD_MID

@@ -178,6 +178,23 @@ class MetroTablesTest(unittest.TestCase):
                 found = prep.split_hits(x, split, **options.get('split', {}))
                 self.assertEqual(len(found), split, '%s %s: %d of %d' % (group, take, len(found), split))
 
+    def test_the_engines_hits_ring_out(self):
+        # A stroke, tick or clunk is cut from running machinery: each must die away before it ends (24 dB under its
+        # peak in its last 60 ms), as a step or a knock does, not stop mid-sound.
+        prep = self.prep
+        out = Path(tempfile.mkdtemp())
+        try:
+            rows = [r for r in prep.METRO_SHOTS if r[0] in ('engine_stroke', 'engine_tick', 'engine_clunk')]
+            for name, paths in prep.prepare_metro(shots=rows, loops=[], sfx_out=str(out), ambience_out=str(out)).items():
+                for path in paths:
+                    x = prep._read_wav(path)
+                    w = int(0.01 * prep.RATE)
+                    env = np.convolve(np.abs(x), np.ones(w) / w, mode='same')
+                    end = 20 * np.log10(env[-int(0.06 * prep.RATE):].max() / env.max() + 1e-12)
+                    self.assertLess(end, -24.0, '%s ends %.0f dB under its peak' % (path, end))
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
+
     def test_real_hums_land_on_g(self):
         prep = self.prep
         out = Path(tempfile.mkdtemp())

@@ -1287,7 +1287,7 @@ METRO_SHOTS = [
     # The neon: its stutters, the short ones ticking off, the long ones striking back; switching on.
     ("neon_tick", [("1793485274299", 1), ("1793485286256", 3)], 6, {"pick": "short"}),
     ("neon_zap", [("1793485274299", 1), ("1793485286256", 3)], 6, {"pick": "long"}),
-    ("neon_ignite", [("1793485326156", None)], 3),
+    ("neon_ignite", [("1793485326156", None)], 3, {"first": 1.3, "ring": 0.3}),
     # The Company's cables under a train's draw, on G.
     ("cable_surge", [("1793485423078", 3)], 6, {"hum": True}),
     # A train through the rock, the length of a pass (TrainPass: 5 + 3 + 6 s); the air it pushes out.
@@ -1309,9 +1309,9 @@ METRO_SHOTS = [
     ("engine_start", [("1793497085575", None)], 3),
     # The engine played from its parts (PlaceSound): a piston's stroke (the body takes' own), a tick of the clockwork
     # (a tooth of the big gear), a clunk of the middle gear's teeth.
-    ("engine_stroke", [("1793496843068", 12), ("1793496875177", 12)], 12),
-    ("engine_tick", [("1793496884448", 12)], 12),
-    ("engine_clunk", [("1793496905564", 12)], 10),
+    ("engine_stroke", [("1793496843068", 12), ("1793496875177", 12)], 12, {"ring": 0.3}),
+    ("engine_tick", [("1793496884448", 12)], 12, {"ring": 0.3}),
+    ("engine_clunk", [("1793496905564", 12)], 10, {"ring": 0.3}),
 ]
 # A loop: (name, [takes], seconds, options).
 METRO_LOOPS = [
@@ -1335,7 +1335,9 @@ METRO_LOOPS = [
 # The options: hum (onto the nearest G) or key (onto the nearer of C and G, the score's tonic and fifth; `to` "C" or "G"
 # forces one); stereo (kept stereo: a bed, or a gust played flat; the game's named sounds are all mono), folder
 # ("ambience": with the beds, not a named sound in audio/sfx/), pitch, lowpass (Hz), hum (pitched onto the nearest G),
-# a hum's shots are not pitched apart; pick ("short" or "long": only that half of the hits, by length), split (split_events' own arguments: sharp, short hits),
+# a hum's shots are not pitched apart; ring (s: a hit cut from running machinery rings out that long after it, dying
+# away); first (s: of a whole take only its opening, the strike: the rest is a sign's own hum); pick ("short" or "long":
+# only that half of the hits, by length), split (split_events' own arguments: sharp, short hits),
 # count (loops: name_1..name_n; one is name itself).
 METRO_SEED = 1931
 # The silence between variations in a listening file (s).
@@ -1407,6 +1409,21 @@ def retune(x, to_hz, lo=40.0, hi=420.0):
         raise ValueError("a hum landed %.0f cents off %.1f Hz" % (off, to_hz))
 
     return y
+
+
+def _rung(x, start, end, ring):
+    """The hit of `x` from `start` to `end` (s), ringing out: `ring` s more of the take after it, dying away (an
+    exponential, 32 dB down by its end) as a struck part does, not stopping mid-sound where running machinery goes on."""
+    last = min(int((end + ring) * RATE), len(x))
+    hit = x[int(start * RATE):last].copy()
+    cut = int((end - start) * RATE)
+
+    if cut < len(hit):
+        t = np.arange(len(hit) - cut) / RATE
+        decay = np.exp(-t / (ring / 3.75))
+        hit[cut:] *= decay if hit.ndim == 1 else decay[:, None]
+
+    return hit
 
 
 def _loud(x):
@@ -1531,9 +1548,11 @@ def prepare_metro(source=METRO_SOURCE, sfx_out=OUT, ambience_out=AMBIENCE_OUT, l
             x = _decode_take(_take_path(source, take), stereo, options.get("pitch", 1.0), options.get("lowpass"))
 
             mono = x if x.ndim == 1 else x.mean(axis=1)
-            spans = [[a / RATE, b / RATE] for a, b in [auto_bounds(mono)]] if split is None \
+            spans = [[a / RATE, min(b / RATE, a / RATE + options.get("first", 1e9))] for a, b in [auto_bounds(mono)]] \
+                if split is None \
                 else split_hits(mono, split, **options.get("split", {}))
-            hits += [x[int(a * RATE):int(b * RATE)] for a, b in spans]
+            hits += [_rung(x, a, b, options["ring"]) if options.get("ring") else x[int(a * RATE):int(b * RATE)]
+                     for a, b in spans]
 
         if not hits:
             raise ValueError("%s: no hits found in its takes" % group)

@@ -108,8 +108,12 @@ const ENGINE_GOVERNOR_REACH := 8.0
 const TICK_TEETH := 16
 const CLUNK_TEETH := 8
 const GOVERNOR_TURNS := 0.7
-## How many of the engine's last sounds engine_heard() keeps.
+## How many of the engine's last sounds engine_heard() keeps; the voices each part plays on, in turn (its own, not the
+## world's pool: there, quiet as they are, its sounds were the first taken when a train set the station sounding); how
+## much each sound's pitch strays.
 const ENGINE_HEARD := 64
+const ENGINE_VOICES := 2
+const ENGINE_STRAY := 0.03
 const VALVE_EVERY := Vector2(60.0, 140.0)
 const LEVER_EVERY := Vector2(50.0, 120.0)
 ## The station's signs on the Company's line while a train draws on it: how far they sag (at its full, and more on the
@@ -140,6 +144,7 @@ var _heard: Array = []
 var _sources := {"neon": 0, "junctions": 0, "transformer_runs": 0, "knock_runs": 0, "ticks": 0, "hisses": 0,
 	"engine_loops": 0, "engine_strokes": 0, "engine_gears": 0, "engine_events": 0}
 var _engine_heard: Array = []
+var _voices := {}
 var _halves := {}
 var _teeth := {}
 var _governor: Node3D
@@ -414,9 +419,50 @@ func _engine_beat() -> void:
 		whir.pitch_scale = maxf(governor_pitch(), 0.05)
 
 
+## The voices the engine's parts play on (each part its own ENGINE_VOICES), for tests.
+func engine_voices() -> Array:
+	var all := []
+
+	for voices: Array in _voices.values():
+		all.append_array(voices)
+
+	return all
+
+
+## One of the engine's sounds from `part`, on that part's next voice of its own, through what stands between.
 func _engine_sound(sound: StringName, part: Node3D, angle: float) -> void:
-	Sfx.play(self, sound, part.global_position)
 	_engine_heard.append([sound, part, angle])
+	var take := Sfx.stream(sound) if Sfx.enabled else null
+
+	if take != null:
+		if not _voices.has(part):
+			var voices := []
+
+			for i in ENGINE_VOICES:
+				var voice := AudioStreamPlayer3D.new()
+				voice.name = "%s_voice" % String(sound)
+				voice.bus = Sfx.BUS_WORLD
+				voice.max_distance = ENGINE_BODY_REACH
+				voice.attenuation_filter_cutoff_hz = Sfx.AIR_CUTOFF
+				voice.attenuation_filter_db = Sfx.AIR_DB
+				voice.doppler_tracking = AudioStreamPlayer3D.DOPPLER_TRACKING_DISABLED
+				add_child(voice)
+				voices.append(voice)
+
+			_voices[part] = voices
+
+		var voices: Array = _voices[part]
+		var voice: AudioStreamPlayer3D = voices[int(part.get_meta(&"next_voice", 0)) % voices.size()]
+		part.set_meta(&"next_voice", int(part.get_meta(&"next_voice", 0)) + 1)
+		voice.global_position = part.global_position
+		voice.stream = take
+		var hidden := Sfx.occlusion_at(self, part.global_position)
+		voice.volume_db = float(Sfx.GAIN.get(sound, 0.0)) + Sfx.OCCLUDED_DB * hidden
+		voice.attenuation_filter_cutoff_hz = lerpf(Sfx.AIR_CUTOFF, Sfx.OCCLUDED_CUTOFF, hidden)
+		voice.pitch_scale = 1.0 + _rng.randf_range(-ENGINE_STRAY, ENGINE_STRAY)
+		voice.play()
+		voice.set_meta(&"plays", int(voice.get_meta(&"plays", 0)) + 1)
+
 
 	if _engine_heard.size() > ENGINE_HEARD:
 		_engine_heard.pop_front()
