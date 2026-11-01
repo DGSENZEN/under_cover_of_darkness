@@ -190,8 +190,21 @@ func _director() -> void:
 	await _frames(30)
 	Engine.time_scale = 1.0
 	var moved := (crowd.volume_db - from) if crowd != null else 0.0
-	_check("S12 slow motion: a bed fades on real time", crowd != null and _near(moved, PlaceSound.EASE_DB * 0.5, PlaceSound.EASE_DB * 0.05),
-		"moved %.2f dB in 0.5 s real" % moved)
+	var gap := sound.bed_db("metro_crowd", sound.family_weights_at(MARKET_MID), sound.zones.depth_at(MARKET_MID)) - from
+	_check("S12 slow motion: a bed fades on real time", crowd != null and _near(moved, minf(PlaceSound.EASE_DB * 0.5, gap), 1.0),
+		"moved %.2f dB in 0.5 s real (%.2f to go)" % [moved, gap])
+
+	# S25: from the old layer (no crowd, no city) up into the hall, every bed is at the hall's level within a second.
+	ear.global_position = OLD_MID
+	await _frames(600)
+	ear.global_position = HALL_MID
+	await _frames(60)
+	var off := []
+	for loop: String in sound.beds:
+		var want := sound.bed_db(loop, sound.family_weights_at(HALL_MID), sound.zones.depth_at(HALL_MID))
+		if absf((sound.beds[loop] as AudioStreamPlayer).volume_db - want) > 1.0:
+			off.append("%s %.1f/%.1f" % [loop, (sound.beds[loop] as AudioStreamPlayer).volume_db, want])
+	_check("S25 a second after walking into a space, every bed is at its level", off.is_empty(), str(off))
 
 	sound.queue_free()
 	ear.queue_free()

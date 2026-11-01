@@ -17,9 +17,9 @@ const FIXTURE := "res://tests/fixtures/place_score/score.json"
 const BAR := 1.0
 const PHRASE := 4.0
 const STEP := 1.0 / 60.0
-## A swell from silence, and the longest weight glide (1 / WEIGHT_GLIDE), with a little over.
+## A swell from silence, and the longest weight glide (1 / WEIGHT_GLIDE).
 const SWELL := 1.5
-const GLIDE := 1.25
+const GLIDE := 0.5
 var pos := 0.0
 
 
@@ -120,12 +120,13 @@ func score_checks() -> void:
 	zones = score.zones as StubZones
 	run_for(score, 0.3)
 	zones.w = {"a": 1.0}
-	run_for(score, 3.6)
-	check(not score.theme_playing(&"a"), "S3 not before the next phrase line")
-	run_for(score, 0.2)
-	check(score.theme_playing(&"a") and near(score.theme_started_at(&"a"), PHRASE, 0.02), "S3 a theme starts on the phrase line: %.3f" % score.theme_started_at(&"a"))
-	run_for(score, BAR)
-	check(score.stem_gain_db(&"a", &"lead") >= -1.0 and score.stem_gain_db(&"a", &"lead_full") <= -79.0, "S4 a bar in, the calm lead is up, the full one not")
+	run_for(score, 0.15)
+	check(not score.theme_playing(&"a"), "S3 not before the next beat")
+	run_for(score, 0.1)
+	check(score.theme_playing(&"a") and near(score.theme_started_at(&"a"), 0.5, 0.02), "S3 a theme comes in on the next beat, not the phrase line: %.3f" % score.theme_started_at(&"a"))
+	check(near(score.theme_start_offset(&"a"), 0.5, STEP + 0.001), "S3 from where the bed is in its phrase, in step with it: %.3f" % score.theme_start_offset(&"a"))
+	run_for(score, 0.5 * BAR)
+	check(score.stem_gain_db(&"a", &"lead") >= -1.0 and score.stem_gain_db(&"a", &"lead_full") <= -79.0, "S4 half a bar in, the calm lead is up, the full one not: %.1f" % score.stem_gain_db(&"a", &"lead"))
 	run_for(score, 2.0 * PHRASE)
 	check(score.intensity_of(&"a") == &"full" and score.stem_gain_db(&"a", &"lead_full") >= -1.0, "S5 two phrases on, the theme is full")
 	var started := score.theme_started_at(&"a")
@@ -135,9 +136,9 @@ func score_checks() -> void:
 	run_for(score, 2.0 * BAR)
 	check(score.theme_playing(&"a") and near(score.theme_started_at(&"a"), started) and score.stem_gain_db(&"a", &"lead") >= -1.0, "S7 coming back while it fades swells it back, no restart")
 	zones.w = {"a": 0.0}
-	# The weight glides to nothing (1.25 s at most), then FADE_BARS of fade.
-	run_for(score, GLIDE + 2.0 * BAR + 0.05)
-	check(score.stem_gain_db(&"a", &"lead") <= -79.0, "S6 two bars after leaving, it has faded out: %.1f" % score.stem_gain_db(&"a", &"lead"))
+	# The weight glides to nothing (half a second at most), then FADE_BARS of fade.
+	run_for(score, GLIDE + 1.0 * BAR + 0.05)
+	check(score.stem_gain_db(&"a", &"lead") <= -79.0, "S6 a bar after leaving, it has faded out: %.1f" % score.stem_gain_db(&"a", &"lead"))
 	run_for(score, PHRASE + 0.1)
 	check(not score.theme_playing(&"a"), "S6 a phrase at silence, it stops")
 	score.free()
@@ -205,16 +206,18 @@ func score_checks() -> void:
 	score = make_score()
 	zones = score.zones as StubZones
 	score.raw_source = func() -> float: return pos - 0.1
+	run_for(score, 0.3)
 	zones.w = {"a": 1.0}
-	run_for(score, PHRASE + 0.05)
-	check(not score.theme_playing(&"a"), "S14 heard at the line, the mixer not yet: no start")
+	run_for(score, 0.25)
+	check(not score.theme_playing(&"a"), "S14 heard at the beat, the mixer not yet: no start")
 	run_for(score, 0.1)
-	check(score.theme_playing(&"a") and score.theme_start_offset(&"a") <= STEP + 0.001, "S14 started as the mixer reaches the line, from its top: %.3f" % score.theme_start_offset(&"a"))
+	check(score.theme_playing(&"a") and near(score.theme_start_offset(&"a"), 0.5, STEP + 0.001), "S14 started as the mixer reaches the beat, from the bed's place in its phrase: %.3f" % score.theme_start_offset(&"a"))
 	zones.w = {"a": 0.0}
 	run_for(score, 3.0 * PHRASE)
 	zones.w = {"a": 1.0}
 	run_for(score, 2.0 * PHRASE)
-	check(score.theme_playing(&"a") and score.theme_start_offset(&"a") <= STEP + 0.001, "S15 after the bed has looped, still from its top: %.3f" % score.theme_start_offset(&"a"))
+	var line := score.theme_started_at(&"a")
+	check(score.theme_playing(&"a") and near(score.theme_start_offset(&"a"), fposmod(line, PHRASE), STEP + 0.001), "S15 after the bed has looped, still in step with its phrase: %.3f at %.3f" % [score.theme_start_offset(&"a"), line])
 	score.free()
 
 	score = make_score("res://tests/fixtures/place_score/nowhere.json")

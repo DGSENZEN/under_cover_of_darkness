@@ -55,6 +55,22 @@ class MetroLayeringTest(unittest.TestCase):
         with wave.open(str(path)) as w:
             return np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
 
+    def test_finds_every_sharp_step_in_a_walk(self):
+        # Footfalls as a take holds them: a sharp click (a few ms over -26 dB of the loudest), a soft ring after,
+        # 0.65 s apart over a quiet room, some steps lighter than others.
+        prep = self.prep
+        rate = prep.RATE
+        rng = np.random.default_rng(3)
+        walk = 0.0005 * rng.standard_normal(int(13.5 * rate))
+        n = int(0.25 * rate)
+        for k in range(20):
+            at = int((0.4 + 0.65 * k) * rate)
+            walk[at:at + n] += (0.25 + 0.5 * (k % 3) / 2) * rng.standard_normal(n) * np.exp(-np.arange(n) / (0.006 * rate))
+        hits = prep.split_hits(walk, 10)
+        self.assertEqual(len(hits), 10)
+        self.assertTrue(all(0.05 < b - a < 0.6 for a, b in hits), hits)
+        self.assertEqual(len(prep.split_hits(walk, 30)), 20)
+
     def test_retunes_a_hum_onto_g(self):
         x = self.prep.retune(self.hum113, 98.0)
         self.assertLess(abs(1200 * np.log2(self.prep.hum_hz(x) / 98.0)), 20.0)
@@ -148,6 +164,18 @@ class MetroTablesTest(unittest.TestCase):
                     self.assertLess(abs(1200 * np.log2(hz / want)), prep.HUM_CENTS, path)
         finally:
             shutil.rmtree(out, ignore_errors=True)
+    def test_real_takes_hold_the_hits_asked(self):
+        # Each split take gives as many separate hits as its row asks for: no group's variations are one hit
+        # pitched over and over.
+        prep = self.prep
+        for group, takes, _count, *rest in prep.METRO_SHOTS:
+            options = rest[0] if rest else {}
+            for take, split in takes:
+                if split is None:
+                    continue
+                x = prep._decode_take(prep._take_path(prep.METRO_SOURCE, take))
+                found = prep.split_hits(x, split, **options.get('split', {}))
+                self.assertEqual(len(found), split, '%s %s: %d of %d' % (group, take, len(found), split))
 
     def test_real_hums_land_on_g(self):
         prep = self.prep

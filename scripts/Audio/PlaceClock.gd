@@ -12,10 +12,14 @@ static func phrase_seconds(bpm: float, beats_per_bar: int, phrase_bars: int) -> 
 
 ## The first phrase line from pos on (pos's own line if just past one).
 static func next_phrase_line(pos: float, phrase: float) -> float:
-	var before := floorf(pos / phrase) * phrase
+	return next_line(pos, phrase)
+
+## The first line every `every` s (a beat, a bar, a phrase) from pos on (pos's own line if just past one).
+static func next_line(pos: float, every: float) -> float:
+	var before := floorf(pos / every) * every
 	if pos - before <= MenuClock.SLACK:
 		return before
-	return before + phrase
+	return before + every
 
 ## Where in its own loop a theme is at bed time bed_pos.
 static func theme_offset(bed_pos: float, theme_loop: float) -> float:

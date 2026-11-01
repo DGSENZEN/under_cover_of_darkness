@@ -59,7 +59,7 @@ const GLUE := {"threshold": -20.0, "ratio": 2.0, "attack_us": 10000.0, "release_
 const GLUE_META := &"metro_glue"
 ## Silence (dB); how fast a bed moves toward its level (dB per real second).
 const OUT := -80.0
-const EASE_DB := 12.0
+const EASE_DB := 60.0
 const SEED := 1987
 ## A train: its rumble at each track mouth (dB, at full city), heard this far over the mouth's bed; how long after it
 ## begins its draught gusts out (s); the seed of a train of its own.
