@@ -26,11 +26,13 @@ const BUS := &"PlaceScore"
 const OUT := -80.0
 ## A stem coming in from silence starts its swell here (still inaudible).
 const ENTRY := -40.0
-const FADE_BARS := 2
-const SWELL_BARS := 1
+## A theme fades out over this many bars and swells in over this many (it follows you: a space's theme is up within
+## a beat and half a bar of walking in, gone a bar after you leave).
+const FADE_BARS := 1.0
+const SWELL_BARS := 0.5
 const STOP_AFTER_PHRASES := 1
 ## Weight units per second (of the music's time).
-const WEIGHT_GLIDE := 0.8
+const WEIGHT_GLIDE := 2.0
 const DEPTH_GLIDE := 0.5
 const FULL_AFTER_PHRASES := 2
 const REST_AFTER_LOOPS := 4
@@ -84,6 +86,7 @@ var _bed := {}
 var _themes := {}
 var _phrase := 0.0
 var _bar := 0.0
+var _beat := 0.0
 ## Bed time: the bed's position run on across its loops, as heard and as mixed.
 var _time := 0.0
 var _raw := 0.0
@@ -286,6 +289,7 @@ func _load() -> bool:
 	score = parsed
 	_bar = PlaceClock.bar_seconds(float(score.bpm), int(score.beats_per_bar))
 	_phrase = _bar * int(score.phrase_bars)
+	_beat = MenuClock.beat_seconds(float(score.bpm))
 	_bed = _make_set(&"bed", score.bed)
 	if _bed.is_empty():
 		return false
@@ -367,22 +371,22 @@ func _step_theme(set: Dictionary, dt: float) -> void:
 			set.scheduled_at = -1.0
 			return
 		if float(set.scheduled_at) < 0.0:
-			set.scheduled_at = PlaceClock.next_phrase_line(_time, _phrase)
+			set.scheduled_at = PlaceClock.next_line(_time, _beat)
 		# Started when the bed's next mixed chunk reaches the line (the mixer runs
 		# ahead of what is heard), so both are mixed from the same place.
 		if _raw + MenuClock.SLACK < float(set.scheduled_at):
 			return
 		_start(set)
 	_grow(set, dt)
-	# Its variants change on its phrase lines only, never mid-phrase.
-	var line := floori((_time - float(set.started_at) + MenuClock.SLACK) / _phrase)
+	# Its variants change on its phrase lines only, never mid-phrase (its phrases run with the bed's).
+	var line := floori((_time + MenuClock.SLACK) / _phrase)
 	if line != int(set.line):
 		set.line = line
 		_choose(set)
 	for stem in set.entry.stems:
 		var id := StringName(stem.id)
 		var swapped_out: bool = stem.has("part") and set.choice.get(StringName(stem.part), id) != id
-		_slide(set, id, OUT if swapped_out else _target(set, stem), dt, 1 if swapped_out else FADE_BARS)
+		_slide(set, id, OUT if swapped_out else _target(set, stem), dt, 1.0 if swapped_out else FADE_BARS)
 	_apply(set)
 	# A phrase at silence and nothing calling it back: let go of its player.
 	if theme_gain_db(StringName(set.name)) <= OUT + 0.5 and float(set.weight) <= NONE:
@@ -395,10 +399,11 @@ func _step_theme(set: Dictionary, dt: float) -> void:
 		set.silent_for = 0.0
 
 
-## From its own top, as late as the bed already is past the line.
+## On a beat, from where the bed is in its phrase (so its phrase runs with the bed's), as late as the bed already is
+## past the beat.
 func _start(set: Dictionary) -> void:
 	var line := float(set.scheduled_at)
-	var late := clampf(_raw - line, 0.0, float(set.loop) - 0.001)
+	var late := clampf(fposmod(line, _phrase) + _raw - line, 0.0, float(set.loop) - 0.001)
 	for id in set.gains:
 		set.gains[id] = OUT
 	_apply(set)
@@ -471,7 +476,7 @@ func _target(set: Dictionary, stem: Dictionary) -> float:
 
 
 ## A gain sliding toward its target: up over SWELL_BARS from ENTRY, down to OUT over fade_bars.
-func _slide(set: Dictionary, id: StringName, target: float, dt: float, fade_bars := FADE_BARS) -> void:
+func _slide(set: Dictionary, id: StringName, target: float, dt: float, fade_bars: float = FADE_BARS) -> void:
 	var gain := float(set.gains[id])
 	if target > gain:
 		if gain < ENTRY:

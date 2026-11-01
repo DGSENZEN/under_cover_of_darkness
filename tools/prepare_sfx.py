@@ -719,6 +719,43 @@ def split_events(x, count, gap=0.18, threshold_db=-26.0, shortest=0.08, longest=
     return [[e[0], e[1]] for e in chosen]
 
 
+def split_hits(x, count, rise=0.35, gap=0.06, shortest=0.015, longest=3.0, lead=0.01, tail=0.15):
+    """The separate hits in `x` (seconds, [start, end]), as split_events but judged against the take's own room:
+    runs where its 10 ms envelope stands `rise` of the way from the take's floor (its quietest fifth) to its loudest,
+    parted by at least `gap` of quiet, each `shortest` to `longest` long; the loudest `count`, in order. A footstep's
+    click is over in a few ms: against the loudest sample alone most of a walk's steps never count."""
+    a = np.abs(x)
+    w = max(int(0.01 * RATE), 1)
+    env = 20 * np.log10(np.convolve(a, np.ones(w) / w, mode="same") + 1e-12)
+    floor = float(np.percentile(env, 20))
+    loud = env > floor + rise * (float(env.max()) - floor)
+    events = []
+    i = 0
+    n = len(x)
+
+    while i < n:
+        if not loud[i]:
+            i += 1
+            continue
+
+        start = i
+        quiet = 0
+
+        while i < n and quiet < int(gap * RATE):
+            quiet = 0 if loud[i] else quiet + 1
+            i += 1
+
+        end = i - quiet
+        length = (end - start) / RATE
+
+        if shortest <= length <= longest:
+            events.append([max(start / RATE - lead, 0.0), min(end / RATE + tail, n / RATE), float(env[start:end].max())])
+
+    events.sort(key=lambda e: -e[2])
+    chosen = sorted(events[:count], key=lambda e: e[0])
+    return [[e[0], e[1]] for e in chosen]
+
+
 def voice_slices(sources, mode, count, fade_out):
     """The slices of a VOICES entry."""
     out = []
@@ -1239,15 +1276,17 @@ def prepare_score(only=None):
 # paid plan, Oct 31 2026), each named by its id (the number after its last "-"), layered into seeded variations and
 # seamless loops (prepare_metro), every hum on G (the Metro score's bed is in C). Nothing reverbed: the room is the game's.
 METRO_SOURCE = os.path.expanduser("~/Downloads/AUCOD ElevenLabs/ucod_sounds/")
-# A shot: (group, [(take, hits to split, or None for the whole take)], variations[, options]).
+# A shot: (group, [(take, hits to split, or None for the whole take)], variations[, options]). A take is split into
+# as many hits as it truly holds (split_hits; test_real_takes_hold_the_hits_asked): a lone tick, hiss or stutter is
+# taken whole, and its group's variations are that one sound pitched until more takes come.
 METRO_SHOTS = [
     # The pipes: water hammer and a knock running down the line; cooling iron ticking; a brass valve letting go.
     ("pipe_knock", [("1793485028335", 3), ("1793485034866", 3), ("1793485078302", 5)], 10),
-    ("pipe_tick", [("1793485036928", 6), ("1793485046858", 7), ("1793485054268", 6)], 12),
-    ("pipe_hiss", [("1793485126062", 3), ("1793485122863", 3)], 8),
+    ("pipe_tick", [("1793485036928", None), ("1793485046858", 7), ("1793485054268", None)], 12),
+    ("pipe_hiss", [("1793485126062", None), ("1793485122863", None)], 8),
     # The neon: its stutters, the short ones ticking off, the long ones striking back; switching on.
-    ("neon_tick", [("1793485274299", 6), ("1793485286256", 6)], 6, {"pick": "short"}),
-    ("neon_zap", [("1793485274299", 6), ("1793485286256", 6)], 6, {"pick": "long"}),
+    ("neon_tick", [("1793485274299", 1), ("1793485286256", 3)], 6, {"pick": "short"}),
+    ("neon_zap", [("1793485274299", 1), ("1793485286256", 3)], 6, {"pick": "long"}),
     ("neon_ignite", [("1793485326156", None)], 3),
     # The Company's cables under a train's draw, on G.
     ("cable_surge", [("1793485423078", 3)], 6, {"hum": True}),
@@ -1261,7 +1300,7 @@ METRO_SHOTS = [
     # The books, the new takes laid with the ones the shop has had.
     ("book_open", [("1793485586835", 4), (FOUR_ITEMS + "Items/book_open.wav", None), (RPG80 + "book_03.ogg", None)], 6),
     ("book_shut", [("1793485606047", 3), (SONIC_TABLE, None)], 6),
-    ("book_riffle", [("1793485667655", 4), ("1793485652718", 4)], 8),
+    ("book_riffle", [("1793485667655", 2), ("1793485652718", 4)], 8),
 ]
 # A loop: (name, [takes], seconds, options).
 METRO_LOOPS = [
@@ -1447,7 +1486,7 @@ def prepare_metro(source=METRO_SOURCE, sfx_out=OUT, ambience_out=AMBIENCE_OUT, l
 
             mono = x if x.ndim == 1 else x.mean(axis=1)
             spans = [[a / RATE, b / RATE] for a, b in [auto_bounds(mono)]] if split is None \
-                else split_events(mono, split, **options.get("split", {}))
+                else split_hits(mono, split, **options.get("split", {}))
             hits += [x[int(a * RATE):int(b * RATE)] for a, b in spans]
 
         if not hits:
