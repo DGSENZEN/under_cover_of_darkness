@@ -239,6 +239,12 @@ func add_trauma(amount: float) -> void:
 	_trauma = clampf(_trauma + amount, 0.0, 1.0)
 
 
+## Holds the view-shake trauma at no less than `level` (0..1) while it is asked: a tremor that lasts (a train passing
+## under your feet), not a blow; it decays as ever once no longer held.
+func hold_trauma(level: float) -> void:
+	_trauma = clampf(maxf(_trauma, level), 0.0, 1.0)
+
+
 ## A kick to the view's springs, in radians per second.
 func punch(pitch: float, yaw: float, roll := 0.0) -> void:
 	_pitch_velocity += pitch

@@ -10,6 +10,9 @@ const METRO := preload("res://maps/metro.tscn")
 const PLAYER := preload("res://Player.tscn")
 const EngineCrank := preload("res://scripts/Visual/EngineCrank.gd")
 const Clockwork := preload("res://scripts/Visual/Clockwork.gd")
+const CameraJuice := preload("res://scripts/PlayerUtils/CameraJuice.gd")
+## A listener with the player's view springs (its shake), as the player is.
+const EAR_SOURCE := "extends Node3D\nvar juice := preload(\"res://scripts/PlayerUtils/CameraJuice.gd\").new()\n"
 
 ## A plan of its own: the hall (the station), the Pasaje beyond its east door (the market layer), the vaults beyond
 ## that (the old layer), the shop north of the hall; each 10 m square, floors at 0.
@@ -50,6 +53,7 @@ func _ready() -> void:
 	await _floors()
 	await _trains()
 	await _engine_beat()
+	await _presence()
 	await _in_the_metro()
 	Focus.reset()
 	Sfx.silence()
@@ -490,3 +494,71 @@ func _engine_beat() -> void:
 	for node in [sound, ear, station]:
 		node.queue_free()
 	await _frames(3)
+
+
+## S33-S35: presence: the rumble through a wall, your steps in the room, the low end felt.
+func _presence() -> void:
+	var station := _fake_station()
+	var ear: Node3D = _script(EAR_SOURCE).new()
+	add_child(ear)
+	ear.global_position = Vector3(5.0, 1.0, 5.0)
+	var eye := Camera3D.new()
+	ear.add_child(eye)
+	eye.make_current()
+	var wall := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(200.0, 6.0, 0.4)
+	shape.shape = box
+	wall.add_child(shape)
+	add_child(wall)
+	wall.global_position = Vector3(0.0, 2.0, 0.0)
+	var sound := PlaceSound.new()
+	add_child(sound)
+	sound.setup(PLAN, ear, station)
+	await _frames(3)
+	sound.train.start_pass()
+	await _frames(90)
+	var near: AudioStreamPlayer3D = sound.get("rumble_near")
+	var walled := [near.volume_db, near.attenuation_filter_cutoff_hz]
+	wall.queue_free()
+	await _frames(90)
+	var open := [near.volume_db, near.attenuation_filter_cutoff_hz]
+	_check("S33 a train behind a wall is heard through it: quieter and duller", float(walled[0]) <= float(open[0]) - 6.0
+		and float(walled[1]) < float(open[1]) - 1000.0, "walled %s, open %s" % [str(walled), str(open)])
+
+	var body := AudioServer.get_bus_index(Sfx.BUS_BODY)
+	var room: AudioEffectReverb = null
+	for i in range(AudioServer.get_bus_effect_count(body)):
+		if AudioServer.get_bus_effect(body, i) is AudioEffectReverb:
+			room = AudioServer.get_bus_effect(body, i)
+	# (A tiled hall as the room's probe finds one: big, closed in.)
+	Sfx.shape_room(Vector2(0.7, 1.0))
+	Sfx.set_acoustics_mix({"tile": 1.0})
+	var ringing := [room.room_size, room.wet]
+	_check("S34 in the Metro's tiled halls your own steps ring in the room", float(ringing[0]) > 0.4 and float(ringing[1]) > 0.08,
+		str(ringing))
+
+	ear.global_position = PLATFORM_MID
+	await _frames(int(4.0 * 60))
+	sound.train.start_pass()
+	var shaken := 0.0
+	for f in int(8.0 * 60):
+		await get_tree().process_frame
+		shaken = maxf(shaken, float(ear.juice.get("_trauma")))
+	ear.global_position = OLD_MID
+	await _frames(int(10.0 * 60))
+	# (The fake ear runs no view springs of its own: the last pass's shake would never decay.)
+	ear.juice.set("_trauma", 0.0)
+	sound.train.start_pass()
+	var deep := 0.0
+	for f in int(8.0 * 60):
+		await get_tree().process_frame
+		deep = maxf(deep, float(ear.juice.get("_trauma")))
+	_check("S35 a train passing by the platform is felt underfoot; in the old layer, not", shaken >= 0.2 and deep <= 0.001,
+		"%.2f, %.3f" % [shaken, deep])
+	for node in [sound, ear, station]:
+		node.queue_free()
+	await _frames(3)
+	_check("S34b out of the Metro your steps are as dry as ever", is_equal_approx(room.room_size, 0.25) and is_equal_approx(room.wet, 0.05),
+		"%.2f %.2f" % [room.room_size, room.wet])

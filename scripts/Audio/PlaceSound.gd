@@ -71,6 +71,14 @@ const MOUTH_UP := 1.5
 const RUMBLE_REACH := 90.0
 const RUMBLE_SIZE := 8.0
 const RUMBLE_FAR_DB := -16.0
+## How fast the rumble's muffling follows a wall coming between (per second).
+const HIDE_RATE := 4.0
+## The low end felt: a train's pass shakes the view this much at its full on the track (trauma, 0..1), nothing this far
+## off (m); the engine's floor hums under you this much at its foot, nothing this far off.
+const TRAIN_TREMOR := 0.45
+const TREMOR_REACH := 25.0
+const ENGINE_TREMOR := 0.2
+const ENGINE_TREMOR_REACH := 10.0
 const DRAUGHT_AFTER := 1.0
 ## The draught's level (dB, at a platform's full), and its stereo takes, kept with the beds.
 const DRAUGHT_DB := -10.0
@@ -136,6 +144,7 @@ var _halves := {}
 var _teeth := {}
 var _governor: Node3D
 var _governor_run := -1
+var _rumble_hidden := 0.0
 var _was_passing := false
 var _pipes: Node3D
 var _sag_clock := 0.0
@@ -160,6 +169,8 @@ func setup(plan: Dictionary, ear: Node3D, station_set: Node3D = null, lane_set: 
 	_built = true
 	_ensure_bus()
 	_ensure_glue()
+	# Your own steps take up the Metro's rooms.
+	Sfx.body_room = 1.0
 	_take_train()
 	_station_machine()
 
@@ -217,6 +228,30 @@ func bed_db(loop: String, weights: Dictionary, depth: float) -> float:
 ## hisses).
 func station_sources() -> Dictionary:
 	return _sources
+
+
+## The low end under your feet (your view's shake, CameraJuice): a passing train, by how near its track you stand and how
+## much of the city is heard there; the engine's floor humming close by it.
+func _felt() -> void:
+	var juice: Variant = listener.get("juice") if listener != null and is_instance_valid(listener) else null
+
+	if juice == null:
+		return
+
+	var at := listener.global_position
+	var tremor := 0.0
+
+	if train != null and train.strength() > 0.0 and not _tracks().is_empty():
+		var near := clampf(1.0 - at.distance_to(_on_track()) / TREMOR_REACH, 0.0, 1.0)
+		tremor = TRAIN_TREMOR * train.strength() * _city_here() * near
+
+	var engine := _engine()
+
+	if engine != null:
+		tremor = maxf(tremor, ENGINE_TREMOR * clampf(1.0 - at.distance_to(engine.global_position) / ENGINE_TREMOR_REACH, 0.0, 1.0))
+
+	if tremor > 0.0:
+		juice.call("hold_trauma", tremor)
 
 
 ## The train gone, the engine catches back up to its beat.
@@ -532,14 +567,21 @@ func _rumble(city: float) -> void:
 		voice.set("stream", take)
 		voice.call("play")
 
-	_voice_rumble(city)
+	_rumble_hidden = Sfx.occlusion_at(self, _on_track())
+	_voice_rumble(city, 0.0)
 
 
-## The rumble's voices where you are now: the near one on the track's nearest point, both thinned by depth.
-func _voice_rumble(city: float) -> void:
+## The rumble's voices where you are now: the near one on the track's nearest point, through what stands between (Sfx's
+## occlusion, eased over `delta`), both thinned by depth.
+func _voice_rumble(city: float, delta: float) -> void:
 	var gain := float(Sfx.GAIN.get(&"train_far", 0.0)) + RUMBLE_DB
 	rumble_near.global_position = _on_track()
-	rumble_near.volume_db = maxf(gain + linear_to_db(maxf(city, 0.0001)), OUT)
+
+	if delta > 0.0:
+		_rumble_hidden = move_toward(_rumble_hidden, Sfx.occlusion_at(self, rumble_near.global_position), HIDE_RATE * delta)
+
+	rumble_near.attenuation_filter_cutoff_hz = lerpf(Sfx.AIR_CUTOFF, Sfx.OCCLUDED_CUTOFF, _rumble_hidden)
+	rumble_near.volume_db = maxf(gain + Sfx.OCCLUDED_DB * _rumble_hidden + linear_to_db(maxf(city, 0.0001)), OUT)
 	rumble_far.volume_db = maxf(gain + RUMBLE_FAR_DB + linear_to_db(maxf(city, 0.0001)), OUT)
 
 
@@ -623,7 +665,9 @@ func _process(delta: float) -> void:
 	_engine_beat()
 
 	if rumble_near != null and rumble_near.playing:
-		_voice_rumble(_city_here())
+		_voice_rumble(_city_here(), delta)
+
+	_felt()
 
 	if listener == null or not is_instance_valid(listener) or zones == null:
 		return
@@ -675,6 +719,7 @@ func _exit_tree() -> void:
 	if index >= 0:
 		AudioServer.remove_bus(index)
 
+	Sfx.body_room = 0.0
 	Sfx.set_acoustics("stone")
 
 

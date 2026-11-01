@@ -373,6 +373,10 @@ static var _material := "stone"
 static var _mix: Array = []
 ## The room as last sounded out ([size, enclosed]), for a blend to reshape.
 static var _shape := Vector2(0.5, 1.0)
+## How much of the room your own sounds (the Body bus: your steps, your breath) take up: 0 close and dry as ever, 1 the
+## room's own reverb, a little under the world's (PlaceSound sets it in the Metro's tiled halls).
+static var body_room := 0.0
+const BODY_ROOM := [0.25, 0.7, 0.05]
 ## How deadened your hearing is by the last heavy blow (0..1, fading).
 static var _ringing := 0.0
 var _heart_in := 0.0
@@ -757,6 +761,18 @@ static func shape_room(shape: Vector2) -> void:
 			reverb.hipass = stuff[4]
 			reverb.dry = 1.0 - 0.3 * far
 			reverb.predelay_msec = lerpf(6.0, 40.0, shape.x)
+
+	# Your own sounds in the room, as much as body_room says.
+	var body := AudioServer.get_bus_index(BUS_BODY)
+
+	for i in range(AudioServer.get_bus_effect_count(body) if body >= 0 else 0):
+		var near := AudioServer.get_bus_effect(body, i) as AudioEffectReverb
+
+		if near != null:
+			near.room_size = lerpf(BODY_ROOM[0], clampf(lerpf(0.18, float(stuff[0]) + 0.2, shape.x), 0.0, 1.0), body_room)
+			near.damping = lerpf(BODY_ROOM[1], float(stuff[1]), body_room)
+			near.wet = lerpf(BODY_ROOM[2], maxf(BODY_ROOM[2], 0.6 * clampf(lerpf(0.035, float(stuff[2]), shape.y), 0.0, 0.6)),
+				body_room)
 
 
 static func _level_of(context: Node) -> Node:
