@@ -144,7 +144,8 @@ class MetroTablesTest(unittest.TestCase):
         prep = self.prep
         names = [r[0] for r in prep.METRO_SHOTS] + [r[0] for r in prep.METRO_LOOPS]
         for name in ['engine_body', 'engine_clockwork', 'engine_gears', 'engine_governor',
-                     'engine_valve', 'engine_lever', 'engine_labour', 'engine_start']:
+                     'engine_valve', 'engine_lever', 'engine_labour', 'engine_start',
+                     'engine_stroke', 'engine_tick', 'engine_clunk']:
             self.assertIn(name, names)
 
     def test_real_engine_lands_in_key(self):

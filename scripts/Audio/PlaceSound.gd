@@ -12,8 +12,9 @@ extends Node
 ## way into the old layer. The station set's machine sounds from the lists the set keeps (no tags in its files): its
 ## neon buzzing, a junction box at each cable run's end, the transformer along its floor mains, knocks down its mains and
 ## risers, its risers ticking as they cool, its fuming floor mouths breathing out; and the Company's engine at the hall's
-## middle: its body, its clockwork at the gear trains, its great gears at the flywheels, its governor, steam let off at
-## its cylinders, its lever thrown now and then, labouring at a train's peak and catching back up to its beat when the
+## middle, played from its moving parts: a piston's stroke at each crank as it passes its dead centres, the clockwork
+## ticking with its big gear's teeth, its middle gear clunking with its own, the governor's whir pitched by its spin, its
+## body a breath under them all; steam let off at its cylinders, its lever thrown now and then, labouring at a train's peak and catching back up to its beat when the
 ## train has gone. Everything else here runs on real time (TimeFx), so slow motion leaves the place alone.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -93,6 +94,14 @@ const ENGINE_BODY_REACH := 36.0
 const ENGINE_CLOCKWORK_REACH := 10.0
 const ENGINE_GEARS_REACH := 16.0
 const ENGINE_GOVERNOR_REACH := 8.0
+## The engine's beat: teeth on the big gear (a tick each: 16 at its 0.06 turns a second is the clockwork take's own
+## pace) and the middle gear (a clunk each); the turns a second the governor's take was recorded at (its whir's pitch
+## 1 there).
+const TICK_TEETH := 16
+const CLUNK_TEETH := 8
+const GOVERNOR_TURNS := 0.7
+## How many of the engine's last sounds engine_heard() keeps.
+const ENGINE_HEARD := 64
 const VALVE_EVERY := Vector2(60.0, 140.0)
 const LEVER_EVERY := Vector2(50.0, 120.0)
 ## The station's signs on the Company's line while a train draws on it: how far they sag (at its full, and more on the
@@ -121,7 +130,12 @@ var _built := false
 var _rng := RandomNumberGenerator.new()
 var _heard: Array = []
 var _sources := {"neon": 0, "junctions": 0, "transformer_runs": 0, "knock_runs": 0, "ticks": 0, "hisses": 0,
-	"engine_loops": 0, "engine_events": 0}
+	"engine_loops": 0, "engine_strokes": 0, "engine_gears": 0, "engine_events": 0}
+var _engine_heard: Array = []
+var _halves := {}
+var _teeth := {}
+var _governor: Node3D
+var _governor_run := -1
 var _was_passing := false
 var _pipes: Node3D
 var _sag_clock := 0.0
@@ -290,23 +304,16 @@ func _engine_works() -> void:
 	var cranks: Array = engine.get_meta("cranks", [])
 	var body := engine.global_position + Vector3(0.0, ENGINE_BODY_UP, 0.0)
 	_pipes.call("run", &"engine_body", body, body, ENGINE_BODY_REACH)
-	var parts: Array[Array] = [[&"engine_clockwork", spinners.slice(0, maxi(spinners.size() - 1, 0)), ENGINE_CLOCKWORK_REACH],
-		[&"engine_gears", cranks, ENGINE_GEARS_REACH], [&"engine_governor", spinners.slice(spinners.size() - 1), ENGINE_GOVERNOR_REACH]]
 	_sources.engine_loops = 1
 
-	for part: Array in parts:
-		var pieces: Array = part[1]
-
-		if pieces.is_empty():
-			continue
-
-		var middle := Vector3.ZERO
-
-		for piece: Node3D in pieces:
-			middle += piece.global_position / pieces.size()
-
-		_pipes.call("run", part[0], middle, middle, part[2])
+	if not spinners.is_empty():
+		_governor = spinners[spinners.size() - 1]
+		_governor_run = (_pipes.get("_runs") as Array).size()
+		_pipes.call("run", &"engine_governor", _governor.global_position, _governor.global_position, ENGINE_GOVERNOR_REACH)
 		_sources.engine_loops += 1
+
+	_sources.engine_strokes = cranks.size()
+	_sources.engine_gears = mini(maxi(spinners.size() - 1, 0), 2)
 
 	for crank: Node3D in cranks:
 		_pipes.call("events", &"engine_valve", crank.global_position + Vector3.UP, VALVE_EVERY)
@@ -314,6 +321,70 @@ func _engine_works() -> void:
 
 	_pipes.call("events", &"engine_lever", body, LEVER_EVERY)
 	_sources.engine_events += 1
+
+
+## What the engine's parts have played lately: [[sound, the part, its angle then (a stroke's crank's; 0 for a gear)]],
+## newest last.
+func engine_heard() -> Array:
+	return _engine_heard
+
+
+## How fast the governor's whir plays: its spin against the spin its take was recorded at.
+func governor_pitch() -> float:
+	if _governor == null or not is_instance_valid(_governor) or _governor.get("turns") == null:
+		return 1.0
+
+	return float(_governor.get("turns")) / GOVERNOR_TURNS
+
+
+## The engine played from its parts, read from where each one has turned to: a stroke as a crank passes a dead centre
+## (its angle crossing a half turn), a tick or a clunk as a gear's tooth passes; the governor's whir at its spin.
+func _engine_beat() -> void:
+	var engine := _engine()
+
+	if engine == null:
+		return
+
+	for crank: Node3D in engine.get_meta("cranks", []):
+		if crank.get("_time") == null:
+			continue
+
+		var angle := float(crank.get("start")) + TAU * float(crank.get("turns")) * float(crank.get("_time"))
+		var half := floori(angle / PI)
+
+		if _halves.has(crank) and half != _halves[crank]:
+			_engine_sound(&"engine_stroke", crank, angle)
+
+		_halves[crank] = half
+
+	var spinners: Array = engine.get_meta("spinners", [])
+
+	for i in range(mini(maxi(spinners.size() - 1, 0), 2)):
+		var gear: Node3D = spinners[i]
+
+		if gear.get("_time") == null:
+			continue
+
+		var teeth := TICK_TEETH if i == 0 else CLUNK_TEETH
+		var tooth := floori((float(gear.get("start")) + TAU * float(gear.get("turns")) * float(gear.get("_time"))) * teeth / TAU)
+
+		if _teeth.has(gear) and tooth != _teeth[gear]:
+			_engine_sound(&"engine_tick" if i == 0 else &"engine_clunk", gear, 0.0)
+
+		_teeth[gear] = tooth
+
+	var whir: AudioStreamPlayer3D = _pipes.call("emitter_of", _governor_run) if _governor_run >= 0 and _pipes != null else null
+
+	if whir != null:
+		whir.pitch_scale = maxf(governor_pitch(), 0.05)
+
+
+func _engine_sound(sound: StringName, part: Node3D, angle: float) -> void:
+	Sfx.play(self, sound, part.global_position)
+	_engine_heard.append([sound, part, angle])
+
+	if _engine_heard.size() > ENGINE_HEARD:
+		_engine_heard.pop_front()
 
 
 ## The engine, where it is (null without one).
@@ -549,6 +620,7 @@ func _process(delta: float) -> void:
 	_last_real = TimeFx.real_time()
 	_sag(delta)
 	_after_train()
+	_engine_beat()
 
 	if rumble_near != null and rumble_near.playing:
 		_voice_rumble(_city_here())

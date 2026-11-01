@@ -1307,6 +1307,11 @@ METRO_SHOTS = [
     ("engine_lever", [("1793496965594", None)], 3),
     ("engine_labour", [("1793497041680", None)], 3, {"key": True}),
     ("engine_start", [("1793497085575", None)], 3),
+    # The engine played from its parts (PlaceSound): a piston's stroke (the body takes' own), a tick of the clockwork
+    # (a tooth of the big gear), a clunk of the middle gear's teeth.
+    ("engine_stroke", [("1793496843068", 12), ("1793496875177", 12)], 12),
+    ("engine_tick", [("1793496884448", 12)], 12),
+    ("engine_clunk", [("1793496905564", 12)], 10),
 ]
 # A loop: (name, [takes], seconds, options).
 METRO_LOOPS = [

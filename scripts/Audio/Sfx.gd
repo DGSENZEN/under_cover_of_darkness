@@ -264,6 +264,9 @@ const GAIN := {
 	&"engine_lever": -6.0,
 	&"engine_labour": -6.0,
 	&"engine_start": -6.0,
+	&"engine_stroke": -6.0,
+	&"engine_tick": -10.0,
+	&"engine_clunk": -8.0,
 }
 
 ## The layers' loops (in audio/ambience/), how loud each plays (dB: target LUFS less measured; a neon's hum -36,
@@ -276,7 +279,8 @@ const LOOP_GAIN := {
 	&"junction_hum": -22.0,
 	&"transformer_hum": -20.0,
 	# The Company's engine at the hall's middle: its body, its clockwork regulator, its great gears, its governor.
-	&"engine_body": -14.0,
+	# (Its body a breath under the strokes its cranks play: PlaceSound.)
+	&"engine_body": -22.0,
 	&"engine_clockwork": -12.0,
 	&"engine_gears": -14.0,
 	&"engine_governor": -18.0,

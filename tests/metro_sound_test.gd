@@ -8,6 +8,8 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
 const METRO := preload("res://maps/metro.tscn")
 const PLAYER := preload("res://Player.tscn")
+const EngineCrank := preload("res://scripts/Visual/EngineCrank.gd")
+const Clockwork := preload("res://scripts/Visual/Clockwork.gd")
 
 ## A plan of its own: the hall (the station), the Pasaje beyond its east door (the market layer), the vaults beyond
 ## that (the old layer), the shop north of the hall; each 10 m square, floors at 0.
@@ -47,6 +49,7 @@ func _ready() -> void:
 	await _director()
 	await _floors()
 	await _trains()
+	await _engine_beat()
 	await _in_the_metro()
 	Focus.reset()
 	Sfx.silence()
@@ -243,9 +246,10 @@ func _in_the_metro() -> void:
 		"%s; neon %d runs %d mains %d risers %d floor mains %d mouths %d" % [str(counts), station.neon.size(), station.runs.size(),
 			station.mains.size(), station.risers.size(), station.floor_mains.size(), station.mouths.size()])
 	var engine: Node3D = station.engine
-	_check("S28 the Company's engine sounds: its body, clockwork, gears and governor, its valves and its lever",
-		engine != null and counts.engine_loops == 4 and counts.engine_events == (engine.get_meta("cranks") as Array).size() + 1,
-		"%d loops, %d events" % [counts.get("engine_loops", 0), counts.get("engine_events", 0)])
+	_check("S28 the Company's engine sounds: its body and governor, a stroke at every crank, ticks and clunks at its gears, its valves and lever",
+		engine != null and counts.engine_loops == 2 and counts.engine_strokes == (engine.get_meta("cranks") as Array).size()
+		and counts.engine_gears == 2 and counts.engine_events == (engine.get_meta("cranks") as Array).size() + 1,
+		str(counts))
 	var lane: Node3D = metro.get_node("candle_lane")
 	var vent: AudioStreamPlayer3D = lane.get("vent_hum")
 	var rumble: AudioStreamPlayer = lane.get("rumble")
@@ -426,5 +430,63 @@ func _trains() -> void:
 	var rode: Vector3 = sound.call("_on_track")
 	_check("S27 with two tracks the rumble rides the one nearer you", rode.distance_to(Vector3(5.0, 0.5, -5.0)) < 0.1, str(rode))
 	for node in [sound, ear, station, lane]:
+		node.queue_free()
+	await _frames(3)
+
+
+## S30-S32: the engine's sound follows its parts.
+func _engine_beat() -> void:
+	var station: Node3D = _script(STATION_SOURCE).new()
+	add_child(station)
+	var engine := Node3D.new()
+	station.add_child(engine)
+	engine.position = Vector3(5.0, 0.0, 5.0)
+	var cranks: Array = []
+	for k in 2:
+		var crank: Node3D = EngineCrank.new()
+		crank.turns = 0.25
+		crank.start = k * PI / 2.0
+		engine.add_child(crank)
+		crank.position = Vector3(k * 2.0 - 1.0, 1.0, 0.0)
+		cranks.append(crank)
+	var spinners: Array = []
+	for spec in [[0.06, Vector3(0, 2, 1)], [-0.088, Vector3(1, 2, 1)], [0.7, Vector3(0, 3, 0)]]:
+		var turner: Node3D = Clockwork.new()
+		turner.turns = spec[0]
+		engine.add_child(turner)
+		turner.position = spec[1]
+		spinners.append(turner)
+	engine.set_meta("cranks", cranks)
+	engine.set_meta("spinners", spinners)
+	station.engine = engine
+	var ear := Node3D.new()
+	add_child(ear)
+	ear.global_position = HALL_MID
+	var sound := PlaceSound.new()
+	add_child(sound)
+	sound.setup(PLAN, ear, station)
+	await _frames(2)
+	sound.engine_heard().clear()
+	await _frames(8 * 60)
+	var heard: Array = sound.engine_heard().duplicate()
+	var strokes := heard.filter(func(h): return h[0] == &"engine_stroke")
+	# (A stroke sounds on the frame its crank crosses: within a frame's turn past the dead centre.)
+	var on_centre := strokes.all(func(h):
+		var angle := fposmod(float(h[2]), PI)
+		return minf(angle, PI - angle) < TAU * 0.25 / 60.0 + 0.001)
+	_check("S30 a piston stroke sounds at each crank as it passes its dead centre, twice a turn",
+		strokes.size() >= 7 and strokes.size() <= 9 and on_centre and strokes.any(func(h): return h[1] == cranks[0])
+		and strokes.any(func(h): return h[1] == cranks[1]), "%d strokes, on centre %s" % [strokes.size(), on_centre])
+	var ticks := heard.filter(func(h): return h[0] == &"engine_tick").size()
+	var clunks := heard.filter(func(h): return h[0] == &"engine_clunk").size()
+	_check("S31 the clockwork ticks with its big gear's teeth, the middle gear clunks with its own",
+		absi(ticks - roundi(0.06 * PlaceSound.TICK_TEETH * 8.0)) <= 1 and absi(clunks - roundi(0.088 * PlaceSound.CLUNK_TEETH * 8.0)) <= 1,
+		"%d ticks, %d clunks" % [ticks, clunks])
+	var whir_full: float = sound.governor_pitch()
+	spinners[2].turns = 0.35
+	await _frames(2)
+	_check("S32 the governor's whir follows its spin", is_equal_approx(whir_full, 1.0) and is_equal_approx(sound.governor_pitch(), 0.5),
+		"%.2f, then %.2f" % [whir_full, sound.governor_pitch()])
+	for node in [sound, ear, station]:
 		node.queue_free()
 	await _frames(3)
