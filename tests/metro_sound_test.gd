@@ -1,7 +1,7 @@
 extends Node3D
 ## The Metro's sound (docs/superpowers/specs/2026-10-31-metro-sound-design.md), headless with --fixed-fps 60, sound on
 ## and Master muted: Sfx's tile steps, gains and blended rooms (S1-S3); the director on a plan of its own (S4-S12);
-## floors answering from the place (S14-S15); the director in the Metro (S13).
+## floors answering from the place (S14-S15); one train for the Metro (S16-S19); the director in the Metro (S13).
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Focus := preload("res://scripts/Audio/Focus.gd")
@@ -18,13 +18,20 @@ const PLAN := {"spaces": [
 	{"name": "vaults", "polygon": [[20, 0], [30, 0], [30, 10], [20, 10]], "floor": 0.0, "height": 5.0, "layer": 3,
 		"openings": [{"to": "pasaje", "at": [20, 5], "width": 3.0}]},
 	{"name": "librarian_shop", "polygon": [[0, 10], [10, 10], [10, 20], [0, 20]], "floor": 0.0, "height": 5.0, "layer": 2,
-		"openings": [{"to": "hall", "at": [5, 10], "width": 2.0}]}]}
+		"openings": [{"to": "hall", "at": [5, 10], "width": 2.0}]},
+	{"name": "platform_n", "polygon": [[0, -10], [10, -10], [10, 0], [0, 0]], "floor": 0.0, "height": 5.0, "layer": 1,
+		"openings": [{"to": "hall", "at": [5, 0], "width": 3.0}]}]}
 const HALL_MID := Vector3(5, 1, 5)
 const HALL_MARKET_DOOR := Vector3(9.9, 1, 5)
 const MARKET_MID := Vector3(15, 1, 5)
 const OLD_MID := Vector3(25, 1, 5)
 const SHOP_MID := Vector3(5, 1, 15)
 const NOWHERE := Vector3(-40, 1, -40)
+const PLATFORM_MID := Vector3(5, 1, -5)
+## A station set's lists, as the real one keeps them (maps/metro_station.gd), and a lane with its train.
+const STATION_SOURCE := "extends Node3D\nvar mouth_runs: Array = []\nvar runs: Array = []\nvar neon: Array = []\n" \
+	+ "var mains: Array = []\nvar risers: Array = []\nvar mouths: Array = []\nvar floor_mains: Array = []\n"
+const LANE_SOURCE := "extends Node\nvar train: TrainPass\n"
 
 var results: Array[String] = []
 var failures := 0
@@ -37,6 +44,7 @@ func _ready() -> void:
 	await _sfx()
 	await _director()
 	await _floors()
+	await _trains()
 	await _in_the_metro()
 	Focus.reset()
 	Sfx.silence()
@@ -232,4 +240,68 @@ func _floors() -> void:
 	floor_body.queue_free()
 	sound.queue_free()
 	made[1].queue_free()
+	await _frames(3)
+
+
+func _script(source: String) -> GDScript:
+	var script := GDScript.new()
+	script.source_code = source
+	script.reload()
+	return script
+
+
+## A station whose track mouth runs west of the platform, with two cable runs: one ending by the platform, one by the
+## vaults.
+func _fake_station() -> Node3D:
+	var station: Node3D = _script(STATION_SOURCE).new()
+	add_child(station)
+	station.mouth_runs = [[-5.0, 0.0, -5.0, -1.0, 4.0]]
+	for end in [Vector3(1, 1, -9), Vector3(25, 1, 5)]:
+		var run := Node3D.new()
+		run.set_meta("points", PackedVector3Array([Vector3.ZERO, end]))
+		station.add_child(run)
+		station.runs.append(run)
+	return station
+
+
+## S16-S19: one train for the Metro.
+func _trains() -> void:
+	var lane: Node = _script(LANE_SOURCE).new()
+	var lane_train := TrainPass.new()
+	lane_train.seed = 31
+	lane.add_child(lane_train)
+	lane.train = lane_train
+	add_child(lane)
+	var station := _fake_station()
+	var ear := Node3D.new()
+	add_child(ear)
+	ear.global_position = PLATFORM_MID
+	var sound := PlaceSound.new()
+	add_child(sound)
+	sound.setup(PLAN, ear, station, lane)
+	_check("S16 with a lane, the Metro's train is the lane's", sound.train == lane_train, str(sound.train))
+
+	await _frames(5)
+	sound.train.start_pass()
+	await _frames(int(1.3 * 60))
+	var heard: Array = sound.train_heard().duplicate()
+	var rumbles := heard.filter(func(h): return h[0] == &"train_far" and float(h[2]) > -10.0)
+	var gusts := heard.filter(func(h): return h[0] == &"metro_draught")
+	_check("S17 a train heard from a platform: its rumble from the mouth, its draught", rumbles.size() == station.mouth_runs.size() and gusts.size() == 1,
+		str(heard))
+
+	await _frames(int(5.0 * 60))
+	var surges := sound.train_heard().filter(func(h): return h[0] == &"cable_surge")
+	_check("S19 at the peak the cables surge, from the run end nearest the ear", surges.size() == 1
+		and (surges[0][1] as Vector3).distance_to(Vector3(1, 1, -9)) < 0.01, str(surges))
+
+	await _frames(int(10.0 * 60))
+	ear.global_position = OLD_MID
+	await _frames(5)
+	sound.train.start_pass()
+	await _frames(int(1.3 * 60))
+	var deep := sound.train_heard().filter(func(h): return h[0] == &"train_far" or h[0] == &"metro_draught")
+	_check("S18 in the old layer the train is not heard", deep.is_empty(), str(deep))
+	for node in [sound, ear, station, lane]:
+		node.queue_free()
 	await _frames(3)

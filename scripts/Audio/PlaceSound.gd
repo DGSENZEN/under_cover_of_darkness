@@ -7,9 +7,12 @@ extends Node
 ## (MetroBed, under Ambience: they keep its duck under World and its hurt filter), darkened with depth. While it is in,
 ## Master carries a gentle glue (before its limiter) and the room's reverb is the family's (FAMILY_ACOUSTICS, blended
 ## through the openings); gone, both are as they were. A floor with no "surface" meta walks as its family's
-## (surface_at). Everything here runs on real time (TimeFx), so slow motion leaves the place alone.
+## (surface_at). The Metro has one train (the lane's own TrainPass, saved, or one of its own): its rumble from the
+## station's track mouths, its draught gusting on the platforms, the cables surging at its peak, all thinned away on the
+## way into the old layer. Everything else here runs on real time (TimeFx), so slow motion leaves the place alone.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const Focus := preload("res://scripts/Audio/Focus.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
 ## Each of the plan's spaces, by family (a space the plan adds later takes the nearest family through its openings).
@@ -53,6 +56,12 @@ const GLUE_META := &"metro_glue"
 const OUT := -80.0
 const EASE_DB := 12.0
 const SEED := 1987
+## A train: its rumble at each track mouth (dB, at full city), heard this far over the mouth's bed; how long after it
+## begins its draught gusts out (s); the seed of a train of its own.
+const RUMBLE_DB := -4.0
+const MOUTH_UP := 1.5
+const DRAUGHT_AFTER := 1.0
+const TRAIN_SEED := 31
 
 var zones: PlaceZones
 var listener: Node3D
@@ -60,6 +69,8 @@ var station: Node3D
 var lane: Node
 ## The beds playing, by loop name.
 var beds := {}
+## The Metro's one train.
+var train: TrainPass
 var _levels := {}
 var _weights := {}
 var _depth := 0.0
@@ -67,6 +78,8 @@ var _rooms := {}
 var _last_real := -1.0
 var _built := false
 var _rng := RandomNumberGenerator.new()
+var _heard: Array = []
+var _draught: AudioStreamPlayer
 
 
 func _init() -> void:
@@ -87,6 +100,7 @@ func setup(plan: Dictionary, ear: Node3D, station_set: Node3D = null, lane_set: 
 	_built = true
 	_ensure_bus()
 	_ensure_glue()
+	_take_train()
 
 	if not Sfx.enabled:
 		return
@@ -136,6 +150,112 @@ func bed_db(loop: String, weights: Dictionary, depth: float) -> float:
 			level += float(weights[family]) * db_to_linear(gain) * (city_of(depth) if bool(bed[2]) else 1.0)
 
 	return maxf(linear_to_db(level), OUT) if level > 0.0 else OUT
+
+
+## What this train's pass played: [[sound, where (Vector3; Vector3.ZERO for the flat draught), dB]], the last pass's.
+func train_heard() -> Array:
+	return _heard
+
+
+## The lane's train when the lane is set in (one clock: its lights sag on it), else one of its own.
+func _take_train() -> void:
+	var theirs: Variant = lane.get("train") if lane != null else null
+	train = theirs if theirs is TrainPass else null
+
+	if train == null:
+		train = TrainPass.new()
+		train.name = "train"
+		train.seed = TRAIN_SEED
+		add_child(train)
+
+	train.began.connect(_on_train_began)
+	train.peaked.connect(_on_train_peaked)
+
+
+func _city_here() -> float:
+	return city_of(zones.depth_at(listener.global_position)) if listener != null and is_instance_valid(listener) else 0.0
+
+
+## Where the station's track mouths are (their runs' middles, over their beds).
+func _mouths() -> Array[Vector3]:
+	var mouths: Array[Vector3] = []
+
+	if station == null or not is_instance_valid(station):
+		return mouths
+
+	for run: Array in station.get("mouth_runs"):
+		mouths.append(station.to_global(Vector3((float(run[0]) + float(run[1])) / 2.0, float(run[3]) + MOUTH_UP, float(run[2]))))
+
+	return mouths
+
+
+func _on_train_began() -> void:
+	_heard = []
+	var city := _city_here()
+
+	if city <= 0.001:
+		return
+
+	for mouth in _mouths():
+		var db := RUMBLE_DB + linear_to_db(city)
+		Sfx.play(self, &"train_far", mouth, db)
+		_heard.append([&"train_far", mouth, db])
+
+	var gust := float(family_weights_at(listener.global_position).get("platforms", 0.0)) * city
+
+	if gust > 0.0:
+		get_tree().create_timer(DRAUGHT_AFTER, false).timeout.connect(_gust.bind(gust))
+
+
+## The air a train pushes out, gusting flat on the beds' bus.
+func _gust(amount: float) -> void:
+	var db := float(Sfx.GAIN.get(&"metro_draught", 0.0)) + linear_to_db(amount)
+	_heard.append([&"metro_draught", Vector3.ZERO, db])
+
+	if not Sfx.enabled:
+		return
+
+	if _draught == null:
+		_draught = AudioStreamPlayer.new()
+		_draught.name = "draught"
+		_draught.bus = BUS
+		add_child(_draught)
+
+	var takes := 0
+
+	while ResourceLoader.exists("res://audio/sfx/metro_draught_%d.wav" % (takes + 1)):
+		takes += 1
+
+	if takes == 0:
+		return
+
+	_draught.stream = load("res://audio/sfx/metro_draught_%d.wav" % (1 + _rng.randi() % takes))
+	_draught.volume_db = db
+	_draught.play()
+
+
+## At the train's peak the Company's cables surge: from the end of the station's cable run nearest you.
+func _on_train_peaked() -> void:
+	if station == null or not is_instance_valid(station) or _city_here() <= 0.001:
+		return
+
+	var ear := listener.global_position
+	var nearest := Vector3.INF
+
+	for run: Node3D in station.get("runs"):
+		var points: PackedVector3Array = run.get_meta("points", PackedVector3Array())
+
+		if points.is_empty():
+			continue
+
+		var end := run.to_global(points[points.size() - 1])
+
+		if end.distance_to(ear) < nearest.distance_to(ear):
+			nearest = end
+
+	if nearest != Vector3.INF and Focus.allow(self, &"detail", nearest):
+		Sfx.play(self, &"cable_surge", nearest)
+		_heard.append([&"cable_surge", nearest, 0.0])
 
 
 ## What a floor with no "surface" meta is at a point: its family's (FAMILY_SURFACE); "" (stone) in no space.
