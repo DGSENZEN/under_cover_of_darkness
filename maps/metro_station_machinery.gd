@@ -19,6 +19,7 @@ const ENGINE_WORKS_KIT := "res://assets/eclipse/kit/station_engine_works.glb"
 const ENGINE_JSON := "res://assets/eclipse/kit/station_engine.json"
 const Clockwork := preload("res://scripts/Visual/Clockwork.gd")
 const EngineCrank := preload("res://scripts/Visual/EngineCrank.gd")
+const EngineFx := preload("res://maps/metro_station_engine_fx.gd")
 const ENGINE_CORE := preload("res://scripts/Visual/engine_core.gdshader")
 const ENGINE_DIAL := preload("res://scripts/Visual/engine_dial.gdshader")
 const ENGINE_LAMP := preload("res://scripts/Visual/engine_lamp.gdshader")
@@ -159,6 +160,8 @@ static func _engine(station, root: Node3D) -> void:
 	engine.add_child(core)
 	core.position = Vector3(0.0, CORE_LIGHT_HIGH, 0.0)
 	station.lights.append(core)
+	# Its beat, and what it gives off into the hall on it.
+	EngineFx.dress(station, engine, data, works_kit, works_look)
 	# The Company's blade signs standing on its deck.
 	if ResourceLoader.exists(NEON_KIT):
 		var neon_kit := SetKit.kit(NEON_KIT)

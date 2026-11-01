@@ -37,6 +37,8 @@ func _ready() -> void:
 
 	if save != null:
 		save.register(self)
+	# (The Metro's one train: the Company's engine strains when it draws on the line.)
+	add_to_group(&"metro_train")
 	_rng.seed = seed
 	next = _rng.randf_range(every.x, every.y)
 

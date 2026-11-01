@@ -7,6 +7,7 @@ const STATION := preload("res://maps/metro_station.tscn")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const StationDressing := preload("res://maps/metro_station_dressing.gd")
 const TeslaArcScript := preload("res://scripts/Visual/TeslaArc.gd")
+const EngineFx := preload("res://maps/metro_station_engine_fx.gd")
 ## The MP-68's running pads, centred this far either side of a track's centre (m).
 const PAD_FROM_CENTRE := 1.0
 
@@ -31,6 +32,7 @@ func _ready() -> void:
 	_neon()
 	await _runs()
 	await _engine()
+	await _engine_fx()
 	print("\n==== RESULTS ====")
 	for result in results:
 		print(result)
@@ -693,7 +695,8 @@ func _mouths() -> void:
 ## S4: every run of wall the shell stands in its spaces dressed, tiled or plastered, every 1.2 m along it from a metre
 ## up to near its top (a run under 0.25 m, a jamb its reveal covers, excepted): sampled just in front of its face
 ## against where the dressing is drawn.
-## S4b: no word on it: no Label3D or Decal under the set (its signs' faces are the kit's blank `sign` slot).
+## S4b: no word on it: no Label3D or Decal from an image under the set (its signs' faces are the kit's blank `sign`
+## slot).
 ## S4c: nothing hung over a walk lower than 2.4 m over its floor.
 func _dressed() -> void:
 	var drawn := _drawn()
@@ -718,8 +721,15 @@ func _dressed() -> void:
 	_check("S4 tiled to every gap and corner, no run of wall left bare", not faces.is_empty() and bare.is_empty(),
 		"%d faces; %d bare: %s" % [faces.size(), bare.size(), bare.slice(0, 6)])
 
-	# (The player's own, standing in it when it stands alone, are not the set's.)
-	var words: Array = (station.find_children("*", "Label3D", true, false) + station.find_children("*", "Decal", true, false)) \
+	# (The player's own, standing in it when it stands alone, are not the set's. A decal drawn only from textures made
+	# here (a gradient, noise: the engine's light pool, its soot) carries no word; one from an image file might.)
+	var from_image := func(decal: Decal) -> bool:
+		for texture: Texture2D in [decal.texture_albedo, decal.texture_emission, decal.texture_normal, decal.texture_orm]:
+			if texture != null and not texture.resource_path.is_empty():
+				return true
+		return false
+	var words: Array = (station.find_children("*", "Label3D", true, false)
+		+ station.find_children("*", "Decal", true, false).filter(from_image)) \
 		.filter(func(n): return not station.player.is_ancestor_of(n))
 	_check("S4b no word on it", words.is_empty(), "%s" % [words.slice(0, 4)])
 
@@ -1224,6 +1234,159 @@ func _engine() -> void:
 			if part is Node3D and (part as Node3D).physics_interpolation_mode != Node.PHYSICS_INTERPOLATION_MODE_OFF:
 				faults.append("%s interpolated" % part.name)
 	_check("S11c the engine runs", faults.is_empty(), "%s" % [faults.slice(0, 6)])
+
+## The engine's presence (docs/superpowers/plans/2026-11-01-engine-presence.md).
+## S12: one beat: a stroke for each crank as its crosshead tops its travel, a second apart; the core's light and its
+## shader breathe on it (low between strokes, high just after one); paused, the beat holds.
+func _engine_fx() -> void:
+	var engine = station.get("engine")
+	var beat = engine.get_node_or_null("beat") if engine != null else null
+	if beat == null:
+		_check("S12 the engine keeps one beat", false, "no beat")
+		return
+	var fx: Dictionary = engine.get_meta("fx", {})
+	var cranks: Array = engine.get_meta("cranks", [])
+	var wrong := []
+	var strokes := []
+	var on_stroke := func(index: int) -> void:
+		strokes.append([index, float(beat.time)])
+		var crank: Node3D = cranks[index]
+		var top := float(crank.throw) + float(crank.conrod)
+		var height := float(crank.head_height(beat.angle(index)))
+		if absf(height - top) > 0.001:
+			wrong.append("crank %d stroked at %.4f of %.4f" % [index, height, top])
+	beat.stroke.connect(on_stroke)
+	var core: OmniLight3D = fx.get("core")
+	var look: ShaderMaterial = fx.get("core_look")
+	var base := float(fx.get("core_energy", 0.0))
+	var samples := []
+	for frame in 240:
+		await get_tree().process_frame
+		var swell := float(beat.swell())
+		samples.append([swell, float(beat.since_stroke())])
+		if core == null or absf(core.light_energy - base * (EngineFx.CORE_LOW + (1.0 - EngineFx.CORE_LOW) * swell)) > 0.01:
+			wrong.append("core light %.3f at swell %.2f" % [core.light_energy if core != null else -1.0, swell])
+		if look == null or absf(float(look.get_shader_parameter("swell")) - swell) > 0.001:
+			wrong.append("core shader's swell %s at %.2f" % [look.get_shader_parameter("swell") if look != null else null, swell])
+	beat.stroke.disconnect(on_stroke)
+	var indices := {}
+	for k in strokes.size():
+		indices[strokes[k][0]] = true
+		if k > 0 and absf(strokes[k][1] - strokes[k - 1][1] - 1.0) > 0.02:
+			wrong.append("strokes %.3f s apart" % (strokes[k][1] - strokes[k - 1][1]))
+	if strokes.size() < 4 or strokes.size() > 5 or indices.size() != 4:
+		wrong.append("strokes %s" % [strokes])
+	var lowest := 1.0
+	var highest := [0.0, 0.0]
+	for sample: Array in samples:
+		lowest = minf(lowest, sample[0])
+		if sample[0] > highest[0]:
+			highest = sample
+	if lowest > 0.2 or highest[0] < 0.8 or highest[1] > 0.15:
+		wrong.append("swell from %.2f to %.2f, its height %.2f s after a stroke" % [lowest, highest[0], highest[1]])
+	get_tree().paused = true
+	var held := float(beat.time)
+	await _frames(30)
+	if float(beat.time) != held:
+		wrong.append("paused, the beat ran on %.3f s" % (float(beat.time) - held))
+	get_tree().paused = false
+	if beat.physics_interpolation_mode != Node.PHYSICS_INTERPOLATION_MODE_OFF:
+		wrong.append("the beat interpolated")
+	_check("S12 the engine keeps one beat; its core breathes on it", wrong.is_empty(), "%s" % [wrong.slice(0, 6)])
+	await _engine_breath(engine, beat, fx)
+
+
+## S13: it breathes: on each stroke that crank's head bursts steam and no other's; a plume off its dome; a heat shimmer
+## over its drum (the screen bent, unshaded, no shadow, on the hall's layer only, faded out near the eye).
+func _engine_breath(engine: Node3D, beat: Node, fx: Dictionary) -> void:
+	var wrong := []
+	var steam: Array = fx.get("steam", [])
+	if steam.size() != 4:
+		wrong.append("%d steam heads" % steam.size())
+	else:
+		var counts := steam.map(func(f): return int(f.bursts))
+		var stroked := []
+		var on_stroke := func(index: int) -> void: stroked.append(index)
+		beat.stroke.connect(on_stroke)
+		await _frames(130)
+		beat.stroke.disconnect(on_stroke)
+		for k in 4:
+			var want := stroked.count(k)
+			if int(steam[k].bursts) - int(counts[k]) != want:
+				wrong.append("head %d burst %d times for %d strokes" % [k, int(steam[k].bursts) - int(counts[k]), want])
+		if stroked.is_empty():
+			wrong.append("no strokes")
+	var plume = fx.get("plume")
+	if plume == null or not plume.visible or plume.puffer == null or not plume.puffer.emitting:
+		wrong.append("no plume breathing")
+	var shimmer: MeshInstance3D = fx.get("shimmer")
+	if shimmer == null:
+		wrong.append("no shimmer")
+	else:
+		var look := shimmer.material_override as ShaderMaterial
+		var code := look.shader.code if look != null and look.shader != null else ""
+		if not ("hint_screen_texture" in code and "unshaded" in code):
+			wrong.append("the shimmer does not bend the screen, unshaded")
+		if shimmer.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF or shimmer.layers != Layers.STATION_HALL:
+			wrong.append("shimmer shadow %d, layers %d" % [shimmer.cast_shadow, shimmer.layers])
+		if look == null or absf(float(look.get_shader_parameter("near_fade")) - EngineFx.NEAR_FADE) > 0.001 \
+				or EngineFx.NEAR_FADE != 1.5:
+			wrong.append("the shimmer does not fade near the eye")
+	_check("S13 the engine breathes: steam on each stroke, its plume, heat over its drum", wrong.is_empty(),
+		"%s" % [wrong.slice(0, 6)])
+	_engine_light(engine, beat, fx)
+
+
+## S14: its light leaves its four windows as a shadowless spot each, aimed down and out, and as soft shafts (additive, unshaded, no shadow, softened where they touch) and
+## lies round it in a pool on the floor and the ceiling, both breathing on its swell, capped, none of it past 7 m.
+func _engine_light(engine: Node3D, beat: Node, fx: Dictionary) -> void:
+	var wrong := []
+	var swell := float(beat.swell())
+	var shafts: Array = fx.get("shafts", [])
+	if shafts.size() != 4:
+		wrong.append("%d shafts" % shafts.size())
+	if EngineFx.SHAFT_STRENGTH > 0.35:
+		wrong.append("shaft strength %.2f" % EngineFx.SHAFT_STRENGTH)
+	var middle := engine.global_position
+	for shaft: MeshInstance3D in shafts:
+		var look := shaft.material_override as ShaderMaterial
+		var code := look.shader.code if look != null and look.shader != null else ""
+		if not ("blend_add" in code and "unshaded" in code) or float(look.get_shader_parameter("soft_depth")) <= 0.0:
+			wrong.append("%s not additive, unshaded, softened" % shaft.name)
+		if shaft.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+			wrong.append("%s casts a shadow" % shaft.name)
+		if look != null and absf(float(look.get_shader_parameter("strength")) - EngineFx.SHAFT_STRENGTH * lerpf(0.6, 1.0, swell)) > 0.001:
+			wrong.append("%s strength %.3f at swell %.2f" % [shaft.name, float(look.get_shader_parameter("strength")), swell])
+		var box := shaft.global_transform * shaft.get_aabb()
+		for i in 8:
+			var corner := box.get_endpoint(i) - middle
+			if Vector2(corner.x, corner.z).length() > 7.0:
+				wrong.append("%s reaches %.2f m" % [shaft.name, Vector2(corner.x, corner.z).length()])
+				break
+	var spots: Array = fx.get("spots", [])
+	if spots.size() != 4:
+		wrong.append("%d window lights" % spots.size())
+	for spot: SpotLight3D in spots:
+		if spot.shadow_enabled or spot.spot_range > EngineFx.SPOT_RANGE + 0.001 or EngineFx.SPOT_RANGE > 6.5 \
+				or absf(spot.light_energy - EngineFx.SPOT_ENERGY * lerpf(0.6, 1.0, swell)) > 0.01 or EngineFx.SPOT_ENERGY > 5.0:
+			wrong.append("%s shadow %s, range %.1f, energy %.2f at swell %.2f" % [spot.name, spot.shadow_enabled,
+				spot.spot_range, spot.light_energy, swell])
+		if (-spot.global_basis.z).y > -0.2:
+			wrong.append("%s not aimed down" % spot.name)
+	var pools: Array = fx.get("pool", [])
+	if pools.size() != 2:
+		wrong.append("%d pools" % pools.size())
+	for pool: Decal in pools:
+		var blue := StationDressing.COMPANY_BLUE
+		if pool.emission_energy > 0.6 or not Color(pool.modulate, 1.0).is_equal_approx(Color(blue, 1.0)):
+			wrong.append("%s energy %.2f, colour %s" % [pool.name, pool.emission_energy, pool.modulate])
+		if absf(pool.modulate.a - lerpf(0.5, 1.0, swell)) > 0.01:
+			wrong.append("%s alpha %.2f at swell %.2f" % [pool.name, pool.modulate.a, swell])
+		if pool.size.x / 2.0 > 7.0 or pool.size.z / 2.0 > 7.0:
+			wrong.append("%s %s wide" % [pool.name, pool.size])
+	_check("S14 its light leaves its windows and lies round it, breathing, capped", wrong.is_empty(),
+		"%s" % [wrong.slice(0, 6)])
+
 
 ## Walks the set's player from `start` along `way`, turning toward each point; arrived at each within 0.3 m.
 func _walk_path(start: Vector3, way: Array, frames: int) -> Dictionary:

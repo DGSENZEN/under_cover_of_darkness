@@ -12,6 +12,8 @@ uniform float climb = 0.45;
 uniform float sweep_rate = 0.35;
 uniform float sweep_width = 0.12;
 uniform float span = 0.72;
+// Its breath on the engine's beat (EngineBeat.swell, 0-1): the streaks and the band brighter as it swells.
+uniform float swell = 0.5;
 
 varying vec3 local;
 
@@ -34,5 +36,5 @@ void fragment() {
 	float band = exp(-pow((fract(local.y / span) - sweep) / sweep_width * span, 2.0));
 	float facing = clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0);
 	vec3 hot = mix(colour.rgb, vec3(1.0), 0.45 * facing * facing + 0.35 * band);
-	ALBEDO = hot * energy * (0.55 + 0.6 * streak + 0.7 * band);
+	ALBEDO = hot * energy * (0.55 + 0.6 * streak + 0.7 * band) * mix(0.7, 1.3, swell);
 }

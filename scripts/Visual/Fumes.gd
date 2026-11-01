@@ -58,6 +58,8 @@ const DRIFT_CAP := 1.2
 @export var widen := 0.0
 ## Its puffs moved by the god's breath (Breath.gd's attractor, on their own layer).
 @export var breathed := false
+## Its puffs built though it breathes none steadily (puffs 0): it only bursts (burst(): a piston's stroke, a valve).
+@export var bursting := false
 @export var seed := 0
 ## The air on it (m/s, world).
 var draught := Vector3.ZERO:
@@ -68,6 +70,11 @@ var draught := Vector3.ZERO:
 var looks: Array[ShaderMaterial] = []
 var tubes: Array[MeshInstance3D] = []
 var puffer: GPUParticles3D
+## How many times it has burst (burst()).
+var bursts := 0
+## Its bursts' own puffs, taken in turn: a burst still climbing is never cut off by the next.
+var _bursters: Array[GPUParticles3D] = []
+var _next_burster := 0
 var _out := Vector3.FORWARD
 var _built := false
 
@@ -130,7 +137,7 @@ func build() -> void:
 		add_child(tube)
 		tubes.append(tube)
 
-	if puffs > 0.0:
+	if puffs > 0.0 or bursting:
 		_puffs(across, upward, rng)
 
 	for visual: VisualInstance3D in find_children("*", "VisualInstance3D", true, false):
@@ -144,12 +151,38 @@ func build() -> void:
 	_blow()
 
 
+## Breathes `count` puffs out at once, over its steady breath (a piston's stroke, a valve blowing off).
+func burst(count := 3) -> void:
+	if not _built:
+		build()
+	if puffer == null:
+		return
+	if _bursters.is_empty() or _bursters[0].amount != count:
+		for old in _bursters:
+			old.queue_free()
+		_bursters.clear()
+		# (As many as live at once, a burst a second at most: its puffs' life over a second, and one more.)
+		for i in int(ceil(puff_life)) + 1:
+			var burster := puffer.duplicate() as GPUParticles3D
+			burster.name = "burst_%d" % i
+			burster.amount = count
+			burster.one_shot = true
+			burster.explosiveness = 0.85
+			burster.emitting = false
+			add_child(burster)
+			_bursters.append(burster)
+	var next := _bursters[_next_burster % _bursters.size()]
+	_next_burster += 1
+	next.restart()
+	bursts += 1
+
+
 ## Starts or stops it.
 func emit(on: bool) -> void:
 	visible = on
 
 	if puffer != null:
-		puffer.emitting = on
+		puffer.emitting = on and puffs > 0.0
 
 
 func _puffs(across: Vector3, upward: bool, rng: RandomNumberGenerator) -> void:
@@ -208,7 +241,7 @@ func _puffs(across: Vector3, upward: bool, rng: RandomNumberGenerator) -> void:
 	puffer.draw_pass_1 = ball
 	puffer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(puffer)
-	puffer.emitting = visible
+	puffer.emitting = visible and puffs > 0.0
 
 
 func _look(is_puff: bool, look_seed: float) -> ShaderMaterial:

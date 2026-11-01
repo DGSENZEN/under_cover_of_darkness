@@ -629,11 +629,10 @@ BUDGET = {"engine": 30000, "engine_works": 70000, "gear_big": 4000, "gear_mid": 
 SLIVER = {n: 0.004 for n, _ in PIECES}
 
 
-def write_json():
+def json_data():
     """In the set frame (the engine at (0, 6, 0)): the gears' spots (piece, x, y, z, the heading their faces look along
     in degrees, turns a second), the cranks' (the wheel's centre, heading, turns, start) and their linkage, the
-    governor's, the blade signs'."""
-    import json
+    governor's, the blade signs'; what it breathes out of (each cylinder's head, by crank, and the dome's crown)."""
 
     def at_set(p):
         return {"x": p[0], "y": p[2] + 6.0, "z": -p[1]}
@@ -641,11 +640,26 @@ def write_json():
     gears = [dict(piece=p, heading=angle, turns=turns, **at_set(at)) for p, at, angle, turns in gear_spots()]
     crank = [dict(heading=angle, turns=turns, start=start, **at_set(at)) for angle, at, turns, start in CRANKS]
     blades = [dict(heading=angle, **at_set(_at(angle, r, DECK))) for angle, r in BLADES]
-    JSON.write_text(json.dumps({
+    lo, hi = OPENING[0][1], OPENING[-1][1]
+    wide = 2.0 * max(-u for u, _ in OPENING)
+    windows = [dict(heading=angle, width=wide, height=hi - lo, **at_set(_on_face(angle, FACE + 0.06, 0.0, (lo + hi) / 2)))
+               for angle in WINDOW_ANGLES]
+    heads = [at_set(_on_face(angle, WHEEL[0] + CONROD_OUT, 0.0, CYLINDER_SPAN[1] + 0.04)) for angle in CRANK_ANGLES]
+    return {
         "gears": gears, "cranks": crank, "blades": blades,
         "linkage": {"throw": CRANK[0], "conrod": CRANK[1], "rod": CRANK[2], "out": CONROD_OUT},
         "governor": dict(turns=0.7, **at_set((0.0, 0.0, GOVERNOR_AT))),
-    }, indent=1))
+        "heads": heads,
+        "dome": at_set((0.0, 0.0, DOME[-1][1])),
+        "windows": windows,
+    }
+
+
+def write_json():
+    """json_data() into the kit's station_engine.json."""
+    import json
+
+    JSON.write_text(json.dumps(json_data(), indent=1))
 
 
 def _make(pieces):

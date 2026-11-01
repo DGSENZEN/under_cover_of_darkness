@@ -3669,6 +3669,26 @@ class StationEngine(unittest.TestCase):
         for name in ("flywheel", "conrod", "crosshead", "governor"):
             self.assertIn(name, self.objects)
 
+    def test_json_gives_its_heads_and_dome(self):
+        """What it breathes out of (the engine's presence): each cylinder's head, the dome's crown, set frame."""
+        data = self.kit.json_data()
+        heads = data.get("heads", [])
+        self.assertEqual(len(heads), 4, heads)
+        for head in heads:
+            self.assertTrue(2.9 <= head["y"] - 6.0 <= 3.3, head)
+            self.assertGreater(math.hypot(head["x"], head["z"]), 2.4, head)
+        self.assertAlmostEqual(data.get("dome", {}).get("y", 0.0) - 6.0, 3.8, delta=0.05)
+
+    def test_json_gives_its_windows(self):
+        """Where its light leaves it (the engine's presence): each window's middle, heading and opening, set frame."""
+        windows = self.kit.json_data().get("windows", [])
+        self.assertEqual(sorted(w["heading"] for w in windows), [45.0, 135.0, 225.0, 315.0])
+        for w in windows:
+            self.assertAlmostEqual(math.hypot(w["x"], w["z"]), self.kit.FACE + 0.06, delta=0.05)
+            self.assertTrue(1.3 < w["y"] - 6.0 < 2.05, w)
+            self.assertAlmostEqual(w["width"], 1.1, delta=0.01)
+            self.assertAlmostEqual(w["height"], 0.75, delta=0.01)
+
     def test_it_takes_the_runs_and_the_trays(self):
         # (The runs' meeting point is inside the dome: every way out of it meets the engine.)
         for way in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)):
