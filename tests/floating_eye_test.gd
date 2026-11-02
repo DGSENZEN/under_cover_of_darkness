@@ -6,6 +6,7 @@ const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const EyeScript := preload("res://scripts/Monsters/FloatingEye.gd")
 const EyeGobScript := preload("res://scripts/Monsters/EyeGob.gd")
+const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const ShardScript := preload("res://scripts/Magic/Shard.gd")
 const CopalCloud := preload("res://scripts/Monsters/CopalCloud.gd")
@@ -34,6 +35,7 @@ func _ready() -> void:
 	await _alive()
 	await _turning()
 	await _spitting()
+	await _review_of_the_spit()
 	await _noticing()
 	await _attacks()
 	await _gaze()
@@ -1044,6 +1046,89 @@ func _spitting() -> void:
 	_free(near)
 	p.statuses.clear(&"evil_eye")
 	p.invulnerable = true
+	await _frames(2)
+
+
+## What the branch's review found.
+func _review_of_the_spit() -> void:
+	await _place_player(HOME)
+	p.rotation.y = 0.0
+	p.neck.rotation.x = 0.0
+	# Whipped, a gob goes straight along your aim, not up over what spat it.
+	var near: Node3D = EyeGobScript.spat_at(self, p.camera.global_position + Vector3(0, 0, -2.8), HOME, null)
+	near.velocity = Vector3.ZERO
+	var along: Vector3 = (near.global_position - p.camera.global_position).normalized()
+	await _frames(1)
+	p.revolver.try_whip()
+	await _frames(12)
+	_check("R1 a whipped gob flies along your aim (%.2f)" % near.velocity.normalized().dot(along), near.is_batted() and near.velocity.normalized().dot(along) > 0.98)
+	_free(near)
+	# Ánimas waiting their turn are no swooping eyes.
+	var eye := _eye(HOME + Vector3(0, 1.5, -40), 12)
+	var waiting: Array = []
+
+	for i in 2:
+		var one: CharacterBody3D = AnimaScript.new()
+		one.form = &"hands"
+		one.position = HOME + Vector3(i, 1.0, -44)
+		add_child(one)
+		waiting.append(one)
+
+	await _frames(2)
+
+	for one in waiting:
+		one.state = STATE.SWOOP
+
+	_check("R2 ánimas don't use up the eyes' turns to swoop", eye._room_to_swoop())
+
+	for one in waiting:
+		_free(one)
+
+	_free(eye)
+	# It turns facing as it was.
+	var facing := _eye(HOME + Vector3(0, 1.0, -7), 13)
+	facing.next_swoop_in = 100.0
+	await _frames(3)
+	facing.state = STATE.CIRCLE
+	await _frames(60)
+	var was_facing: Basis = facing.body.global_basis
+	var pupil_was: float = facing.body.pupil
+	facing.turn()
+	await _frames(1)
+	var turned_away: float = facing.body.global_basis.get_rotation_quaternion().angle_to(was_facing.get_rotation_quaternion())
+	_check("R3 torn open, it hasn't turned away from you (%.2f rad)" % turned_away, turned_away < 0.1)
+	_check("R3b nor has its pupil started over", absf(facing.body.pupil - pupil_was) < 0.2)
+	_free(facing)
+	# The gob leaves from the side that faces you, wherever you are.
+	var behind_it := _spitter(HOME + Vector3(0, 1.0, -7))
+	await _frames(3)
+	behind_it.state = STATE.CIRCLE
+	behind_it._clear_line = true
+	await _frames(40)
+	behind_it.spit_in = 0.0
+	await _until(func(): return not _gobs().is_empty(), 2.0)
+	var first_gob: Node3D = _gobs()[0]
+	_check("R4 it leaves from the side facing you", first_gob.global_position.distance_to(p.global_position) < behind_it.global_position.distance_to(p.global_position))
+	# A spit broken off doesn't come straight back.
+	behind_it.spit_in = 0.0
+	await _until(func(): return behind_it.state == STATE.SPIT_UP, 2.0)
+	behind_it.take_hit(1.0, p, &"shot", behind_it.global_position, Vector3.FORWARD)
+	_check("R5 a hit in the wind-up breaks it off", behind_it.state != STATE.SPIT_UP)
+	_check("R5b and its next spit is a full wait away (%.2f)" % behind_it.spit_in, behind_it.spit_in >= behind_it.SPIT_EVERY.x)
+	behind_it.state = STATE.CIRCLE
+	behind_it.spit_in = 0.0
+	await _until(func(): return behind_it.state == STATE.SPIT_UP, 2.0)
+	behind_it.flinch()
+	_check("R5c a packmate bursting breaks it off too", behind_it.state == STATE.CIRCLE)
+	_free(behind_it)
+
+	for gob in _gobs():
+		_free(gob)
+
+	# The drain's claws keep to the flesh's distance, with the curse up.
+	var drain_shader := FileAccess.get_file_as_string("res://scripts/UI/life_drain_view.gdshader")
+	_check("R6 the drain's claws hear of the flesh", drain_shader.count("with_flesh") >= 2 and drain_shader.count("CLAWS_WITH_FLESH") >= 2)
+	p.statuses.clear(&"evil_eye")
 	await _frames(2)
 
 

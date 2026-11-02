@@ -57,6 +57,11 @@ func is_batted() -> bool:
 	return _batted
 
 
+## Where a blow aims at it (Revolver._update_whip): itself, there being no more of it.
+func eye_position() -> Vector3:
+	return global_position
+
+
 func _launch(at: Vector3, by: Node3D) -> void:
 	add_to_group(&"eye_gobs")
 	_by = by

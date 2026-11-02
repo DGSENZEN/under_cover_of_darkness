@@ -48,12 +48,22 @@ func _ready() -> void:
 func _measure(label: String, frames: int) -> void:
 	var took: Array[float] = []
 	var was := Time.get_ticks_usec()
+	var scripts := 0.0
+	var physics := 0.0
+	var physics_most := 0.0
+	var scripts_most := 0.0
 
 	for i in frames:
 		await get_tree().process_frame
 		var now := Time.get_ticks_usec()
 		took.append(float(now - was) / 1000.0)
 		was = now
+		var a := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+		var b := Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+		scripts += a
+		physics += b
+		scripts_most = maxf(scripts_most, a)
+		physics_most = maxf(physics_most, b)
 
 	took = took.slice(20)
 	took.sort()
@@ -62,4 +72,5 @@ func _measure(label: String, frames: int) -> void:
 	for t in took:
 		sum += t
 
+	print("  process mean %.1f most %.1f ms, physics mean %.1f most %.1f ms, draw calls %d, objects %d" % [scripts / frames, scripts_most, physics / frames, physics_most, Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)])
 	print("PERF %s: mean %.1f ms, p99 %.1f ms, worst %.1f ms, over 16.7 ms: %d of %d, gobs %d" % [label, sum / took.size(), took[int(took.size() * 0.99)], took[-1], took.filter(func(t): return t > 16.7).size(), took.size(), get_tree().get_nodes_in_group(&"eye_gobs").size()])

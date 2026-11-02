@@ -209,8 +209,10 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 
 
 func _swap_body() -> void:
-	body.queue_free()
+	var old := body
+	old.queue_free()
 	_build_body()
+	body.take_over_from(old)
 
 
 ## Off a save, a hurt one has already turned: nothing bursts.
@@ -325,6 +327,7 @@ func _brain(delta: float) -> Vector3:
 				spit_in -= delta
 
 				if spit_in <= 0.0:
+					spit_in = _rng.randf_range(SPIT_EVERY.x, SPIT_EVERY.y)
 					_enter(State.SPIT_UP)
 					return Vector3.ZERO
 
@@ -346,11 +349,9 @@ func _brain(delta: float) -> Vector3:
 			return Vector3.ZERO
 		State.SPIT_UP:
 			if smoked or not _clear_line:
-				spit_in = _rng.randf_range(SPIT_EVERY.x, SPIT_EVERY.y)
 				_enter(State.CIRCLE)
 			elif _state_t >= SPIT_WIND:
-				EyeGob.spat_at(get_parent(), global_position - global_basis.z * 0.3, you.global_position + Vector3.UP * 0.15, self)
-				spit_in = _rng.randf_range(SPIT_EVERY.x, SPIT_EVERY.y)
+				EyeGob.spat_at(get_parent(), global_position - body.global_basis.z * 0.3, you.global_position + Vector3.UP * 0.15, self)
 				_enter(State.CIRCLE)
 
 			return Vector3.ZERO
@@ -450,7 +451,7 @@ func _room_to_swoop() -> bool:
 	var busy := 0
 
 	for other in get_tree().get_nodes_in_group(&"monsters"):
-		if other != self and other.get("state") != null and not other.dead and not other.asleep and (other.state == State.TELL or other.state == State.SWOOP):
+		if other != self and other.kind == kind and not other.dead and not other.asleep and (other.state == State.TELL or other.state == State.SWOOP):
 			busy += 1
 
 	return busy < MOST_SWOOPING
@@ -506,7 +507,7 @@ func flinch() -> void:
 	next_swoop_in += FLINCH_WAIT
 	_flinch_left = FLINCH_TIME
 
-	if state == State.TELL:
+	if state == State.TELL or state == State.SPIT_UP:
 		_enter(State.CIRCLE)
 
 

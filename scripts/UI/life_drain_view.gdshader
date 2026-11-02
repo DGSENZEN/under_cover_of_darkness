@@ -130,7 +130,7 @@ void fragment() {
 					float wide = (0.004 + 0.016 * pow(sin(along * 3.1416), 0.7)) * (0.5 + broken) * mix(1.0, 0.5, claw_age);
 					float past_ends = step(0.002, along) * step(along, 0.998);
 					float mark = (1.0 - smoothstep(wide * 0.6, wide, abs(off))) * past_ends;
-					float keep = claw_fade * smoothstep(CLEAR * 0.5, CLEAR * 0.95, out_from_middle);
+					float keep = claw_fade * smoothstep(mix(CLEAR * 0.5, CLAWS_WITH_FLESH.x, step(0.01, with_flesh)), mix(CLEAR * 0.95, CLAWS_WITH_FLESH.y, step(0.01, with_flesh)), out_from_middle);
 					// Your sight, split across it.
 					float split = (1.0 - smoothstep(wide, wide * 3.5, abs(off))) * past_ends * keep;
 					vec2 shift = cross_it * sign(off + 0.00001) * vec2(1.0 / aspect, 1.0) * 0.5 * 0.014 * split;

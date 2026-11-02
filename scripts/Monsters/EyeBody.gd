@@ -137,6 +137,19 @@ func _ready() -> void:
 	_dress()
 
 
+## Worn in place of `old`: facing as it faced, in the state it was in.
+func take_over_from(old: Node3D) -> void:
+	transform = old.transform
+	lids = old.lids
+	pupil = old.pupil
+	rage = old.rage
+	hurt = old.hurt
+	wounds = old.wounds
+	sway = old.sway
+	part(&"Ball").transform.basis = old.part(&"Ball").transform.basis
+	reset_physics_interpolation()
+
+
 func part(id: StringName) -> MeshInstance3D:
 	return _parts.get(id)
 
