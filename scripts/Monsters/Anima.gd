@@ -29,6 +29,9 @@ const MISSED_TIME := 0.8
 ## Thrown off: how long it is stunned and exposed, how hard it is thrown.
 const THROWN_TIME := 1.5
 const THROW_SPEED := 9.0
+## Flung up by the Burst: how hard, how fast that dies.
+const FLUNG_UP := 6.5
+const FLUNG_DIES := 10.0
 ## They spread out, so they come at you from more than one side (m beside you).
 const SPREAD := 1.6
 const GRAVITY := 18.0
@@ -75,6 +78,7 @@ var _agent: NavigationAgent3D
 var _fall := 0.0
 var _surge_in := 0.6
 var _surge_left := 0.0
+var _lift := 0.0
 
 
 func _init() -> void:
@@ -390,15 +394,26 @@ func _toward(you: Node3D) -> Vector3:
 	return to.normalized() if to.length() > 0.01 else Vector3.ZERO
 
 
-## Crawlers fall to the floor; a face holds its height.
+## Crawlers fall to the floor; a face holds its height. Either can be flung up off it.
 func _hold_height(wanted: Vector3, delta: float) -> Vector3:
+	_lift = move_toward(_lift, 0.0, FLUNG_DIES * delta)
+
 	if bool(_form["floats"]):
-		wanted.y = (float(_form["height"]) - global_position.y) * FLOAT_RATE
+		wanted.y = (float(_form["height"]) - global_position.y) * FLOAT_RATE * (1.0 if _lift <= 0.0 else 0.0) + _lift
 		return wanted
 
-	_fall = 0.0 if is_on_floor() else _fall + GRAVITY * delta
-	wanted.y = -_fall
+	_fall = 0.0 if is_on_floor() and _lift <= 0.0 else _fall + GRAVITY * delta
+	wanted.y = _lift - _fall
 	return wanted
+
+
+## Thrown up off its feet by the wave, and over. Nothing else changes: no stun, no opening.
+func flung_up(from: Vector3) -> void:
+	_lift = FLUNG_UP
+	_fall = 0.0
+
+	if body != null:
+		body.tumble(global_position - from)
 
 
 func _on_struck(result: StringName, source: StringName) -> void:
@@ -406,7 +421,7 @@ func _on_struck(result: StringName, source: StringName) -> void:
 		return
 
 	if body != null:
-		body.struck(global_position, Vector3.FORWARD, result)
+		body.struck(global_position, Vector3.FORWARD, result, source)
 
 	rouse()
 

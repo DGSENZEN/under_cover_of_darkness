@@ -450,3 +450,7 @@ func _touching(you: Node3D) -> bool:
 	return global_position.distance_to(nearest) <= BITE_REACH
 
 
+## Glass from the floor through it (ObsidianBurst.gd).
+func cracked_by(point: Vector3, direction: Vector3) -> void:
+	if body != null:
+		body.crack(point, direction)

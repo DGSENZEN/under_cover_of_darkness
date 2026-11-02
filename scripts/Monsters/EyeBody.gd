@@ -32,6 +32,9 @@ const WEEP_EVERY := 0.2
 const WINCE_TIME := 0.14
 const HURT_FADE := 0.28
 const CHUNKS := 7
+## How much a crack adds to its shown wounds, and for how long.
+const CRACK_SHOWS := 0.3
+const CRACK_LASTS := 1.5
 static var _BLACK: Texture2D = _flat(Color(0.012, 0.009, 0.01))
 
 
@@ -52,6 +55,7 @@ var pupil := 1.0
 var rage := 0.0
 var hurt := 0.0
 var wounds := 0.0
+var _crack_left := 0.0
 var sway := Vector3.ZERO
 var tears := 0
 
@@ -160,7 +164,8 @@ static func _stone_look(mesh: MeshInstance3D) -> ShaderMaterial:
 ## how it is moving.
 func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, exposed: bool, smoked: bool, whole: float) -> void:
 	_clock += delta
-	wounds = clampf(1.0 - whole, 0.0, 1.0)
+	_crack_left = maxf(_crack_left - delta, 0.0)
+	wounds = clampf(1.0 - whole + (CRACK_SHOWS if _crack_left > 0.0 else 0.0), 0.0, 1.0)
 	hurt = move_toward(hurt, 0.0, delta / HURT_FADE)
 	smoulder = move_toward(smoulder, 1.0 if smoked else 0.0, delta * (SMOULDER_TAKES if smoked else SMOULDER_DIES))
 	_wince_left = maxf(_wince_left - delta, 0.0)
@@ -326,6 +331,16 @@ func _weep(delta: float, doing: StringName, smoked: bool) -> void:
 
 
 ## A hit: it winces and flushes, and bleeds where it was struck.
+## Glass through it: the ball cracks, for a while more than its wounds say.
+func crack(point: Vector3, direction: Vector3) -> void:
+	_crack_left = CRACK_LASTS
+	Fx.blood(self, point, -direction.normalized(), 1.6)
+
+
+func cracked() -> bool:
+	return _crack_left > 0.0
+
+
 func struck(point: Vector3, direction: Vector3, result: StringName) -> void:
 	_wince_left = WINCE_TIME
 	var strength := 0.3 if result == &"resisted" else (1.3 if result == &"weak" else 0.8)

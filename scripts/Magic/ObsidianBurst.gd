@@ -24,6 +24,9 @@ const RELEASE_TRAUMA := 0.42
 const RELEASE_ROLL := 1.5
 ## From your chest, level.
 const CHEST := 1.2
+## What it leaves in them: how many shards, how far apart (m).
+const STUCK_IN := 3
+const STUCK_SPREAD := 0.12
 ## The flash that lights what it reaches.
 const FLASH_COLOUR := Color(0.78, 0.72, 1.0)
 
@@ -115,7 +118,26 @@ func _strike_what_it_reached() -> void:
 		var way := at - global_position
 		way.y = 0.0
 		var kind := &"burst" if target.is_in_group(&"monsters") else &"blast"
-		target.take_hit(DAMAGE, _player, kind, at, way.normalized() if way.length() > 0.01 else Vector3.FORWARD)
+		var out_way := way.normalized() if way.length() > 0.01 else Vector3.FORWARD
+		target.take_hit(DAMAGE, _player, kind, at, out_way)
+		_marked_by_it(target, at, out_way)
+
+
+## It goes up and over, with the glass in it, if it is still there.
+func _marked_by_it(target: Node3D, at: Vector3, way: Vector3) -> void:
+	if not is_instance_valid(target) or target.get("dead") == true or not target.is_in_group(&"monsters"):
+		return
+
+	if target.has_method("flung_up"):
+		target.flung_up(global_position)
+
+	if target.has_method("cracked_by"):
+		target.cracked_by(at, way)
+
+	for i in STUCK_IN:
+		var off := Vector3(_rng.randf_range(-STUCK_SPREAD, STUCK_SPREAD), _rng.randf_range(-STUCK_SPREAD, STUCK_SPREAD), _rng.randf_range(-STUCK_SPREAD, STUCK_SPREAD))
+		# Up through it, from the floor, and out.
+		MagicFx.stuck_in(target, at + off, (way + Vector3.UP * 1.1 + off * 2.0).normalized())
 
 
 func _floor_under(at: Vector3) -> Vector3:

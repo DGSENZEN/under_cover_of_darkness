@@ -19,6 +19,7 @@ const AnimaSkullScript := preload("res://scripts/Monsters/AnimaSkull.gd")
 const AnimaFire := preload("res://scripts/Monsters/AnimaFire.gd")
 const AnimaBurnScript := preload("res://scripts/Monsters/AnimaBurn.gd")
 const AnimaDeathsScript := preload("res://scripts/Monsters/AnimaDeaths.gd")
+const AnimaSpillScript := preload("res://scripts/Monsters/AnimaSpill.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 const FINGER_NAMES := ["index", "middle", "ring", "pinky", "thumb"]
@@ -107,6 +108,8 @@ const BURNS_SIZE := {&"hands": 1.0, &"face": 1.2}
 ## How long the parts of the face outlast its hands, burning.
 const SKULL_LATE := 0.26
 const JAW_LATE := 0.14
+## Flung by the Burst: how long it tumbles.
+const TUMBLES := 0.65
 ## How far down it looks for a floor to fall on (m).
 const FLOOR_LOOK := 12.0
 ## Where its flames stand, and how tall: along each hand's bones, and on the skull. (Bone, how
@@ -155,6 +158,8 @@ var _beats_said := 0
 var _lies_side := 1.0
 var _you: Node3D
 var _curl_shown := 0.0
+var _tumble := 0.0
+var _last_wound: StringName = &""
 var _nod := 0.0
 var _back := 0.0
 var _embers: Array[MeshInstance3D] = []
@@ -361,6 +366,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 		_doing_for = 0.0
 
 	_doing_for += delta
+	_tumble = move_toward(_tumble, 0.0, delta / TUMBLES)
 	fed_shown = fed
 	hurt = move_toward(hurt, 0.0, delta / 0.25)
 	smoulder = move_toward(smoulder, 1.0 if smoked else 0.0, delta * (6.0 if smoked else 3.0))
@@ -423,7 +429,8 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 	# It never holds still: a palsy all the time, worse when it rears. Hungry.
 	var shake := sin(_clock * 46.0) * 0.012 * rear_wanted + (sin(_clock * 23.0) * 0.012 + sin(_clock * 37.0) * 0.008) * (1.0 - _rest * 0.8)
 	# Thrown, it goes over on its back, scrabbling at the air, and rights itself.
-	_flip = move_toward(_flip, 1.0 if doing == &"thrown" else 0.0, delta * (6.0 if doing == &"thrown" else 3.2))
+	var flung := doing == &"thrown" or _tumble > 0.0
+	_flip = move_toward(_flip, 1.0 if flung else 0.0, delta * (6.0 if flung else 3.2))
 	hand_at.y -= smoothstep(0.0, 1.0, _flip) * 0.1
 	# It rolls with each step, and drops its head into a surge.
 	var surging := smoothstep(2.4, 4.5, speed)
@@ -538,6 +545,14 @@ func _work_face(delta: float, doing: StringName, speed: float, fed: float) -> vo
 			# Knocked loose: its jaw flapping.
 			jaw_to = 0.5 + sin(_clock * 21.0) * 0.4
 			roll_to = sin(_clock * 11.0) * 0.5 * (1.0 - minf(_doing_for / 1.2, 1.0))
+
+	# Flung, it goes over whatever it was doing, jaw flapping.
+	if _tumble > 0.0:
+		roll_to = sin(_tumble * PI) * 1.5 * _lies_side
+		nod_to = 0.6 * _tumble
+		jaw_to = 0.5 + sin(_clock * 21.0) * 0.4
+		hand_to = hand_to.lerp(Vector3(0.48, 0.14, 0.18), _tumble)
+		snap = maxf(snap, 7.0)
 
 	_walk += delta * (PAW_RATE + surging * 1.8)
 	_nod = _spring(&"nod", nod_to, snap, 0.55, delta)
@@ -667,7 +682,7 @@ func _foot_for(i: int, knuckle_rest: Transform3D, hand_pose: Transform3D, doing:
 		# Up, spread, and hooked at you.
 		return Vector3(knuckle.x * 1.5 + side * SPLAY[i], knuckle.y + 0.02 + sin(_clock * 30.0 + float(i)) * 0.012, knuckle.z - REACH[i] * 1.25)
 
-	if doing == &"thrown":
+	if doing == &"thrown" or _tumble > 0.0:
 		return Vector3(knuckle.x * 1.3, knuckle.y - 0.08 + sin(_clock * 22.0 + float(i) * 1.7) * 0.05, knuckle.z - REACH[i] * 0.8)
 
 	var phase: float = fposmod(_walk + float(PHASES[i]), 1.0)
@@ -729,9 +744,33 @@ func palm_height() -> float:
 	return _skeleton.get_bone_global_pose(_skeleton.find_bone("hand")).origin.y - _floor_y
 
 
-func struck(point: Vector3, direction: Vector3, result: StringName) -> void:
+## `source`: what did it. Glass spills its fire; for the rest, for now, blood.
+func struck(point: Vector3, direction: Vector3, result: StringName, source: StringName = &"") -> void:
 	hurt = 1.0 if result != &"resisted" else 0.25
+
+	if source == &"obsidian":
+		_last_wound = &"fire"
+		AnimaSpillScript.at(self, point + Vector3.UP * 0.12, -direction.normalized())
+		return
+
+	_last_wound = &"blood"
 	Fx.blood(self, point, -direction.normalized(), 0.2 if result == &"resisted" else 0.7)
+
+
+## What its last wound let out.
+func last_wound() -> StringName:
+	return _last_wound
+
+
+## Flung, it goes over, flailing, and rights itself.
+func tumble(_way: Vector3) -> void:
+	_tumble = 1.0
+	_lies_side = -1.0 if _rng.randf() < 0.5 else 1.0
+
+
+## How much of a tumble is left, 0..1.
+func tumbling() -> float:
+	return _tumble
 
 
 ## What is burning it down, once it is dead.

@@ -12,6 +12,7 @@ const HOME := Vector3(0, 1.05, 0)
 
 var p: CharacterBody3D
 var failed := 0
+var _spills_seen := 0
 
 
 func _ready() -> void:
@@ -30,6 +31,7 @@ func _ready() -> void:
 	await _reach()
 	await _spikes()
 	await _casting()
+	await _taking_it()
 	await _on_you()
 	await _refused()
 	print("==== RESULTS ====")
@@ -52,6 +54,10 @@ func _glass() -> void:
 	var tall: AABB = glass.find_child("Spike_1", true, false).get_aabb()
 	_check("G1c a spike grows from its root, up, about a metre (%.2f)" % tall.end.y, absf(tall.end.y - 1.0) < 0.1 and tall.position.y < 0.0)
 	glass.free()
+
+
+func _process(_delta: float) -> void:
+	_spills_seen = maxi(_spills_seen, get_tree().get_nodes_in_group(&"anima_spill").size())
 
 
 func _reach() -> void:
@@ -258,6 +264,75 @@ func _casting() -> void:
 	_check("U4 a scar lies right out to the reach (%.2f)" % (scar.reach_now() if scar != null else 0.0), scar != null and scar.reach_now() > 5.0)
 	await _frames(240)
 	_check("U4b and goes", get_tree().get_nodes_in_group(&"burst_cracks").is_empty())
+
+
+## What it does to them.
+func _taking_it() -> void:
+	await _until(func(): return get_tree().get_nodes_in_group(&"burst_wave").is_empty(), 8.0)
+	await _frames(20)
+	var near := _anima(&"hands", p.global_position + Vector3(2.5, -0.75, 0))
+	var face := _anima(&"face", p.global_position + Vector3(-2.5, 0.25, 0))
+	var doomed := _anima(&"hands", p.global_position + Vector3(0, -0.75, 2.5))
+	var shot := _anima(&"hands", p.global_position + Vector3(0, -0.75, -20))
+	var eye: CharacterBody3D = EyeScript.new()
+	eye.seed_value = 4
+	eye.position = p.global_position + Vector3(0, 1.2, -3)
+	add_child(eye)
+	eye.next_swoop_in = 100.0
+	await _frames(3)
+
+	for e in [near, face, doomed, shot]:
+		e.asleep = false
+		e.state = STATE.MISSED
+		e._state_t = -99.0
+
+	doomed.health = 1.0
+	await _frames(25)
+	var near_from: Vector3 = near.global_position
+	var height_was: float = near.global_position.y
+	var state_was: int = near.state
+	p.power.power = 100.0
+	Input.action_press("spell_4")
+	var rose := 0.0
+	var tumble_seen := 0.0
+
+	for i in 50:
+		await get_tree().physics_frame
+		rose = maxf(rose, near.global_position.y - height_was)
+		tumble_seen = maxf(tumble_seen, near.body.tumbling())
+
+		if is_instance_valid(eye):
+			eye.global_position = p.global_position + Vector3(0, 1.2, -3)
+
+		if i == 22:
+			Input.action_release("spell_4")
+
+	_check("R1 knocked up (%.2f m) and back (%.2f m)" % [rose, near_from.distance_to(near.global_position)], rose > 0.4 and near_from.distance_to(near.global_position) > 1.0)
+	_check("R1b it tumbles (%.2f), and its state has not changed" % tumble_seen, tumble_seen > 0.8 and near.state == state_was and not near.is_exposed())
+	_check("R2 glass stuck in it (%d)" % _stuck_on(near), _stuck_on(near) >= 2)
+	_check("R2b and in a face (%d)" % _stuck_on(face), _stuck_on(face) >= 2)
+	_check("R3 an ánima spills fire, not blood", near.body.last_wound() == &"fire")
+	_check("R3a it was seen to", _spills_seen > 0)
+	var was: float = shot.health
+	shot.round_hint = &"lead"
+	shot.take_hit(10.0, p, &"bullet", shot.global_position, Vector3.FORWARD)
+	_check("R3b a bullet still does what it did", shot.body.last_wound() == &"blood" and shot.health < was)
+	_check("R4 an eye cracks, and takes the glass (%d)" % _stuck_on(eye), eye.body.cracked() and _stuck_on(eye) >= 1)
+	_check("R5 killed by it: into its death, its body burning", doomed.dead and get_tree().get_nodes_in_group(&"anima_ash").size() == 1)
+	await _frames(60)
+	_check("R6 it comes down again, and goes on", near.global_position.y - height_was < 0.1)
+
+	for node in get_tree().get_nodes_in_group(&"anima_ash"):
+		node.queue_free()
+
+	for e in [near, face, doomed, shot, eye]:
+		e.queue_free()
+
+	await _frames(3)
+
+
+func _stuck_on(target: Node) -> int:
+	return target.get_children().filter(func(c): return c.is_in_group(&"shard_stuck")).size()
 
 
 func _on_you() -> void:
