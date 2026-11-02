@@ -8,7 +8,6 @@ extends Node3D
 const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
-const GLASS := "res://assets/magic/burst_glass.glb"
 
 ## The rings: how far apart (m), the first how far out, how many to a metre round; a share go
 ## missing, so it isn't a pattern.
@@ -42,6 +41,12 @@ const RUBBLE_GOES := 0.5
 ## How often a spike throws dust as it breaks through, and as it falls (one in).
 const DUST_ONE_IN := 4
 const FLOOR_LOOK := 1.6
+## What it draws is kept to this far round it (m), up and down.
+const DRAWN_WIDE := 9.0
+const DRAWN_DOWN := 3.0
+const DRAWN_UP := 5.0
+const SPIKE_SHAPES := 5
+const CHUNK_SHAPES := 6
 
 var _spikes: Array[Dictionary] = []
 var _chunks: Array[Dictionary] = []
@@ -50,6 +55,11 @@ var _chunk_draws: Array[MultiMeshInstance3D] = []
 var _rng := RandomNumberGenerator.new()
 var _t := 0.0
 var _rubble_end := 0.0
+var _rubble_drawn := 0
+
+## The glass, once, shared by every cast: its own copies, wearing a look that takes each spike's charge.
+static var _spike_shapes: Array[Mesh] = []
+static var _chunk_shapes: Array[Mesh] = []
 
 
 static func rise_at(context: Node, floor_at: Vector3, reach: float, takes: float) -> Node3D:
@@ -92,21 +102,51 @@ func rubble_left() -> int:
 	return _chunks.size()
 
 
+## How far across what it draws is kept (m).
+func drawn_across() -> float:
+	return _spike_draws[0].custom_aabb.size.x
+
+
+## How many pieces of rubble are being drawn, of all it could hold.
+func rubble_drawn() -> int:
+	var drawn := 0
+
+	for draw in _chunk_draws:
+		drawn += draw.multimesh.visible_instance_count
+
+	return drawn
+
+
+func spike_mesh(i: int) -> Mesh:
+	return _spike_draws[i].multimesh.mesh
+
+
+static func _shapes_ready() -> void:
+	if not _spike_shapes.is_empty():
+		return
+
+	for i in SPIKE_SHAPES:
+		_spike_shapes.append(_charged(MagicFx.glass_mesh("Spike_%d" % (i + 1))))
+
+	for i in CHUNK_SHAPES:
+		_chunk_shapes.append(_charged(MagicFx.glass_mesh("Chunk_%d" % (i + 1))))
+
+
+static func _charged(mesh: Mesh) -> Mesh:
+	var shape: Mesh = mesh.duplicate()
+	var look := MagicFx.big_glass_look()
+	look.set_shader_parameter(&"custom_share", 1.0)
+	shape.surface_set_material(0, look)
+	return shape
+
+
 func _lay_out(reach: float, takes: float) -> void:
 	add_to_group(&"burst_wave")
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_rng.seed = hash(global_position) + Time.get_ticks_usec()
-	var made: Node3D = (load(GLASS) as PackedScene).instantiate()
-	var spike_meshes: Array[Mesh] = []
-	var chunk_meshes: Array[Mesh] = []
-
-	for mesh in made.find_children("*", "MeshInstance3D", true, false):
-		if mesh.name.begins_with("Spike"):
-			spike_meshes.append(mesh.mesh)
-		elif mesh.name.begins_with("Chunk"):
-			chunk_meshes.append(mesh.mesh)
-
-	made.free()
+	_shapes_ready()
+	var spike_meshes := _spike_shapes
+	var chunk_meshes := _chunk_shapes
 	var space := get_world_3d().direct_space_state
 	var centre := global_position + Vector3.UP * 0.5
 	var ring := RING_FIRST
@@ -155,26 +195,24 @@ func _lay_out(reach: float, takes: float) -> void:
 		counts[spike["shape"]] += 1
 
 	for i in spike_meshes.size():
-		_spike_draws.append(_new_draw(spike_meshes[i], counts[i]))
+		_spike_draws.append(_new_draw(spike_meshes[i], counts[i], true))
 
 	# Enough room for every spike's chunks, whichever they turn out to be.
 	var chunks_each := ceili(float(_spikes.size() * CHUNKS_EACH.y) / float(maxi(chunk_meshes.size(), 1)))
 
 	for mesh in chunk_meshes:
-		_chunk_draws.append(_new_draw(mesh, chunks_each))
+		var draw := _new_draw(mesh, chunks_each, false)
+		draw.multimesh.visible_instance_count = 0
+		_chunk_draws.append(draw)
 
 	_rubble_end = takes + STANDS.y + takes * 0.5 + SINKS + RUBBLE_LIES + RUBBLE_GOES
 
 
-func _new_draw(mesh: Mesh, count: int) -> MultiMeshInstance3D:
-	var shape: Mesh = mesh.duplicate()
-	var look := MagicFx.big_glass_look()
-	look.set_shader_parameter(&"custom_share", 1.0)
-	shape.surface_set_material(0, look)
+func _new_draw(mesh: Mesh, count: int, shadows: bool) -> MultiMeshInstance3D:
 	var multi := MultiMesh.new()
 	multi.transform_format = MultiMesh.TRANSFORM_3D
 	multi.use_custom_data = true
-	multi.mesh = shape
+	multi.mesh = mesh
 	multi.instance_count = count
 
 	for i in count:
@@ -182,10 +220,10 @@ func _new_draw(mesh: Mesh, count: int) -> MultiMeshInstance3D:
 
 	var draw := MultiMeshInstance3D.new()
 	draw.multimesh = multi
-	draw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	draw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	draw.top_level = true
 	draw.global_transform = Transform3D.IDENTITY
-	draw.custom_aabb = AABB(Vector3(-2000.0, -2000.0, -2000.0), Vector3(4000.0, 4000.0, 4000.0))
+	draw.custom_aabb = AABB(global_position + Vector3(-DRAWN_WIDE, -DRAWN_DOWN, -DRAWN_WIDE), Vector3(DRAWN_WIDE * 2.0, DRAWN_DOWN + DRAWN_UP, DRAWN_WIDE * 2.0))
 	add_child(draw)
 	return draw
 
@@ -248,6 +286,8 @@ func _break(spike: Dictionary) -> void:
 		if slot < 0:
 			continue
 
+		var multi: MultiMesh = _chunk_draws[shape].multimesh
+		multi.visible_instance_count = maxi(multi.visible_instance_count, slot + 1)
 		_chunks.append({
 			"shape": shape, "slot": slot, "at": at + Vector3.UP * tall * (float(i) + 0.5) / float(count) * 0.8,
 			"floor": at.y + 0.04, "speed": (way * _rng.randf_range(-0.3, 1.0) + Vector3(_rng.randf_range(-0.5, 0.5), _rng.randf_range(0.0, 0.8), _rng.randf_range(-0.5, 0.5))) * _rng.randf_range(BURST_SPEED.x, BURST_SPEED.y),

@@ -34,6 +34,7 @@ func _ready() -> void:
 	await _casting()
 	await _taking_it()
 	await _the_shard()
+	await _review_fixes()
 	await _on_you()
 	await _refused()
 	print("==== RESULTS ====")
@@ -398,6 +399,55 @@ func _the_shard() -> void:
 	var star: Array = get_tree().get_nodes_in_group(&"shard_spike")
 	_check("L8 its star on the floor is the same glass (%d)" % star.size(), not star.is_empty() and star[0].material_override.shader.resource_path.ends_with("burst_glass.gdshader"))
 	await _frames(300)
+
+
+## What the fresh review found.
+func _review_fixes() -> void:
+	await _until(func(): return get_tree().get_nodes_in_group(&"burst_wave").is_empty() and get_tree().get_nodes_in_group(&"burst_cracks").is_empty(), 10.0)
+	# A platform with an edge, and a wall on it: the scar lies on the floor it has, and no further.
+	var deck := Vector3(60, 0, 60)
+	Props.block(self, deck + Vector3(0, 1.0, 0), Vector3(6, 2, 6))
+	Props.block(self, deck + Vector3(-2.5, 3.0, 0), Vector3(0.4, 2, 6))
+	p.teleport(Transform3D(Basis.IDENTITY, deck + Vector3(0, 3.05, 0)))
+	await _frames(15)
+	p.power.power = 100.0
+	Input.action_press("spell_4")
+	await _frames(24)
+	Input.action_release("spell_4")
+	await _frames(2)
+	var scar: Node = get_tree().get_first_node_in_group(&"burst_cracks")
+	_check("Z0 a scar", scar != null)
+	_check("Z1 on the platform, it lies on it", scar.lies_at(deck + Vector3(1.5, 0, 0)))
+	_check("Z2 not hanging past its edge", not scar.lies_at(deck + Vector3(4.5, 0, 0)))
+	_check("Z3 not through a wall", not scar.lies_at(deck + Vector3(-4.0, 0, 0)))
+	# What it draws is kept near it, and what it draws from is shared between casts.
+	var first: Node = get_tree().get_first_node_in_group(&"burst_wave")
+	_check("Z4 its spikes are only drawn near it (%.0f m across)" % first.drawn_across(), first.drawn_across() < 20.0)
+	_check("Z5 rubble not yet made is not drawn (%d)" % first.rubble_drawn(), first.rubble_drawn() == 0)
+	var shape: Mesh = first.spike_mesh(0)
+	await _frames(40)
+	p.power.power = 100.0
+	Input.action_press("spell_4")
+	await _frames(24)
+	Input.action_release("spell_4")
+	await _frames(2)
+	var waves: Array = get_tree().get_nodes_in_group(&"burst_wave")
+	_check("Z6 a second cast uses the same glass, loaded once", waves.size() == 2 and waves[1].spike_mesh(0) == shape)
+	await _until(func(): return get_tree().get_nodes_in_group(&"burst_wave").is_empty(), 10.0)
+	p.teleport(Transform3D(Basis.IDENTITY, HOME))
+	await _frames(15)
+	# Flung while it is leaping, it lands on you; thrown off later, it doesn't go up for no reason.
+	var leaper := _anima(&"hands", p.global_position + Vector3(1.5, -0.75, 0))
+	await _frames(3)
+	leaper.asleep = false
+	leaper.state = STATE.LEAP
+	leaper._state_t = -99.0
+	leaper._leap_way = Vector3.ZERO
+	leaper.flung_up(p.global_position)
+	await _frames(60)
+	_check("Z7 what flung it dies away whatever it is doing (%.2f)" % leaper._lift, leaper._lift == 0.0)
+	leaper.queue_free()
+	await _frames(3)
 
 
 func _stuck_on(target: Node) -> int:

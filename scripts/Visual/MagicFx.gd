@@ -42,7 +42,7 @@ const CLAW_FLY := 5.0
 ## the world bends through, a cold light), and what it leaves on the world
 ## (a star of spikes that crumbles, a ring of glass dust) or in a man.
 const OBSIDIAN_SHADER := preload("res://scripts/Magic/burst_glass.gdshader")
-const GLASS_MODEL := "res://assets/magic/burst_glass.glb"
+const GLASS_MODEL := preload("res://assets/magic/burst_glass.glb")
 ## The school's light.
 const AMETHYST := Color("#8F70E8")
 ## How much of the spell the glass holds: in flight, and left about after.
@@ -504,7 +504,7 @@ static func obsidian_hot_look() -> ShaderMaterial:
 ## A piece of the modelled glass (assets/magic/burst_glass.glb) by name.
 static func glass_mesh(id: String) -> Mesh:
 	if not _glass_meshes.has(id):
-		var made: Node3D = (load(GLASS_MODEL) as PackedScene).instantiate()
+		var made: Node3D = GLASS_MODEL.instantiate()
 		_glass_meshes[id] = (made.find_child(id, true, false) as MeshInstance3D).mesh
 		made.free()
 

@@ -14,6 +14,11 @@ uniform vec4 gap : source_color = vec4(0.008, 0.006, 0.014, 1.0);
 uniform vec4 glow : source_color = vec4(0.46, 0.26, 0.92, 1.0);
 
 void fragment() {
+	// (The scar's grid: nothing past the edge of the floor it found.)
+	if (COLOR.a < 0.5) {
+		discard;
+	}
+
 	vec2 at = (UV - vec2(0.5)) * 2.0 * size;
 	float r = length(at);
 	float a = atan(at.y, at.x) / TAU;

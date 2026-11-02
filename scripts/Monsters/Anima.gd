@@ -221,6 +221,8 @@ func _die(by: Node3D) -> void:
 
 func _brain(delta: float) -> Vector3:
 	_state_t += delta
+	# (Whatever it is doing: a leap and a hold on you never ask for its height.)
+	_lift = move_toward(_lift, 0.0, FLUNG_DIES * delta)
 	var you: Node3D = target()
 
 	if you == null:
@@ -398,8 +400,6 @@ func _toward(you: Node3D) -> Vector3:
 
 ## Crawlers fall to the floor; a face holds its height. Either can be flung up off it.
 func _hold_height(wanted: Vector3, delta: float) -> Vector3:
-	_lift = move_toward(_lift, 0.0, FLUNG_DIES * delta)
-
 	if bool(_form["floats"]):
 		wanted.y = (float(_form["height"]) - global_position.y) * FLOAT_RATE * (1.0 if _lift <= 0.0 else 0.0) + _lift
 		return wanted
