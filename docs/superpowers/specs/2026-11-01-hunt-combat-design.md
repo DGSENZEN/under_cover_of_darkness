@@ -316,3 +316,33 @@ Art for each monster runs one model at a time with the user, beside the code, wh
 - The exact keys for the dodge, the prep items and round switching, within the shape above.
 - How the bestiary data is stored (a `Spells.gd`-style table or resources).
 - How the monster brains are structured, as long as they stay simple and reuse navigation, SoundBus and the gore path.
+
+## Polish round one (after the user's first play, 2026-11-01)
+
+The user played the gym: "a good first vertical slice", "a lot of promising gameplay", "it just needs polish". Their notes: "you don't really know what to do with the enemies aside just shooting them", "there is no real reaction to the enemies dying", and the slide needs to feel better. The user approved the following as proposed.
+
+**Cause of "only shooting":** one copal ball or one Shard killed an eye, and three lead balls did too, so exposed and smoke were rarely seen and lead was not really wrong.
+
+**Answers to an eye:**
+
+| Moment | Answer | Result |
+|---|---|---|
+| The tell (pupil wide) | Any hit | Interrupts the swoop, exposes it, pays back power, three times the damage |
+| A swoop at you | Kick or whip | Batted back along your aim; a batted eye hurts and exposes what it hits, and hurts itself on a wall |
+| Several gazing | Ward | Breaks their line of sight, so no gaze and no swoop; an eye swooping into it is smoked and bounces |
+| Bunched up | Copal round | Leaves a cloud that smokes every monster in it, not only the one hit |
+| Lined up | Shard | Goes through a monster to the next, twice at most |
+| Close | Shotgun | Unchanged |
+
+*(Claude's call on numbers:)* eye health 120, lead 0.3, so a right answer takes a hit and a follow-up, and lead alone takes eight balls.
+
+**The reaction to a death:**
+
+- A longer hold (0.11 s), a camera jolt, a wet pop, and more blood.
+- The body drops and bounces as a real object and leaves a stain, instead of vanishing. It goes after 8 s. Not kept in a save.
+- Other eyes within 14 m flinch, pull 2 m further out for 3 s, and wait 1.5 s longer before swooping: a breath for the player, which is the tempo the user asked for.
+- Power gained shows: the crosshair's power arc flashes brass.
+
+**The slide:** a sharper drop and an FOV kick at the start, speed held for the first 40 %, then bled off, 0.9 s long; a scrape and floor dust; a lean into the way you steer; a quicker rise at the end.
+
+Stand-ins: the pop and scrape use the existing library, listed in `refs/hunt/sounds_needed.md`. The body is the stand-in ball until the eye's model is made.
