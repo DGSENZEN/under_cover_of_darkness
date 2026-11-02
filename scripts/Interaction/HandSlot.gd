@@ -106,6 +106,10 @@ const CAST_DRAW_BACK := 0.015
 const CAST_TREMBLE := 0.0015
 const RELEASE_PUSH := 0.05
 const RELEASE_PUSH_TIME := 0.15
+## A hand slammed down (the Burst): how far (full size), how fast down, how long to come back.
+const SLAM_DROP := 0.13
+const SLAM_DOWN := 0.07
+const SLAM_BACK := 0.35
 const WARD_CORE := Color("#F2FAFC")
 const WARD_BODY := Color("#CFE8F0")
 const WARD_EDGE := Color("#7FA6B4")
@@ -264,6 +268,7 @@ var _fur_on := false
 var _bristle := 0.0
 ## Seconds since a hand spell was let go (release_cast).
 var _release_t := INF
+var _slam_t := INF
 ## The revolver's moving parts, children of the main mesh: cylinder, hammer, gate.
 var _gun_parts := {}
 var _time := 0.0
@@ -1190,7 +1195,20 @@ func _cast_offset() -> Vector3:
 	if _release_t < RELEASE_PUSH_TIME:
 		push = Vector3(0.0, 0.0, -RELEASE_PUSH * sin(PI * _release_t / RELEASE_PUSH_TIME))
 
-	return back + tremble() + push
+	return back + tremble() + push + Vector3.DOWN * SLAM_DROP * slam_shown()
+
+
+## Slams the casting hand down at the floor (the Burst).
+func slam_down() -> void:
+	_slam_t = 0.0
+
+
+## How far down the slam has it, 0..1.
+func slam_shown() -> float:
+	if _slam_t < SLAM_DOWN:
+		return _slam_t / SLAM_DOWN
+
+	return 1.0 - smoothstep(0.0, 1.0, (_slam_t - SLAM_DOWN) / SLAM_BACK) if _slam_t < SLAM_DOWN + SLAM_BACK else 0.0
 
 
 ## What the left hand is showing for the Caster now: "" while it is busy
@@ -1988,6 +2006,7 @@ func _rebuild_keyring(count: int) -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	_release_t += delta
+	_slam_t += delta
 	var real_delta := TimeFx.real_since(_last_real) if _last_real >= 0.0 else 0.0
 	_last_real = TimeFx.real_time()
 	_real_time += real_delta

@@ -10,6 +10,7 @@ const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const BurstWave := preload("res://scripts/Magic/BurstWave.gd")
+const BurstCracks := preload("res://scripts/Magic/BurstCracks.gd")
 
 const REACH := 5.5
 ## How long the wave takes to get there.
@@ -17,8 +18,10 @@ const WAVE_TIME := 0.5
 const DAMAGE := 35.0
 ## How long it stays about, for what it has started. (The spikes are its children.)
 const SPELL_LASTS := 6.0
-const RELEASE_STOP := 0.05
-const RELEASE_TRAUMA := 0.28
+const RELEASE_STOP := 0.07
+const RELEASE_TRAUMA := 0.42
+## The thump in your view: rolled, not pitched (a pitch would walk your aim off).
+const RELEASE_ROLL := 1.5
 ## From your chest, level.
 const CHEST := 1.2
 ## The flash that lights what it reaches.
@@ -30,12 +33,26 @@ var _t := 0.0
 var _hit: Dictionary = {}
 
 
-static func cast_on(player: CharacterBody3D) -> Node3D:
+## `cracks`: the floor already cracking under you (BurstCracks.gd), or none.
+static func cast_on(player: CharacterBody3D, cracks: Node3D = null) -> Node3D:
 	var burst: Node3D = (load("res://scripts/Magic/ObsidianBurst.gd") as GDScript).new()
 	player.get_parent().add_child(burst)
 	burst.global_position = player.global_position
 	burst._go(player)
+
+	if not is_instance_valid(cracks):
+		cracks = BurstCracks.on_floor(player.get_parent(), floor_below(player))
+
+	cracks.scar(REACH, WAVE_TIME)
 	return burst
+
+
+## The floor under them, or a little under their feet if there is none in reach.
+static func floor_below(player: CharacterBody3D) -> Vector3:
+	var at := player.global_position
+	var ray := PhysicsRayQueryParameters3D.create(at, at + Vector3.DOWN * 8.0, 1, [player.get_rid()])
+	var hit := player.get_world_3d().direct_space_state.intersect_ray(ray)
+	return hit["position"] if not hit.is_empty() else at + Vector3.DOWN
 
 
 func _go(player: CharacterBody3D) -> void:
@@ -45,11 +62,13 @@ func _go(player: CharacterBody3D) -> void:
 	player.leech.free_all()
 	TimeFx.hitstop(get_tree(), RELEASE_STOP)
 	player.juice.add_trauma(RELEASE_TRAUMA)
-	Sfx.play_flat(self, &"whoosh_heavy", -2.0, 1.25)
-	Sfx.play_flat(self, &"ting", -7.0, 0.6)
+	player.juice.punch(0.0, 0.0, RELEASE_ROLL * (1.0 if _rng.randf() < 0.5 else -1.0))
+	Sfx.play_flat(self, &"thud", 0.0, 0.5)
+	Sfx.play_flat(self, &"whoosh_heavy", -2.0, 0.72)
+	Sfx.play_flat(self, &"ting", -8.0, 0.55)
 	var floor_at := _floor_under(global_position)
 	BurstWave.rise_at(self, floor_at, REACH, WAVE_TIME)
-	Fx.flash(self, global_position + Vector3.UP * 0.4, FLASH_COLOUR, 3.0, REACH * 1.8, 0.16)
+	Fx.flash(self, global_position + Vector3.UP * 0.4, FLASH_COLOUR, 1.4, REACH * 1.8, 0.3)
 	get_tree().create_timer(SPELL_LASTS, false, true).timeout.connect(queue_free)
 
 

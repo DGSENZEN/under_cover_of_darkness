@@ -13,6 +13,7 @@ const Blink := preload("res://scripts/Magic/Blink.gd")
 const ShardScript := preload("res://scripts/Magic/Shard.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const ObsidianBurst := preload("res://scripts/Magic/ObsidianBurst.gd")
+const BurstCracks := preload("res://scripts/Magic/BurstCracks.gd")
 const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
@@ -89,6 +90,7 @@ var _aim_ledge := {}
 var _game_time := 0.0
 ## When a hand spell was last let go (game time): the hand stays up a moment
 ## after, pushing out (FOLLOW_THROUGH).
+var _cracks: Node3D
 var _loosed_at := -INF
 ## How far the tome is raised to be read (0 held, 1 read).
 var _tome_raised := 0.0
@@ -107,6 +109,10 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_game_time += delta
+
+	if is_instance_valid(_cracks):
+		_cracks.grow_to(cast_progress(), ObsidianBurst.floor_below(player))
+
 	var gun: bool = player.combat != null and player.combat.gun_drawn()
 
 	if empowered_until >= 0.0 and _game_time >= empowered_until:
@@ -279,6 +285,9 @@ func _begin(id: StringName) -> void:
 	_cast_t = 0.0
 	cast_started.emit(id)
 
+	if id == &"burst":
+		_cracks = BurstCracks.on_floor(player.get_parent(), ObsidianBurst.floor_below(player))
+
 	# The beast stirring as its tome is read: a low growl under the pages.
 	if Spells.info(id).get("tier") == Spells.Tier.TOME:
 		Sfx.play_flat(player, &"roar", -18.0, 0.55)
@@ -294,6 +303,7 @@ func _complete() -> void:
 
 	if not player.power.pay(float(Spells.info(id)["cost"])):
 		player.power.refused()
+		_let_go_of_cracks()
 		return
 
 	if Spells.info(id).get("tier") == Spells.Tier.HAND:
@@ -309,6 +319,14 @@ func _complete() -> void:
 func _cancel() -> void:
 	_casting = &""
 	_cast_t = 0.0
+	_let_go_of_cracks()
+
+
+func _let_go_of_cracks() -> void:
+	if is_instance_valid(_cracks):
+		_cracks.let_go()
+
+	_cracks = null
 
 
 ## What each spell does, once cast and paid for.
@@ -322,7 +340,11 @@ func _effect(id: StringName) -> void:
 			WardScript.cast_on(player)
 			player.leech.free_all()
 		&"burst":
-			ObsidianBurst.cast_on(player)
+			ObsidianBurst.cast_on(player, _cracks)
+			_cracks = null
+
+			if player.hand != null and player.hand.has_method("slam_down"):
+				player.hand.slam_down()
 		&"empower":
 			empowered_until = _game_time + EMPOWER_TIME
 			Sfx.play_flat(player, &"heartbeat", -2.0, 0.85)

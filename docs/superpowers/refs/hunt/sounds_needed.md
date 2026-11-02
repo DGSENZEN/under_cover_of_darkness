@@ -22,3 +22,5 @@ Stand-ins from the existing library until the user chooses real ones.
 | Sound | Where | Stand-in |
 |---|---|---|
 | A rasping drink, while one is on you | `LifeLeech._physics_process` | `anima_moan`, pitched down |
+| The Burst: glass tearing up through stone | `ObsidianBurst._go` | `thud` + `whoosh_heavy` + `ting` |
+| The Burst's spikes falling to pieces | `BurstWave._break` | `ting`, low |

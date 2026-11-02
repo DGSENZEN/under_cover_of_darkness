@@ -29,6 +29,7 @@ func _ready() -> void:
 	_glass()
 	await _reach()
 	await _spikes()
+	await _casting()
 	await _on_you()
 	await _refused()
 	print("==== RESULTS ====")
@@ -216,6 +217,47 @@ func _spikes() -> void:
 	_check("S8 two close together: both running (%d)" % get_tree().get_nodes_in_group(&"burst_wave").size(), get_tree().get_nodes_in_group(&"burst_wave").size() == 2)
 	await _frames(360)
 	_check("S8b and both end", get_tree().get_nodes_in_group(&"burst_wave").is_empty())
+
+
+## The cast itself: cracks creeping, the slam, the thump, the scar.
+func _casting() -> void:
+	await _until(func(): return get_tree().get_nodes_in_group(&"burst_wave").is_empty(), 8.0)
+	await _frames(20)
+	p.power.power = 100.0
+	Input.action_press("spell_4")
+	await _frames(6)
+	var cracks: Node = get_tree().get_first_node_in_group(&"burst_cracks")
+	var early: float = cracks.reach_now() if cracks != null else 0.0
+	await _frames(8)
+	_check("U1 holding the key, cracks creep out from your feet (%.2f, %.2f)" % [early, cracks.reach_now() if cracks != null else 0.0], cracks != null and cracks.reach_now() > early + 0.2)
+	Input.action_release("spell_4")
+	# Let go early: they go, and nothing is spent.
+	await _frames(25)
+	_check("U2 let go early: they fade, nothing is left, nothing is spent", get_tree().get_nodes_in_group(&"burst_cracks").is_empty() and p.power.power >= 99.0)
+	p.power.power = 100.0
+	var aim_before: Basis = p.camera.global_basis
+	var yaw_before: float = p.rotation.y
+	var pitch_before: float = p.neck.rotation.x
+	Input.action_press("spell_4")
+	var slam_seen := 0.0
+	var trauma_seen := 0.0
+
+	# (It goes off as the circle closes, with the key still down.)
+	for i in 52:
+		await get_tree().physics_frame
+		slam_seen = maxf(slam_seen, p.hand.slam_shown())
+		trauma_seen = maxf(trauma_seen, p.juice._trauma)
+
+		if i == 22:
+			Input.action_release("spell_4")
+
+	_check("U3 on release your hand slams down (%.2f)" % slam_seen, slam_seen > 0.8)
+	_check("U3b your view thumps (%.2f), and your aim stays where it was" % trauma_seen, trauma_seen > 0.3 and is_equal_approx(p.rotation.y, yaw_before) and is_equal_approx(p.neck.rotation.x, pitch_before))
+	await _frames(90)
+	var scar: Node = get_tree().get_first_node_in_group(&"burst_cracks")
+	_check("U4 a scar lies right out to the reach (%.2f)" % (scar.reach_now() if scar != null else 0.0), scar != null and scar.reach_now() > 5.0)
+	await _frames(240)
+	_check("U4b and goes", get_tree().get_nodes_in_group(&"burst_cracks").is_empty())
 
 
 func _on_you() -> void:
