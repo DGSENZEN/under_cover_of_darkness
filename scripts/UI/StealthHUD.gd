@@ -98,7 +98,8 @@ var _ammo: HuntReadoutScript
 var _curse_view: ColorRect
 var _curse_shown := 0.0
 var _stared_shown := 0.0
-var _clean_flash := 0.0
+var _burn := 0.0
+var _wither_shown := 0.0
 var _cleansed_shown := 0.0
 var _ring_open := PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 ## Monster to its mark: x, y on the screen (0..1), z how open.
@@ -106,7 +107,11 @@ var _gazers := {}
 const MOST_GAZERS := 4
 const GAZER_MARGIN := 0.07
 const GAZER_CLEAR := 0.22
-const CLEAN_WASH_TIME := 0.7
+## How long the egg takes to break the flesh; how long before the curse runs out it
+## starts to dry; how long it takes to pull back once it has.
+const BURN_TIME := 1.15
+const WITHER_FROM := 1.6
+const WITHER_BACK_TIME := 1.1
 var _crosshair: Crosshair
 var _prompts: HBoxContainer
 var _prompt_signature := ""
@@ -881,27 +886,44 @@ func _show_curse(delta: float) -> void:
 	var alive: bool = not player.is_dead
 	var cursed: bool = alive and watch.has(&"evil_eye")
 	var left: float = watch.fraction(&"evil_eye") if cursed else 0.0
-	_curse_shown = move_toward(_curse_shown, 1.0 if cursed else 0.0, delta / (1.1 if cursed else 0.6))
+	_burn = _burn + delta / BURN_TIME if _burn > 0.0 else 0.0
+
+	# The egg's ending: the flesh stays whole until it has broken apart, then is gone.
+	if _burn >= 1.0:
+		_burn = 0.0
+		_curse_shown = 0.0
+	elif _burn <= 0.0:
+		_curse_shown = move_toward(_curse_shown, 1.0 if cursed else 0.0, delta / (1.1 if cursed else WITHER_BACK_TIME))
+
+	# Its own ending: drying over its last seconds, then pulling back, still dry.
+	var drying := 0.0
+
+	if cursed:
+		drying = clampf((WITHER_FROM - float(watch.left(&"evil_eye"))) / WITHER_FROM, 0.0, 1.0)
+	elif _curse_shown > 0.0 and _burn <= 0.0:
+		drying = 1.0
+
+	_wither_shown = drying if _curse_shown > 0.0 else 0.0
 	_stared_shown = move_toward(_stared_shown, float(watch.stared()) if alive else 0.0, delta * 3.0)
-	_clean_flash = move_toward(_clean_flash, 0.0, delta / CLEAN_WASH_TIME)
 	_cleansed_shown = float(watch.fraction(&"cleansed")) if alive and watch.has(&"cleansed") else 0.0
 	_crosshair.cursed = _curse_shown
 	_crosshair.stray_px = _stray_pixels()
 
 	for i in _ring_open.size():
 		# They close last to first: the last with the curse itself.
-		var stays: bool = cursed and left > float(i) / float(_ring_open.size())
+		var stays: bool = (cursed and left > float(i) / float(_ring_open.size())) or (_burn > 0.0 and _ring_open[i] > 0.5)
 		_ring_open[i] = move_toward(_ring_open[i], 1.0 if stays else 0.0, delta / 0.35)
 
 	_update_gazers(delta)
-	var shown := _curse_shown > 0.01 or _stared_shown > 0.01 or _clean_flash > 0.01 or _cleansed_shown > 0.001 or _gazers.values().any(func(g): return g.z > 0.01)
+	var shown := _curse_shown > 0.01 or _stared_shown > 0.01 or _burn > 0.0 or _cleansed_shown > 0.001 or _gazers.values().any(func(g): return g.z > 0.01)
 	_curse_view.visible = shown
 
 	if shown:
 		var look := _curse_view.material as ShaderMaterial
 		look.set_shader_parameter(&"curse", _curse_shown)
 		look.set_shader_parameter(&"stared", _stared_shown)
-		look.set_shader_parameter(&"clean", _clean_flash)
+		look.set_shader_parameter(&"burn", _burn)
+		look.set_shader_parameter(&"wither", _wither_shown)
 		look.set_shader_parameter(&"cleansed", _cleansed_shown)
 		look.set_shader_parameter(&"ring", _ring_open)
 		var marks := PackedVector3Array()
@@ -969,9 +991,11 @@ func _stray_pixels() -> float:
 	return view_height * 0.5 * tan(deg_to_rad(player.revolver.EVIL_EYE_STRAY)) / tan(deg_to_rad(player.camera.fov) * 0.5)
 
 
-## The egg has gone: its pale wash.
+## The egg has gone: it breaks the flesh, if there is any on you.
 func egg_broke() -> void:
-	_clean_flash = 1.0
+	# Something to break, even if it wasn't on you: the cracks still run.
+	_burn = 0.001
+	_curse_shown = maxf(_curse_shown, 0.0)
 
 
 ## The evil eye's marks are on screen.
@@ -982,7 +1006,7 @@ func curse_view_shown() -> bool:
 ## What the screen is saying about the evil eye, for whoever asks.
 func curse_state() -> Dictionary:
 	return {"stared": _stared_shown, "curse": _curse_shown, "gazers": _gazers.values(), "ring_open": Array(_ring_open).filter(func(o): return o > 0.5).size(),
-		"clean": _clean_flash, "cleansed": _cleansed_shown}
+		"clean": _burn, "burn": _burn, "wither": _wither_shown, "cleansed": _cleansed_shown}
 
 
 func show_death_page() -> void:

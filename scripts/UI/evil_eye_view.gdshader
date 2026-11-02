@@ -7,13 +7,18 @@ shader_type canvas_item;
 //   - curse: the curse itself. The meat closes in, beating, the edges of your view
 //     double (your aim strays) and bruise, and six eyes sunk in it (ring, how open)
 //     stare at your aim, weeping blood, shutting one by one as it runs out.
-//   - clean: the egg. Pale cracks run out and the flesh burns back from them.
+//   - wither: running out by itself. It dries and darkens, the eyes film over, and
+//     as `curse` falls it pulls back to the edges, flaking.
+//   - burn: the egg, 0..1. Pale cracks run out from the middle, the flesh chars along
+//     them and breaks into pieces that fall away down your sight, and the eyes
+//     go milky and collapse.
 //   - cleansed: a dry broken line of ward colour at the frame's edge, for as long as
 //     no gaze can stick.
 
 uniform float stared = 0.0;
 uniform float curse = 0.0;
-uniform float clean = 0.0;
+uniform float burn = 0.0;
+uniform float wither = 0.0;
 uniform float cleansed = 0.0;
 uniform vec3 gazers[4];
 uniform float ring[6];
@@ -34,6 +39,9 @@ const vec3 ARTERY = vec3(0.2, 0.018, 0.016);
 const vec3 BLOOD = vec3(0.13, 0.008, 0.008);
 const vec3 WARD = vec3(0.72, 0.8, 0.82);
 const vec3 YOLK = vec3(0.66, 0.56, 0.36);
+const vec3 CHAR = vec3(0.02, 0.016, 0.016);
+const vec3 DRY = vec3(0.1, 0.055, 0.04);
+const vec3 MILK = vec3(0.5, 0.48, 0.42);
 const vec2 LIGHT_DIR = vec2(-0.45, -0.89);
 
 float hash(vec2 p) {
@@ -93,7 +101,16 @@ vec3 meat_at(vec2 a, float body, float time, float pulse) {
 	// The wet dab: small, hard, muted, only here and there.
 	float dab = smoothstep(0.93, 0.95, facing) * smoothstep(0.66, 0.72, h) * step(0.55, noise(a * 3.0));
 	c = mix(c, DAB, dab * 0.8);
-	return c * (0.85 + body * 0.15);
+	c *= 0.85 + body * 0.15;
+	// Drying out: the wet goes, leaving a dull brown crust, cracked.
+	if (wither > 0.001) {
+		float grey = dot(c, vec3(0.3, 0.5, 0.2));
+		vec3 crust = mix(CHAR, DRY, smoothstep(0.0, 0.1, grey));
+		c = mix(c, crust, wither * 0.9);
+		c = mix(c, CHAR, reaching(a * 2.3 + 7.0, 0.02) * wither);
+	}
+
+	return c;
 }
 
 // One eye sunk in the meat at `c`, `size` half-wide: the swollen lids, the painted
@@ -135,6 +152,9 @@ vec4 sunk_eye(vec2 a, vec2 c, float size, float open, vec2 look, float seed, flo
 		// Its pupil, breathing.
 		float pupil = 0.2 + 0.03 * sin(time * 2.1 + seed * 9.0);
 		ball = mix(ball, INK, 1.0 - smoothstep(pupil - 0.012, pupil + 0.012, r));
+		// Filmed over as it runs out; gone milky as the egg takes it.
+		float film = max(wither, smoothstep(0.1, 0.45, burn));
+		ball = mix(ball, MILK * (0.7 + 0.3 * noise(q * 5.0 + seed)), film * 0.85);
 		// In shadow under the upper lid, and a hard wet dab.
 		ball *= 0.55 + 0.45 * smoothstep(-lid, -lid * 0.2, q.y);
 		ball = mix(ball, DAB * 1.3, 1.0 - smoothstep(0.035, 0.05, length(on_ball - vec2(-0.14, -0.14))));
@@ -163,6 +183,18 @@ float tears_from(vec2 a, vec2 c, float size, float seed, float time) {
 	return wept;
 }
 
+// How far past the flesh's edge `p` is: above 0, inside it. `closing` is how far in
+// it has come; a dry brush's streaks and a beat move its edge.
+float flesh_past(vec2 p, float closing, float time, float heart, float bristle) {
+	float edge_noise = noise(vec2(p.x * 3.0 + time * 0.04, 3.0)) * 0.6 + noise(vec2(p.x * 9.0 - time * 0.03, 7.0)) * 0.3 + noise(vec2(p.x * 21.0, p.y * 6.0)) * 0.1;
+	float open = mix(1.42, 0.84, closing) * (1.0 - p.x * p.x * 0.5) - heart * 0.012 * closing;
+	float past = abs(p.y) - open + (edge_noise - 0.5) * 0.16 + (bristle - 0.5) * 0.1;
+	// Withering, its edge goes to flakes as it pulls back.
+	past += (noise(p * vec2(19.0, 13.0)) - 0.5) * 0.09 * wither;
+	// Its corners come in round the sides too.
+	return max(past, abs(p.x) - mix(1.5, 1.02, closing) + (edge_noise - 0.5) * 0.12 + (bristle - 0.5) * 0.08);
+}
+
 void fragment() {
 	vec2 p = UV * 2.0 - 1.0;
 	float aspect = SCREEN_PIXEL_SIZE.y / SCREEN_PIXEL_SIZE.x;
@@ -188,23 +220,81 @@ void fragment() {
 		col = mix(col, ARTERY * (0.75 + heart * 0.3), vein * limit * 0.7);
 	}
 
-	// The flesh, closing in from above and below and burnt back by the egg.
-	float closing = max(curse, stared * 0.28) * (1.0 - clean * 0.5);
+	// The flesh, closing in from above and below. The egg breaks it into pieces, each
+	// with its own moment, which char and fall.
+	float closing = max(curse, stared * 0.28);
+	vec2 flesh_a = a;
+	vec2 flesh_p = p;
+	float piece_gone = 0.0;
+	float piece_char = 0.0;
+	float seam = 0.0;
+
+	if (burn > 0.001) {
+		// The nearest of a few scattered points owns this spot: a piece of flesh.
+		vec2 cell = floor(a * 3.2);
+		float nearest = 9.0;
+		float second = 9.0;
+		vec2 owner = cell;
+
+		for (int y = -1; y <= 1; y++) {
+			for (int x = -1; x <= 1; x++) {
+				vec2 c = cell + vec2(float(x), float(y));
+				vec2 at = c + vec2(hash(c), hash(c + 3.7));
+				float d = length(a * 3.2 - at);
+
+				if (d < nearest) {
+					second = nearest;
+					nearest = d;
+					owner = c;
+				} else if (d < second) {
+					second = d;
+				}
+			}
+		}
+
+		seam = 1.0 - smoothstep(0.0, 0.05, second - nearest);
+		// The crack reaches it first from the middle out, then it lets go.
+		float reached = clamp(length(p) * 0.42 + hash(owner + 9.1) * 0.12, 0.0, 0.6);
+		piece_char = smoothstep(reached, reached + 0.14, burn);
+		float falling = clamp((burn - reached - 0.14) / 0.5, 0.0, 1.0);
+		float drop = falling * falling * (0.9 + hash(owner + 1.3) * 1.3);
+		flesh_a += vec2((hash(owner + 2.2) - 0.5) * falling * 0.25, -drop);
+		flesh_p = vec2(flesh_a.x / aspect, flesh_a.y);
+		piece_gone = smoothstep(0.55, 1.0, falling);
+	}
 
 	if (closing > 0.001) {
-		float edge_noise = noise(vec2(p.x * 3.0 + time * 0.04, 3.0)) * 0.6 + noise(vec2(p.x * 9.0 - time * 0.03, 7.0)) * 0.3 + noise(vec2(p.x * 21.0, p.y * 6.0)) * 0.1;
-		float open = mix(1.42, 0.84, closing) * (1.0 - p.x * p.x * 0.5) - heart * 0.012 * closing;
-		// Its edge is a dry brush's: bristle streaks dragged along it.
-		float bristle = strokes(vec2(p.x * 1.7 + 0.3, p.y * 0.25)) * 0.6 + strokes(vec2(p.x * 4.3, p.y * 0.5 + 0.7)) * 0.4;
-		float past = abs(p.y) - open + (edge_noise - 0.5) * 0.16 + (bristle - 0.5) * 0.1;
-		// Its corners come in round the sides too.
-		past = max(past, abs(p.x) - mix(1.5, 1.02, closing) + (edge_noise - 0.5) * 0.12 + (bristle - 0.5) * 0.08);
+		float bristle = strokes(vec2(flesh_p.x * 1.7 + 0.3, flesh_p.y * 0.25)) * 0.6 + strokes(vec2(flesh_p.x * 4.3, flesh_p.y * 0.5 + 0.7)) * 0.4;
+		float past = flesh_past(flesh_p, closing, time, heart, bristle);
+
+		// Its shadow on your sight, cast down and in: it lies on top of the view. Not
+		// once it has begun to come apart.
+		float cast = 0.0;
+
+		if (burn <= 0.001) {
+			float shadow_past = flesh_past(p - vec2(0.012, -sign(p.y) * 0.05 + 0.01), closing, time, heart, bristle);
+			cast = smoothstep(-0.05, 0.03, shadow_past) * (1.0 - smoothstep(-0.004, 0.012, past));
+			col *= 1.0 - cast * 0.62 * smoothstep(0.1, 0.5, closing);
+		}
 
 		if (past > -0.04) {
-			vec3 flesh = meat_at(a, smoothstep(0.0, 0.3, past), time, heart * closing);
+			vec3 flesh = meat_at(flesh_a, smoothstep(0.0, 0.3, past), time, heart * closing);
 			float body = smoothstep(0.0, 0.015, past);
+			// A wet lit lip just inside its edge, where it folds over.
+			float lip = smoothstep(0.012, 0.03, past) * (1.0 - smoothstep(0.03, 0.06 + bristle * 0.03, past));
+			flesh = mix(flesh, mix(WET, DRY, wither), lip * 0.7);
 			// Pigment pools in a line of ink, thick and thin as the brush went.
 			float line = smoothstep(-0.03 - bristle * 0.02, -0.012, past) * (1.0 - body);
+
+			if (burn > 0.001) {
+				// Charring from the cracks in, the seams pale and open.
+				flesh = mix(flesh, CHAR, piece_char * 0.9);
+				flesh = mix(flesh, YOLK, seam * smoothstep(0.0, 0.25, piece_char) * (1.0 - piece_gone) * 0.9);
+				body *= 1.0 - piece_gone;
+				body *= 1.0 - seam * smoothstep(0.3, 0.7, piece_char);
+				line *= 1.0 - smoothstep(0.0, 0.2, burn);
+			}
+
 			col = mix(col, INK, line);
 			col = mix(col, flesh, body);
 		}
@@ -218,17 +308,24 @@ void fragment() {
 			float across = (float(i % 3) - 1.0) * 0.72;
 			float side = i < 3 ? -1.0 : 1.0;
 			float rest = mix(1.42, 0.84, curse) * (1.0 - across * across * 0.5);
-			vec2 at = vec2((across + (side > 0.0 ? 0.12 : -0.12)) * aspect, side * min(rest + 0.11, 0.84));
 			float seed = float(i) * 0.37 + 0.11;
+			vec2 at = vec2((across + (side > 0.0 ? 0.12 : -0.12)) * aspect, side * min(rest + 0.11, 0.84));
 			// Blinking when it likes, not together.
 			float blink = 1.0 - smoothstep(0.965, 0.99, noise(vec2(blink_clock * 9.0, seed * 31.0)));
 			float size = 0.12 + hash(vec2(seed, 5.0)) * 0.035;
 			float presence = smoothstep(0.1, 0.4, curse);
+			// The egg takes it: it sags, collapses and falls with the rest.
+			float sag = smoothstep(0.25, 0.6, burn);
+			at.y -= sag * sag * 0.16;
+			size *= 1.0 - sag * 0.45;
 			vec2 twitch = vec2(noise(vec2(time * 1.7, seed * 11.0)), noise(vec2(time * 1.7, seed * 17.0))) * 0.2 - 0.1;
 			float shed = tears_from(a, at, size, seed, time) * ring[i];
-			col = mix(col, BLOOD, shed * presence * 0.95);
-			vec4 eye = sunk_eye(a, at, size, ring[i] * blink, -normalize(at) + twitch, seed, time);
-			col = mix(col, eye.rgb, eye.a * presence);
+			col = mix(col, BLOOD, shed * presence * 0.95 * (1.0 - smoothstep(0.3, 0.5, burn)));
+			// Set deep: the meat dark around it.
+			float pit = 1.0 - smoothstep(0.9, 1.5, length((a - at) / vec2(size * 1.35, size * 0.95)));
+			col *= 1.0 - pit * 0.55 * presence * (1.0 - smoothstep(0.1, 0.3, burn));
+			vec4 eye = sunk_eye(a, at, size, ring[i] * blink * (1.0 - sag * 0.6), -normalize(at) + twitch, seed, time);
+			col = mix(col, eye.rgb, eye.a * presence * (1.0 - smoothstep(0.4, 0.58, burn)));
 		}
 	}
 
@@ -248,14 +345,13 @@ void fragment() {
 		}
 	}
 
-	// The egg: pale cracks running out through it all, the light of it behind them.
-	if (clean > 0.001) {
-		float front = (1.0 - clean) * 1.7;
-		// Dry pale strokes running outward, as cracks in a shell.
+	// The egg: pale cracks running out through it all, ahead of the breaking.
+	if (burn > 0.001) {
+		float front = burn * 3.0;
 		float crack_lines = reaching(a * 1.4 + 1.0, 0.012) * smoothstep(0.35, 0.6, strokes(a * 1.5));
 		float behind = 1.0 - smoothstep(front - 0.05, front + 0.05, out_from_middle);
 		float near_front = smoothstep(front - 0.45, front, out_from_middle);
-		col = mix(col, YOLK, crack_lines * behind * near_front * min(clean * 2.0, 1.0) * 0.85);
+		col = mix(col, YOLK, crack_lines * behind * near_front * (1.0 - smoothstep(0.55, 0.8, burn)) * 0.85);
 	}
 
 	// Clean: a dry broken line of ward colour, gone as it runs out.
