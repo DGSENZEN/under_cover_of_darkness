@@ -590,17 +590,15 @@ func _curse_view() -> void:
 	await _frames(70)
 	_check("C4b it lifts", cross.cursed < 0.1 and hud.curse_state()["ring_open"] == 0)
 
-	# Running out by itself: it dries and withers over its last seconds.
+	# Running out by itself: nothing but a quiet fade.
 	p.statuses.apply(&"evil_eye", 8.0)
 	await _frames(70)
-	_check("C7a fresh, it isn't withering", hud.curse_state()["wither"] < 0.05)
-	p.statuses._left[&"evil_eye"] = 0.7
+	p.statuses._left[&"evil_eye"] = 0.1
 	await _frames(12)
-	_check("C7 near its end it dries (%.2f)" % hud.curse_state()["wither"], hud.curse_state()["wither"] > 0.2)
-	await _frames(38)
-	_check("C7b run out, the flesh is still there, pulling back", not p.statuses.has(&"evil_eye") and hud.curse_state()["curse"] > 0.2 and hud.curse_state()["wither"] > 0.9)
-	await _frames(90)
-	_check("C7c and then it is gone", hud.curse_state()["curse"] < 0.01 and hud.curse_state()["wither"] < 0.01)
+	_check("C7 run out, it is easing away, not cut off (%.2f)" % hud.curse_state()["curse"], not p.statuses.has(&"evil_eye") and hud.curse_state()["curse"] > 0.5)
+	_check("C7a it is fading as it goes", hud.curse_state()["leaving"] > 0.5)
+	await _frames(70)
+	_check("C7c and then it is gone", hud.curse_state()["curse"] < 0.01 and not hud.curse_view_shown())
 
 	p.loadout.pack_item(&"egg")
 	p.loadout.item_counts[&"egg"] = 1
@@ -608,12 +606,9 @@ func _curse_view() -> void:
 	await _press("use_item")
 	await _frames(52)
 	state = hud.curse_state()
-	_check("C5 the egg breaks in pale cracks (%.2f)" % state["clean"], state["clean"] > 0.03)
-	_check("C8 the flesh holds as it cracks, it doesn't just fade (%.2f)" % state["curse"], state["curse"] > 0.6 and state["burn"] > 0.0 and state["burn"] < 0.5)
-	await _frames(30)
-	_check("C8b part way, it is coming apart, still there (%.2f, %.2f)" % [hud.curse_state()["burn"], hud.curse_state()["curse"]], hud.curse_state()["burn"] > 0.3 and hud.curse_state()["curse"] > 0.5)
-	await _frames(60)
-	_check("C8c done, the flesh is gone at once, not a slow shrink", hud.curse_state()["curse"] < 0.01 and hud.curse_state()["burn"] < 0.01)
+	_check("C5 the egg dispels it: under way, all of it still there (%.2f, %.2f)" % [state["dispel"], state["curse"]], state["dispel"] > 0.0 and state["curse"] > 0.6)
+	await _frames(40)
+	_check("C8 half a second on, it has gone, whole, not shrunk away (%.2f, %.2f)" % [hud.curse_state()["dispel"], hud.curse_state()["curse"]], hud.curse_state()["dispel"] == 0.0 and hud.curse_state()["curse"] < 0.01)
 	state = hud.curse_state()
 	_check("C5b and a ward's ring shows how long you are clean (%.2f)" % state["cleansed"], state["cleansed"] > 0.8 and hud.curse_view_shown())
 	p.statuses.apply(&"cleansed", 0.2)

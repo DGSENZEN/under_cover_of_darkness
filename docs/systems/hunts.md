@@ -50,7 +50,7 @@ A shot need not be exact. `Monster.on_line` finds the monster a line passes near
 
 The egg sends the curse back (`Loadout`, `PrepItems` `returns`, `FloatingEye.limpia`): eyes within 14 m that can see you shut for 4 s, opening them to any hit, and you are `cleansed` of gaze for 12 s.
 
-The screen says what the evil eye is doing (`StealthHUD._show_curse`, `evil_eye_view.gdshader`), as the monster's own flesh over your sight. A stare builds on the bearer (`Statuses.stare`), and an eye tears open in a patch of meat on the side each one watching is on, veins reaching in. Cursed: the flesh closes in, the edges double, six eyes shut as it runs out, the power arc bruises and the stray is drawn round the aim. Running out, it dries, the eyes film over and it pulls back (`wither`). The egg breaks it (`burn`): pale cracks, char, pieces falling, then a dry ward-coloured line for as long as you are cleansed.
+The screen says what the evil eye is doing (`StealthHUD._show_curse`, `evil_eye_view.gdshader`), as the monster's own flesh over your sight. A stare builds on the bearer (`Statuses.stare`), and an eye tears open in a patch of meat on the side each one watching is on, veins reaching in. Cursed: the flesh closes in, the edges double, six eyes shut as it runs out, the power arc bruises and the stray is drawn round the aim. Running out, it fades quietly (`leaving`). The egg dispels it (`dispel`, half a second): a soft pale pulse, the eyes snap shut, and it all dissolves, then a dry ward-coloured line for as long as you are cleansed.
 
 A kill holds 0.11 s and jolts the view (`Monster._die`). An eye leaves `Remains.gd` and makes others within 14 m flinch (`flinch`): 2 m further out for 3 s, and 1.5 s longer before swooping.
 
