@@ -18,6 +18,7 @@ const LEFT_MODEL := "res://assets/monsters/anima_hands_left.glb"
 const AnimaSkullScript := preload("res://scripts/Monsters/AnimaSkull.gd")
 const AnimaFire := preload("res://scripts/Monsters/AnimaFire.gd")
 const AnimaBurnScript := preload("res://scripts/Monsters/AnimaBurn.gd")
+const AnimaDeathsScript := preload("res://scripts/Monsters/AnimaDeaths.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 const FINGER_NAMES := ["index", "middle", "ring", "pinky", "thumb"]
@@ -78,23 +79,41 @@ const SHOULDER := Vector3(0.078, -0.07, 0.05)
 const ARM_BONE := 0.42
 ## The way its elbows go, each side, out and up.
 const ELBOW_OUT := Vector3(0.75, 0.55, 0.3)
+## How each form dies: its own last moments (AnimaDeaths.gd).
+const DEATHS: Dictionary = AnimaDeathsScript.TABLE
 ## Dead: how fast it falls (m/s²), how high the body lies off the floor, by form; how far over
-## it rolls; how quickly its fingers go, one after another; how fast its push dies.
+## it lies; how fast a shot's push dies.
 const FALLS := 11.0
 const LIES_AT := {&"hands": 0.25, &"face": 0.16}
-const LIES_OVER := 0.62
-const SLACKENS := 5.5
 const PUSH_DIES := 3.5
 const DEAD_HIGH := 0.075
+## The hands, dying: how far up it rears (m, and the turn of it), how far a finger draws in, how
+## much the heat draws them in once it is limp, and how hard they go when it shakes.
+const REAR_UP := 0.46
+const REAR_TURN := 1.32
+const CURL_IN := 0.14
+const HEAT_CURLS := 0.42
+const SCRABBLES := 0.085
+## How fast its fingers follow, thrashing and limp.
+const FINGERS_QUICK := 16.0
+const FINGERS_SLACK := 4.2
+## The base of what a dying hand is told.
+const HAND_DYING := {"low": 1.0, "rear": 0.0, "flip": 0.0, "up": 0.0, "roll": 0.0, "curl": 0.1, "open": 0.0, "shake": 0.0, "walk": 0.0, "drag": 0.0, "snap": 4.0}
+## How much the heat shuts the face's hands once it is limp, and opens its jaw.
+const HEAT_SHUTS := 0.5
+const HEAT_GAPES := 0.18
 ## The size of what burns, by form, against what AnimaBurn.gd makes.
 const BURNS_SIZE := {&"hands": 1.0, &"face": 1.2}
-const BURN_FLAMES := {&"hands": 6, &"face": 9}
 ## How long the parts of the face outlast its hands, burning.
 const SKULL_LATE := 0.26
 const JAW_LATE := 0.14
-## How far down it looks for a floor to fall on (m), and its own fire's light.
+## How far down it looks for a floor to fall on (m).
 const FLOOR_LOOK := 12.0
-const DEATH_LIGHT := Color("#8E9C3C")
+## Where its flames stand, and how tall: along each hand's bones, and on the skull. (Bone, how
+## far along it, how tall at its height.)
+const FINGER_FLAME := 0.26
+const HAND_FLAMES := [["hand", 0.1, 0.42], ["middle_01", 0.0, 0.36], ["arm_1", 0.1, 0.36], ["arm_1", 0.3, 0.32], ["arm_2", 0.1, 0.3], ["arm_2", 0.3, 0.24]]
+const SKULL_FLAMES := [[Vector3(0.0, -0.13, -0.12), 0.4], [Vector3(0.045, 0.012, -0.11), 0.22], [Vector3(-0.045, 0.012, -0.11), 0.22], [Vector3(0.0, 0.12, -0.02), 0.32], [Vector3(0.0, -0.2, -0.08), 0.26]]
 ## How long a miss's bite lasts before it opens again and looks for you.
 const BITE_HOLDS := 0.28
 const LOOKS_ABOUT := 0.34
@@ -130,6 +149,12 @@ var _burn: Node3D
 var _falling := Vector3.ZERO
 var _floor_at := 0.0
 var _landed := false
+var _death: Dictionary = {}
+var _death_t := 0.0
+var _beats_said := 0
+var _lies_side := 1.0
+var _you: Node3D
+var _curl_shown := 0.0
 var _nod := 0.0
 var _back := 0.0
 var _embers: Array[MeshInstance3D] = []
@@ -383,10 +408,8 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 	part_hand.set_instance_shader_parameter(&"hurt", hurt)
 	part_hand.set_instance_shader_parameter(&"smoulder", smoulder)
 	# Its fire, up as it drinks and as it rears.
-	if doing != &"dead":
-		_ember_flare = clampf(fed * 0.7 + _rear * 0.25, 0.0, 0.95)
-		part(&"Ember").set_instance_shader_parameter(&"flare", _ember_flare)
-
+	_ember_flare = clampf(fed * 0.7 + _rear * 0.25, 0.0, 0.95)
+	part(&"Ember").set_instance_shader_parameter(&"flare", _ember_flare)
 	# A step per stride, faster the faster it goes, up to what can still be seen as
 	# fingers; at rest, they still work.
 	_walk += delta * minf(speed * (1.0 - SWING) / STEP + 0.35, MOST_STEPS)
@@ -395,10 +418,8 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 	_rest = lerpf(_rest, 1.0 if doing == &"rest" else 0.0, 1.0 - exp(-(3.5 if doing == &"rest" else 12.0) * delta))
 	# A miss throws it flat, and it gathers itself up again.
 	var slam := 1.0 - smoothstep(SLAM_FOR * 0.6, SLAM_FOR, _doing_for) if doing == &"missed" else 0.0
-	var dead := doing == &"dead"
 	var low := maxf(_rest * (1.0 - sin(_clock * 1.3) * 0.08), slam)
-	var dead_low := _spring(&"dead_low", 1.0 if dead else 0.0, 2.6, 0.7, delta)
-	var hand_at := Vector3(0.0, lerpf(lerpf(PALM_HIGH + _rear * REAR + sin(_walk * TAU * 2.0) * 0.016, REST_HIGH, low), DEAD_HIGH, clampf(dead_low, 0.0, 1.0)) - 0.25, 0.22 - _rear * 0.1)
+	var hand_at := Vector3(0.0, lerpf(PALM_HIGH + _rear * REAR + sin(_walk * TAU * 2.0) * 0.016, REST_HIGH, low) - 0.25, 0.22 - _rear * 0.1)
 	# It never holds still: a palsy all the time, worse when it rears. Hungry.
 	var shake := sin(_clock * 46.0) * 0.012 * rear_wanted + (sin(_clock * 23.0) * 0.012 + sin(_clock * 37.0) * 0.008) * (1.0 - _rest * 0.8)
 	# Thrown, it goes over on its back, scrabbling at the air, and rights itself.
@@ -406,14 +427,14 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 	hand_at.y -= smoothstep(0.0, 1.0, _flip) * 0.1
 	# It rolls with each step, and drops its head into a surge.
 	var surging := smoothstep(2.4, 4.5, speed)
-	var roll := sin(_walk * TAU) * 0.1 * (1.0 - dead_low) + shake * (1.0 - dead_low) + smoothstep(0.0, 1.0, _flip) * PI + dead_low * LIES_OVER
+	var roll := sin(_walk * TAU) * 0.1 + shake + smoothstep(0.0, 1.0, _flip) * PI
 	var tilt := Basis(Vector3.RIGHT, (-TIP - _rear * 0.5 - surging * 0.16) * (1.0 - low * 0.9) + slam * 0.2) * Basis(Vector3.BACK, roll * (1.0 - _rest * 0.7))
 	var hand_bone := _skeleton.find_bone("hand")
 	var rest: Transform3D = _skeleton.get_bone_rest(hand_bone)
 	_skeleton.set_bone_pose_position(hand_bone, hand_at)
 	_skeleton.set_bone_pose_rotation(hand_bone, (tilt * rest.basis).get_rotation_quaternion())
-	_skeleton.set_bone_pose_rotation(_skeleton.find_bone("arm_1"), _arm_turn("arm_1", lerpf(ARM_OUT + sin(_clock * 2.3) * 0.05, -0.08, dead_low)))
-	_skeleton.set_bone_pose_rotation(_skeleton.find_bone("arm_2"), _arm_turn("arm_2", lerpf(ARM_DOWN + sin(_clock * 3.1) * 0.08, -0.05, dead_low)))
+	_skeleton.set_bone_pose_rotation(_skeleton.find_bone("arm_1"), _arm_turn("arm_1", ARM_OUT + sin(_clock * 2.3) * 0.05))
+	_skeleton.set_bone_pose_rotation(_skeleton.find_bone("arm_2"), _arm_turn("arm_2", ARM_DOWN + sin(_clock * 3.1) * 0.08))
 	var hand_pose := _skeleton.get_bone_global_pose(hand_bone)
 
 	for i in FINGER_NAMES.size():
@@ -421,11 +442,6 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 		var knuckle_rest: Transform3D = _skeleton.get_bone_rest(chain[0])
 		var frame: Transform3D = hand_pose * knuckle_rest
 		var target := _foot_for(i, knuckle_rest, hand_pose, doing)
-
-		# Dead, each finger lets go in its own time, straight out, on the floor.
-		if doing == &"dead":
-			target = _tips[i].lerp(target, 1.0 - exp(-SLACKENS * (0.55 + float(i) * 0.28) * delta))
-
 		_tips[i] = target
 		_reach_to(chain, frame, target)
 
@@ -451,7 +467,7 @@ func _kick(id: StringName, by: float) -> void:
 
 ## The face: it runs from pose to pose (POSES), with what each moment adds on top.
 func _work_face(delta: float, doing: StringName, speed: float, fed: float) -> void:
-	var pose: Dictionary = POSES.get(doing, POSES[&"rush"])
+	var pose: Dictionary = POSES.get(doing, POSES[&"rush"]) if doing != &"dead" else _dying_pose(POSES[&"dead"])
 	var snap: float = pose["snap"]
 	var surging := smoothstep(2.0, 3.8, speed) if doing == &"rush" else 0.0
 	var nod_to: float = pose["nod"]
@@ -507,8 +523,17 @@ func _work_face(delta: float, doing: StringName, speed: float, fed: float) -> vo
 
 			jaw_rate = maxf(jaw_rate, 5.0)
 		&"dead":
-			# Over on its side, as it falls. Nothing in it now.
-			roll_to = LIES_OVER * (1.0 if int(_clock * 7.0) % 2 == 0 else -1.0)
+			roll_to = float(pose.get("roll", 0.0)) * _lies_side
+			yaw_to = float(pose.get("yaw", 0.0)) * _lies_side
+			var shaking: float = pose.get("shake", 0.0)
+			nod_to += sin(_clock * 37.0) * 0.14 * shaking
+			yaw_to += sin(_clock * 29.0) * 0.14 * shaking
+			jaw_to += sin(_clock * 31.0) * float(pose.get("chatter", 0.0))
+
+			# Limp: only the heat moves it now, drawing its fingers in, its jaw down.
+			if pose.get("limp", false):
+				jaw_to += _burn.charred() * HEAT_GAPES
+				shut_to += _burn.charred() * HEAT_SHUTS
 		&"thrown":
 			# Knocked loose: its jaw flapping.
 			jaw_to = 0.5 + sin(_clock * 21.0) * 0.4
@@ -527,7 +552,7 @@ func _work_face(delta: float, doing: StringName, speed: float, fed: float) -> vo
 	skull.position = Vector3(0.0, lift, _back)
 	var flare := clampf(fed * 0.7 + _rear * 0.08, 0.0, 0.95)
 	_ember_flare = flare
-	_rig.throat_to(clampf(fed * 0.35, 0.0, 0.5) if doing != &"dead" else 0.0)
+	_rig.throat_to(clampf(fed * 0.35, 0.0, 0.5) if doing != &"dead" else float(pose.get("throat", 0.0)) * (1.0 - smoothstep(0.7, 1.3, _death_t)))
 	_rig.paint(fed, hurt, smoulder)
 
 	for mesh in _face_hands:
@@ -549,7 +574,8 @@ func _work_hand(side: float, doing: StringName, pose: Dictionary, hand_to: Vecto
 	var hand := hand_on(side)
 	var seed := 0.0 if side > 0.0 else 2.3
 	var id := "r" if side > 0.0 else "l"
-	var at := Vector3(hand_to.x * side, hand_to.y, hand_to.z)
+	var wanted_hand: Vector3 = pose.get("hand_r" if side > 0.0 else "hand_l", hand_to)
+	var at := Vector3(wanted_hand.x * side, wanted_hand.y, wanted_hand.z)
 	var pawing := 1.0 if doing == &"rush" or doing == &"circle" else 0.0
 	# Each reaches in turn, up and over, and pulls back and down, closing on the air.
 	var paw := sin(_walk * TAU + (0.0 if side > 0.0 else PI))
@@ -559,15 +585,17 @@ func _work_hand(side: float, doing: StringName, pose: Dictionary, hand_to: Vecto
 	var drift := 0.4 if doing == &"rest" else 1.0
 	at += Vector3(sin(_clock * 3.1 * drift + seed) * 0.018, sin(_clock * 2.3 * drift + seed) * 0.022, sin(_clock * 4.3 * drift + seed) * 0.024)
 	root.position = Vector3(_spring(StringName(id + "x"), at.x, snap, 0.6, delta), _spring(StringName(id + "y"), at.y, snap, 0.55, delta), _spring(StringName(id + "z"), at.z, snap, 0.55, delta))
-	var pitch_to: float = float(pose["pitch"]) + paw * 0.28 * pawing
+	var pitch_to: float = float(pose.get("pitch_r" if side > 0.0 else "pitch_l", pose["pitch"])) + paw * 0.28 * pawing
 	var pitch := _spring(StringName(id + "p"), pitch_to, snap, 0.6, delta)
 	# Palms down and thrust ahead; up and out, showing you the palm, as it rears. Thrown, flung back.
-	var aim := Basis(Vector3.UP, side * -0.16) * Basis(Vector3.RIGHT, pitch) * Basis(Vector3.BACK, side * (0.3 + sin(_clock * 1.7 * drift + seed) * 0.07))
+	var inward := _spring(StringName(id + "i"), float(pose.get("inward", 0.0)), snap, 0.7, delta)
+	var aim := Basis(Vector3.UP, side * (-0.16 + inward)) * Basis(Vector3.RIGHT, pitch) * Basis(Vector3.BACK, side * (0.3 + sin(_clock * 1.7 * drift + seed) * 0.07))
 	root.basis = aim.scaled(Vector3.ONE * FACE_HAND_SIZE)
 	_reach_shoulder(hand, side)
 	var fan := _spring(StringName(id + "f"), float(pose["fan"]) * FACE_FAN, snap, 0.7, delta)
-	var shut_base := _spring(StringName(id + "s"), shut_to + paw * 0.28 * pawing, snap * 1.3, 0.7, delta)
-	var palsy_size := 0.05 if doing == &"rest" else (0.32 if doing == &"thrown" else (0.0 if doing == &"dead" else 0.17))
+	var this_shut: float = pose.get("shut_r" if side > 0.0 else "shut_l", shut_to) if doing == &"dead" else shut_to
+	var shut_base := _spring(StringName(id + "s"), this_shut + paw * 0.28 * pawing, snap * 1.3, 0.7, delta)
+	var palsy_size := 0.05 if doing == &"rest" else (0.32 if doing == &"thrown" else (float(pose.get("shake", 0.0)) * 2.0 if doing == &"dead" else 0.17))
 
 	for f in FINGER_NAMES.size():
 		var finger_seed := float(f) * 1.9 + seed
@@ -628,9 +656,6 @@ func _foot_for(i: int, knuckle_rest: Transform3D, hand_pose: Transform3D, doing:
 	var knuckle: Vector3 = hand_pose * knuckle_rest.origin
 	var side := signf(knuckle.x) if absf(knuckle.x) > 0.001 else 0.0
 	var home := Vector3(knuckle.x + side * SPLAY[i], _floor_y, knuckle.z - REACH[i])
-
-	if doing == &"dead":
-		return Vector3(knuckle.x * 1.2 + side * SPLAY[i] * 1.2, _floor_y + 0.012, knuckle.z - REACH[i] * 1.7)
 
 	if doing == &"rest":
 		# Lying on them, curled under it; a finger gathers in and taps now and then.
@@ -714,10 +739,33 @@ func burning() -> Node3D:
 	return _burn
 
 
-## Dead: it leaves the monster (which is out of play) for `world`, goes limp, drops, and its
-## own fire burns it down (AnimaBurn.gd). It frees itself when it has gone.
-func burn_away(world: Node, push: Vector3) -> void:
-	if form != &"hands" and form != &"face":
+## The face: how far ahead its hand on that side is.
+func hand_ahead(side: float) -> float:
+	return -_face_roots[0 if side > 0.0 else 1].position.z
+
+
+## The face: how far the tips of its hands' middle fingers are from the middle of its skull.
+func fingers_from_skull() -> float:
+	var skull: Vector3 = _rig.skull().global_position
+	var total := 0.0
+
+	for side in [1.0, -1.0]:
+		var hand := hand_on(side)
+		total += (hand.global_transform * hand.get_bone_global_pose(hand.find_bone("middle_03")).origin).distance_to(skull)
+
+	return total * 0.5
+
+
+## The hands, dying: how far its fingers are drawn in, 0..1.
+func finger_curl() -> float:
+	return _curl_shown
+
+
+## Dead: it leaves the monster (which is out of play) for `world`, plays out its last moments
+## (`kind` of its form's, or any), goes limp, and its own fire burns it down (AnimaBurn.gd). It
+## frees itself when it has gone.
+func burn_away(world: Node, push: Vector3, you: Node3D = null, kind := -1) -> void:
+	if not DEATHS.has(form):
 		queue_free()
 		return
 
@@ -725,16 +773,21 @@ func burn_away(world: Node, push: Vector3) -> void:
 	reset_physics_interpolation()
 	add_to_group(&"anima_ash")
 	visible = true
+	_you = you
+	var deaths: Array = DEATHS[form]
+	_death = deaths[kind if kind >= 0 and kind < deaths.size() else _rng.randi() % deaths.size()]
+	_lies_side = -1.0 if _rng.randf() < 0.5 else 1.0
 	_doing = &"dead"
-	_doing_for = 0.0
 	_falling = Vector3(push.x, maxf(push.y, 0.0), push.z) * 0.45
 	_floor_at = _find_floor()
 	var meshes: Array = []
 	var embers: Array[MeshInstance3D] = []
+	var from: Vector3
 
 	if form == &"hands":
 		meshes.append([part(&"Hand"), 0.0])
 		embers.append(part(&"Ember"))
+		from = _skeleton.global_transform * _skeleton.get_bone_global_pose(_skeleton.find_bone("hand")).origin
 	else:
 		for mesh in _face_hands:
 			meshes.append([mesh, 0.0])
@@ -744,37 +797,136 @@ func burn_away(world: Node, push: Vector3) -> void:
 		meshes.append([part(&"Jaw"), JAW_LATE])
 		meshes.append([part(&"Tongue"), JAW_LATE])
 		meshes.append([part(&"Gullet"), JAW_LATE])
+		from = _rig.skull().global_transform * Vector3(SKULL_FLAMES[0][0])
 
 	_burn = AnimaBurnScript.new()
 	add_child(_burn)
-	_burn.start(meshes, embers, _flame_places, int(BURN_FLAMES[form]), _floor_at, float(BURNS_SIZE[form]), hash(global_position))
-	Fx.flash(world, global_position + Vector3.UP * 0.2, DEATH_LIGHT, 0.32, 2.6, 1.5)
-	Sfx.play(world, &"anima_moan", global_position, -7.0, 0.55)
-	Sfx.play(world, &"ignite", global_position, -12.0, 0.8)
+	_burn.start({
+		"meshes": meshes, "embers": embers, "spots": _flame_spots(), "place": _flame_place,
+		"floor": _floor_at, "size": float(BURNS_SIZE[form]), "seed": hash(global_position),
+		"ignites": float(_death["ignites"]), "crumbles": float(_death["crumbles"]), "from": from,
+	})
 	set_physics_process(true)
+
+
+## What it should be doing, this moment of its last: each beat up to now, laid over `base`.
+func _dying_pose(base: Dictionary) -> Dictionary:
+	var pose := base.duplicate()
+
+	for beat: Dictionary in _death["beats"]:
+		if float(beat["at"]) <= _death_t:
+			pose.merge(beat, true)
+
+	return pose
 
 
 func _physics_process(delta: float) -> void:
 	if _burn == null:
 		return
 
-	_fall(delta)
+	_death_t += delta
+	var beats: Array = _death["beats"]
+
+	while _beats_said < beats.size() and float(beats[_beats_said]["at"]) <= _death_t:
+		var said: Variant = beats[_beats_said].get("say")
+		_beats_said += 1
+
+		if said != null:
+			Sfx.play(self, said[0], global_position, said[1], said[2])
+
+	var pose := _dying_pose(POSES[&"dead"] if form == &"face" else HAND_DYING)
+
+	# While there is anything in it, it trembles. After that, nothing moves it of itself.
+	if float(pose.get("shake", 0.0)) > 0.0 or float(pose.get("chatter", 0.0)) > 0.0 or float(pose.get("walk", 0.0)) > 0.0:
+		_clock += delta
+
+	_fall(delta, pose)
+
+	if not pose.get("limp", false):
+		_face_you(delta)
 
 	if form == &"hands":
-		_walk_hand(delta, &"dead", 0.0, fed_shown, false)
+		_die_hand(delta, pose)
 	else:
 		_work_face(delta, &"dead", 0.0, fed_shown)
 
 	_ember_flare = _burn.flare()
 
 
-func _fall(delta: float) -> void:
+func _face_you(delta: float) -> void:
+	if not is_instance_valid(_you):
+		return
+
+	var way := _you.global_position - global_position
+	way.y = 0.0
+
+	if way.length() > 0.05:
+		global_basis = global_basis.orthonormalized().slerp(Basis.looking_at(way.normalized(), Vector3.UP), 1.0 - exp(-8.0 * delta))
+
+
+## A hand in its last moments: its palm and tilt told by the beats, each finger going for where
+## the beats say (reached out, or drawn in under the palm), thrashing while there is anything
+## in it, each in its own time once there isn't.
+func _die_hand(delta: float, pose: Dictionary) -> void:
+	var snap: float = pose["snap"]
+	var low := clampf(_spring(&"d_low", pose["low"], snap, 0.7, delta), 0.0, 1.0)
+	var rear := _spring(&"d_rear", pose["rear"], snap, 0.6, delta)
+	var flip := clampf(_spring(&"d_flip", pose["flip"], snap, 0.8, delta), 0.0, 1.0)
+	var up := _spring(&"d_up", pose["up"], snap * 1.4, 0.5, delta)
+	var roll := _spring(&"d_roll", float(pose["roll"]) * _lies_side, snap, 0.5, delta)
+	var limp: bool = pose.get("limp", false)
+	var curl_to: float = float(pose["curl"]) + (_burn.charred() * HEAT_CURLS if limp else 0.0)
+	var curl := clampf(_spring(&"d_curl", curl_to, snap, 0.7, delta), 0.0, 1.0)
+	var open := _spring(&"d_open", pose["open"], snap, 0.7, delta)
+	var walk: float = pose["walk"]
+	var shaking: float = pose["shake"]
+	_flip = flip
+	_curl_shown = curl
+	_walk += delta * walk
+	var hand_at := Vector3(0.0, lerpf(PALM_HIGH + sin(_walk * TAU * 2.0) * 0.016, DEAD_HIGH, low) + rear * REAR_UP + up + flip * 0.03 - 0.25, 0.22 - rear * 0.1)
+	var tilt := Basis(Vector3.RIGHT, lerpf(-TIP, 0.0, low) + rear * REAR_TURN) * Basis(Vector3.BACK, roll + flip * PI + (sin(_walk * TAU) * 0.1 if walk > 0.0 else 0.0))
+	var hand_bone := _skeleton.find_bone("hand")
+	var rest: Transform3D = _skeleton.get_bone_rest(hand_bone)
+	_skeleton.set_bone_pose_position(hand_bone, hand_at)
+	_skeleton.set_bone_pose_rotation(hand_bone, (tilt * rest.basis).get_rotation_quaternion())
+	_skeleton.set_bone_pose_rotation(_skeleton.find_bone("arm_1"), _arm_turn("arm_1", lerpf(ARM_OUT, -0.08, low) + sin(_clock * 19.0) * 0.1 * shaking))
+	_skeleton.set_bone_pose_rotation(_skeleton.find_bone("arm_2"), _arm_turn("arm_2", lerpf(ARM_DOWN, -0.05, low) + sin(_clock * 23.0) * 0.1 * shaking))
+	var hand_pose := _skeleton.get_bone_global_pose(hand_bone)
+
+	for i in FINGER_NAMES.size():
+		var chain: Array[int] = _bones[i]
+		var knuckle_rest: Transform3D = _skeleton.get_bone_rest(chain[0])
+		var frame: Transform3D = hand_pose * knuckle_rest
+		var knuckle: Vector3 = hand_pose * knuckle_rest.origin
+		var across: float = (tilt.inverse() * (knuckle - hand_at)).x
+		var side := signf(across) if absf(across) > 0.001 else 0.0
+		var shake_z := sin(_clock * 34.0 + float(i) * 1.7) * SCRABBLES * shaking
+		var shake_y := cos(_clock * 27.0 + float(i) * 2.9) * SCRABBLES * 1.3 * shaking
+		var target: Vector3
+
+		if walk > 0.0:
+			target = _foot_for(i, knuckle_rest, hand_pose, &"rush")
+		else:
+			target = knuckle + tilt * Vector3(side * SPLAY[i] * (1.0 + open) * (1.0 - curl * 0.8), -curl * CURL_IN + shake_y, -float(REACH[i]) * lerpf(1.45 + open * 0.3, 0.22, curl) + shake_z)
+			# What lies on the floor stays out of it.
+			target.y = maxf(target.y, _floor_y + 0.012)
+
+			if flip < 0.5 and rear < 0.2 and low > 0.5:
+				target.y = lerpf(target.y, _floor_y + 0.012, (low - 0.5) * 2.0 * (1.0 - curl * 0.6))
+
+		var quick := FINGERS_QUICK if not limp else FINGERS_SLACK * (0.55 + float(i) * 0.28)
+		target = _tips[i].lerp(target, 1.0 - exp(-quick * delta))
+		_tips[i] = target
+		_reach_to(chain, frame, target)
+
+
+func _fall(delta: float, pose: Dictionary) -> void:
 	var lies_at: float = _floor_at + float(LIES_AT[form])
 	_falling.x = move_toward(_falling.x, 0.0, PUSH_DIES * delta)
 	_falling.z = move_toward(_falling.z, 0.0, PUSH_DIES * delta)
 	var next := global_position
 
-	if not _landed:
+	if not _landed and (form == &"hands" or pose.get("falls", false)):
 		_falling.y -= FALLS * delta
 		next.y += _falling.y * delta
 
@@ -784,11 +936,20 @@ func _fall(delta: float) -> void:
 			_kick(&"nod", -2.4)
 			_kick(&"jaw", 3.0)
 			Fx.dust(self, Vector3(next.x, _floor_at, next.z), Vector3.UP, 0.5)
+			Sfx.play(self, &"flesh", next, -14.0, 0.6)
 
-	var sideways := Vector3(_falling.x, 0.0, _falling.z) * delta
+	var sideways := Vector3(_falling.x, 0.0, _falling.z)
+	var drag: float = pose.get("drag", 0.0)
 
-	if sideways.length() > 0.0001 and not _wall_in_the_way(sideways):
-		next += sideways
+	if drag > 0.0 and is_instance_valid(_you):
+		var way := _you.global_position - global_position
+		way.y = 0.0
+
+		if way.length() > 0.9:
+			sideways += way.normalized() * drag
+
+	if sideways.length() > 0.001 and not _wall_in_the_way(sideways * delta):
+		next += sideways * delta
 
 	global_position = next
 
@@ -805,19 +966,29 @@ func _find_floor() -> float:
 	return float(hit["position"].y) if not hit.is_empty() else global_position.y - float(LIES_AT[form])
 
 
-## Where its flames stand, this frame, in the world: on its knuckles and wrists, and its head.
-func _flame_places() -> PackedVector3Array:
-	var places := PackedVector3Array()
+## Where its flames stand, listed: [a skeleton, its bone, how far along it, how tall], or [a
+## place on its skull, how tall].
+func _flame_spots() -> Array:
+	var spots: Array = []
 	var hands: Array = [_skeleton] if form == &"hands" else [_right_hand, _left_hand]
 
 	for hand in hands:
-		for bone_name in ["middle_01", "index_02", "pinky_02", "hand", "arm_1", "thumb_02"]:
-			var skeleton: Skeleton3D = hand
-			places.append(skeleton.global_transform * skeleton.get_bone_global_pose(skeleton.find_bone(bone_name)).origin)
+		for name_of in FINGER_NAMES:
+			spots.append([hand, "%s_02" % name_of, 0.0, FINGER_FLAME])
+
+		for spot in HAND_FLAMES:
+			spots.append([hand, spot[0], spot[1], spot[2]])
 
 	if form == &"face":
-		var skull: Node3D = _rig.skull()
-		places[2] = skull.global_transform * Vector3(0.0, 0.1, 0.0)
-		places[8] = skull.global_transform * Vector3(0.03, -0.08, -0.05)
+		spots.append_array(SKULL_FLAMES)
 
-	return places
+	return spots
+
+
+## Where that flame stands, this moment, in the world.
+func _flame_place(spot: Array) -> Vector3:
+	if spot.size() == 2:
+		return _rig.skull().global_transform * Vector3(spot[0])
+
+	var hand: Skeleton3D = spot[0]
+	return hand.global_transform * (hand.get_bone_global_pose(hand.find_bone(spot[1])) * Vector3(0.0, spot[2], 0.0))

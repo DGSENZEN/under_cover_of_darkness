@@ -38,6 +38,7 @@ func _ready() -> void:
 	await _drained_view()
 	await _mouth_drain()
 	await _death()
+	await _character()
 	await _dying()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
@@ -135,8 +136,14 @@ func _face_model() -> void:
 	var skeleton: Skeleton3D = body.hand_on(1.0)
 	var bone := skeleton.find_bone("middle_02")
 	var pose: Quaternion = skeleton.get_bone_pose_rotation(bone)
-	await _frames(9)
-	_check("V9b its fingers never hold still", skeleton.get_bone_pose_rotation(bone).angle_to(pose) > 0.01)
+	var moved := 0.0
+
+	# (Over a while: its palsy can come back to where it was at any one moment.)
+	for i in 24:
+		await get_tree().physics_frame
+		moved = maxf(moved, skeleton.get_bone_pose_rotation(bone).angle_to(pose))
+
+	_check("V9b its fingers never hold still (%.3f)" % moved, moved > 0.01)
 	_check("V9c it has the low fire too", body.part(&"Ember") != null)
 	e.queue_free()
 	await _frames(2)
@@ -658,8 +665,15 @@ func _face_life() -> void:
 	var tilt_was: Vector3 = body.part(&"Skull").rotation
 	var bone: int = body.hand_on(1.0).find_bone("middle_02")
 	var finger_was: Quaternion = body.hand_on(1.0).get_bone_pose_rotation(bone)
-	await _frames(20)
-	_check("F1e it never holds quite still", body.part(&"Skull").rotation.distance_to(tilt_was) > 0.005 and body.hand_on(1.0).get_bone_pose_rotation(bone).angle_to(finger_was) > 0.003)
+	var head_moved := 0.0
+	var finger_moved := 0.0
+
+	for i in 40:
+		await get_tree().physics_frame
+		head_moved = maxf(head_moved, body.part(&"Skull").rotation.distance_to(tilt_was))
+		finger_moved = maxf(finger_moved, body.hand_on(1.0).get_bone_pose_rotation(bone).angle_to(finger_was))
+
+	_check("F1e it never holds quite still (%.3f, %.3f)" % [head_moved, finger_moved], head_moved > 0.005 and finger_moved > 0.003)
 	# It knows you when you come near.
 	e.global_position = p.global_position + Vector3(0, 0.25, -5.0)
 	var woke := await _until(func(): return e.state == STATE.WAKE, 1.0)
@@ -888,6 +902,7 @@ func _death() -> void:
 	await _dies_as(&"hands", Vector3(3, 0.3, -6), 0.25)
 	# Killed on your face: it falls off you, there in front of you.
 	var on := _anima(&"face", p.global_position + Vector3(0.9, 0.5, -0.2))
+	on.death_kind = 0
 	await _frames(1)
 	on.put_on_you()
 	await _frames(20)
@@ -913,6 +928,7 @@ func _dies_as(form: StringName, at: Vector3, rests_at: float) -> void:
 	e.state = STATE.REST
 	e.rests = true
 	e.notice = 0.0
+	e.death_kind = 0
 	await _frames(20)
 	e.state = STATE.REST
 	var body: Node3D = e.body
@@ -921,31 +937,40 @@ func _dies_as(form: StringName, at: Vector3, rests_at: float) -> void:
 	_hit(e, &"bullet", &"copal")
 	_check("D1 %s: dead, the monster gives up its body to burn" % form, e.dead and e.body == null and body.is_inside_tree() and body.is_in_group(&"anima_ash"))
 	_check("D1b it can be seen, though the monster is out of play", body.is_visible_in_tree())
-	await _frames(60)
-	var floor_y := 0.0
-	_check("D2 %s: limp, it drops to the floor (%.2f from %.2f)" % [form, body.global_position.y, height_was], absf(body.global_position.y - floor_y - rests_at) < 0.08)
-	var skeleton: Skeleton3D = body.hand_on(1.0) if form == &"face" else body.skeleton()
-	var bone := skeleton.find_bone("middle_02")
-	var pose: Quaternion = skeleton.get_bone_pose_rotation(bone)
-	await _frames(12)
-	_check("D3 %s: nothing left in it: its fingers still (%.4f)" % [form, skeleton.get_bone_pose_rotation(bone).angle_to(pose)], skeleton.get_bone_pose_rotation(bone).angle_to(pose) < 0.02)
-
-	if form == &"face":
-		_check("D3b its jaw hangs slack (%.2f)" % body.jaw_open(), body.jaw_open() > 0.3)
-
 	var burn: Node = body.burning()
-	_check("D4 %s: its own fire comes up on it (%.2f, %d flames)" % [form, body.ember_flare(), burn.flames_lit()], body.ember_flare() > 0.7 and burn.flames_lit() >= 4)
-	_check("D5 %s: it is charring, from the fire's edge (%.2f)" % [form, burn.charred()], burn.charred() > 0.3 and burn.charred() < 1.0)
-	_check("D5b it has not begun to fall apart (%.2f)" % burn.crumbled(), burn.crumbled() < 0.05)
+	var most_flames := 0
+	var most_light := 0.0
+	var most_wisps := 0
 	var flakes := false
+	var black := false
+	var left := 500
 
-	for i in 90:
+	while left > 0 and burn.crumbled() < 0.02:
+		left -= 1
+		await get_tree().physics_frame
+		most_flames = maxi(most_flames, burn.flames_lit())
+		most_light = maxf(most_light, burn.light_energy())
+		most_wisps = maxi(most_wisps, burn.wisps_rising())
+		black = black or burn.charred() >= 1.0
+
+	_check("D2 %s: limp by the end, down on the floor (%.2f from %.2f)" % [form, body.global_position.y, height_was], absf(body.global_position.y - rests_at) < 0.09)
+	_check("D4 %s: a blaze, not a few flames (%d)" % [form, most_flames], most_flames >= 10)
+	_check("D4b it throws its own light (%.2f), and smoke goes up from it (%d)" % [most_light, most_wisps], most_light > 0.3 and most_wisps >= 2)
+	_check("D5 %s: burnt black before it goes to ash" % form, black)
+	left = 200
+
+	while left > 0 and burn.crumbled() < 1.0:
+		left -= 1
 		await get_tree().physics_frame
 		flakes = flakes or burn.flakes_falling()
 
-	_check("D6 %s: ash, and it comes apart, flakes off it" % form, burn.charred() >= 1.0 and burn.crumbled() >= 1.0 and flakes)
-	_check("D6b nothing left of it standing, and its fire out", not body.part(&"Skull" if form == &"face" else &"Hand").visible and burn.flames_lit() == 0)
-	_check("D7 %s: a heap of ash on the floor (%.2f high)" % [form, burn.heap_height()], burn.heap_height() > 0.02 and absf(burn.heap_floor() - floor_y) < 0.05)
+	await _frames(30)
+	_check("D6 %s: it comes apart, flakes off it" % form, burn.crumbled() >= 1.0 and flakes)
+	_check("D6b nothing left of it standing", not body.part(&"Skull" if form == &"face" else &"Hand").visible)
+	_check("D7 %s: a heap of ash on the floor (%.2f high)" % [form, burn.heap_height()], burn.heap_height() > 0.02 and absf(burn.heap_floor()) < 0.05)
+	await _frames(40)
+	_check("D7b and its fire out", burn.flames_lit() == 0)
+
 	for i in 720:
 		if not is_instance_valid(body):
 			break
@@ -955,6 +980,109 @@ func _dies_as(form: StringName, at: Vector3, rests_at: float) -> void:
 	_check("D8 %s: and in a while, that is gone too" % form, not is_instance_valid(body))
 	_free([e])
 	await _frames(2)
+
+
+## Each death has its own acting. Returns the body, its monster dead, `kind` of its form's.
+func _killed(form: StringName, kind: int, at: Vector3) -> Array:
+	var e := _anima(form, at)
+	e.state = STATE.REST
+	e.rests = true
+	e.notice = 0.0
+	e.death_kind = kind
+	await _frames(5)
+	# Awake, at the height of its attack: nothing it does after that is left over from rest.
+	e.state = STATE.TELL
+	e._state_t = -9.0
+	await _frames(30)
+	var body: Node3D = e.body
+	e.health = 1.0
+	_hit(e, &"bullet", &"copal")
+	return [e, body]
+
+
+func _character() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(3)
+	var script: GDScript = AnimaScript.AnimaBody
+	_check("C0 three deaths each, told apart", script.DEATHS[&"face"].size() == 3 and script.DEATHS[&"hands"].size() == 3)
+	# The face: it screams, its hands at its skull.
+	var scream: Array = await _killed(&"face", 0, Vector3(-6, 1.3, -6))
+	var body: Node3D = scream[1]
+	await _frames(36)
+	_check("C1 it screams: head back (%.2f), jaw wide (%.2f)" % [body.head_nod(), body.jaw_open()], body.head_nod() > 0.4 and body.jaw_open() > 0.85)
+	_check("C1b its hands to its skull (%.2f m off), still up in the air (%.2f)" % [body.fingers_from_skull(), body.global_position.y], body.fingers_from_skull() < 0.32 and body.global_position.y > 1.0)
+	body.queue_free()
+	_free([scream[0]])
+	# The face: it reaches for you to the last.
+	var at := Vector3(0, 1.3, -6)
+	var reach: Array = await _killed(&"face", 1, at)
+	body = reach[1]
+	var was: float = body.global_position.distance_to(p.global_position)
+	await _frames(125)
+	_check("C2 it drags itself at you (%.2f m nearer)" % (was - body.global_position.distance_to(p.global_position)), was - body.global_position.distance_to(p.global_position) > 0.45)
+	await _frames(35)
+	_check("C2b one hand left stretched out for you (%.2f)" % absf(body.hand_ahead(1.0) - body.hand_ahead(-1.0)), absf(body.hand_ahead(1.0) - body.hand_ahead(-1.0)) > 0.25)
+	body.queue_free()
+	_free([reach[0]])
+	# The face: the strings cut, its hands first, and it looks down at them.
+	var cut: Array = await _killed(&"face", 2, Vector3(6, 1.3, -6))
+	body = cut[1]
+	await _frames(30)
+	_check("C3 its hands drop first (%.2f), its head still up (%.2f)" % [body.hands_up(), body.global_position.y], body.hands_up() < -0.3 and body.global_position.y > 1.2)
+	await _frames(30)
+	_check("C3b it looks down at them (%.2f)" % body.head_nod(), body.head_nod() < -0.4)
+	body.queue_free()
+	_free([cut[0]])
+	await _frames(2)
+	# The hands: a dying spider, over on its back, legs going, then drawn in.
+	var spider: Array = await _killed(&"hands", 0, Vector3(-6, 0.3, -6))
+	body = spider[1]
+	await _frames(20)
+	_check("C4 over on its back (%.2f)" % body.flipped(), body.flipped() > 0.8)
+	var skeleton: Skeleton3D = body.skeleton()
+	var moved_early: float = await _finger_motion(skeleton, 20)
+	var curl_early: float = body.finger_curl()
+	await _frames(115)
+	var moved_late: float = await _finger_motion(skeleton, 20)
+	_check("C4b its fingers going hard, then dying off (%.2f, %.2f)" % [moved_early, moved_late], moved_early > 0.4 and moved_late < moved_early * 0.3)
+	_check("C4c and drawn in (%.2f from %.2f)" % [body.finger_curl(), curl_early], body.finger_curl() > curl_early + 0.25)
+	body.queue_free()
+	_free([spider[0]])
+	# The hands: crawling to you to the last.
+	var crawl: Array = await _killed(&"hands", 1, Vector3(0, 0.3, -6))
+	body = crawl[1]
+	was = body.global_position.distance_to(p.global_position)
+	await _frames(100)
+	_check("C5 it crawls on at you (%.2f m nearer)" % (was - body.global_position.distance_to(p.global_position)), was - body.global_position.distance_to(p.global_position) > 0.3)
+	body.queue_free()
+	_free([crawl[0]])
+	# The hands: up, open, as if asking; it closes on nothing, and goes over.
+	var asks: Array = await _killed(&"hands", 2, Vector3(6, 0.3, -6))
+	body = asks[1]
+	await _frames(30)
+	_check("C6 it rears right up, open (%.2f high, %.2f curled)" % [body.palm_height(), body.finger_curl()], body.palm_height() > 0.55 and body.finger_curl() < 0.2)
+	await _frames(65)
+	_check("C6b it closes on nothing (%.2f)" % body.finger_curl(), body.finger_curl() > 0.6)
+	await _frames(70)
+	_check("C6c and it goes over (%.2f)" % body.palm_height(), body.palm_height() < 0.2)
+	body.queue_free()
+	_free([asks[0]])
+	await _frames(2)
+
+
+func _finger_motion(skeleton: Skeleton3D, frames: int) -> float:
+	var bone := skeleton.find_bone("index_02")
+	var total := 0.0
+	var last: Quaternion = skeleton.get_bone_pose_rotation(bone)
+
+	for i in frames:
+		await get_tree().physics_frame
+		var now: Quaternion = skeleton.get_bone_pose_rotation(bone)
+		total += now.angle_to(last)
+		last = now
+
+	return total
 
 
 func _dying() -> void:

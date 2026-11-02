@@ -300,46 +300,49 @@ func _mouth() -> void:
 	await _frames(3)
 
 
-## Their deaths, in steps, close, in the room's light.
+## Their deaths, each of them, in steps, in the room's light.
 func _death() -> void:
-	await _dies(&"face", Vector3(0, 1.3, 0.2), Vector3(0.0, 1.05, -1.2))
-	await _dies(&"hands", Vector3(0, 0.3, 0.2), Vector3(0.0, 1.05, -1.0))
+	for kind in 3:
+		await _dies(&"face", kind, Vector3(0, 1.3, 0.6), Vector3(0.0, 1.05, -2.2))
+
+	for kind in 3:
+		await _dies(&"hands", kind, Vector3(0, 0.3, 0.6), Vector3(0.0, 1.05, -1.8))
 
 
-func _dies(form: StringName, at: Vector3, stand: Vector3) -> void:
+func _dies(form: StringName, kind: int, at: Vector3, stand: Vector3) -> void:
 	var e: CharacterBody3D = AnimaScript.new()
 	e.form = form
-	e.rests = true
 	e.position = at
+	e.death_kind = kind
 	add_child(e)
 	await _frames(2)
-	e.notice = 0.0
-	e.global_position = at
-	e.state = e.State.RUSH
 	e._form = e._form.duplicate()
 	e._form["leap_reach"] = 0.0
-	e.global_position = at
+	e.state = e.State.RUSH
 	pinned = e
 	pin_at = at
 	p.teleport(Transform3D(Basis(Vector3.UP, PI), stand))
-	p.neck.rotation.x = -0.55
+	p.neck.rotation.x = -0.34
 	await _frames(25)
-	await _shot("death_%s_0_alive" % form)
 	pinned = null
+	var body: Node3D = e.body
 	e.health = 1.0
 	e.round_hint = &"copal"
 	e.take_hit(50.0, p, &"bullet", e.global_position, Vector3.BACK)
 	var last := 0
 
-	for step in [6, 20, 42, 66, 88, 104, 122, 145, 240]:
+	for step in [10, 30, 55, 85, 115, 145, 170, 195, 225, 300]:
 		await _frames(step - last)
 		last = step
-		await _shot("death_%s_%03d" % [form, step])
+		await _shot("death_%s_%d_%03d" % [form, kind, step])
 
 	p.neck.rotation.x = 0.0
 	e.queue_free()
-	# Let its heap go, before the next.
-	await _frames(420)
+
+	if is_instance_valid(body):
+		body.queue_free()
+
+	await _frames(3)
 
 
 func _burst() -> void:

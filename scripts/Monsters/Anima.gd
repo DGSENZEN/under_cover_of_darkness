@@ -57,6 +57,8 @@ const FULL := 60.0
 @export var rests := false
 ## How near you can come before it stirs (m).
 var notice := NOTICE
+## Which of its form's deaths it dies (AnimaDeaths.gd), or any.
+var death_kind := -1
 var state: int = State.RISE
 var body: Node3D
 var whip_reach := 1.6
@@ -206,7 +208,7 @@ func _die(by: Node3D) -> void:
 	if body != null:
 		var burning := body
 		body = null
-		burning.burn_away(get_parent(), _push)
+		burning.burn_away(get_parent(), _push, target(), death_kind)
 
 	super._die(by)
 
