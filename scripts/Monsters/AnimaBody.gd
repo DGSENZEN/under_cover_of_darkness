@@ -2,13 +2,16 @@ extends Node3D
 ## What a ravenous ánima looks like, and how it moves. The hands are a real model, walking
 ## on their fingertips: each finger reaches for its place on the floor (a two-joint
 ## solve), stance and swing in turn, so they plant and don't slide; the palm arched up,
-## the arm dragged behind. The face and torso are stand-in shapes until their models
-## are made and approved (the plan's Tasks 11 and 12).
+## the arm dragged behind. The face is a small dried skull, its jaw dropping and chattering,
+## floating behind two great hands thrust out ahead of it, always working. The torso is a
+## stand-in shape until its model is made and approved (the plan's Task 12).
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const FleshShader := preload("res://scripts/Monsters/anima_flesh.gdshader")
 const BRUSH := preload("res://textures/painted/eclipse/brush.png")
 const HANDS_MODEL := "res://assets/monsters/anima_hands.glb"
+const LEFT_MODEL := "res://assets/monsters/anima_hands_left.glb"
+const FACE_MODEL := "res://assets/monsters/anima_face.glb"
 const AnimaFire := preload("res://scripts/Monsters/AnimaFire.gd")
 
 const FINGER_NAMES := ["index", "middle", "ring", "pinky", "thumb"]
@@ -32,6 +35,15 @@ const REAR := 0.26
 const ARM_OUT := -0.62
 const ARM_DOWN := -0.42
 ## Fire at the end of the arm, nearly out.
+## The face's hands: how big, against the walking hands; where the wrists are held, and
+## out how far as they rear; the head's bob; how far its jaw drops.
+const FACE_HAND_SIZE := 0.86
+const FACE_WRIST := Vector3(0.3, -0.1, -0.34)
+const FACE_REAR := Vector3(0.16, 0.26, -0.04)
+const FACE_LUNGE := 0.2
+const FACE_BOB := 0.035
+const JAW_DROPS := 0.85
+const FACE_FAN := 0.13
 const FIRE_CORE := Color("#8E9C3C")
 const FIRE_BODY := Color("#3E4624")
 const FIRE_EDGE := Color("#16160E")
@@ -52,6 +64,12 @@ var _floor_y := -0.25
 ## How far over on its back it is, thrown off, 0..1.
 var _flip := 0.0
 var _ember_flare := 0.0
+var _left_hand: Skeleton3D
+var _right_hand: Skeleton3D
+var _jaw_open := 0.0
+var _embers: Array[MeshInstance3D] = []
+var _face_hands: Array[MeshInstance3D] = []
+var _face_roots: Array[Node3D] = []
 var _bones := {}
 var _tips: Array[Vector3] = []
 var _look: StandardMaterial3D
@@ -65,6 +83,8 @@ func _ready() -> void:
 
 	if form == &"hands":
 		_build_hands()
+	elif form == &"face":
+		_build_face()
 	else:
 		_build_stand_in()
 
@@ -75,6 +95,16 @@ func part(id: StringName) -> MeshInstance3D:
 
 func skeleton() -> Skeleton3D:
 	return _skeleton
+
+
+## The face's hand on that side (-1 its left, 1 its right).
+func hand_on(side: float) -> Skeleton3D:
+	return _left_hand if side < 0.0 else _right_hand
+
+
+## How far its jaw has dropped, 0..1.
+func jaw_open() -> float:
+	return _jaw_open
 
 
 func _build_hands() -> void:
@@ -104,6 +134,50 @@ func _build_hands() -> void:
 
 	_build_fire()
 	_parts[&"Ember"] = AnimaFire.ember_on(part(&"Hand"), 0.01)
+
+
+func _build_face() -> void:
+	_flesh = _new_flesh()
+	var head: Node3D = (load(FACE_MODEL) as PackedScene).instantiate()
+	add_child(head)
+
+	for mesh in head.find_children("*", "MeshInstance3D", true, false):
+		_parts[StringName(mesh.name)] = mesh
+		mesh.set_surface_override_material(0, _flesh)
+
+	_right_hand = _face_hand(HANDS_MODEL, 1.0)
+	_left_hand = _face_hand(LEFT_MODEL, -1.0)
+	_parts[&"Ember"] = _embers[0]
+	# What is left of its fire, trailing from under its jaw.
+	var flame := MeshInstance3D.new()
+	flame.mesh = MeshVfx.flame(0.34, 0.06, 8, 8)
+	flame.material_override = MeshVfx.look(FIRE_CORE, FIRE_BODY, FIRE_EDGE, 0.7, 0.5, 1.1)
+	flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	flame.transform = Transform3D(Basis(Vector3.RIGHT, PI), Vector3(0.0, -0.12, 0.06))
+	add_child(flame)
+
+
+func _new_flesh() -> ShaderMaterial:
+	var flesh := ShaderMaterial.new()
+	flesh.shader = FleshShader
+	flesh.set_shader_parameter(&"stroke_sheet", BRUSH)
+	flesh.set_shader_parameter(&"wet", 0.0)
+	flesh.set_shader_parameter(&"fill", 0.46)
+	flesh.set_shader_parameter(&"rim", 0.34)
+	return flesh
+
+
+func _face_hand(model: String, side: float) -> Skeleton3D:
+	var hand: Node3D = (load(model) as PackedScene).instantiate()
+	hand.name = "HandRight" if side > 0.0 else "HandLeft"
+	hand.scale = Vector3.ONE * FACE_HAND_SIZE
+	add_child(hand)
+	var mesh: MeshInstance3D = hand.find_children("*", "MeshInstance3D", true, false)[0]
+	mesh.set_surface_override_material(0, _flesh)
+	_face_hands.append(mesh)
+	_face_roots.append(hand)
+	_embers.append(AnimaFire.ember_on(mesh, 0.007))
+	return hand.find_children("*", "Skeleton3D", true, false)[0]
 
 
 ## What is left of its fire, where its arm ends.
@@ -172,6 +246,10 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 		_walk_hand(delta, doing, Vector3(moving.x, 0.0, moving.z).length(), fed, exposed)
 		return
 
+	if form == &"face":
+		_work_face(delta, doing, Vector3(moving.x, 0.0, moving.z).length(), fed)
+		return
+
 	position.y = 0.16 + sin(_clock * 40.0) * 0.015 if doing == &"tell" else 0.0
 	_look.emission_energy_multiplier = 0.2 + fed * 0.5 + (0.3 if exposed else 0.0)
 	_look.emission = Color(1.0, 0.5, 0.1) if smoked else Color(0.38, 0.5, 0.08)
@@ -225,6 +303,77 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 		var target := _foot_for(i, knuckle_rest, hand_pose, doing)
 		_tips[i] = target
 		_reach_to(chain, frame, target)
+
+
+## The face: its head nodding, its jaw working, its hands thrust ahead and never still.
+func _work_face(delta: float, doing: StringName, speed: float, fed: float) -> void:
+	var rearing := 1.0 if doing == &"tell" else 0.0
+	var thrust := 1.0 if doing == &"leap" else 0.0
+	var surging := smoothstep(2.0, 3.8, speed)
+	_rear = lerpf(_rear, rearing, 1.0 - exp(-12.0 * delta))
+	_walk = lerpf(_walk, maxf(thrust, surging), 1.0 - exp(-10.0 * delta))
+	_flip = move_toward(_flip, 1.0 if doing == &"thrown" else 0.0, delta * 5.0)
+	# Its jaw: hanging, dropped wide to bite, chattering when the hunger takes it.
+	var wanted := 0.22 + sin(_clock * 1.7) * 0.05 + _rear * 0.78 + thrust * 0.5
+	wanted += sin(_clock * 34.0) * 0.1 * maxf(surging, _rear)
+	_jaw_open = lerpf(_jaw_open, clampf(wanted, 0.0, 1.0), 1.0 - exp(-22.0 * delta))
+	part(&"Jaw").rotation.x = -JAW_DROPS * _jaw_open
+	var skull := part(&"Skull")
+	skull.rotation = Vector3(0.14 * _rear - 0.18 * _walk + sin(_clock * 2.1) * 0.04, sin(_clock * 1.3) * 0.08 + sin(_clock * 19.0) * 0.012, sin(_clock * 0.9) * 0.07)
+	skull.position.y = sin(_clock * 1.9) * FACE_BOB
+	var flare := clampf(fed * 0.7 + _rear * 0.08, 0.0, 0.95)
+	_ember_flare = flare
+
+	for mesh in _face_hands:
+		mesh.set_instance_shader_parameter(&"fed", fed)
+		mesh.set_instance_shader_parameter(&"hurt", hurt)
+		mesh.set_instance_shader_parameter(&"smoulder", smoulder)
+
+	for ember in _embers:
+		ember.set_instance_shader_parameter(&"flare", flare)
+
+	for id in [&"Skull", &"Jaw"]:
+		part(id).set_instance_shader_parameter(&"fed", fed)
+		part(id).set_instance_shader_parameter(&"hurt", hurt)
+		part(id).set_instance_shader_parameter(&"smoulder", smoulder)
+
+	for side in [-1.0, 1.0]:
+		_work_hand(hand_on(side), float(side), delta)
+
+
+func _work_hand(hand: Skeleton3D, side: float, _delta: float) -> void:
+	# (The model's own root, which holds its size: the skeleton sits inside it.)
+	var root: Node3D = _face_roots[0 if side > 0.0 else 1]
+	var seed := 0.0 if side > 0.0 else 2.3
+	var wrist := Vector3(FACE_WRIST.x * side, FACE_WRIST.y, FACE_WRIST.z)
+	wrist += Vector3(FACE_REAR.x * side, FACE_REAR.y, FACE_REAR.z) * _rear
+	wrist += Vector3(-0.08 * side, 0.02, -FACE_LUNGE) * _walk
+	wrist += Vector3(sin(_clock * 3.1 + seed) * 0.018, sin(_clock * 2.3 + seed) * 0.022, sin(_clock * 4.3 + seed) * 0.024)
+	root.position = wrist
+	# Palms down and thrust ahead; up and out, showing you the palm, as it rears. Thrown, flung back.
+	var aim := Basis(Vector3.UP, side * -0.16) * Basis(Vector3.RIGHT, -0.12 + 1.0 * _rear - 0.9 * smoothstep(0.0, 1.0, _flip)) * Basis(Vector3.BACK, side * (0.3 + sin(_clock * 1.7 + seed) * 0.07))
+	root.basis = aim.scaled(Vector3.ONE * FACE_HAND_SIZE)
+	# The arm back to behind the head.
+	hand.set_bone_pose_rotation(hand.find_bone("arm_1"), (hand.get_bone_rest(hand.find_bone("arm_1")).basis * Basis(Vector3.BACK, side * lerpf(-0.5, -0.3, _rear)) * Basis(Vector3.RIGHT, -0.2 + _rear * 0.5)).get_rotation_quaternion())
+	hand.set_bone_pose_rotation(hand.find_bone("arm_2"), (hand.get_bone_rest(hand.find_bone("arm_2")).basis * Basis(Vector3.BACK, side * -0.32)).get_rotation_quaternion())
+	var fan := lerpf(FACE_FAN, FACE_FAN * 1.9, _rear)
+
+	for f in FINGER_NAMES.size():
+		var finger_seed := float(f) * 1.9 + seed
+		var palsy := sin(_clock * 13.0 + finger_seed) * 0.6 + sin(_clock * 21.3 + finger_seed * 2.0) * 0.4
+		var jerk := sin(floor(_clock * 6.0 + finger_seed) * 12.9898) * 0.5
+		var shut := lerpf(0.68, 0.0, _rear) - _walk * 0.5 + (palsy + jerk) * 0.17
+		var out_of_middle := (float(f) - 1.5) * fan if f < 4 else fan * 2.2
+
+		for k in range(1, 4):
+			var bone := hand.find_bone("%s_%02d" % [FINGER_NAMES[f], k])
+			var rest: Basis = hand.get_bone_rest(bone).basis
+			var turn := Basis(Vector3.RIGHT, -shut * [0.7, 1.0, 1.25][k - 1])
+
+			if k == 1:
+				turn = Basis(Vector3.BACK, -out_of_middle * side) * turn
+
+			hand.set_bone_pose_rotation(bone, (rest * turn).get_rotation_quaternion())
 
 
 func _arm_turn(bone_name: String, angle: float) -> Quaternion:

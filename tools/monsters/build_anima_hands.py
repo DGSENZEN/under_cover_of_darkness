@@ -278,7 +278,8 @@ def curve(points, per=4):
     return out
 
 
-def build():
+def build(flip=1.0):
+    """The hand; `flip` -1 for a left one, mirrored."""
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
     with bpy.data.libraries.load(BASE_HAND) as (from_file, into):
@@ -387,7 +388,11 @@ def build():
     closed_or_die("hands", bm)
 
     # The whole of it, to game size, in one.
-    bmesh.ops.scale(bm, vec=(SIZE, SIZE, SIZE), verts=bm.verts)
+    bmesh.ops.scale(bm, vec=(SIZE * flip, SIZE, SIZE), verts=bm.verts)
+
+    if flip < 0.0:
+        bmesh.ops.reverse_faces(bm, faces=bm.faces)
+
     bm.normal_update()
     bm.verts.ensure_lookup_table()
 
@@ -438,7 +443,9 @@ def build():
     bpy.context.view_layer.objects.active = rig
     bpy.ops.object.mode_set(mode="EDIT")
     edit = data.edit_bones
+    mirror = Vector((flip, 1.0, 1.0))
     knuckles = Vector(HAND_JOINTS["knuckles"]) * SIZE
+    knuckles.x *= flip
     root = edit.new("hand")
     root.head = Vector((0.0, 0.0, 0.0))
     root.tail = knuckles
@@ -446,25 +453,25 @@ def build():
 
     for name in FINGERS:
         parent = root
-        nail = Vector(HAND_JOINTS["nails"][name])
+        nail = Vector(HAND_JOINTS["nails"][name]) * mirror
 
         for k in range(3):
             bone = edit.new("%s_%02d" % (name, k + 1))
-            bone.head = LONG[name][k] * SIZE
-            bone.tail = LONG[name][k + 1] * SIZE
+            bone.head = LONG[name][k] * SIZE * mirror
+            bone.tail = LONG[name][k + 1] * SIZE * mirror
             bone.align_roll(nail)
             bone.parent = parent
             bone.use_connect = k > 0
             parent = bone
 
     arm_1 = edit.new("arm_1")
-    arm_1.head = wrist * SIZE
-    arm_1.tail = mid * SIZE
+    arm_1.head = wrist * SIZE * mirror
+    arm_1.tail = mid * SIZE * mirror
     arm_1.align_roll(Vector((0.0, 0.0, 1.0)))
     arm_1.parent = root
     arm_2 = edit.new("arm_2")
-    arm_2.head = mid * SIZE
-    arm_2.tail = end * SIZE
+    arm_2.head = mid * SIZE * mirror
+    arm_2.tail = end * SIZE * mirror
     arm_2.align_roll(Vector((0.0, 0.0, 1.0)))
     arm_2.parent = arm_1
     arm_2.use_connect = True
@@ -526,6 +533,11 @@ def main():
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(SOURCE, "anima_hands.blend"))
     bpy.ops.export_scene.gltf(filepath=GLB, export_format="GLB", export_yup=True, export_materials="NONE", export_normals=True, export_apply=False, export_vertex_color="ACTIVE", export_all_vertex_colors=False, export_skins=True, export_animations=False)
     print("WROTE", GLB)
+    # And its left, for the form that has two.
+    rig, hand = build(-1.0)
+    left = GLB.replace("anima_hands.glb", "anima_hands_left.glb")
+    bpy.ops.export_scene.gltf(filepath=left, export_format="GLB", export_yup=True, export_materials="NONE", export_normals=True, export_apply=False, export_vertex_color="ACTIVE", export_all_vertex_colors=False, export_skins=True, export_animations=False)
+    print("WROTE", left)
 
 
 main()

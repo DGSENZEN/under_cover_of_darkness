@@ -28,6 +28,7 @@ func _ready() -> void:
 	p.inventory.ammo[&"copal_rounds"] = 60
 	await _frames(60)
 	await _hands_model()
+	await _face_model()
 	await _forms()
 	await _rush()
 	await _leeching()
@@ -89,6 +90,49 @@ func _hands_model() -> void:
 	e.state = STATE.RUSH
 	await _frames(40)
 	_check("V5b and rights itself (%.2f)" % body.flipped(), body.flipped() < 0.05)
+	e.queue_free()
+	await _frames(2)
+
+
+## The face's model: two great hands, and a small dried face behind and between them.
+func _face_model() -> void:
+	var e := _anima(&"face", Vector3(0, 1.3, -60))
+	await _frames(3)
+	var body: Node3D = e.body
+	_check("V7 a dried skull and its jaw, apart", body.part(&"Skull") != null and body.part(&"Jaw") != null)
+	_check("V7b and two hands, a left and a right", body.hand_on(-1.0) != null and body.hand_on(1.0) != null and body.hand_on(-1.0) != body.hand_on(1.0))
+	var skull: MeshInstance3D = body.part(&"Skull")
+	var colours: PackedColorArray = skull.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var dark := 0
+	var pale := 0
+
+	for colour in colours:
+		if colour.get_luminance() < 0.05:
+			dark += 1
+		elif colour.get_luminance() > 0.22:
+			pale += 1
+
+	_check("V7c it is painted: black pits, pale bone (%d dark, %d pale, of %d)" % [dark, pale, colours.size()], dark > colours.size() / 20 and pale > colours.size() / 40 and colours.size() > 0)
+	var tris: int = (skull.mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size() + body.part(&"Jaw").mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size()) / 3
+	_check("V7d small on screen: few tris (%d)" % tris, tris <= 5000)
+	var left_wrist: Vector3 = body.hand_on(-1.0).global_position
+	var right_wrist: Vector3 = body.hand_on(1.0).global_position
+	var ahead: Vector3 = -e.global_basis.z
+	var head_at: Vector3 = skull.global_position
+	_check("V8 the hands first, thrust out ahead of the face, one each side", (left_wrist - head_at).dot(-body.global_basis.z) > 0.1 and (right_wrist - head_at).dot(-body.global_basis.z) > 0.1 and body.to_local(left_wrist).x < -0.1 and body.to_local(right_wrist).x > 0.1)
+	e.state = STATE.RUSH
+	await _frames(6)
+	var at_rest: float = body.jaw_open()
+	e.state = STATE.TELL
+	e._state_t = -5.0
+	await _frames(25)
+	_check("V9 in its tell its jaw drops (%.2f, %.2f)" % [at_rest, body.jaw_open()], body.jaw_open() > at_rest + 0.3)
+	var skeleton: Skeleton3D = body.hand_on(1.0)
+	var bone := skeleton.find_bone("middle_02")
+	var pose: Quaternion = skeleton.get_bone_pose_rotation(bone)
+	await _frames(9)
+	_check("V9b its fingers never hold still", skeleton.get_bone_pose_rotation(bone).angle_to(pose) > 0.01)
+	_check("V9c it has the low fire too", body.part(&"Ember") != null)
 	e.queue_free()
 	await _frames(2)
 

@@ -30,6 +30,9 @@ func _ready() -> void:
 	if only == "" or only == "hands":
 		await _hands()
 
+	if only == "" or only == "face":
+		await _face()
+
 	if only == "" or only == "burst":
 		await _burst()
 
@@ -130,6 +133,41 @@ func _hands() -> void:
 	pin_at = Vector3(-1.6, 0.25, -16)
 	await _frames(14)
 	await _shot("hand_yard_near")
+	pinned = null
+	e.queue_free()
+	await _frames(3)
+
+
+## The face, held in place: in the room's light, close and at distance; and rearing.
+func _face() -> void:
+	var e: CharacterBody3D = AnimaScript.new()
+	e.form = &"face"
+	e.position = Vector3(0, 1.3, -30)
+	add_child(e)
+	await _frames(2)
+	pinned = e
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 1.05, -3.4)))
+	p.neck.rotation.x = 0.0
+	pin_at = Vector3(0, 1.45, 0.8)
+	e.state = e.State.RUSH
+	await _frames(25)
+	await _shot("face_room")
+	pin_at = Vector3(0, 1.5, -1.9)
+	await _frames(4)
+	e.state = e.State.TELL
+	e._state_t = -9.0
+	await _frames(30)
+	await _shot("face_room_tell")
+	# From the side and close, in its tell still.
+	p.teleport(Transform3D(Basis(Vector3.UP, PI * 0.72), Vector3(1.0, 1.05, -3.0)))
+	p.neck.rotation.x = 0.0
+	await _frames(20)
+	await _shot("face_room_side")
+	e.state = e.State.RUSH
+	p.teleport(Transform3D(Basis.IDENTITY, Vector3(-2, 1.05, -14)))
+	pin_at = Vector3(-1, 1.4, -19)
+	await _frames(20)
+	await _shot("face_yard")
 	pinned = null
 	e.queue_free()
 	await _frames(3)
