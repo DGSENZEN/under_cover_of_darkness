@@ -76,6 +76,12 @@ func _hands_model() -> void:
 	e.fed = 60.0
 	await _frames(3)
 	_check("V3 it shows what it drank", body.fed_shown > 0.5)
+	_check("V6 it has some of the Metro ánimas' fire, low", body.part(&"Ember") != null and body.ember_flare() < 1.0)
+	var ember_fed: float = body.ember_flare()
+	e.fed = 0.0
+	await _frames(3)
+	_check("V6b its fire comes up as it drinks (%.2f, %.2f)" % [body.ember_flare(), ember_fed], ember_fed > body.ember_flare() + 0.2)
+	e.fed = 60.0
 	e.state = STATE.THROWN
 	await _frames(14)
 	_check("V5 thrown, it goes over on its back (%.2f)" % body.flipped(), body.flipped() > 0.6)
@@ -475,6 +481,7 @@ func _drained_view() -> void:
 	_check("S7 it drinks in gulps, not a steady bleed (%d in 2.2 s)" % gulps[0], gulps[0] >= 2 and gulps[0] <= 4)
 	_check("S7b each one shows on your sight (%.2f)" % gulp_seen, gulp_seen > 0.5)
 	_check("S7c its hands squeeze with each (%.2f to %.2f)" % [squeeze_low, squeeze_high], squeeze_high > squeeze_low + 0.2)
+	_check("S7e the hands on you carry its fire", hands.has_ember(slot_a))
 	# They come at you, and are flung off: they don't just appear.
 	var late := _anima(&"hands", p.global_position + Vector3(-0.2, 0.5, 0.9))
 	await _frames(40)

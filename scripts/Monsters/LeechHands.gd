@@ -10,11 +10,12 @@ const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 const FleshShader := preload("res://scripts/Monsters/anima_flesh.gdshader")
 const BRUSH := preload("res://textures/painted/eclipse/brush.png")
 const HANDS_MODEL := "res://assets/monsters/anima_hands.glb"
+const AnimaFire := preload("res://scripts/Monsters/AnimaFire.gd")
 
 const VIEWMODEL_LAYER := 1 << 18
 const FINGER_NAMES := ["index", "middle", "ring", "pinky", "thumb"]
 ## Where a hand has hold, as you look (its wrist): left, right, or low if those are taken.
-const ANCHORS := [Vector3(-0.33, -0.21, -0.66), Vector3(0.36, -0.21, -0.66), Vector3(-0.05, -0.31, -0.66)]
+const ANCHORS := [Vector3(-0.33, -0.21, -0.66), Vector3(0.36, -0.21, -0.66), Vector3(-0.09, -0.42, -0.66)]
 ## The way its fingers point from there: AT you. Up and toward your face, the palm
 ## turned to you, the arm running away behind it into the world, to what it belongs to.
 const POINTS := [Vector3(0.28, 0.42, 0.86), Vector3(-0.28, 0.42, 0.86), Vector3(0.02, 0.5, 0.86)]
@@ -51,6 +52,7 @@ var player: CharacterBody3D
 var _hands: Array[Node3D] = []
 var _skeletons: Array[Skeleton3D] = []
 var _meshes: Array[MeshInstance3D] = []
+var _embers: Array[MeshInstance3D] = []
 var _anchor_of: Array[int] = [0, 1, 2]
 var _squeeze: Array[float] = [0.0, 0.0, 0.0]
 var _curl: Array[float] = [0.0, 0.0, 0.0]
@@ -88,6 +90,7 @@ func _ready() -> void:
 		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mesh.set_surface_override_material(0, look)
 		_meshes.append(mesh)
+		_embers.append(AnimaFire.ember_on(mesh, 0.008, ViewArmsScript.Z_CLIP, ViewArmsScript.VIEW_FOV))
 
 
 func shown(slot: int) -> bool:
@@ -97,6 +100,10 @@ func shown(slot: int) -> bool:
 ## How hard the hand in `slot` has hold, 0..1.
 func squeeze(slot: int) -> float:
 	return _squeeze[slot]
+
+
+func has_ember(slot: int) -> bool:
+	return _embers[slot] != null
 
 
 ## How far its fingers are shut, as a whole.
@@ -220,6 +227,7 @@ func _pose(slot: int, anchor: int, fed: float, gulp: float, coming: float) -> vo
 	_squeeze[slot] = clampf(0.25 + fed_share * 0.2 + gulp * 0.55, 0.0, 1.0)
 	var skeleton := _skeletons[slot]
 	_meshes[slot].set_instance_shader_parameter(&"fed", fed_share)
+	_embers[slot].set_instance_shader_parameter(&"flare", clampf(fed_share * 0.5 + gulp * 0.45, 0.0, 0.95))
 	var total := 0.0
 	var least := 9.0
 	var most := -9.0

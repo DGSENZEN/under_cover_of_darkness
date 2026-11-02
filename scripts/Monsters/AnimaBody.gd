@@ -9,6 +9,7 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const FleshShader := preload("res://scripts/Monsters/anima_flesh.gdshader")
 const BRUSH := preload("res://textures/painted/eclipse/brush.png")
 const HANDS_MODEL := "res://assets/monsters/anima_hands.glb"
+const AnimaFire := preload("res://scripts/Monsters/AnimaFire.gd")
 
 const FINGER_NAMES := ["index", "middle", "ring", "pinky", "thumb"]
 ## Each finger's place in the walk (of a whole cycle): opposite fingers together.
@@ -50,6 +51,7 @@ var _rear := 0.0
 var _floor_y := -0.25
 ## How far over on its back it is, thrown off, 0..1.
 var _flip := 0.0
+var _ember_flare := 0.0
 var _bones := {}
 var _tips: Array[Vector3] = []
 var _look: StandardMaterial3D
@@ -101,6 +103,7 @@ func _build_hands() -> void:
 		_bones[i] = chain
 
 	_build_fire()
+	_parts[&"Ember"] = AnimaFire.ember_on(part(&"Hand"), 0.01)
 
 
 ## What is left of its fire, where its arm ends.
@@ -174,6 +177,11 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 	_look.emission = Color(1.0, 0.5, 0.1) if smoked else Color(0.38, 0.5, 0.08)
 
 
+## How far its fire is up, 0..1.
+func ember_flare() -> float:
+	return _ember_flare
+
+
 ## How far over on its back it is, 0..1.
 func flipped() -> float:
 	return _flip
@@ -184,6 +192,9 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 	part_hand.set_instance_shader_parameter(&"fed", fed)
 	part_hand.set_instance_shader_parameter(&"hurt", hurt)
 	part_hand.set_instance_shader_parameter(&"smoulder", smoulder)
+	# Its fire, up as it drinks and as it rears.
+	_ember_flare = clampf(fed * 0.7 + _rear * 0.25, 0.0, 0.95)
+	part(&"Ember").set_instance_shader_parameter(&"flare", _ember_flare)
 	# A step per stride, faster the faster it goes, up to what can still be seen as
 	# fingers; at rest, they still work.
 	_walk += delta * minf(speed * (1.0 - SWING) / STEP + 0.35, MOST_STEPS)
