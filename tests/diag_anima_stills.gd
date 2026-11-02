@@ -55,9 +55,13 @@ func _drain() -> void:
 		await _until_gulp()
 		await _frames(4)
 		await _shot("drain_%d_gulp" % (i + 1))
-		await _frames(20)
+		await _frames(12)
+		await _shot("drain_%d_raked" % (i + 1))
+		await _frames(14)
 		await _shot("drain_%d_between" % (i + 1))
 
+	await _until_wind_up()
+	await _shot("drain_wind_up")
 	p.power.power = 5.0
 	await _frames(80)
 	await _until_gulp()
@@ -67,6 +71,14 @@ func _drain() -> void:
 	p.leech.free_all()
 	await _frames(4)
 	await _shot("drain_released")
+
+
+func _until_wind_up() -> void:
+	var left := 200
+
+	while left > 0 and p.leech.coming() < 0.92:
+		left -= 1
+		await get_tree().physics_frame
 
 
 func _until_gulp() -> void:

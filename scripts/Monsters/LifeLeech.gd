@@ -195,6 +195,11 @@ func gulp() -> float:
 	return _gulp
 
 
+## How near the next gulp is, 0..1: what the hands wind up on.
+func coming() -> float:
+	return clampf(1.0 - _gulp_in / maxf(_gulp_span, 0.01), 0.0, 1.0)
+
+
 ## How far your arm has sunk under them, 0..1.
 func sag() -> float:
 	return _sag

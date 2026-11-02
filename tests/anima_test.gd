@@ -468,6 +468,27 @@ func _drained_view() -> void:
 	_check("S7 it drinks in gulps, not a steady bleed (%d in 2.2 s)" % gulps[0], gulps[0] >= 2 and gulps[0] <= 4)
 	_check("S7b each one shows on your sight (%.2f)" % gulp_seen, gulp_seen > 0.5)
 	_check("S7c its hands squeeze with each (%.2f to %.2f)" % [squeeze_low, squeeze_high], squeeze_high > squeeze_low + 0.2)
+	# It claws: rears back open, then rakes down and closes.
+	var open_most := 9.0
+	var closed_most := -9.0
+	var high := -9.0
+	var low := 9.0
+	var marks_most := 0.0
+	var fingers_apart := 0.0
+
+	for i in 130:
+		await get_tree().process_frame
+		open_most = minf(open_most, hands.curl(slot_a))
+		closed_most = maxf(closed_most, hands.curl(slot_a))
+		high = maxf(high, hands.reach_y(slot_a))
+		low = minf(low, hands.reach_y(slot_a))
+		marks_most = maxf(marks_most, hud.drain_state()["claws"])
+		fingers_apart = maxf(fingers_apart, hands.finger_spread(slot_a))
+
+	_check("S10 it opens and closes its claw (%.2f to %.2f)" % [open_most, closed_most], closed_most > open_most + 0.6)
+	_check("S10b it rakes down your view, a long way (%.3f)" % (high - low), high - low > 0.05)
+	_check("S10c its fingers scrabble, not all as one (%.2f)" % fingers_apart, fingers_apart > 0.15)
+	_check("S10d it leaves claw marks across your sight (%.2f)" % marks_most, marks_most > 0.5)
 	_check("S7d and it jolts your view (%.3f)" % trauma_seen, trauma_seen > 0.02)
 	p.power.power = 5.0
 	await _frames(40)

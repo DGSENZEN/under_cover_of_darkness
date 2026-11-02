@@ -103,6 +103,8 @@ var _drain_release := 0.0
 var _drain_threads := 0
 var _drain_magic := 1.0
 var _drain_life := 1.0
+var _drain_gulp_was := 0.0
+var _drain_claw_age := 1.0
 var _drain_held_was := 0
 ## Between the two, or the curse's own look at the screen wouldn't have the drain in it.
 var _drain_copy: BackBufferCopy
@@ -133,6 +135,7 @@ const DRAIN_DEPTH := [0.0, 0.45, 0.72, 1.0]
 const DRAIN_COMES := 1.2
 const DRAIN_GOES := 5.0
 const DRAIN_RELEASE_TIME := 0.5
+const DRAIN_CLAW_TIME := 1.1
 ## From the wrist of a hand in your view to its palm, on the screen.
 const DRAIN_INTO_PALM := Vector2(0.0, 0.05)
 const RELIEF_TIME := 1.2
@@ -1075,6 +1078,13 @@ func _show_drain(delta: float) -> void:
 	look.set_shader_parameter(&"drain", _drain_shown)
 	look.set_shader_parameter(&"release", _drain_release)
 	look.set_shader_parameter(&"gulp", leech.gulp())
+	# Claw marks: each gulp's rake, opened and then fading.
+	if leech.gulp() > _drain_gulp_was:
+		_drain_claw_age = 0.0
+
+	_drain_gulp_was = leech.gulp()
+	_drain_claw_age = minf(_drain_claw_age + delta / DRAIN_CLAW_TIME, 1.0)
+	look.set_shader_parameter(&"claw_age", _drain_claw_age if held > 0 else 1.0)
 	_drain_magic = float(player.power.power) / float(player.power.MAX)
 	look.set_shader_parameter(&"magic", _drain_magic)
 	_drain_life = float(player.health) / maxf(float(player.max_health), 1.0)
@@ -1097,7 +1107,8 @@ func drain_view_shown() -> bool:
 
 
 func drain_state() -> Dictionary:
-	return {"drain": _drain_shown, "release": _drain_release, "threads": _drain_threads, "gulp": player.leech.gulp() if player != null and player.leech != null else 0.0, "magic": _drain_magic, "life": _drain_life, "pull": _drain_shown}
+	return {"drain": _drain_shown, "release": _drain_release, "threads": _drain_threads, "gulp": player.leech.gulp() if player != null and player.leech != null else 0.0, "magic": _drain_magic, "life": _drain_life, "pull": _drain_shown,
+		"claws": smoothstep(0.0, 0.16, _drain_claw_age) * (1.0 - smoothstep(0.4, 1.0, _drain_claw_age))}
 
 
 ## The evil eye's marks are on screen.

@@ -3,8 +3,8 @@ shader_type canvas_item;
 // your magic goes the colour goes out of everything; as your life goes the dark closes in.
 // Round it, from the edges, it goes corpse-green and thin, rot blotching through it, the low
 // sick fire of what has hold of you at its front, deeper with each one on you. With each
-// gulp your sight dims and is dragged toward the hand that has you, and a soft green mist
-// streams in to it. The middle stays clear enough to fight. Thrown off, colour floods back
+// gulp your sight dims and is dragged toward the hand that has you, its nails rake long
+// marks down the view, and a soft green mist streams in to it. The middle stays clear enough to fight. Thrown off, colour floods back
 // past where it was (`release`). Painted, as evil_eye_view is, and drawn under it.
 
 uniform float drain = 0.0;
@@ -14,6 +14,8 @@ uniform float gulp = 0.0;
 // How much magic and life you have left, 0..1.
 uniform float magic = 1.0;
 uniform float life = 1.0;
+// How old the last rake's claw marks are, 0 new, 1 gone.
+uniform float claw_age = 1.0;
 // Each hand that has you: where it is on the screen, 0..1, and how much to show.
 uniform vec3 threads[3];
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
@@ -91,6 +93,37 @@ void fragment() {
 			float smoke = textureLod(stroke_sheet, way * 0.45 + vec2(away * 0.32 + TIME * 0.11 + float(i) * 0.37, float(i)), 0.0).r;
 			float mist = smoothstep(0.42, 0.74, smoke) * exp(-away * 1.15) * smoothstep(0.2, 0.55, away);
 			col = mix(col, value * CORPSE * 0.6 + GRAVE * 0.75 + SICK * 0.05, mist * (0.28 + gulp * 0.42) * threads[i].z);
+		}
+	}
+
+	// Where its nails went: four long marks raked down your sight above each hand, torn
+	// open as the rake goes, fading. Never over the middle.
+	float claw_show = smoothstep(0.0, 0.16, claw_age);
+	float claw_fade = 1.0 - smoothstep(0.4, 1.0, claw_age);
+
+	if (claw_show * claw_fade > 0.001) {
+		for (int i = 0; i < 3; i++) {
+			if (threads[i].z > 0.01) {
+				vec2 hand_at = vec2((threads[i].x * 2.0 - 1.0) * aspect, threads[i].y * 2.0 - 1.0);
+				float side = sign(hand_at.x + 0.0001);
+
+				for (int k = 0; k < 4; k++) {
+					float across = (float(k) - 1.5) * 0.105;
+					float seed = float(k) + float(i) * 4.0;
+					vec2 top = hand_at + vec2(across + side * 0.16, -0.72 - hash(vec2(seed, 1.0)) * 0.1);
+					vec2 down = vec2(-side * 0.16 + across * 0.25, 0.64 + hash(vec2(seed, 2.0)) * 0.12) * claw_show;
+					float along = clamp(dot(a - top, down) / max(dot(down, down), 0.0001), 0.0, 1.0);
+					vec2 near = top + down * along;
+					float off = length(a - near);
+					float broken = textureLod(stroke_sheet, vec2(along * 1.4 + seed * 0.31, seed * 0.13), 0.0).r;
+					float wide = (0.004 + 0.015 * sin(along * 3.1416)) * (0.55 + broken * 0.9);
+					float mark = 1.0 - smoothstep(wide * 0.55, wide, off);
+					float lip = (1.0 - smoothstep(wide, wide * 1.8, off)) * (1.0 - mark);
+					float keep = claw_fade * smoothstep(CLEAR * 0.5, CLEAR * 0.95, out_from_middle);
+					col = mix(col, ROT * 0.4, mark * keep * 0.95);
+					col = mix(col, value * CORPSE * 0.5 + SICK * 0.2, lip * keep * 0.6);
+				}
+			}
 		}
 	}
 

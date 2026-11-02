@@ -1,8 +1,9 @@
 extends Node3D
-## The hands of whatever is on you, clutching AT you: withered and real, coming up from
-## out in the world on the side each is on, palm to you, nails hooked at your face. With
-## every gulp they lunge closer and close on you, and clench harder as they feed. Never
-## over the crosshair. Drawn as the viewmodel is (HandSlot.gd). A camera
+## The hands of whatever is on you, clawing AT you: withered and real, coming up from out
+## in the world on the side each is on, palm to you, nails hooked at your face. Before a
+## gulp they rear back, open; on it they rake down your view and close, a finger at a time,
+## and between gulps the fingers go on scrabbling at you. Worse as they feed. Never over the
+## crosshair. Drawn as the viewmodel is (HandSlot.gd). A camera
 ## child of the player; LifeLeech says who is on.
 
 const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
@@ -20,11 +21,20 @@ const POINTS := [Vector3(0.28, 0.42, 0.86), Vector3(-0.28, 0.42, 0.86), Vector3(
 const BACKS := [Vector3(-0.1, 0.9, -0.42), Vector3(0.1, 0.9, -0.42), Vector3(0.0, 0.9, -0.5)]
 ## How big, in the view's miniature.
 const SIZE := 0.44
-## How far the fingers curl at rest, and how much harder with a gulp: they close on you.
-const CURL := 0.5
-const CURL_GULP := 0.55
-## With a gulp it lunges at you, this far.
-const LUNGE := 0.07
+## How the fingers curl: wide open on the wind-up, shut at the end of a rake, and how
+## they sit between; a finger's lag behind the one before; how hard they scrabble.
+const CURL_OPEN := -0.1
+const CURL_SHUT := 1.15
+const CURL_REST := 0.62
+const FINGER_LAG := 0.13
+const SCRABBLE := 0.17
+## The rake, as a share of a gulp's fading it takes; how high it rears, how far down
+## it drags, how far at you it lunges, how far it swings across.
+const RAKE_TAKES := 0.42
+const REARS := 0.1
+const DRAGS := 0.065
+const LUNGE := 0.1
+const ACROSS := 0.035
 const FULL := 60.0
 
 var player: CharacterBody3D
@@ -33,6 +43,8 @@ var _skeletons: Array[Skeleton3D] = []
 var _meshes: Array[MeshInstance3D] = []
 var _anchor_of: Array[int] = [0, 1, 2]
 var _squeeze: Array[float] = [0.0, 0.0, 0.0]
+var _curl: Array[float] = [0.0, 0.0, 0.0]
+var _spread: Array[float] = [0.0, 0.0, 0.0]
 var _clock := 0.0
 
 
@@ -71,9 +83,24 @@ func squeeze(slot: int) -> float:
 	return _squeeze[slot]
 
 
+## How far its fingers are shut, as a whole.
+func curl(slot: int) -> float:
+	return _curl[slot]
+
+
+## How high the hand in `slot` is, in your view.
+func reach_y(slot: int) -> float:
+	return _hands[slot].position.y
+
+
+## How far apart its fingers are, curling.
+func finger_spread(slot: int) -> float:
+	return _spread[slot]
+
+
 ## Where the hand in `slot` has hold on the screen, 0..1.
 func on_screen(slot: int) -> Vector2:
-	var at := _hands[slot].position
+	var at: Vector3 = ANCHORS[_anchor_of[slot]]
 	var tall := tan(deg_to_rad(ViewArmsScript.VIEW_FOV) * 0.5) * maxf(-at.z, 0.001)
 	var size := get_viewport().get_visible_rect().size
 	var aspect := size.x / maxf(size.y, 1.0)
@@ -97,7 +124,8 @@ func _process(delta: float) -> void:
 
 		var anchor := _anchor_for(who, taken)
 		taken.append(anchor)
-		_pose(slot, anchor, float(who.fed), player.leech.gulp())
+		_anchor_of[slot] = anchor
+		_pose(slot, anchor, float(who.fed), player.leech.gulp(), player.leech.coming())
 
 
 ## The side of your view it is on; low, if that side is taken.
@@ -115,19 +143,41 @@ func _anchor_for(who: Node3D, taken: Array[int]) -> int:
 	return 1 - wanted
 
 
-func _pose(slot: int, anchor: int, fed: float, gulp: float) -> void:
+func _pose(slot: int, anchor: int, fed: float, gulp: float, coming: float) -> void:
 	var fingers: Vector3 = POINTS[anchor].normalized()
-	var haul := fingers * LUNGE * gulp * gulp
-	# The model's fingers go along its -Z, the back of the hand its +Y.
-	_hands[slot].transform = Transform3D(Basis.looking_at(fingers, BACKS[anchor]).scaled(Vector3.ONE * SIZE), ANCHORS[anchor] + haul)
-	var tremble := sin(_clock * 31.0 + float(slot) * 2.1) * 0.03
-	_squeeze[slot] = clampf(0.25 + clampf(fed / FULL, 0.0, 1.0) * 0.2 + gulp * 0.55, 0.0, 1.0)
-	var curl: float = CURL + CURL_GULP * gulp + tremble
+	var fed_share := clampf(fed / FULL, 0.0, 1.0)
+	# Each hand a beat behind the last, so they don't move as one.
+	var rake := clampf((1.0 - gulp) / RAKE_TAKES - float(slot) * 0.12, 0.0, 1.0)
+	var raking := gulp > 0.001
+	var eased := 1.0 - pow(1.0 - rake, 3.0)
+	# Up and back as the next gulp comes, then down and at you with it.
+	var wind := smoothstep(0.5, 1.0, coming)
+	var height: float = lerpf(REARS, -DRAGS, eased) if raking else lerpf(-DRAGS, REARS, wind)
+	var at_you: float = (sin(rake * PI) * LUNGE if raking else -wind * LUNGE * 0.5)
+	var side := signf(ANCHORS[anchor].x)
+	var swing: float = -side * ACROSS * (eased if raking else 1.0 - wind)
+	var offset := Vector3(swing, height, 0.0) + fingers * at_you
+	_hands[slot].transform = Transform3D(Basis.looking_at(fingers, BACKS[anchor]).rotated(fingers, side * (0.35 * eased - 0.2)).scaled(Vector3.ONE * SIZE), ANCHORS[anchor] + offset)
+	_squeeze[slot] = clampf(0.25 + fed_share * 0.2 + gulp * 0.55, 0.0, 1.0)
 	var skeleton := _skeletons[slot]
-	_meshes[slot].set_instance_shader_parameter(&"fed", clampf(fed / FULL, 0.0, 1.0))
+	_meshes[slot].set_instance_shader_parameter(&"fed", fed_share)
+	var total := 0.0
+	var least := 9.0
+	var most := -9.0
 
-	for finger in FINGER_NAMES:
+	for f in FINGER_NAMES.size():
+		# Open on the wind-up; shut, one after another, down the rake; scrabbling between.
+		var this_rake := clampf((1.0 - gulp) / RAKE_TAKES - float(f) * FINGER_LAG, 0.0, 1.0)
+		var shut: float = lerpf(CURL_OPEN, CURL_SHUT, smoothstep(0.0, 1.0, this_rake)) if raking else lerpf(CURL_REST, CURL_OPEN, wind)
+		shut += sin(_clock * 15.0 + float(f) * 1.9 + float(slot) * 2.3) * SCRABBLE * (1.0 - wind) * (1.0 + fed_share)
+		total += shut
+		least = minf(least, shut)
+		most = maxf(most, shut)
+
 		for k in range(1, 4):
-			var bone := skeleton.find_bone("%s_%02d" % [finger, k])
+			var bone := skeleton.find_bone("%s_%02d" % [FINGER_NAMES[f], k])
 			var rest: Basis = skeleton.get_bone_rest(bone).basis
-			skeleton.set_bone_pose_rotation(bone, (rest * Basis(Vector3.RIGHT, -curl * (0.8 if k == 1 else 1.0))).get_rotation_quaternion())
+			skeleton.set_bone_pose_rotation(bone, (rest * Basis(Vector3.RIGHT, -shut * (0.8 if k == 1 else 1.0))).get_rotation_quaternion())
+
+	_curl[slot] = total / float(FINGER_NAMES.size())
+	_spread[slot] = most - least
