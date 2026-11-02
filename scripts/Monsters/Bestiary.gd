@@ -13,12 +13,30 @@ const TABLE := {
 		"weak": {&"shot": 1.0, &"copal": 1.2, &"obsidian": 1.5, &"blast": 1.5},
 		"resist": {&"lead": 0.3},
 	},
+	# Souls no one lit a candle for: what they drink, how they come. Copal hurts them;
+	# lead passes through; a shell's few pellets that tell are a poor answer.
+	&"anima": {
+		"health": 70.0,
+		"weak": {&"copal": 1.0},
+		"resist": {&"lead": 0.15, &"shot": 0.5},
+		"lead_read": &"through",
+		"forms": {
+			&"hands": {"health": 40.0, "power_drain": 5.0, "life_drain": 1.5, "grip": 1, "speed": 6.5, "tell": 0.3, "leap_reach": 3.0, "leap_speed": 11.0, "hit_radius": 0.3, "height": 0.25, "floats": false},
+			&"face": {"health": 70.0, "power_drain": 8.0, "life_drain": 2.5, "grip": 1, "speed": 4.5, "tell": 0.45, "leap_reach": 4.0, "leap_speed": 9.0, "hit_radius": 0.4, "height": 1.3, "floats": true},
+			&"torso": {"health": 130.0, "power_drain": 12.0, "life_drain": 4.0, "grip": 2, "speed": 2.2, "tell": 0.7, "leap_reach": 6.0, "leap_speed": 10.0, "hit_radius": 0.55, "height": 0.35, "floats": false},
+		},
+	},
 }
 
 
 ## {health, weak, resist}; {} for an unknown kind.
 static func info(kind: StringName) -> Dictionary:
 	return TABLE.get(kind, {})
+
+
+## One of a kind's forms, {} if it has none by that name.
+static func form(kind: StringName, form_id: StringName) -> Dictionary:
+	return info(kind).get("forms", {}).get(form_id, {})
 
 
 ## What a blow counts as: a bullet its round's source; a shell's pellets, a

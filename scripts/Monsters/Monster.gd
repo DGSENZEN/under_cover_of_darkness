@@ -164,7 +164,7 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, _point: Vec
 		return &"none"
 
 	var source := Bestiary.source_of(hit_kind, round_hint)
-	var opening := _is_opening()
+	var opening := _is_opening_to(source)
 	var weak := Bestiary.is_weak(kind, source) or opening
 	var was_exposed := is_exposed()
 	health -= damage * Bestiary.scale_for(kind, source) * (EXPOSED_SCALE if was_exposed else 1.0) * (OPENING_SCALE if opening else 1.0)
@@ -212,6 +212,11 @@ func kick(push: Vector3, by: Node3D) -> void:
 ## more. A kind says when (a floating eye's tell).
 func _is_opening() -> bool:
 	return false
+
+
+## Whether it has opened itself to this source: to anything, unless a kind says.
+func _is_opening_to(_source: StringName) -> bool:
+	return _is_opening()
 
 
 func is_exposed() -> bool:
