@@ -749,6 +749,8 @@ func setup(p_player: CharacterBody3D) -> void:
 	_curse_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_curse_view.material = ShaderMaterial.new()
 	_curse_view.material.shader = EvilEyeView
+	_curse_view.material.set_shader_parameter(&"eye_paint", load("res://assets/monsters/floating_eye_eye_ball.png"))
+	_curse_view.material.set_shader_parameter(&"stroke_sheet", load("res://textures/painted/eclipse/brush.png"))
 	_curse_view.visible = false
 	_play.add_child(_curse_view)
 	_ammo = HuntReadoutScript.new()
