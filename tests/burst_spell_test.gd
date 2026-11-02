@@ -7,6 +7,7 @@ const GUARD := preload("res://Guard.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
 const EyeScript := preload("res://scripts/Monsters/FloatingEye.gd")
+const ShardScript := preload("res://scripts/Magic/Shard.gd")
 const STATE: Dictionary = AnimaScript.State
 const HOME := Vector3(0, 1.05, 0)
 
@@ -32,6 +33,7 @@ func _ready() -> void:
 	await _spikes()
 	await _casting()
 	await _taking_it()
+	await _the_shard()
 	await _on_you()
 	await _refused()
 	print("==== RESULTS ====")
@@ -329,6 +331,73 @@ func _taking_it() -> void:
 		e.queue_free()
 
 	await _frames(3)
+
+
+## The Shard is the same glass, and does the same to what it goes through, smaller.
+func _shard_at(from: Vector3, to: Vector3) -> Node3D:
+	var shard: Node3D = ShardScript.new()
+	add_child(shard)
+	shard.launch(from, (to - from).normalized() * 70.0, 40.0, p)
+	return shard
+
+
+func _the_shard() -> void:
+	await _until(func(): return get_tree().get_nodes_in_group(&"burst_wave").is_empty(), 8.0)
+	await _frames(10)
+	var lane := Vector3(30, 1.05, -30)
+	var first := _anima(&"hands", lane + Vector3(0, -0.75, -4))
+	var second := _anima(&"hands", lane + Vector3(0, -0.75, -7))
+	await _frames(3)
+
+	for e in [first, second]:
+		e.asleep = false
+		e.state = STATE.MISSED
+		e._state_t = -99.0
+		# (Enough to live through it, and be seen to.)
+		e.health = 500.0
+
+	await _frames(20)
+	var shard := _shard_at(Vector3(lane.x, first.global_position.y, lane.z), first.global_position)
+	var visual: MeshInstance3D = shard.get_node("MeshInstance3D")
+	_check("L1 it flies in the Burst's glass", visual.material_override.shader.resource_path.ends_with("burst_glass.gdshader"))
+	var tris: int = visual.mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size() / 3
+	_check("L1b a flaked spear, not a plain one (%d tris)" % tris, tris > 100 and tris <= 500)
+	var aabb: AABB = visual.mesh.get_aabb()
+	_check("L1c about 32 cm long (%.2f)" % aabb.size.y, aabb.size.y > 0.28 and aabb.size.y < 0.36)
+	var jolt_seen := 0.0
+
+	for i in 16:
+		await get_tree().physics_frame
+		jolt_seen = maxf(jolt_seen, first.body.jolting())
+
+	_check("L2 it goes in: glass stays in it (%d)" % _stuck_on(first), _stuck_on(first) == 1)
+	_check("L3 it spills fire, not blood", first.body.last_wound() == &"fire")
+	_check("L4 it is jolted by it (%.2f), and its state has not changed" % jolt_seen, jolt_seen > 0.5 and first.state == STATE.MISSED)
+	_check("L5 the wound is where it hit: at the wound, not at its middle", first.last_hit_at.distance_to(first.global_position) > 0.0)
+	await _frames(12)
+	_check("L6 on through to the next, the same", _stuck_on(second) == 1 and second.body.last_wound() == &"fire")
+	first.queue_free()
+	second.queue_free()
+	await _frames(3)
+	var eye: CharacterBody3D = EyeScript.new()
+	eye.seed_value = 4
+	eye.position = lane + Vector3(0, 1.2, -4)
+	add_child(eye)
+	eye.next_swoop_in = 100.0
+	eye.health = 500.0
+	await _frames(3)
+	var eye_at: Vector3 = eye.global_position
+	_shard_at(eye_at + Vector3(0, 0, 3), eye_at)
+	await _frames(8)
+	_check("L7 an eye cracks, and takes the glass (%d)" % _stuck_on(eye), eye.body.cracked() and _stuck_on(eye) == 1)
+	eye.queue_free()
+	await _frames(3)
+	# Into the floor: its star is the same glass.
+	_shard_at(lane + Vector3(0, 1, 0), lane + Vector3(0, -1.05, -2))
+	await _frames(10)
+	var star: Array = get_tree().get_nodes_in_group(&"shard_spike")
+	_check("L8 its star on the floor is the same glass (%d)" % star.size(), not star.is_empty() and star[0].material_override.shader.resource_path.ends_with("burst_glass.gdshader"))
+	await _frames(300)
 
 
 func _stuck_on(target: Node) -> int:

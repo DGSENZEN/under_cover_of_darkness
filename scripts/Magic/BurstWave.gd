@@ -103,7 +103,7 @@ func _lay_out(reach: float, takes: float) -> void:
 	for mesh in made.find_children("*", "MeshInstance3D", true, false):
 		if mesh.name.begins_with("Spike"):
 			spike_meshes.append(mesh.mesh)
-		else:
+		elif mesh.name.begins_with("Chunk"):
 			chunk_meshes.append(mesh.mesh)
 
 	made.free()

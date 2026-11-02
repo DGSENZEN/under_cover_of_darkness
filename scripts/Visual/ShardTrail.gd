@@ -30,7 +30,7 @@ static func follow(shard: Node3D, from: Vector3) -> MeshInstance3D:
 	trail._points = [[from, 0.0]]
 	var look := ShaderMaterial.new()
 	look.shader = TRAIL_SHADER
-	look.set_shader_parameter(&"line_tint", MagicFx.GLINT)
+	look.set_shader_parameter(&"line_tint", MagicFx.AMETHYST)
 	trail.material_override = look
 	trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	trail.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF

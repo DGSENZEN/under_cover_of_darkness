@@ -48,6 +48,9 @@ var eye_height := 99.0
 ## The round about to hit it (Revolver, just before take_hit).
 var round_hint: StringName = &"lead"
 var dead := false
+## Where and which way it was last hit.
+var last_hit_at := Vector3.ZERO
+var last_hit_way := Vector3.FORWARD
 ## Not in play yet (a wave to come): hidden, and it does nothing until woken.
 var asleep := false
 var statuses: Node
@@ -159,9 +162,12 @@ func _meet_player() -> void:
 		_player.add_collision_exception_with(self)
 
 
-func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, _point: Vector3, direction: Vector3) -> StringName:
+func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vector3, direction: Vector3) -> StringName:
 	if dead:
 		return &"none"
+
+	last_hit_at = point
+	last_hit_way = direction
 
 	var source := Bestiary.source_of(hit_kind, round_hint)
 	var opening := _is_opening_to(source)

@@ -110,6 +110,9 @@ const SKULL_LATE := 0.26
 const JAW_LATE := 0.14
 ## Flung by the Burst: how long it tumbles.
 const TUMBLES := 0.65
+## A Shard through it: how long the knock lasts, how far it turns it.
+const JOLTS := 0.3
+const JOLT_ROLL := 0.7
 ## How far down it looks for a floor to fall on (m).
 const FLOOR_LOOK := 12.0
 ## Where its flames stand, and how tall: along each hand's bones, and on the skull. (Bone, how
@@ -159,6 +162,7 @@ var _lies_side := 1.0
 var _you: Node3D
 var _curl_shown := 0.0
 var _tumble := 0.0
+var _jolt := 0.0
 var _last_wound: StringName = &""
 var _nod := 0.0
 var _back := 0.0
@@ -367,6 +371,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 
 	_doing_for += delta
 	_tumble = move_toward(_tumble, 0.0, delta / TUMBLES)
+	_jolt = move_toward(_jolt, 0.0, delta / JOLTS)
 	fed_shown = fed
 	hurt = move_toward(hurt, 0.0, delta / 0.25)
 	smoulder = move_toward(smoulder, 1.0 if smoked else 0.0, delta * (6.0 if smoked else 3.0))
@@ -434,7 +439,7 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 	hand_at.y -= smoothstep(0.0, 1.0, _flip) * 0.1
 	# It rolls with each step, and drops its head into a surge.
 	var surging := smoothstep(2.4, 4.5, speed)
-	var roll := sin(_walk * TAU) * 0.1 + shake + smoothstep(0.0, 1.0, _flip) * PI
+	var roll := sin(_walk * TAU) * 0.1 + shake + smoothstep(0.0, 1.0, _flip) * PI + _jolt * JOLT_ROLL * _lies_side
 	var tilt := Basis(Vector3.RIGHT, (-TIP - _rear * 0.5 - surging * 0.16) * (1.0 - low * 0.9) + slam * 0.2) * Basis(Vector3.BACK, roll * (1.0 - _rest * 0.7))
 	var hand_bone := _skeleton.find_bone("hand")
 	var rest: Transform3D = _skeleton.get_bone_rest(hand_bone)
@@ -750,7 +755,7 @@ func struck(point: Vector3, direction: Vector3, result: StringName, source: Stri
 
 	if source == &"obsidian":
 		_last_wound = &"fire"
-		AnimaSpillScript.at(self, point + Vector3.UP * 0.12, -direction.normalized())
+		AnimaSpillScript.at(self, point - Vector3.UP * 0.04, -direction.normalized())
 		return
 
 	_last_wound = &"blood"
@@ -766,6 +771,20 @@ func last_wound() -> StringName:
 func tumble(_way: Vector3) -> void:
 	_tumble = 1.0
 	_lies_side = -1.0 if _rng.randf() < 0.5 else 1.0
+
+
+## A Shard through it: knocked over a little, and it comes back.
+func jolt(_way: Vector3) -> void:
+	_jolt = 1.0
+	_lies_side = -1.0 if _rng.randf() < 0.5 else 1.0
+	_kick(&"nod", 3.0)
+	_kick(&"roll", 4.0 * _lies_side)
+	_kick(&"jaw", 4.0)
+
+
+## How much of a knock is left, 0..1.
+func jolting() -> float:
+	return _jolt
 
 
 ## How much of a tumble is left, 0..1.

@@ -7,7 +7,7 @@ const FIRE_SHEET := "res://assets/vfx/fire.png"
 
 const LASTS := 0.6
 const FLAMES := 3
-const FLAME_SIZE := Vector2(0.26, 0.5)
+const FLAME_SIZE := Vector2(0.13, 0.26)
 const ASH := 14
 const ASH_PALE := Color(0.2, 0.205, 0.22)
 const ASH_DARK := Color(0.05, 0.05, 0.055)

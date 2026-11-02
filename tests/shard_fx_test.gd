@@ -169,7 +169,8 @@ func _run() -> void:
 		var s := spike as Node3D
 		var along: Vector3 = s.global_basis.y
 		out_of_wall = out_of_wall and along.normalized().dot(Vector3.BACK) > 0.2 and s.global_position.z > -43.85
-		lengths.append(snappedf(along.length() * float(s.get_meta(&"length", 0.0)), 0.01))
+		# (A modelled spike is a metre tall, so its scale up its length is its length.)
+		lengths.append(snappedf(along.length(), 0.01))
 
 	var lengths_ok: bool = not lengths.is_empty() and lengths.min() >= 0.2 and lengths.max() <= 0.6
 	var ring := get_tree().get_nodes_in_group(&"shard_ring")

@@ -52,6 +52,9 @@ func _ready() -> void:
 	if only == "perf":
 		await _perf()
 
+	if only == "" or only == "shard":
+		await _shard()
+
 	if only == "" or only == "drain":
 		await _drain()
 
@@ -430,6 +433,49 @@ func _burst() -> void:
 		await _shot("burst_%03d" % step)
 
 	p.neck.rotation.x = 0.0
+
+
+## The Shard: in the hand, away, through one, into the floor beyond, and what it leaves.
+func _shard() -> void:
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 1.05, -3.0)))
+	p.neck.rotation.x = -0.14
+	await _frames(10)
+	var e: CharacterBody3D = AnimaScript.new()
+	e.form = &"face"
+	e.position = Vector3(0.1, 1.3, -0.4)
+	add_child(e)
+	await _frames(2)
+	pinned = e
+	pin_at = e.position
+	e.health = 600.0
+	e._form = e._form.duplicate()
+	e._form["leap_reach"] = 0.0
+	e.state = e.State.RUSH
+	await _frames(20)
+	var way: Vector3 = (e.global_position - p.camera.global_position).normalized()
+	p.rotation.y = atan2(-way.x, -way.z)
+	p.neck.rotation.x = asin(way.y)
+	await _frames(2)
+	p.power.power = 100.0
+	Input.action_press("spell_1")
+	await _frames(20)
+	await _shot("shard_0_hand")
+
+	while not get_tree().get_nodes_in_group(&"shards").size() > 0:
+		await get_tree().physics_frame
+
+	Input.action_release("spell_1")
+	var last := 0
+
+	for step in [1, 3, 5, 8, 12, 20, 40, 90]:
+		await _frames(step - last)
+		last = step
+		await _shot("shard_%03d" % step)
+
+	pinned = null
+	e.queue_free()
+	p.neck.rotation.x = 0.0
+	await _frames(3)
 
 
 ## What a cast into a full wave costs, in frames: before, during, and while they all burn.

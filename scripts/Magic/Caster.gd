@@ -35,6 +35,8 @@ enum Loadout {
 const BREAKS_AT := 25.0
 const BREAKING_KINDS := [&"power", &"blast", &"crush"]
 ## Spell keys, in order.
+## The shake as a Shard leaves your hand.
+const SHARD_TRAUMA := 0.12
 const KEYED := [&"shard", &"ward", &"empower", &"burst"]
 ## Seconds the casting hand stays up after a hand spell is let go.
 const FOLLOW_THROUGH := 0.18
@@ -336,6 +338,7 @@ func _effect(id: StringName) -> void:
 			_loose_shard()
 			# Thrown from the hand: a small kick to the view.
 			player.juice.punch(0.8, 0.15)
+			player.juice.add_trauma(SHARD_TRAUMA)
 		&"ward":
 			WardScript.cast_on(player)
 			player.leech.free_all()

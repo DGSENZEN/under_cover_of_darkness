@@ -41,7 +41,13 @@ const CLAW_FLY := 5.0
 ## The Shard, round two: its look, its release at the palm (flakes, a ring
 ## the world bends through, a cold light), and what it leaves on the world
 ## (a star of spikes that crumbles, a ring of glass dust) or in a man.
-const OBSIDIAN_SHADER := preload("res://scripts/Visual/vfx_obsidian.gdshader")
+const OBSIDIAN_SHADER := preload("res://scripts/Magic/burst_glass.gdshader")
+const GLASS_MODEL := "res://assets/magic/burst_glass.glb"
+## The school's light.
+const AMETHYST := Color("#8F70E8")
+## How much of the spell the glass holds: in flight, and left about after.
+const GLASS_CHARGED := 1.0
+const GLASS_SPENT := 0.5
 const REFRACT_RING_SHADER := preload("res://scripts/Visual/vfx_refract_ring.gdshader")
 const RELEASE_FLAKES := 8
 const RELEASE_LIFE := 0.12
@@ -88,6 +94,8 @@ const FLOOR_DUST_EDGE := Color("#4A443C")
 static var _live: Array = []
 static var _glass_look: StandardMaterial3D
 static var _obsidian: ShaderMaterial
+static var _obsidian_hot: ShaderMaterial
+static var _glass_meshes := {}
 static var _panes: Array = []
 
 
@@ -457,27 +465,25 @@ static func spearhead_mesh(width: float, length: float, depth: float, from_heel 
 
 
 ## Obsidian for what stands metres tall (the Burst's spikes): deep glass with the spell's light
-## in it. `charge`: how much is still in it (a MultiMesh's spikes add their own).
+## in it, its own, for its MultiMesh to set. `charge`: how much is still in it (each spike adds its own).
 static func big_glass_look(charge := 0.3) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
-	m.shader = load("res://scripts/Magic/burst_glass.gdshader")
+	m.shader = OBSIDIAN_SHADER
 	m.set_shader_parameter(&"noise", MeshVfx.noise())
 	m.set_shader_parameter(&"charge", charge)
 	return m
 
 
-## Obsidian (vfx_obsidian): in the world, or drawn in your view as the arms
+## Obsidian (burst_glass): in the world, or drawn in your view as the arms
 ## are (`view_fov` the arms' field of view, 0 the camera's).
 static func obsidian_look(in_view := false, view_fov := 0.0) -> ShaderMaterial:
 	if not in_view and _obsidian != null:
 		return _obsidian
 
-	var m := ShaderMaterial.new()
-	m.shader = OBSIDIAN_SHADER
-	m.set_shader_parameter(&"glass", GLASS)
-	m.set_shader_parameter(&"glint", GLINT)
+	var m := big_glass_look(GLASS_SPENT)
 
 	if in_view:
+		m.set_shader_parameter(&"charge", GLASS_CHARGED)
 		m.set_shader_parameter(&"z_clip", ViewArms.Z_CLIP)
 		m.set_shader_parameter(&"fov_override", view_fov)
 		m.render_priority = 12
@@ -485,6 +491,24 @@ static func obsidian_look(in_view := false, view_fov := 0.0) -> ShaderMaterial:
 		_obsidian = m
 
 	return m
+
+
+## Obsidian full of the spell: the Shard in flight.
+static func obsidian_hot_look() -> ShaderMaterial:
+	if _obsidian_hot == null:
+		_obsidian_hot = big_glass_look(GLASS_CHARGED)
+
+	return _obsidian_hot
+
+
+## A piece of the modelled glass (assets/magic/burst_glass.glb) by name.
+static func glass_mesh(id: String) -> Mesh:
+	if not _glass_meshes.has(id):
+		var made: Node3D = (load(GLASS_MODEL) as PackedScene).instantiate()
+		_glass_meshes[id] = (made.find_child(id, true, false) as MeshInstance3D).mesh
+		made.free()
+
+	return _glass_meshes[id]
 
 
 ## The Shard let go at the palm, in your view: RELEASE_FLAKES flakes flung
@@ -585,7 +609,7 @@ static func spike_star(context: Node, at: Vector3, normal: Vector3) -> void:
 		var along := (out * cos(tilt) + lean * sin(tilt)).normalized()
 		var spike := MeshInstance3D.new()
 		spike.name = "Spike"
-		spike.mesh = spearhead_mesh(length * 0.3, length, length * 0.18, true)
+		spike.mesh = glass_mesh("Spike_%d" % (i % 5 + 1))
 		spike.material_override = obsidian_look()
 		spike.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		spike.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
@@ -596,16 +620,18 @@ static func spike_star(context: Node, at: Vector3, normal: Vector3) -> void:
 		var heel := at + lean * 0.025 * float(i > 0) - out * 0.015
 		var facing := along.cross(lean if i > 0 else side).normalized()
 		var basis := Basis(along.cross(facing).normalized(), along, facing)
-		spike.global_transform = Transform3D(basis.scaled_local(Vector3(1.0, 0.05, 1.0)), heel)
+		# (A modelled spike is a metre tall: this one, `length`, a little stouter than that makes it.)
+		var wide := length * 1.05
+		spike.global_transform = Transform3D(basis.scaled_local(Vector3(wide, length * 0.05, wide)), heel)
 		var life := spike.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
-		life.tween_method(func(g: float): spike.global_basis = basis.scaled_local(Vector3(1.0, g, 1.0)), 0.05, 1.0, SPIKE_GROW).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		life.tween_method(func(g: float): spike.global_basis = basis.scaled_local(Vector3(wide, length * g, wide)), 0.05, 1.0, SPIKE_GROW).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 		life.tween_interval(SPIKE_STAY - SPIKE_GROW)
 		life.tween_callback(func(): _crumble(spike, along, length))
-		life.tween_method(func(g: float): spike.global_basis = basis.scaled_local(Vector3(g, g, g)), 1.0, 0.0, SPIKE_CRUMBLE).set_ease(Tween.EASE_IN)
+		life.tween_method(func(g: float): spike.global_basis = basis.scaled_local(Vector3(wide * g, length * g, wide * g)), 1.0, 0.0, SPIKE_CRUMBLE).set_ease(Tween.EASE_IN)
 		_keep(spike, SPIKE_STAY + SPIKE_CRUMBLE)
 
 	_dust_ring(context, at + out * 0.01, out, &"shard_ring", [DUST, DUST_BODY, GLASS], DUST_RING_TO)
-	glint_light(context, at + out * 0.3, 1.0, 2.5)
+	glint_light(context, at + out * 0.3, 1.0, 2.5, AMETHYST)
 
 
 ## A shard stuck in a man where it struck (`at`, going `direction`): on the
@@ -617,7 +643,7 @@ static func stuck_in(target: Node3D, at: Vector3, direction: Vector3) -> void:
 
 	var shard := MeshInstance3D.new()
 	shard.name = "StuckShard"
-	shard.mesh = spearhead_mesh(0.05, 0.32, 0.022)
+	shard.mesh = glass_mesh("Head")
 	shard.material_override = obsidian_look()
 	shard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	shard.add_to_group(&"shard_stuck")
@@ -679,7 +705,8 @@ static func _crumble(spike: Node3D, along: Vector3, length: float) -> void:
 		shape.shape = box
 		piece.add_child(shape)
 		var visual := MeshInstance3D.new()
-		visual.mesh = spearhead_mesh(0.02, 0.04 + 0.015 * float(i), 0.008)
+		visual.mesh = glass_mesh("Chunk_%d" % (i + 1))
+		visual.scale = Vector3.ONE * (0.3 + 0.1 * float(i))
 		visual.material_override = obsidian_look()
 		visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		piece.add_child(visual)

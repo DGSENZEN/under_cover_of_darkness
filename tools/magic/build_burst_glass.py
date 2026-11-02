@@ -1,5 +1,5 @@
 """The Burst's black glass (docs/superpowers/specs/2026-11-02-burst-floor-wave-design.md): five
-thick spikes that tear up through a floor, and six broken chunks they fall into. Flaked: curved
+thick spikes that tear up through a floor, six broken chunks they fall into, and the Shard's head. Flaked: curved
 scooped hollows meeting at ridges, on a bent line, a blade or two grown from the same root. They
 wear scripts/Magic/burst_glass.gdshader; their colours tell it how near a ridge each corner is
 (red) and how deep in a flake (green). The user's pick, from the look that read as amethyst.
@@ -43,6 +43,11 @@ SPIKES = (
 ## corners wander.
 RINGS = ((0.0, 1.0, 0.1), (0.3, 0.78, 0.22), (0.62, 0.45, 0.3), (0.86, 0.17, 0.35))
 CHUNKS = 6
+## The Shard's flying head (and what stays in what it hits): how long (m), how wide against that,
+## how many triangles it keeps.
+HEAD_LONG = 0.32
+HEAD_WIDE = 0.2
+HEAD_TRIS = 420
 CHUNK_SIZE = (0.16, 0.3)
 ## How fine it is cut before it is flaked (m), how many triangles it keeps.
 VOXEL = 0.0125
@@ -289,6 +294,25 @@ def build_chunk(index):
     return obj
 
 
+def build_head():
+    """The Shard's spearhead: the same flaked glass, drawn in at its heel. Its middle at the origin,
+    its point up +Z (the game's +Y)."""
+    rng = random.Random(71)
+    obj = as_object(loft(rng, 1.0, HEAD_WIDE, 6, 0.02, False), "Head")
+    flakes = flake(obj, rng, True)
+    finish(obj, flakes, HEAD_TRIS)
+
+    for v in obj.data.vertices:
+        drawn = 0.45 + 0.55 * min(max((v.co.z + BELOW) / 0.3, 0.0), 1.0)
+        v.co.x *= drawn
+        v.co.y *= drawn
+
+    low = min(v.co.z for v in obj.data.vertices)
+    high = max(v.co.z for v in obj.data.vertices)
+    obj.data.transform(Matrix.Scale(HEAD_LONG / (high - low), 4) @ Matrix.Translation((0.0, 0.0, -(low + high) * 0.5)))
+    return obj
+
+
 def previews(spikes, chunks):
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_EEVEE"
@@ -335,7 +359,10 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     spikes = [build_spike(i + 1, spec) for i, spec in enumerate(SPIKES)]
     chunks = [build_chunk(i + 1) for i in range(CHUNKS)]
+    head = build_head()
+    head.hide_render = True
     previews(spikes, chunks)
+    head.hide_render = False
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(SOURCE, "burst_glass.blend"))
     bpy.ops.export_scene.gltf(filepath=GLB, export_format="GLB", export_yup=True, export_materials="NONE", export_normals=True, export_apply=False, export_vertex_color="ACTIVE", export_all_vertex_colors=False)
     print("TRIS", [sum(len(p.vertices) - 2 for p in o.data.polygons) for o in spikes + chunks])

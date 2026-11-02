@@ -32,6 +32,8 @@ const THROW_SPEED := 9.0
 ## Flung up by the Burst: how hard, how fast that dies.
 const FLUNG_UP := 6.5
 const FLUNG_DIES := 10.0
+## Knocked by a Shard going through it, how hard.
+const JOLT_UP := 2.2
 ## They spread out, so they come at you from more than one side (m beside you).
 const SPREAD := 1.6
 const GRAVITY := 18.0
@@ -407,6 +409,15 @@ func _hold_height(wanted: Vector3, delta: float) -> Vector3:
 	return wanted
 
 
+## Glass has gone through it: it is knocked, and goes on. No stun, no opening.
+func jolted(way: Vector3) -> void:
+	_lift = maxf(_lift, JOLT_UP)
+	_fall = 0.0
+
+	if body != null:
+		body.jolt(way)
+
+
 ## Thrown up off its feet by the wave, and over. Nothing else changes: no stun, no opening.
 func flung_up(from: Vector3) -> void:
 	_lift = FLUNG_UP
@@ -421,7 +432,7 @@ func _on_struck(result: StringName, source: StringName) -> void:
 		return
 
 	if body != null:
-		body.struck(global_position, Vector3.FORWARD, result, source)
+		body.struck(last_hit_at, last_hit_way, result, source)
 
 	rouse()
 

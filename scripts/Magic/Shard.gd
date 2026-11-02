@@ -16,6 +16,7 @@ const WardScript := preload("res://scripts/Magic/Ward.gd")
 const MonsterScript := preload("res://scripts/Monsters/Monster.gd")
 const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
 const ShardTrail := preload("res://scripts/Visual/ShardTrail.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
 signal struck(target: Object, damage: float)
 
@@ -37,12 +38,12 @@ const LENGTH := 0.32
 const PIERCES := 2
 ## How far past a monster's edge it still finds it (m).
 const GENEROUS := 0.3
-const WIDTH := 0.05
-const DEPTH := 0.022
 ## How fast it spins about its length (radians a second).
 const SPIN := 14.0
 ## Struck this close to a limb's bone, a killing shard takes that limb.
 const LIMB_REACH := 0.16
+## The little catch as it goes through something (s).
+const THROUGH_STOP := 0.025
 
 var velocity := Vector3.ZERO
 var damage := DAMAGE
@@ -63,8 +64,8 @@ func _ready() -> void:
 	# A long splinter of black glass, its point along the flight (-Z).
 	_visual = MeshInstance3D.new()
 	_visual.name = "MeshInstance3D"
-	_visual.mesh = MagicFx.spearhead_mesh(WIDTH, LENGTH, DEPTH)
-	_visual.material_override = MagicFx.obsidian_look()
+	_visual.mesh = MagicFx.glass_mesh("Head")
+	_visual.material_override = MagicFx.obsidian_hot_look()
 	_visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_visual)
 	_turn()
@@ -97,6 +98,7 @@ func launch(from: Vector3, launch_velocity: Vector3, hit_damage: float, by: Node
 	ShardTrail.follow(self, visual_position())
 	SoundBus.emit_sound(from, HISS_DB, by, &"shard")
 	Sfx.play(self, &"whoosh_light", from, -6.0, 1.6)
+	Sfx.play(self, &"whoosh_heavy", from, -13.0, 1.5)
 
 
 func _physics_process(delta: float) -> void:
@@ -172,6 +174,7 @@ func _hit(hit: Dictionary, direction: Vector3) -> void:
 			_passed_monsters.append(target)
 			global_position = point
 			collider.take_hit(damage, shooter, &"shard", point, direction)
+			_went_through(target, point, direction)
 			struck.emit(collider, damage)
 			return
 
@@ -206,8 +209,28 @@ func _hit(hit: Dictionary, direction: Vector3) -> void:
 	MagicFx.shatter(self, point, normal)
 	MagicFx.spike_star(self, point, normal)
 	SoundBus.emit_sound(point, HISS_DB, shooter, &"shard")
+	Sfx.play(self, &"thud", point, -9.0, 1.3)
+	Sfx.play(self, &"ting", point, -11.0, 0.8)
 	struck.emit(collider, 0.0)
 	queue_free()
+
+
+## Through a monster: you feel it, it is knocked, and if it lives, it has the glass in it.
+func _went_through(target: Node3D, point: Vector3, direction: Vector3) -> void:
+	Sfx.play(self, &"arrow_flesh", point, -3.0, 1.2)
+	Sfx.play(self, &"ting", point, -13.0, 0.9)
+	TimeFx.hitstop(get_tree(), THROUGH_STOP)
+
+	if not is_instance_valid(target) or target.get("dead") == true:
+		return
+
+	if target.has_method("jolted"):
+		target.jolted(direction)
+
+	if target.has_method("cracked_by"):
+		target.cracked_by(point, direction)
+
+	MagicFx.stuck_in(target, point, direction)
 
 
 ## The limb of `target` a shard went into, struck at `point` (on his body's

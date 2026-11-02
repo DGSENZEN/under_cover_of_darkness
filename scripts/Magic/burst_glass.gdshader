@@ -1,4 +1,4 @@
-// The Burst's obsidian: dark amethyst-black volcanic glass, flaked, its facets catching a cold
+// The obsidian school's glass (the Burst, the Shard): dark amethyst-black volcanic glass, flaked, its facets catching a cold
 // violet sheen in hard bands that slide as you move, with a faint oil of colour; its flaked ridges
 // razor thin, so they let the light through. Inside it, seen at depth, veins of the spell's violet
 // light, moving, strongest at the root where it tore up from the floor. `charge` is how much of the
@@ -19,6 +19,9 @@ uniform float charge = 0.3;
 uniform float dark = 0.3;
 // How much a MultiMesh instance's own alpha adds to it (0 for a lone mesh).
 uniform float custom_share = 0.0;
+// The viewmodel's depth squeeze and its own field of view (0: the camera's).
+uniform float z_clip = 1.0;
+uniform float fov_override = 0.0;
 
 varying vec3 local;
 varying vec3 to_eye_local;
@@ -27,6 +30,15 @@ varying float in_flake;
 varying float charged;
 
 void vertex() {
+	Z_CLIP_SCALE = z_clip;
+
+	if (fov_override > 0.0) {
+		float f = 1.0 / tan(radians(fov_override) * 0.5);
+		float aspect = abs(PROJECTION_MATRIX[1][1] / PROJECTION_MATRIX[0][0]);
+		PROJECTION_MATRIX[1][1] = f * sign(PROJECTION_MATRIX[1][1]);
+		PROJECTION_MATRIX[0][0] = f / aspect * sign(PROJECTION_MATRIX[0][0]);
+	}
+
 	local = VERTEX;
 	to_eye_local = (inverse(MODEL_MATRIX) * vec4(CAMERA_POSITION_WORLD, 1.0)).xyz - VERTEX;
 	near_ridge = COLOR.r;
