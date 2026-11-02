@@ -4,12 +4,12 @@ extends RefCounted
 ## one it showed last time.
 
 const ALL := [
-	{"text": "“Los muertos pesan más que los vivos; lo aplastan a uno.”", "by": "Juan Rulfo, Pedro Paramo"},
-	{"text": "“Cada suspiro es como un sorbo de vida del que uno se deshace.”", "by": "Juan Rulfo, Pedro Paramo"},
+	{"text": "“Los muertos pesan más que los vivos; lo aplastan a uno.”", "by": "Juan Rulfo, Pedro Páramo"},
+	{"text": "“Cada suspiro es como un sorbo de vida del que uno se deshace.”", "by": "Juan Rulfo, Pedro Páramo"},
 	{"text": "“No hay paz ni cierre. No hay reconciliación. No hay cruce. Todo eso es ficción.”", "by": "Mariana Enriquez, Mis Tristes Muertos"},
 	{"text": "“Nos asustan los fantasmas y sin embargo vivimos minuciosamente entre ellos.”", "by": "Silvina Ocampo, La Torre de los Caballos Azules"},
-	{"text": "“Cualquier acto que ejecutemos puede ser el último; no hay rostro que no esté a punto de desdibujarse como el rostro de un sueño.”", "by": "Jorge Luis Borges, El Alefo."},
-	{"text": "“¿Y qué es la vida sino una sombra que pasa?”", "by": "Rosario Castellanos, Balun Calan"},
+	{"text": "“Cualquier acto que ejecutemos puede ser el último; no hay rostro que no esté a punto de desdibujarse como el rostro de un sueño.”", "by": "Jorge Luis Borges, El Aleph."},
+	{"text": "“¿Y qué es la vida sino una sombra que pasa?”", "by": "Rosario Castellanos, Balún Canán"},
 	{"text": "“Era un fantasma que no sabía que estaba muerto, y eso era lo peor.”", "by": "Roberto Bolaño, Los sinsabores del verdadero policía"},
 	{"text": "“Los muertos no se van; se quedan pegados a las paredes, a los muebles, a la ropa.”", "by": "Laura Restrepo, Delirio."},
 ]

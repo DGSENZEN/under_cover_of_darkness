@@ -65,6 +65,7 @@ func _ready() -> void:
 	await baker.baked
 	await _frames(5)
 	await _run()
+	await _blink_aimed_a_little_down()
 
 	print("\n==== RESULTS ====")
 	for r in results:
@@ -1082,3 +1083,18 @@ func _near(a: float, b: float, tol: float) -> bool:
 
 func _check(test_name: String, ok: bool, detail: String) -> void:
 	results.append("%s  %s   [%s]" % ["PASS" if ok else "FAIL", test_name, detail])
+
+
+## Aimed a little under the horizon, on the flat: the ground is no wall, it still goes the distance.
+func _blink_aimed_a_little_down() -> void:
+	const Blink := preload("res://scripts/Magic/Blink.gd")
+	player.teleport(Transform3D(Basis.IDENTITY, Vector3(0.0, 1.05, -25.0)))
+	await _frames(3)
+	var eye: Vector3 = player.camera.global_position
+
+	for down in [0.0, 1.5, 3.0, 5.0]:
+		var way := Vector3(0.0, -sin(deg_to_rad(down)), -cos(deg_to_rad(down)))
+		var to: Vector3 = Blink.arrival(player, eye, way, Blink.RANGE)
+		var gone: float = Vector2(to.x, to.z).distance_to(Vector2(player.global_position.x, player.global_position.z))
+		_check("D1 aimed %.1f degrees down on the flat it goes the distance" % down, gone > Blink.RANGE * 0.9, "%.1f m" % gone)
+		_check("D1b and stands on the floor", absf(to.y - player.global_position.y) < 0.2, "%.2f" % to.y)

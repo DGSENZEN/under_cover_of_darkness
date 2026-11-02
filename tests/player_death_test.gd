@@ -437,7 +437,7 @@ func _marked_dead() -> void:
 
 
 func _quotes() -> void:
-	_check("Q1 all eight of the user's quotes", DeathQuotes.ALL.size() == 8 and DeathQuotes.ALL[1]["text"] == "“Cada suspiro es como un sorbo de vida del que uno se deshace.”" and DeathQuotes.ALL[1]["by"] == "Juan Rulfo, Pedro Paramo")
+	_check("Q1 all eight of the user's quotes", DeathQuotes.ALL.size() == 8 and DeathQuotes.ALL[1]["text"] == "“Cada suspiro es como un sorbo de vida del que uno se deshace.”" and DeathQuotes.ALL[1]["by"] == "Juan Rulfo, Pedro Páramo")
 	var used := {}
 
 	for how in [&"eyes", &"animas", &"both", &"swipe", &"fall"]:

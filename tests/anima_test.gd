@@ -32,6 +32,7 @@ func _ready() -> void:
 	await _face_life()
 	await _hands_life()
 	await _forms()
+	await _round_cover()
 	await _swipes()
 	await _swipes_seen()
 	await _rush()
@@ -150,6 +151,26 @@ func _face_model() -> void:
 	_check("V9c it has the low fire too", body.part(&"Ember") != null)
 	e.queue_free()
 	await _frames(2)
+
+
+## Cover between it and you: it gets round, however square it meets it.
+func _round_cover() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(20)
+	p.invulnerable = true
+
+	for offset in [0.0, 0.4, 0.8, -0.6]:
+		var block: Node = Props.block(self, HOME + Vector3(0.0, 0.0, -3.0), Vector3(3.0, 3.0, 0.6))
+		var one := _anima(&"hands", HOME + Vector3(offset, -0.6, -5.0))
+		one.leap_chance = 0.0
+		one.health = 500.0
+		await _frames(1)
+		var reached: bool = await _until(func(): return one.global_position.distance_to(p.global_position) < 2.2, 12.0)
+		_check("R1 hands behind cover, %.1f m off square, get round it (%.1f m left)" % [offset, one.global_position.distance_to(p.global_position)], reached)
+		one.free()
+		block.free()
+		await _frames(2)
 
 
 func _forms() -> void:

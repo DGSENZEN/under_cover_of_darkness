@@ -29,6 +29,12 @@ const LEAVE_TIME := 6.0
 const CROWD_REACH := 12.0
 const CROWD_SPEED := 6.0
 const CROWD_RING := 1.3
+## Stopped dead this long, moving slower than this, it feels along what stopped it for this long,
+## and goes on the same way round for this long after.
+const FEEL_AFTER := 0.2
+const FEEL_MOVES_LESS := 0.25
+const FEEL_FOR := 0.9
+const FEEL_KEEPS := 2.5
 ## A swipe (its damage, reach and wind-up by form, in Bestiary): how long the swing, how hard it
 ## lunges into it; how long it backs off, how fast; how long till the next.
 const SWIPE_TIME := 0.16
@@ -94,6 +100,12 @@ var notice := NOTICE
 var death_kind := -1
 ## If it kills you, how you die (PlayerDeath.gd).
 var kills_as: StringName = &"swipe"
+var _feel_was := Vector3.ZERO
+var _feel_stuck := 0.0
+var _feel_left := 0.0
+var _feel_keeps := 0.0
+var _feel_side := 0.0
+var _feel_way := Vector3.ZERO
 ## How likely, each time it could leap, that it does. If not, it comes on to cut you.
 var leap_chance := 1.0
 var state: int = State.RISE
@@ -139,6 +151,8 @@ func _ready() -> void:
 	health = float(_form["health"])
 	grip_left = int(_form["grip"])
 	super._ready()
+	# (Godot stops a body dead against a wall it meets nearly square, unless told not to.)
+	wall_min_slide_angle = 0.0
 	_spread_turn = TAU * fmod(absf(position.x) * 0.37 + absf(position.z) * 0.61, 1.0)
 	_agent = NavigationAgent3D.new()
 	_agent.path_desired_distance = 0.6
@@ -320,7 +334,7 @@ func _after_you(you: Node3D, delta: float) -> Vector3:
 			var spot := you.global_position + Vector3(cos(_spread_turn), 0.0, sin(_spread_turn)) * CROWD_RING
 			var to_spot := spot - global_position
 			to_spot.y = 0.0
-			return _hold_height(to_spot.limit_length(1.0) * CROWD_SPEED, delta)
+			return _hold_height(_feel_round(to_spot.limit_length(1.0), delta) * CROWD_SPEED, delta)
 
 	if state == State.LEAVE:
 		if _state_t >= LEAVE_TIME:
@@ -328,9 +342,38 @@ func _after_you(you: Node3D, delta: float) -> Vector3:
 		else:
 			var away := global_position - you.global_position
 			away.y = 0.0
-			return _hold_height(away.normalized() * LEAVE_SPEED, delta)
+			return _hold_height(_feel_round(away.normalized(), delta) * LEAVE_SPEED, delta)
 
 	return _hold_height(Vector3.ZERO, delta)
+
+
+## Stopped dead against something between it and where it is going, it feels along it, the same
+## way, till it is past.
+func _feel_round(way: Vector3, delta: float) -> Vector3:
+	var moved := (global_position - _feel_was) * Vector3(1.0, 0.0, 1.0)
+	_feel_was = global_position
+	_feel_stuck = _feel_stuck + delta if is_on_wall() and moved.length() < FEEL_MOVES_LESS * delta else 0.0
+
+	if _feel_stuck >= FEEL_AFTER:
+		_feel_stuck = 0.0
+		_feel_left = FEEL_FOR
+		var wall := get_wall_normal()
+		_feel_way = Vector3(-wall.z, 0.0, wall.x).normalized()
+
+		# Whichever way along it is nearer where it is going; once chosen, kept, or it dithers.
+		if _feel_side == 0.0:
+			_feel_side = signf(_feel_way.dot(way)) if absf(_feel_way.dot(way)) > 0.05 else (1.0 if _spread_turn < PI else -1.0)
+
+		_feel_way *= _feel_side
+
+	if _feel_left <= 0.0:
+		_feel_keeps = maxf(_feel_keeps - delta, 0.0)
+		_feel_side = _feel_side if _feel_keeps > 0.0 else 0.0
+		return way
+
+	_feel_left -= delta
+	_feel_keeps = FEEL_KEEPS
+	return _feel_way
 
 
 ## It has no more use for you.
@@ -371,7 +414,7 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 				if randf() < leap_chance:
 					_enter(State.TELL)
 			else:
-				return _hold_height(_toward(you) * float(_form["speed"]) * _hunger() * _slowed(), delta)
+				return _hold_height(_feel_round(_toward(you), delta) * float(_form["speed"]) * _hunger() * _slowed(), delta)
 		State.CIRCLE:
 			var leech: Node = _leech()
 

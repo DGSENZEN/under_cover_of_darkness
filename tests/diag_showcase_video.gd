@@ -1,96 +1,63 @@
 extends Node3D
-## The hunts so far, played with real keys in the mixed gym, to record: packing and choosing items,
-## swipes and the whip, the spells, the turned eye and its spit, the egg and the line, the curse and
-## the drain as one body; then each way of dying. No words of ours. To record:
-##   Godot --path . --resolution 1920x1080 --write-movie <file>.avi res://tests/diag_showcase_video.tscn
+## The hunts so far, as a list of shots, each staged in the mixed gym and played with real keys,
+## nothing left to chance: the camera is on what matters, and each shot says whether the thing it
+## is there to show really happened (SHOW lines, read by tools/showcase/record.sh). One shot a run:
+##   Godot --path . --resolution 1920x1080 --fixed-fps 60 --write-movie <file>.avi res://tests/diag_showcase_video.tscn -- --shot=<name>
+## No words of ours. For the camera only: the yard is lit, and things are put where they can be seen.
 
 const GYM := preload("res://maps/mixed_gym.tscn")
 const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
 const EyeScript := preload("res://scripts/Monsters/FloatingEye.gd")
+const EyeGobScript := preload("res://scripts/Monsters/EyeGob.gd")
 const SaveFiles := preload("res://scripts/Save/SaveFiles.gd")
 const DeathQuotes := preload("res://scripts/UI/DeathQuotes.gd")
-## How fast the view swings to what it is after, and how far off it wanders (rad).
-const AIM_RATE := 7.0
-const AIM_WANDER := 0.012
-const LONGEST := 420.0
+## Where a shot stands, looking along -z, with room all round.
+const MARK := Vector3(-3.5, 1.05, -16.0)
+const AIM_RATE := 8.0
+
+const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
 
 var gym: Node3D
 var p: CharacterBody3D
 var target: Node3D
 var look_point := Vector3.ZERO
-var strafing := false
-var _time := 0.0
+var _failed := 0
 
 
 func _ready() -> void:
-	await _new_gym()
+	var shot := "pack"
 
-	# (A long take can stall the recording: --fights and --deaths take a half each.)
-	if not OS.get_cmdline_user_args().has("--deaths"):
-		await _packing()
-		await _swipes_and_whip()
-		await _spells()
-		await _the_turned_eye()
-		await _one_body()
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--shot="):
+			shot = arg.trim_prefix("--shot=")
 
-	if not OS.get_cmdline_user_args().has("--fights"):
-		await _death_by_the_eyes()
-		await _death_by_the_animas()
-		await _death_by_a_swipe()
-		await _death_by_both()
-	_chapter("the end")
+	gym = GYM.instantiate()
+	add_child(gym)
+	await _frames(40)
+	p = gym.player
+	p.invulnerable = true
+	p.reload_on_death = true
+	gym.wave_now = gym._waves.size()
+	CityState.job.read_slot("mixed_clue")
+	_light_the_yard()
+	await call("_" + shot)
+	print("SHOW %s %s" % [shot, "ok" if _failed == 0 else "FAILED"])
 	SaveFiles.delete_run(CityState.run_id)
 	get_tree().quit()
 
 
-func _new_gym() -> void:
-	target = null
-	look_point = Vector3.ZERO
-	strafing = false
-
-	for action in ["move_left", "move_right", "move_forward", "move_back", "throw"]:
-		Input.action_release(action)
-
-	if gym != null:
-		gym.free()
-		await _frames(2)
-
-	gym = GYM.instantiate()
-	add_child(gym)
-	await _frames(70)
-	p = gym.player
-	p.invulnerable = true
-	p.reload_on_death = true
-	CityState.job.read_slot("mixed_clue")
-	_light_the_yard()
-
-
-## For the camera, this recording only: the yard is meant to be dark, and film goes darker.
 func _light_the_yard() -> void:
-	for at in [Vector3(-8, 4, -12), Vector3(8, 4, -14), Vector3(0, 4.5, -22), Vector3(-9, 4, -28), Vector3(9, 4, -30), Vector3(0, 4, -8)]:
+	for at in [Vector3(-7, 4, -13), Vector3(7, 4, -13), Vector3(0, 4.5, -22), Vector3(-8, 4, -28), Vector3(8, 4, -28)]:
 		var lamp := OmniLight3D.new()
 		lamp.light_color = Color(1.0, 0.8, 0.58)
-		lamp.light_energy = 1.5
-		lamp.omni_range = 15.0
+		lamp.light_energy = 1.6
+		lamp.omni_range = 16.0
 		lamp.omni_attenuation = 0.8
 		gym.add_child(lamp)
 		lamp.global_position = at
 
 
-## The eyes wait their turn, so what is being shown can be seen.
-func _eyes_wait() -> void:
-	for one in _awake():
-		if one.get("form") == null:
-			one.sleep()
-
-
 func _physics_process(delta: float) -> void:
-	_time += delta
-
-	if _time > LONGEST:
-		print("VIDEO cut at the longest")
-		get_tree().quit()
-
 	if p == null or not is_instance_valid(p) or p.is_dead:
 		return
 
@@ -101,362 +68,483 @@ func _physics_process(delta: float) -> void:
 
 	var way: Vector3 = (at - p.camera.global_position).normalized()
 	var turn := 1.0 - exp(-AIM_RATE * delta)
-	var wander := Vector2(sin(_time * 1.3), cos(_time * 0.9)) * AIM_WANDER
-	p.rotation.y = lerp_angle(p.rotation.y, atan2(-way.x, -way.z) + wander.x, turn)
-	p.neck.rotation.x = lerp_angle(p.neck.rotation.x, asin(clampf(way.y, -1.0, 1.0)) + wander.y, turn)
+	p.rotation.y = lerp_angle(p.rotation.y, atan2(-way.x, -way.z), turn)
+	p.neck.rotation.x = lerp_angle(p.neck.rotation.x, asin(clampf(way.y, -1.0, 1.0)), turn)
 
 
-func _packing() -> void:
-	_chapter("packing")
+# The stage.
+
+## Out in the yard, kitted, gun up on copal, looking ahead.
+func _stand(aim_low := 0.0) -> void:
 	for what in [&"copal", &"copal_line", &"egg"]:
-		look_point = gym.kit_table.piece(what).global_position
-		await _frames(55)
 		gym.kit_table.piece(what).frob(p)
-		await _frames(30)
 
-	look_point = Vector3(0.0, 1.8, -20.0)
-	await _frames(30)
-	Input.action_press("move_forward")
-	await _until(func(): return p.global_position.z < gym.YARD_START + 1.5, 6.0)
-	Input.action_release("move_forward")
-	# Choosing between what you packed.
-	await _press("next_item")
-	await _frames(50)
-	await _press("next_item")
-	await _frames(50)
-	await _press("switch_round")
-	await _until(func(): return not p.revolver.is_reloading(), 6.0)
-
-
-func _walk_out() -> void:
-	look_point = Vector3(0.0, 1.8, -24.0)
-	Input.action_press("move_forward")
-	await _until(func(): return p.global_position.z < gym.YARD_START - 4.0, 6.0)
-	Input.action_release("move_forward")
-
-
-func _swipes_and_whip() -> void:
-	_chapter("swipes")
-	await _walk_out()
-	_eyes_wait()
-	strafing = false
-	await _let_them_come(5.0)
-	await _fight(func(): return _awake_animas().is_empty(), 11.0)
-	_clear(_awake_animas())
-	await _frames(70)
-
-
-func _spells() -> void:
-	_chapter("spells")
-	gym.wave(2)
-	_eyes_wait()
-	await _let_them_come(3.0)
-	await _spell("spell_1", 42)
-	await _fight(func(): return false, 1.5)
-	await _spell("spell_1", 42)
-	await _let_them_come(2.0)
-	await _spell("spell_4", 36)
-	await _frames(70)
-	await _spell("spell_2", 36)
-	await _frames(70)
-	await _spell("spell_3", 90)
-	target = _nearest()
+	p.loadout.restock()
+	p.revolver.cylinder_round = &"copal"
+	p.revolver.loaded[&"cylinder"] = 6
+	p.teleport(Transform3D(Basis.IDENTITY, MARK))
+	look_point = MARK + Vector3(0.0, 0.2 - aim_low, -10.0)
+	p.rotation.y = 0.0
+	p.neck.rotation.x = 0.0
 	await _frames(20)
-	p.revolver.try_whip()
-	await _frames(50)
-	await _blink()
-	await _fight(func(): return _awake_animas().is_empty(), 4.0)
-	_clear(_awake_animas())
-	await _frames(70)
 
 
-func _the_turned_eye() -> void:
-	_chapter("the turned eye")
-	var eye: CharacterBody3D = EyeScript.new()
-	eye.position = p.global_position + Vector3(2.0, 1.4, -8.0)
-	gym.add_child(eye)
-	await _frames(2)
-	eye.state = eye.State.CIRCLE
-	eye.next_swoop_in = 60.0
-	eye.spit_in = 60.0
-	# Near, for the camera: its radius is meant to keep it out of reach.
-	eye._radius = 3.4
-	eye._height = 2.4
-	target = eye
-	# Shot down past half: it tears open.
-	var left := 300
-
-	while not eye.dead and not eye.turned and left > 0:
-		left -= 1
-
-		if int(p.revolver.loaded[&"cylinder"]) == 0 and not p.revolver.is_reloading():
-			await _press("reload")
-		elif p.revolver.ready_to_fire() and _on_target():
-			await _press("throw")
-			await _frames(12)
-		else:
-			await _frames(1)
-
-	await _frames(100)
-
-	if eye.dead:
-		return
-
-	# It spits. One whipped back, one let through, and it opens the curse.
-	eye.spit_in = 0.0
-	await _until(func(): return not get_tree().get_nodes_in_group(&"eye_gobs").is_empty(), 3.0)
-	var gob: Node3D = get_tree().get_nodes_in_group(&"eye_gobs")[0] if not get_tree().get_nodes_in_group(&"eye_gobs").is_empty() else null
-
-	if gob != null:
-		target = gob
-		await _until(func(): return not is_instance_valid(gob) or gob.global_position.distance_to(p.global_position) < 2.8, 3.0)
-		p.revolver.try_whip()
-		await _frames(70)
-
-	target = eye
-	eye.spit_in = 0.0
-	await _frames(190)
-	# The egg sent back at it.
-	p.statuses.apply(&"evil_eye", 20.0)
-	await _frames(90)
-	p.loadout.selected = p.loadout.items.find(&"egg")
-	await _frames(20)
-	await _press("use_item")
-	await _frames(110)
-	await _fight(func(): return eye.dead, 7.0)
-	_clear(_awake())
-	await _frames(70)
+func _ahead(x: float, z: float, y := 0.0) -> Vector3:
+	return MARK + Vector3(x, y, -z)
 
 
-func _one_body() -> void:
-	_chapter("one body")
-	await _frames(10)
-	gym.wave(3)
-
-	for one in _awake():
-		if one.get("form") == null:
-			one.next_swoop_in = 60.0
-		elif one.get("form") == &"torso":
-			one.leap_chance = 0.0
-
-	p.statuses.apply(&"evil_eye", 60.0)
-
-	for i in 5:
-		p.curse.deepen()
-
-	await _let_them_come(3.0)
-	var put := 0
-
-	for one in _awake_animas():
-		if put < 3 and one.form != &"torso":
-			one.global_position = p.global_position + Vector3(0.6, 0.0, 0.2)
-			one.put_on_you()
-			put += 1
-			await _frames(70)
-
-	target = null
-	look_point = p.global_position + Vector3(0.0, 1.8, -10.0)
-	await _frames(240)
-	# Laying the line throws them off.
-	p.statuses.clear(&"evil_eye")
-	p.loadout.item_counts[&"copal_line"] = 2
-	p.loadout.selected = p.loadout.items.find(&"copal_line")
-	await _frames(30)
-	await _press("use_item")
-	await _frames(120)
-
-
-## Dies, and holds on the words and the page a moment.
-func _hold_on_the_words(quote: int) -> void:
-	await _until(func(): return p.is_dead, 25.0)
-	# (One of each, for the film; in play a death draws among its own.)
-	p.hud._death.set_quote(DeathQuotes.ALL[quote])
-	await _until(func(): return p.hud.death_page.visible, 12.0)
-	await _frames(170)
-
-
-func _feeder(form: StringName, at: Vector3, put_on := true) -> CharacterBody3D:
+func _anima(form: StringName, at: Vector3, leaps := 0.0) -> CharacterBody3D:
 	var one: CharacterBody3D = AnimaScript.new()
 	one.form = form
+	one.leap_chance = leaps
 	one.position = at
 	gym.add_child(one)
 	await _frames(1)
-
-	if put_on:
-		one.put_on_you()
-
 	return one
 
 
-func _in_the_room() -> void:
-	# Out of the door, where there is room to go down.
-	p.teleport(Transform3D(Basis.IDENTITY, Vector3(0.0, 1.05, -16.0)))
-	gym.wave_now = 3
-	look_point = Vector3(0.0, 1.6, -26.0)
+## Told to hold off, for a shot that needs it standing there.
+func _holds_off(one: CharacterBody3D) -> void:
+	one.notice = 0.0
+	one.state = one.State.CIRCLE
+
+
+func _eye(at: Vector3, near := 3.6, high := 2.3, turned := false) -> CharacterBody3D:
+	var one: CharacterBody3D = EyeScript.new()
+	one.position = at
+	one.start_turned = turned
+	gym.add_child(one)
+	await _frames(1)
+	one.state = one.State.CIRCLE
+	one.next_swoop_in = 100.0
+	one.spit_in = 100.0
+	one._radius = near
+	one._height = high
+	return one
+
+
+func _expect(what: String, ok: bool) -> void:
+	print("SHOW   %s %s" % ["ok  " if ok else "FAIL", what])
+
+	if not ok:
+		_failed += 1
+
+
+func _shoot(at: Node3D, count: int) -> void:
+	target = at
+	var left := 480
+	var fired := 0
+
+	while fired < count and left > 0 and is_instance_valid(at) and not at.dead:
+		left -= 1
+
+		if p.revolver.ready_to_fire() and _on_target(at):
+			await _press("throw")
+			fired += 1
+			await _frames(18)
+		else:
+			await _frames(1)
+
+
+func _on_target(at: Node3D) -> bool:
+	var way: Vector3 = (at.global_position - p.camera.global_position).normalized()
+	return way.dot(-p.camera.global_basis.z) > 0.995
+
+
+func _spell(action: String, frames: int) -> void:
+	p.power.power = p.power.MAX
+	Input.action_press(action)
+	await _frames(frames)
+	Input.action_release(action)
+
+
+func _gulps(count: int, most: float) -> void:
+	var seen := [0]
+	var on_gulp := func(): seen[0] += 1
+	p.leech.gulped.connect(on_gulp)
+	await _until(func(): return seen[0] >= count, most)
+	p.leech.gulped.disconnect(on_gulp)
+
+
+func _spit_at_you(eye: CharacterBody3D) -> Node3D:
+	eye.spit_in = 0.0
+	await _until(func(): return not get_tree().get_nodes_in_group(&"eye_gobs").is_empty(), 3.0)
+	var gobs: Array = get_tree().get_nodes_in_group(&"eye_gobs")
+	return gobs[0] if not gobs.is_empty() else null
+
+
+# The shots.
+
+func _pack() -> void:
+	for what in [&"copal", &"copal_line", &"egg"]:
+		look_point = gym.kit_table.piece(what).global_position
+		await _frames(50)
+		gym.kit_table.piece(what).frob(p)
+		await _frames(28)
+
+	_expect("three packed", p.loadout.items.size() == 2 and p.loadout.rounds.has(&"copal"))
+
+
+func _choose() -> void:
+	await _stand()
+	await _frames(45)
+	var was: StringName = p.loadout.selected_item()
+	await _press("next_item")
+	await _frames(70)
+	var then: StringName = p.loadout.selected_item()
+	await _press("next_item")
+	await _frames(70)
+	_expect("cycled and came back", then != was and p.loadout.selected_item() == was)
+
+
+func _swipes_by(form: StringName) -> void:
+	await _stand(0.5)
+	var one := await _anima(form, _ahead(0.6, 5.0, 0.3 if form == &"face" else -0.5))
+	target = one
+	var cuts := [0]
+	one.swiped.connect(func(hit): cuts[0] += 1 if hit else 0)
+	await _until(func(): return cuts[0] >= 2, 8.0)
+	await _frames(40)
+	_expect("two cuts landed on camera (%d)" % cuts[0], cuts[0] >= 2)
+
+
+func _swipe_hands() -> void:
+	await _swipes_by(&"hands")
+
+
+func _swipe_face() -> void:
+	await _swipes_by(&"face")
+
+
+func _latch_whip() -> void:
+	await _stand(0.5)
+	var one := await _anima(&"hands", _ahead(-0.5, 6.0, -0.5), 1.0)
+	target = one
+	var got: bool = await _until(func(): return p.leech.count() > 0, 8.0)
+	target = null
+	await _gulps(2, 6.0)
+	p.revolver.try_whip()
+	await _until(func(): return p.leech.count() == 0, 2.0)
+	await _frames(70)
+	_expect("it leapt on, drank, and the whip threw it off", got and p.leech.count() == 0)
+
+
+func _face_drinks() -> void:
+	await _stand()
+	var one := await _anima(&"face", _ahead(0.8, 0.5, 0.3))
+	one.put_on_you()
+	await _gulps(3, 7.0)
+	await _frames(20)
+	_expect("a face on you, drinking", p.leech.count() == 1)
+
+
+func _burst() -> void:
+	await _stand(0.6)
+	var hits := [0]
+
+	for i in 5:
+		var turn := -1.0 + float(i) * 0.5
+		var one := await _anima(&"face" if i % 2 == 1 else &"hands", _ahead(sin(turn) * 3.6, cos(turn) * 3.6, 0.3 if i % 2 == 1 else -0.5))
+		one.health = 500.0
+		_holds_off(one)
+		one.struck.connect(func(_result, _source): hits[0] += 1)
+
 	await _frames(30)
+	await _spell("spell_4", 40)
+	await _until(func(): return hits[0] >= 3, 2.0)
+	await _frames(150)
+	_expect("the wave reached them (%d hit)" % hits[0], hits[0] >= 3)
 
 
-func _death_by_the_eyes() -> void:
-	_chapter("the eyes")
-	await _new_gym()
-	await _in_the_room()
-	p.statuses.apply(&"evil_eye", 60.0)
-	p.curse.deepen()
-	var eye: CharacterBody3D = EyeScript.new()
-	eye.position = p.global_position + Vector3(0.0, 1.2, -7.0)
-	gym.add_child(eye)
+func _shard() -> void:
+	await _stand()
+	var near := await _anima(&"face", _ahead(0.0, 5.0, 0.15))
+	var far := await _anima(&"face", _ahead(0.0, 9.0, 0.15))
+	var hits := [0]
+
+	for one in [near, far]:
+		one.health = 500.0
+		_holds_off(one)
+		one.struck.connect(func(_result, _source): hits[0] += 1)
+
+	target = near
+	await _frames(30)
+	await _spell("spell_1", 36)
+	await _frames(100)
+	_expect("it went through (%d hit)" % hits[0], hits[0] >= 2)
+
+
+func _ward() -> void:
+	await _stand()
+	var eye := await _eye(_ahead(0.0, 8.0, 1.0), 8.0, 2.2, true)
+	target = eye
+	await _frames(40)
+	await _spell("spell_2", 34)
+	await _frames(40)
+	# (Behind its smoke the eye can't see you to spit: this one left before it rose.)
+	var gob: Node3D = EyeGobScript.spat_at(gym, eye.global_position, p.global_position + Vector3.UP * 0.15, eye)
+	await _until(func(): return not is_instance_valid(gob), 3.0)
+	await _frames(80)
+	_expect("the Ward stopped the spit", not is_instance_valid(gob) and not p.statuses.has(&"evil_eye"))
+
+
+func _empower() -> void:
+	await _stand(0.5)
+	var one := await _anima(&"hands", _ahead(0.3, 3.2, -0.5))
+	one.health = 9000.0
+	_holds_off(one)
+	var hit := [false]
+	one.struck.connect(func(_result, _source): hit[0] = true)
+	await _spell("spell_3", 85)
+	target = one
+	await _until(func(): return one.global_position.distance_to(p.global_position) < 1.25, 4.0)
+	p.revolver.try_whip()
+	await _until(func(): return hit[0], 1.0)
+	await _frames(110)
+	_expect("empowered, and the blow landed", hit[0])
+
+
+func _blink() -> void:
+	await _stand()
+	await _frames(25)
+	var from: Vector3 = p.global_position
+	p.power.power = p.power.MAX
+	look_point = _ahead(1.5, 12.0, 0.2)
+	await _frames(25)
+	Input.action_press("blink")
+	await _frames(30)
+	Input.action_release("blink")
+	await _frames(70)
+	_expect("it went (%.1f m)" % from.distance_to(p.global_position), from.distance_to(p.global_position) > 2.0)
+
+
+func _weak_kill() -> void:
+	await _stand(0.2)
+	var hands := await _anima(&"hands", _ahead(-1.5, 5.0, -0.5))
+	var face := await _anima(&"face", _ahead(1.5, 5.5, 0.2))
+
+	for one in [hands, face]:
+		_holds_off(one)
+		one.health = 1.0
+
+	await _frames(20)
+	await _shoot(hands, 2)
+	await _frames(120)
+	await _shoot(face, 2)
+	await _frames(170)
+	_expect("both shot, and burnt", hands.dead and face.dead)
+
+
+func _swoop_bat() -> void:
+	await _stand()
+	var eye := await _eye(_ahead(0.0, 5.0, 1.0), 5.0)
 	target = eye
 	await _frames(60)
-	eye.state = eye.State.CIRCLE
+	eye.next_swoop_in = 0.0
+	var swooped: bool = await _until(func(): return eye.state == eye.State.SWOOP, 4.0)
+	await _until(func(): return eye.global_position.distance_to(p.camera.global_position) < 3.0, 2.0)
+	p.revolver.try_whip()
+	var batted: bool = await _until(func(): return eye.state == eye.State.BATTED, 1.0)
+	await _frames(110)
+	_expect("it told, swooped, and was whipped back", swooped and batted)
+
+
+func _turn() -> void:
+	await _stand()
+	var eye := await _eye(_ahead(0.0, 4.0, 1.0), 4.0)
+	target = eye
+	await _frames(60)
+	# (However hard the round: this one hit is the one that tears it open.)
+	eye.health = 500.0
+	eye.struck.connect(func(_result, _source):
+		eye.health = eye._max_health() * eye.TURNS_AT
+		eye.turn())
+	await _shoot(eye, 1)
+	await _until(func(): return eye.turned, 2.0)
+	await _frames(200)
+	_expect("it tore open", eye.turned and not eye.dead)
+
+
+func _spit_bat() -> void:
+	await _stand()
+	var eye := await _eye(_ahead(0.0, 7.0, 1.0), 7.0, 2.0, true)
+	eye.health = 500.0
+	var hurt := [false]
+	eye.struck.connect(func(_result, _source): hurt[0] = true)
+	target = eye
+	await _frames(50)
+	var gob: Node3D = await _spit_at_you(eye)
+	var seen := gob != null
+
+	if seen:
+		await _until(func(): return not is_instance_valid(gob) or gob.global_position.distance_to(p.camera.global_position) < 2.6, 3.0)
+		p.revolver.try_whip()
+		await _until(func(): return not is_instance_valid(gob) or gob.is_batted(), 0.6)
+
+		# (The eye has moved since it spat: this much help, for the camera.)
+		for i in 60:
+			if not is_instance_valid(gob) or hurt[0]:
+				break
+
+			if gob.is_batted():
+				gob.velocity = (eye.global_position - gob.global_position).normalized() * gob.BAT_SPEED
+
+			await _frames(1)
+
+	await _frames(90)
+	_expect("whipped back into the eye that spat it", seen and hurt[0])
+
+
+func _spit_curse() -> void:
+	await _stand()
+	var eye := await _eye(_ahead(0.0, 7.0, 1.0), 7.0, 2.0, true)
+	target = eye
+	await _frames(40)
+	await _spit_at_you(eye)
+	await _until(func(): return p.statuses.has(&"evil_eye"), 3.0)
+	await _frames(60)
+	var one: bool = p.statuses.has(&"evil_eye")
+	var depth: int = p.curse.depth()
+	await _spit_at_you(eye)
+	await _until(func(): return p.curse.depth() > depth, 3.0)
+	await _frames(100)
+	_expect("it put the curse on you, then opened another eye (%d)" % p.curse.depth(), one and p.curse.depth() > depth)
+
+
+func _egg() -> void:
+	await _stand()
+	var eye := await _eye(_ahead(1.0, 6.0, 1.0), 6.0)
+	var eye_two := await _eye(_ahead(-1.5, 6.0, 1.0), 6.0)
+	p.statuses.apply(&"evil_eye", 60.0)
+
+	for i in 3:
+		p.curse.deepen()
+
+	target = eye
+	await _frames(80)
+	p.loadout.selected = p.loadout.items.find(&"egg")
+	await _press("use_item")
+	await _frames(100)
+	await _frames(80)
+	_expect("the egg took it, and sent it back", not p.statuses.has(&"evil_eye") and (eye.state == eye.State.DAZED or eye_two.state == eye.State.DAZED))
+
+
+func _line() -> void:
+	await _stand(0.7)
+	var one := await _anima(&"hands", _ahead(0.8, 0.5, -0.4))
+	one.put_on_you()
+	await _gulps(1, 5.0)
+	await _frames(20)
+	p.loadout.selected = p.loadout.items.find(&"copal_line")
+	await _press("use_item")
+	await _until(func(): return p.leech.count() == 0, 2.0)
+	var thrown: bool = p.leech.count() == 0
+	await _frames(170)
+	_expect("the line threw it off and holds it out", thrown)
+
+
+func _one_body() -> void:
+	await _stand()
+	p.statuses.apply(&"evil_eye", 60.0)
+
+	for i in 2:
+		p.curse.deepen()
+
+	await _frames(80)
+	var a := await _anima(&"face", _ahead(0.9, 0.5, 0.3))
+	a.put_on_you()
+	p.power.power = p.power.MAX * 0.5
+	await _gulps(2, 6.0)
+
+	for i in 3:
+		p.curse.deepen()
+
+	var b := await _anima(&"face", _ahead(-0.9, 0.5, 0.3))
+	var c := await _anima(&"hands", _ahead(0.0, -0.5, 0.0))
+	b.put_on_you()
+	c.put_on_you()
+	p.power.power = p.power.MAX * 0.15
+	await _gulps(3, 6.0)
+	_expect("curse and drain together", p.leech.count() == 3 and p.statuses.has(&"evil_eye"))
+
+
+func _words(quote: int, kind: StringName) -> void:
+	await _until(func(): return p.is_dead, 20.0)
+	_expect("the death is %s (%s)" % [kind, p.death.kind], p.death.kind == kind)
+	# (One of each, for the film; in play a death draws among its own.)
+	p.hud._death.set_quote(DeathQuotes.ALL[quote])
+	await _until(func(): return p.hud.death_page.visible, 14.0)
+	_expect("the words and the page came", p.hud.death_page.visible)
+	await _frames(150)
+
+
+func _die_eyes() -> void:
+	await _stand()
+	p.statuses.apply(&"evil_eye", 60.0)
+	p.curse.deepen()
+	var eye := await _eye(_ahead(0.0, 6.0, 1.0), 6.0)
+	target = eye
+	await _frames(70)
 	eye.next_swoop_in = 0.0
 	p.invulnerable = false
 	p.health = 1.0
-	await _hold_on_the_words(3)
+	await _words(3, &"eyes")
 
 
-func _death_by_the_animas() -> void:
-	_chapter("the animas")
-	await _new_gym()
-	await _in_the_room()
-	var face := await _feeder(&"face", p.global_position + Vector3(0.9, 0.3, -0.3))
-	var hands := await _feeder(&"hands", p.global_position + Vector3(-0.9, 0.3, -0.3))
+func _feeders_and_crowd() -> void:
+	var a := await _anima(&"face", _ahead(0.9, 0.5, 0.3))
+	var b := await _anima(&"hands", _ahead(-0.9, 0.5, 0.0))
+	a.put_on_you()
+	b.put_on_you()
 
 	for i in 3:
-		await _feeder(&"hands" if i < 2 else &"face", p.global_position + Vector3(float(i) * 3.0 - 3.0, 0.0, -8.0), false)
+		await _anima(&"hands" if i < 2 else &"face", _ahead(float(i) * 3.0 - 3.0, 8.0, -0.5 if i < 2 else 0.3))
 
-	target = null
-	await _frames(100)
+
+func _die_animas() -> void:
+	await _stand()
+	await _feeders_and_crowd()
+	await _gulps(1, 4.0)
 	p.invulnerable = false
-	p.max_health = maxf(p.max_health, 1.0)
-	p.health = 4.0
-	await _hold_on_the_words(1)
-	assert(face != null and hands != null)
+	p.health = 0.01
+	p.drain_life(1.0)
+	await _words(1, &"animas")
 
 
-func _death_by_a_swipe() -> void:
-	_chapter("a swipe")
-	await _new_gym()
-	await _in_the_room()
-	var one := await _feeder(&"hands", p.global_position + Vector3(1.0, 0.0, -6.0), false)
-	one.leap_chance = 0.0
+func _die_hands() -> void:
+	await _stand()
+	var a := await _anima(&"hands", _ahead(0.9, 0.5, 0.0))
+	a.put_on_you()
+	await _gulps(1, 4.0)
+	p.invulnerable = false
+	p.health = 0.01
+	p.drain_life(1.0)
+	await _words(0, &"animas")
+
+
+func _die_swipe() -> void:
+	await _stand(0.4)
+	var one := await _anima(&"hands", _ahead(0.5, 4.0, -0.5))
 	target = one
 	p.invulnerable = false
 	p.health = 1.0
-	await _hold_on_the_words(4)
+	await _words(4, &"swipe")
 
 
-func _death_by_both() -> void:
-	_chapter("both")
-	await _new_gym()
-	await _in_the_room()
+func _die_both() -> void:
+	await _stand()
 	p.statuses.apply(&"evil_eye", 60.0)
 
 	for i in 4:
 		p.curse.deepen()
 
-	await _frames(90)
-	await _feeder(&"face", p.global_position + Vector3(0.9, 0.3, -0.3))
-	await _feeder(&"hands", p.global_position + Vector3(-0.9, 0.3, -0.3))
-	target = null
-	await _frames(120)
+	await _frames(50)
+	await _feeders_and_crowd()
+	await _gulps(1, 4.0)
 	p.invulnerable = false
-	p.health = 4.0
-	await _hold_on_the_words(2)
-
-
-func _spell(action: String, frames: int) -> void:
-	p.power.power = p.power.MAX
-	target = _nearest()
-	Input.action_press(action)
-	await _frames(frames)
-	Input.action_release(action)
-	await _frames(14)
-
-
-func _blink() -> void:
-	p.power.power = p.power.MAX
-	target = null
-	look_point = p.global_position + Vector3(4.0, 1.2, -8.0)
-	await _frames(30)
-	Input.action_press("blink")
-	await _frames(24)
-	Input.action_release("blink")
-	await _frames(40)
-
-
-## Shoots what is nearest, whipping off what gets on you, till it's done or the time is up.
-func _fight(done: Callable, most: float) -> void:
-	var left := int(most * 60.0)
-	var held := 0
-
-	while left > 0 and not done.call():
-		left -= 1
-		p.power.power = maxf(p.power.power, p.power.MAX * 0.5)
-		target = _nearest()
-
-		if p.leech.count() > 0:
-			held += 1
-
-			# Let it get its teeth in first.
-			if held > 110:
-				held = 0
-				p.revolver.try_whip()
-				await _frames(14)
-				continue
-		else:
-			held = 0
-
-		if int(p.revolver.loaded[&"cylinder"]) == 0 and not p.revolver.is_reloading():
-			await _press("reload")
-		elif p.revolver.ready_to_fire() and _on_target():
-			await _press("throw")
-			await _frames(14)
-		else:
-			await _frames(1)
-
-
-func _clear(list: Array) -> void:
-	for m in list:
-		m.take_hit(9999.0, p, &"power", m.global_position, Vector3.FORWARD)
-
-
-func _let_them_come(seconds: float) -> void:
-	var left := int(seconds * 60.0)
-
-	while left > 0:
-		left -= 1
-		target = _nearest()
-		await _frames(1)
-
-
-func _on_target() -> bool:
-	if not is_instance_valid(target):
-		return false
-
-	var way: Vector3 = (target.global_position - p.camera.global_position).normalized()
-	return way.dot(-p.camera.global_basis.z) > 0.985
-
-
-func _awake() -> Array:
-	return get_tree().get_nodes_in_group(&"monsters").filter(func(m): return not m.dead and not m.asleep)
-
-
-func _awake_animas() -> Array:
-	return _awake().filter(func(m): return m.get("form") != null)
-
-
-func _nearest() -> Node3D:
-	var best: Node3D = null
-
-	for m in _awake():
-		if best == null or m.global_position.distance_to(p.global_position) < best.global_position.distance_to(p.global_position):
-			best = m
-
-	return best
-
-
-func _chapter(name_of: String) -> void:
-	print("VIDEO %.1f s: %s" % [_time, name_of])
+	p.health = 0.01
+	p.drain_life(1.0)
+	await _words(2, &"both")
 
 
 func _press(action: String) -> void:

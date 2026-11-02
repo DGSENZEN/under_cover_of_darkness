@@ -42,6 +42,12 @@ static func arrival(player: CharacterBody3D, eye: Vector3, toward: Vector3, reac
 			target = hit["position"] + Vector3.UP * (_origin_above_feet(player) + 0.05)
 		else:
 			target = eye + direction * maxf(eye.distance_to(hit["position"]) - SHORT, 0.0) + below_eye
+	# Aimed under the horizon with no floor in reach of the look: the body would be driven into
+	# the ground. It stands on whatever is under where it is going, or falls from there.
+	elif target.y < player.global_position.y:
+		var under := PhysicsRayQueryParameters3D.create(Vector3(target.x, eye.y, target.z), target + Vector3.DOWN * (_origin_above_feet(player) + 0.05), 1, [player.get_rid()])
+		var ground := space.intersect_ray(under)
+		target.y = player.global_position.y if ground.is_empty() else float(ground["position"].y) + _origin_above_feet(player) + 0.05
 
 	var start := player.global_position + Vector3.UP * LIFT
 	var motion := target + Vector3.UP * LIFT - start
