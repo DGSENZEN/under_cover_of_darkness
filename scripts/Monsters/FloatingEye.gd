@@ -93,6 +93,8 @@ var start_turned := false
 var spit_in := 2.0
 ## Whether it is staring at you right now (the HUD marks where from).
 var gazing := false
+## If it kills you, how you die (PlayerDeath.gd).
+var kills_as: StringName = &"eyes"
 
 var _rng := RandomNumberGenerator.new()
 var _ticks := 0

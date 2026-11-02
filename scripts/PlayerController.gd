@@ -23,6 +23,7 @@ const PowerPoolScript := preload("res://scripts/Magic/PowerPool.gd")
 const CasterScript := preload("res://scripts/Magic/Caster.gd")
 const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
 const EvilEyeCurseScript := preload("res://scripts/Monsters/EvilEyeCurse.gd")
+const PlayerDeathScript := preload("res://scripts/PlayerUtils/PlayerDeath.gd")
 const LifeLeechScript := preload("res://scripts/Monsters/LifeLeech.gd")
 const LeechHandsScript := preload("res://scripts/Monsters/LeechHands.gd")
 const LoadoutScript := preload("res://scripts/Hunt/Loadout.gd")
@@ -418,6 +419,10 @@ var statuses: Node = null
 var curse: Node = null
 ## What is on you and drinking (LifeLeech.gd).
 var leech: Node = null
+## How you die, if it is something you can fight (PlayerDeath.gd), and what last struck you says it
+## kills as.
+var death: Node = null
+var last_blow: StringName = &""
 var leech_hands: Node3D = null
 ## What you took on the hunt (Loadout.gd).
 var loadout: Node = null
@@ -649,6 +654,10 @@ func _ready() -> void:
 	leech.name = "Leech"
 	leech.player = self
 	add_child(leech)
+	death = PlayerDeathScript.new()
+	death.name = "Death"
+	death.player = self
+	add_child(death)
 	leech_hands = LeechHandsScript.new()
 	leech_hands.name = "LeechHands"
 	leech_hands.player = self
@@ -1694,6 +1703,7 @@ func take_damage(amount: float, from: Node) -> void:
 
 	health = maxf(health - amount, 0.0)
 	_hurt_at = _game_time
+	last_blow = StringName(from.get("kills_as")) if from != null and from.get("kills_as") != null else &""
 	_break_off_talk()
 	# A heavy one deadens your hearing for a moment.
 	Sfx.body_hit(amount)
@@ -1800,12 +1810,16 @@ func _die() -> void:
 			# Nothing keeps a dead man afloat: he sinks.
 			movement_state = MoveState.LOCOMOTION
 
+	death.begin(last_blow)
 	died.emit()
 
 	if reload_on_death:
 		# A paused game waits: pressing Esc while dead must not reload behind
 		# the pause screen.
-		await get_tree().create_timer(2.0, false).timeout
+		if death.playing():
+			await death.finished
+		else:
+			await get_tree().create_timer(2.0, false).timeout
 
 		if not is_inside_tree():
 			return

@@ -35,6 +35,8 @@ var whip_reach := 3.2
 var health := 1.0
 var asleep := false
 var velocity := Vector3.ZERO
+## If it kills you, how you die (PlayerDeath.gd).
+var kills_as: StringName = &"eyes"
 
 var _by: Node3D
 var _batted := false

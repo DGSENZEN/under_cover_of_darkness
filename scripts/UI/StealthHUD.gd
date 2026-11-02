@@ -1527,8 +1527,14 @@ func _process(delta: float) -> void:
 		(_grade.material as ShaderMaterial).set_shader_parameter("amount", smoothstep(0.0, 0.35, _grade_amount))
 
 	if player.is_dead:
-		_fade.color.a = move_toward(_fade.color.a, 0.92, delta * 0.8)
-		_death.modulate.a = move_toward(_death.modulate.a, 1.0, delta * 1.2)
+		if player.death.playing():
+			# The fight is still on screen: the dark and the words wait for its very end.
+			var last: float = player.death.words_share()
+			_fade.color.a = 0.92 * last
+			_death.modulate.a = last
+		else:
+			_fade.color.a = move_toward(_fade.color.a, 0.92, delta * 0.8)
+			_death.modulate.a = move_toward(_death.modulate.a, 1.0, delta * 1.2)
 
 	_place(_death, Vector2(EDGE, centre.y - 40), Vector2(view.x - EDGE * 2.0, 60))
 

@@ -84,6 +84,8 @@ signal swiped(hit: bool)
 var notice := NOTICE
 ## Which of its form's deaths it dies (AnimaDeaths.gd), or any.
 var death_kind := -1
+## If it kills you, how you die (PlayerDeath.gd).
+var kills_as: StringName = &"swipe"
 ## How likely, each time it could leap, that it does. If not, it comes on to cut you.
 var leap_chance := 1.0
 var state: int = State.RISE
