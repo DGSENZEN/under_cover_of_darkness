@@ -1,9 +1,8 @@
 """The Burst's black glass (docs/superpowers/specs/2026-11-02-burst-floor-wave-design.md): five
-thick spikes that tear up through a floor, and six broken chunks they fall into. Knapped, not
-turned: few big flat facets, a bent line, a shoulder broken out here and there, a blade or two
-grown from the same root. They wear scripts/Magic/burst_glass.gdshader, which draws a hairline
-along each real ridge, not along the triangles a flat facet is cut into: each corner's colour is
-half its barycentric corner, and half more for an edge that is no ridge.
+thick spikes that tear up through a floor, and six broken chunks they fall into. Flaked: curved
+scooped hollows meeting at ridges, on a bent line, a blade or two grown from the same root. They
+wear scripts/Magic/burst_glass.gdshader; their colours tell it how near a ridge each corner is
+(red) and how deep in a flake (green). The user's pick, from the look that read as amethyst.
 
 Each is one closed solid: blades are unioned into their spike. The script refuses an open edge.
 A spike's root is at the origin, it runs a metre up +Z (the game's +Y), and it starts a little
@@ -45,8 +44,14 @@ SPIKES = (
 RINGS = ((0.0, 1.0, 0.1), (0.3, 0.78, 0.22), (0.62, 0.45, 0.3), (0.86, 0.17, 0.35))
 CHUNKS = 6
 CHUNK_SIZE = (0.16, 0.3)
-## How sharply two faces must meet to be a ridge (degrees).
-RIDGE_BENDS = 20.0
+## How fine it is cut before it is flaked (m), how many triangles it keeps.
+VOXEL = 0.0125
+SPIKE_TRIS = 1500
+CHUNK_TRIS = 220
+## The flakes: how many to a square metre of it, how wide (m), how deep against that.
+FLAKES_PER_M2 = 150
+FLAKE_WIDE = (0.05, 0.13)
+FLAKE_DEEP = (0.1, 0.17)
 
 
 def loft(rng, tall, wide, sides, bend, snapped, turn=0.0, lean=0.0):
@@ -119,36 +124,132 @@ def union(base, other):
     bpy.data.objects.remove(other)
 
 
-def finish(obj):
-    """Refuses it open; then triangles, flat, each with its corners in its colours."""
+def apply(obj, kind, **settings):
+    modifier = obj.modifiers.new("Do", kind)
+
+    for key, value in settings.items():
+        setattr(modifier, key, value)
+
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.modifier_apply(modifier="Do")
+
+
+def tris_of(obj):
+    return sum(len(p.vertices) - 2 for p in obj.data.polygons)
+
+
+def flake(obj, rng, sharp_top):
+    """Finely cut, then scooped by spheres from outside, so each flake is a curved hollow and they
+    meet in ridges; the point drawn back out. Returns the flakes."""
+    apply(obj, "REMESH", mode="VOXEL", voxel_size=VOXEL, use_smooth_shade=False)
     bm = bmesh.new()
     bm.from_mesh(obj.data)
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.0005)
-    bmesh.ops.dissolve_degenerate(bm, edges=bm.edges, dist=0.0005)
-    bmesh.ops.triangulate(bm, faces=bm.faces)
-    bad = [e for e in bm.edges if len(e.link_faces) != 2]
+    bm.normal_update()
+    top = max(v.co.z for v in bm.verts)
+    area = sum(f.calc_area() for f in bm.faces)
+    faces = list(bm.faces)
+    flakes = []
+
+    for i in range(int(area * FLAKES_PER_M2) + 6):
+        face = rng.choice(faces)
+        at = face.calc_center_median()
+
+        # (Thin glass near the point takes small flakes, or it would be cut through.)
+        thin = 1.0 - max(0.0, at.z / max(top, 0.01)) * 0.72
+        wide = rng.uniform(*FLAKE_WIDE) * thin
+        deep = wide * rng.uniform(*FLAKE_DEEP)
+        radius = (wide * wide + deep * deep) / (2.0 * deep)
+        flakes.append((at + face.normal * (radius - deep), radius))
+
+    for centre, radius in flakes:
+        for v in bm.verts:
+            off = v.co - centre
+
+            if off.length < radius:
+                v.co = centre + off.normalized() * radius
+
+    if sharp_top:
+        peak = max(bm.verts, key=lambda w: w.co.z).co.copy()
+
+        for v in bm.verts:
+            share = (v.co.z - top * 0.84) / (top * 0.16)
+
+            if share > 0.0:
+                axis = Vector((peak.x, peak.y, v.co.z))
+                # (Not quite all the way: nothing folds onto itself at the point.)
+                v.co = v.co.lerp(axis, min(share, 1.0) ** 1.6 * 0.93)
+
+    bm.to_mesh(obj.data)
+    bm.free()
+    return flakes
+
+
+def finish(obj, flakes, budget):
+    """Down to its budget. Refuses it open. Smooth inside each flake, a hard edge between them,
+    and its colours say how near a ridge, how deep in a flake."""
+    # (A collapse can now and then pinch an edge: try again a little finer, or refuse it.)
+    whole = obj.data.copy()
+    ratio = min(1.0, budget / max(tris_of(obj), 1))
+
+    for attempt in range(8):
+        obj.data = whole.copy()
+        apply(obj, "DECIMATE", ratio=ratio)
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        bmesh.ops.triangulate(bm, faces=bm.faces)
+        bad = [e for e in bm.edges if len(e.link_faces) != 2]
+
+        if not bad:
+            break
+
+        bm.free()
+        ratio *= 1.03
 
     if bad:
         raise RuntimeError("%s has %d open edges" % (obj.name, len(bad)))
 
+    bpy.data.meshes.remove(whole)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     bm.normal_update()
+
+    def flake_of(point):
+        best = -1
+        best_off = 1e9
+
+        for i, (centre, radius) in enumerate(flakes):
+            off = abs((point - centre).length - radius)
+
+            if off < best_off:
+                best_off = off
+                best = i
+
+        return best if best_off < 0.006 else -1
+
+    owner = {f: flake_of(f.calc_center_median()) for f in bm.faces}
+    ridge_verts = set()
+    sharp = []
+
+    for e in bm.edges:
+        a, b = e.link_faces
+        bent = a.normal.angle(b.normal, 0.0)
+
+        if owner[a] != owner[b] and bent > math.radians(14) or bent > math.radians(38):
+            sharp.append(e)
+            ridge_verts.update(e.verts)
+
+    for e in bm.edges:
+        e.smooth = e not in sharp
+
     layer = bm.loops.layers.color.new("Color")
 
-    def ridge(edge):
-        a, b = edge.link_faces
-        return a.normal.angle(b.normal, 0.0) > math.radians(RIDGE_BENDS)
-
     for face in bm.faces:
-        face.smooth = False
-        loops = list(face.loops)
-        # What is opposite each corner: the edge from the next corner to the one after.
-        no_ridge = [0.0 if ridge(loops[(k + 1) % 3].edge) else 0.5 for k in range(3)]
+        face.smooth = True
+        deep = 1.0 if owner[face] >= 0 else 0.0
 
-        for k, loop in enumerate(loops):
-            values = [(0.5 if i == k else 0.0) + no_ridge[i] for i in range(3)]
-            # (The export takes colours as sRGB: as paint_value does for the face.)
-            loop[layer] = (values[0] ** (1.0 / 2.2), values[1] ** (1.0 / 2.2), values[2] ** (1.0 / 2.2), 1.0)
+        for loop in face.loops:
+            loop[layer] = (1.0 if loop.vert in ridge_verts else 0.0, deep, 0.0, 1.0)
 
     bm.to_mesh(obj.data)
     bm.free()
@@ -164,7 +265,8 @@ def build_spike(index, spec):
     for height, wide, lean, turn in spec["blades"]:
         union(obj, as_object(loft(rng, height, wide, 5, 0.05, False, turn, lean), "Blade"))
 
-    finish(obj)
+    flakes = flake(obj, rng, not spec["snapped"])
+    finish(obj, flakes, SPIKE_TRIS)
     return obj
 
 
@@ -182,7 +284,8 @@ def build_chunk(index):
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     obj = as_object(bm, "Chunk_%d" % index)
-    finish(obj)
+    flakes = flake(obj, rng, False)
+    finish(obj, flakes, CHUNK_TRIS)
     return obj
 
 
