@@ -65,6 +65,7 @@ const FLINCH_WAIT := 1.5
 ## The limpia sent back on it (the egg): how long it stays shut, how fast it sinks
 ## and how low.
 const DAZED_TIME := 4.0
+const LIMPIA_THROW := 4.0
 const DAZED_SINK := 0.7
 const DAZED_LOWEST := 0.9
 const LINE_EVERY := 6
@@ -131,10 +132,16 @@ func sees(you: Node3D) -> bool:
 
 ## The evil eye sent back on it: it squeezes shut, sinks and can do nothing for a
 ## while, and whatever hits it counts as weak.
-func limpia(_by: Node3D) -> void:
+func limpia(by: Node3D) -> void:
 	_enter(State.DAZED)
 	statuses.apply(&"exposed", DAZED_TIME)
-	Fx.blood(self, global_position, Vector3.DOWN, 0.4)
+	# Struck by it: flung off you, flushing and bleeding.
+	var away: Vector3 = global_position - by.global_position
+	_push += away.normalized() * LIMPIA_THROW
+	Fx.flash(self, global_position, Color(1.0, 0.8, 0.55), 1.5, 4.0, 0.12)
+
+	if body != null:
+		body.struck(global_position, away, &"weak")
 
 
 

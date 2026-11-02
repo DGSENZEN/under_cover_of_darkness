@@ -553,7 +553,12 @@ func _show_left() -> void:
 	if hand == null or not hand.has_method("set_left_hold"):
 		return
 
-	if not player.combat.gun_drawn():
+	if player.loadout != null and player.loadout.is_using():
+		hand.set_left_hold(&"egg", player.loadout.left_frame())
+		hand.set_egg_taken(player.loadout.use_progress())
+	elif player.loadout != null and player.loadout.just_spent():
+		hand.set_left_hold(&"egg_spent", player.loadout.left_frame())
+	elif not player.combat.gun_drawn():
 		hand.set_left_hold(&"", Transform3D.IDENTITY)
 	elif loadout == Loadout.TOME:
 		# Up to be read as Empower is read (eased in), down after.

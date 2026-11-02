@@ -141,6 +141,13 @@ const BOW_GRIP := Transform3D(Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(
 ## The purse sitting in the left palm, facing up.
 const PURSE_GRIP := Transform3D(Basis(Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, -1, 0)), Vector3(0.085, 0.07, 0.0))
 ## A small thing (a key, a coin) pinched in the left hand, up from the palm.
+## An egg taking a curse: in the hand, up from the palm.
+const EGG_GRIP := Transform3D(Basis(Vector3(0.5, -0.866, 0), Vector3(0.866, 0.5, 0), Vector3(0, 0, 1)), Vector3(0.064, 0.1, 0.0))
+## Its light, on the hand holding it (the viewmodel only): how far, how bright.
+const EGG_LIGHT_RANGE := 0.26
+const EGG_LIGHT := 0.22
+const EGG_LOOK := preload("res://scripts/Hunt/egg_held.gdshader")
+const BRUSH_SHEET := preload("res://textures/painted/eclipse/brush.png")
 const PINCH_GRIP := Transform3D(Basis(Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, -1, 0)), Vector3(0.05, 0.1, 0.0))
 ## The string hand: the right fingers hooked on the nock, palm toward the bow.
 const STRING_GRIP := Transform3D(Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0)), Vector3(-0.02, 0.09, 0.0))
@@ -214,6 +221,9 @@ var _left_mode: StringName = &""
 var _left_frame := Transform3D.IDENTITY
 var _left_up := 0.0
 var _tome: MeshInstance3D
+var _egg: MeshInstance3D
+var _egg_look: ShaderMaterial
+var _egg_taken := 0.0
 ## The tome's pages turned as Empower is read (set_tome_flutter): their
 ## pivots on the spine, and how far through the reading it is.
 var _pages: Array[Node3D] = []
@@ -418,6 +428,28 @@ func _ready() -> void:
 	_tome.visible = false
 	add_child(_tome)
 	_make_pages()
+
+	# The egg, in the left hand as it takes a curse.
+	_egg = _viewmodel_instance()
+	_egg.name = "Egg"
+	_egg.mesh = WeaponScript.egg_mesh()
+	_egg_look = ShaderMaterial.new()
+	_egg_look.shader = EGG_LOOK
+	_egg_look.set_shader_parameter(&"stroke_sheet", BRUSH_SHEET)
+	_egg_look.set_shader_parameter(&"half_height", WeaponScript.EGG_HALF_HEIGHT)
+	_egg_look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+	_egg.material_override = _egg_look
+	_egg.visible = false
+	add_child(_egg)
+	var egg_light := OmniLight3D.new()
+	egg_light.name = "Light"
+	egg_light.light_color = Color(1.0, 0.8, 0.58)
+	egg_light.light_energy = EGG_LIGHT
+	egg_light.omni_range = EGG_LIGHT_RANGE
+	egg_light.light_cull_mask = VIEWMODEL_LAYER
+	egg_light.shadow_enabled = false
+	egg_light.position = Vector3(0.0, 0.04, 0.16)
+	_egg.add_child(egg_light)
 
 	_off = Node3D.new()
 	_off.name = "OffHand"
@@ -707,6 +739,34 @@ func is_checking() -> bool:
 func set_left_hold(mode: StringName, frame: Transform3D) -> void:
 	_left_mode = mode
 	_left_frame = frame
+
+
+## How much of a curse the egg in the hand has taken, 0..1.
+func set_egg_taken(amount: float) -> void:
+	_egg_taken = clampf(amount, 0.0, 1.0)
+
+
+func egg_shown() -> bool:
+	return _egg.visible
+
+
+func egg_fill() -> float:
+	return _egg_taken
+
+
+## Where the egg is on the screen, 0..1, as the viewmodel's field of view draws it.
+func egg_on_screen() -> Vector2:
+	var camera: Camera3D = player.get("camera") if player != null else null
+
+	if camera == null:
+		return Vector2(0.3, 0.7)
+
+	var at: Vector3 = camera.to_local(_egg.global_position)
+	var fov: float = ViewArmsScript.view_fov_for(camera.fov)
+	var tall := tan(deg_to_rad(fov) * 0.5) * maxf(-at.z, 0.001)
+	var size := get_viewport().get_visible_rect().size
+	var aspect := size.x / maxf(size.y, 1.0)
+	return Vector2(at.x / (tall * aspect), -at.y / tall) * 0.5 + Vector2(0.5, 0.5)
 
 
 ## Empower being read: 0..1 through it, the tome's three pages turning one
@@ -2473,6 +2533,7 @@ func _place_arms() -> void:
 	# The Caster's left hand: up and open for a circle, or holding the tome.
 	_left_up = move_toward(_left_up, 1.0 if left_mode() != &"" and not dead else 0.0, get_process_delta_time() / 0.15)
 	_tome.visible = _left_mode == &"tome" and _left_up > 0.05
+	_egg.visible = left_mode() == &"egg" and _left_up > 0.05
 	_place_page_glyphs()
 
 	if _left_up > 0.0 and _left_mode != &"":
@@ -2487,6 +2548,18 @@ func _place_arms() -> void:
 			# Flat under the boards: fingers curled would come through the pages.
 			curls[0] = 0.0
 			poses[0] = _pose_if_had(&"Open")
+		elif _left_mode == &"egg_spent":
+			# Burst: the hand thrown open, a moment, then down.
+			targets[0] = _held_by(at, Transform3D.IDENTITY)
+			curls[0] = 0.0
+			poses[0] = _pose_if_had(&"Open")
+		elif _left_mode == &"egg":
+			targets[0] = _held_by(at, Transform3D.IDENTITY)
+			curls[0] = 0.55
+			poses[0] = _pose_if_had(&"Relaxed")
+			_egg.transform = targets[0] * EGG_GRIP
+			_egg_look.set_shader_parameter(&"taken", _egg_taken)
+			_egg_look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
 		else:
 			at.origin += _cast_offset() * size
 			targets[0] = _held_by(at, Transform3D.IDENTITY)

@@ -13,4 +13,6 @@ Stand-ins from the existing library until the user chooses real ones.
 | A copal cloud bursting and hanging | `CopalCloud.gd` | `whoosh_light` |
 | A slide's scrape | `PlayerController._update_slide` | `cloth`, repeated |
 | The evil eye settling on you, and lifting | `PlayerController._feel_statuses` | None yet |
-| The egg, rolled | `Loadout.use_item` | None yet |
+| The egg drawing the curse in, rising | `Loadout.use_item` | `whoosh_heavy` low |
+| A ribbon of the curse landing in the egg | `Loadout._land_ribbons` | `flesh` quiet, rising pitch |
+| The egg's release: the crack and sting of a dispel | `Loadout._release` | `ting` + `bone_crack` |

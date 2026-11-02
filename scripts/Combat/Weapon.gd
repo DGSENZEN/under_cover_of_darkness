@@ -340,6 +340,51 @@ static func revolver_mesh() -> Mesh:
 
 ## The tome, open: its spine at the origin along Y, the boards out to either
 ## side, pages toward you (+Z). A stand-in of blocks until the model is made.
+## An egg's half height (m): a little over life, to be read at a glance in the hand.
+const EGG_HALF_HEIGHT := 0.038
+
+## An egg, its point up: a closed lathe, the blunt end the fuller.
+static func egg_mesh() -> Mesh:
+	const ROUND := 18
+	const RINGS := 12
+	const HALF_WIDTH := 0.029
+	const HALF_HEIGHT := EGG_HALF_HEIGHT
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	surface.set_smooth_group(0)
+	surface.add_vertex(Vector3(0.0, HALF_HEIGHT, 0.0))
+
+	for ring in range(1, RINGS):
+		var down := PI * float(ring) / float(RINGS)
+		var width := HALF_WIDTH * sin(down) * (1.0 - 0.16 * cos(down))
+
+		for i in ROUND:
+			var round_about := TAU * float(i) / float(ROUND)
+			surface.add_vertex(Vector3(cos(round_about) * width, cos(down) * HALF_HEIGHT, sin(round_about) * width))
+
+	surface.add_vertex(Vector3(0.0, -HALF_HEIGHT, 0.0))
+	var bottom := 1 + (RINGS - 1) * ROUND
+
+	for i in ROUND:
+		var next := (i + 1) % ROUND
+		for index in [0, 1 + next, 1 + i]:
+			surface.add_index(index)
+		var last := 1 + (RINGS - 2) * ROUND
+		for index in [bottom, last + i, last + next]:
+			surface.add_index(index)
+
+		for ring in RINGS - 2:
+			var a := 1 + ring * ROUND + i
+			var b := 1 + ring * ROUND + next
+			var c := a + ROUND
+			var d := b + ROUND
+			for index in [a, b, d, a, d, c]:
+				surface.add_index(index)
+
+	surface.generate_normals()
+	return surface.commit()
+
+
 static func tome_mesh() -> Mesh:
 	var mesh := model(&"tome")
 

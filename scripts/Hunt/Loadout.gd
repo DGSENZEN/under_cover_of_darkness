@@ -10,6 +10,7 @@ const Rounds := preload("res://scripts/Combat/Rounds.gd")
 const SaveFields := preload("res://scripts/Save/SaveFields.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
 ## An item was spent; the pack or a count changed.
 signal item_used(id: StringName)
@@ -24,6 +25,30 @@ const MAX_ITEM_KINDS := 2
 const CARRY := {&"rounds": 24, &"copal_rounds": 12, &"shells": 6}
 ## This many watching you and the HUD offers what would answer them, uncursed.
 const OFFER_WATCHED_BY := 2
+## The hand's pass, in the left of your sight: up from low, in toward the middle.
+const PASS_FROM := Vector3(-0.3, -0.36, -0.52)
+const PASS_THROUGH := Vector3(-0.23, -0.27, -0.5)
+const PASS_TO := Vector3(-0.19, -0.26, -0.47)
+## The hand through it: palm up and tipped toward you, fingers ahead and to the
+## right, the egg standing in it; rolled in as it takes the curse.
+const PALM_UP := Basis(Vector3(0.1, 0.849, 0.519), Vector3(0.488, 0.412, -0.77), Vector3(-0.868, 0.33, -0.373))
+const PASS_ROLL := -0.3
+## The ribbons reach the egg on the shader's clock (evil_eye_view.gdshader): when the
+## first lands, and each next. Each lands with a jolt of the hand, down and away.
+const RIBBON_LANDS_AT := 0.69
+const RIBBON_LANDS_EVERY := 0.06
+const RIBBONS := 6
+const JOLT := Vector3(-0.012, -0.03, 0.012)
+const JOLT_FADE := 7.0
+const JOLT_TRAUMA := 0.035
+## How hard the burst throws the hand, of a ribbon's jolt, and how long it stays up.
+const BURST_JOLT := 2.2
+const SPENT_FOR := 0.28
+## An item going off: the hold (real seconds), the slow beat after it, the kick.
+const RELEASE_STOP := 0.04
+const RELEASE_SLOW := 0.75
+const RELEASE_SLOW_FOR := 0.18
+const RELEASE_TRAUMA := 0.16
 const SAVED := ["rounds", "items", "item_counts", "locked", "owned"]
 
 var rounds: Array[StringName] = [&"lead"]
@@ -35,6 +60,10 @@ var owned := {&"rounds": 96, &"copal_rounds": 24, &"shells": 18, &"egg": 6}
 var player: CharacterBody3D
 var _using: StringName = &""
 var _using_left := 0.0
+## How many ribbons have reached the item in this use, and the last one's jolt, 1..0.
+var _landed := 0
+var _jolt := 0.0
+var _spent_left := 0.0
 
 
 func _ready() -> void:
@@ -152,8 +181,38 @@ func use_item(index := 0) -> bool:
 
 	_using = id
 	_using_left = float(info["use_time"])
+	_landed = 0
+	_jolt = 0.0
 	Sfx.play_flat(self, &"cloth", -6.0, 1.2)
+	# It draws: a low rush, rising to the release.
+	Sfx.play_flat(self, &"whoosh_heavy", -15.0, 0.55)
 	return true
+
+
+## Where the left hand is as it passes the item across your sight, in camera
+## space at full size. (A stand-in pose: poses_needed.md.)
+func left_frame() -> Transform3D:
+	var u := 1.0 if just_spent() else smoothstep(0.0, 1.0, use_progress())
+	var at := PASS_FROM.lerp(PASS_THROUGH, u).lerp(PASS_THROUGH.lerp(PASS_TO, u), u)
+	return Transform3D(Basis(Vector3.BACK, PASS_ROLL * u) * PALM_UP, at + JOLT * _jolt)
+
+
+## The item just burst: the hand stays up, open, a moment.
+func just_spent() -> bool:
+	return _spent_left > 0.0
+
+
+## How many of the curse's ribbons have reached the item.
+func ribbons_landed() -> int:
+	return _landed
+
+
+## How far through being taken up it is, 0..1; 0 if nothing is.
+func use_progress() -> float:
+	if not is_using():
+		return 0.0
+
+	return 1.0 - _using_left / maxf(float(PrepItems.info(_using).get("use_time", 1.0)), 0.001)
 
 
 ## There is something packed that would help you now (the HUD offers it).
@@ -197,10 +256,14 @@ func _physics_process(delta: float) -> void:
 		Sfx.play_flat(self, &"gear", -12.0, 1.8)
 		refused_use.emit()
 
+	_jolt = maxf(_jolt - _jolt * JOLT_FADE * delta, 0.0)
+	_spent_left = maxf(_spent_left - delta, 0.0)
+
 	if not is_using():
 		return
 
 	_using_left -= delta
+	_land_ribbons()
 
 	if _using_left > 0.0:
 		return
@@ -217,8 +280,7 @@ func _physics_process(delta: float) -> void:
 	for monster in _sent_back_at(id):
 		monster.limpia(player)
 
-	Sfx.play_flat(self, &"ting", -6.0, 0.8)
-	Fx.flash(player, player.global_position, Color(1.0, 0.86, 0.6), 2.5, 7.0, 0.14)
+	_release()
 	item_used.emit(id)
 	var hud: Node = player.get("hud")
 
@@ -226,6 +288,34 @@ func _physics_process(delta: float) -> void:
 		hud.egg_broke()
 
 	changed.emit()
+
+
+## Each ribbon reaching the item: a wet thud and a jolt, felt in the hand.
+func _land_ribbons() -> void:
+	if _landed >= RIBBONS or use_progress() < RIBBON_LANDS_AT + RIBBON_LANDS_EVERY * float(_landed):
+		return
+
+	_landed += 1
+	_jolt = 1.0
+	Sfx.play_flat(self, &"flesh", -15.0, 0.85 + 0.07 * float(_landed))
+
+	if player.juice != null:
+		player.juice.add_trauma(JOLT_TRAUMA)
+
+
+## What an item going off feels like: a stop, a beat of slow time, a kick, a sting.
+func _release() -> void:
+	_jolt = BURST_JOLT
+	_spent_left = SPENT_FOR
+	TimeFx.hitstop(get_tree(), RELEASE_STOP)
+	TimeFx.request(get_tree(), &"dispel", RELEASE_SLOW, RELEASE_SLOW_FOR)
+	Sfx.play_flat(self, &"ting", -6.0, 0.7)
+	Sfx.play_flat(self, &"bone_crack", -10.0, 1.9)
+	Fx.flash(player, player.global_position, Color(1.0, 0.86, 0.6), 0.5, 2.5, 0.1)
+
+	if player.juice != null:
+		player.juice.add_trauma(RELEASE_TRAUMA)
+		player.juice.punch(-0.6, 0.0, 0.0)
 
 
 func save_state() -> Dictionary:

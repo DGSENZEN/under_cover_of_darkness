@@ -99,6 +99,9 @@ var _curse_view: ColorRect
 var _curse_shown := 0.0
 var _stared_shown := 0.0
 var _dispel := 0.0
+var _gather := 0.0
+var _relief := 0.0
+var _egg_at := Vector2(0.3, 0.7)
 var _leaving_shown := 0.0
 var _cleansed_shown := 0.0
 var _ring_open := PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
@@ -108,7 +111,8 @@ const MOST_GAZERS := 4
 const GAZER_MARGIN := 0.07
 const GAZER_CLEAR := 0.22
 ## How long the egg's dispel takes; how long it takes to fade when it runs out.
-const DISPEL_TIME := 0.5
+const DISPEL_TIME := 0.35
+const RELIEF_TIME := 1.2
 const LEAVE_TIME := 0.8
 var _crosshair: Crosshair
 var _prompts: HBoxContainer
@@ -890,8 +894,15 @@ func _show_curse(delta: float) -> void:
 	if _dispel >= 1.0:
 		_dispel = 0.0
 		_curse_shown = 0.0
+		_relief = 1.0
 	elif _dispel <= 0.0:
 		_curse_shown = move_toward(_curse_shown, 1.0 if cursed else 0.0, delta / (1.1 if cursed else LEAVE_TIME))
+
+	_relief = move_toward(_relief, 0.0, delta / RELIEF_TIME)
+	_gather = float(player.loadout.use_progress()) if player.loadout != null else 0.0
+
+	if _gather > 0.0 and player.hand != null and player.hand.has_method("egg_on_screen"):
+		_egg_at = player.hand.egg_on_screen()
 
 	# Running out by itself, it fades as it goes.
 	_leaving_shown = 0.0 if cursed or _dispel > 0.0 else 1.0
@@ -906,7 +917,7 @@ func _show_curse(delta: float) -> void:
 		_ring_open[i] = move_toward(_ring_open[i], 1.0 if stays else 0.0, delta / 0.35)
 
 	_update_gazers(delta)
-	var shown := _curse_shown > 0.01 or _stared_shown > 0.01 or _dispel > 0.0 or _cleansed_shown > 0.001 or _gazers.values().any(func(g): return g.z > 0.01)
+	var shown := _curse_shown > 0.01 or _stared_shown > 0.01 or _dispel > 0.0 or _gather > 0.0 or _relief > 0.0 or _cleansed_shown > 0.001 or _gazers.values().any(func(g): return g.z > 0.01)
 	_curse_view.visible = shown
 
 	if shown:
@@ -914,6 +925,9 @@ func _show_curse(delta: float) -> void:
 		look.set_shader_parameter(&"curse", _curse_shown)
 		look.set_shader_parameter(&"stared", _stared_shown)
 		look.set_shader_parameter(&"dispel", _dispel)
+		look.set_shader_parameter(&"gather", _gather)
+		look.set_shader_parameter(&"relief", _relief)
+		look.set_shader_parameter(&"egg_at", _egg_at)
 		look.set_shader_parameter(&"leaving", _leaving_shown)
 		look.set_shader_parameter(&"cleansed", _cleansed_shown)
 		look.set_shader_parameter(&"ring", _ring_open)
@@ -995,7 +1009,7 @@ func curse_view_shown() -> bool:
 ## What the screen is saying about the evil eye, for whoever asks.
 func curse_state() -> Dictionary:
 	return {"stared": _stared_shown, "curse": _curse_shown, "gazers": _gazers.values(), "ring_open": Array(_ring_open).filter(func(o): return o > 0.5).size(),
-		"dispel": _dispel, "leaving": _leaving_shown, "cleansed": _cleansed_shown}
+		"dispel": _dispel, "gather": _gather, "relief": _relief, "egg_at": _egg_at, "leaving": _leaving_shown, "cleansed": _cleansed_shown}
 
 
 func show_death_page() -> void:
