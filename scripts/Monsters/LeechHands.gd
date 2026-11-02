@@ -46,6 +46,9 @@ const SPLAY_SHUT := 0.03
 ## In from out of your sight when it gets hold, flung back out when it loses it.
 const ARRIVES := 0.14
 const FLUNG_FOR := 0.14
+## As you die: how long a face takes to come off you; where hands close over your eyes.
+const FACE_COMES_OFF := 0.35
+const OVER_EYES := Vector3(0.05, -0.02, -0.2)
 const COMES_FROM := 0.42
 const FLUNG_TO := 0.6
 const FULL := 60.0
@@ -64,6 +67,7 @@ var _curl: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var _spread: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var _arrive: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var _flung: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _face_off: Array[float] = [1.0, 1.0, 1.0]
 var _held: Array[bool] = [false, false, false, false]
 var _fed: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var _splay_low: Array[float] = [9.0, 9.0, 9.0, 9.0]
@@ -209,9 +213,15 @@ func _process(delta: float) -> void:
 			_hands[slot].visible = _flung[slot] > 0.0
 			_face_anchor[slot] = -1
 
-			# Its face goes at once: the one in the world is there, thrown.
+			# Its face goes at once: the one in the world is there, thrown. As you die it comes
+			# off you, having had what it came for.
 			if _faces[slot] != null:
-				_faces[slot].visible = false
+				_face_off[slot] = _face_off[slot] + delta / FACE_COMES_OFF if player.is_dead and _faces[slot].visible else 1.0
+				_faces[slot].visible = _face_off[slot] < 1.0
+
+				if _faces[slot].visible:
+					var left: float = 1.0 - _face_off[slot]
+					_faces[slot].drink(delta, 0.0, 0.0, left, 1.0, 0.0, 0.0, left)
 
 			if _flung[slot] > 0.0:
 				_pose(slot, _anchor_of[slot], _fed[slot], 0.0, 0.0)
@@ -223,6 +233,7 @@ func _process(delta: float) -> void:
 			_held[slot] = true
 
 		_flung[slot] = 0.0
+		_face_off[slot] = 0.0
 		_arrive[slot] = minf(_arrive[slot] + delta / ARRIVES, 1.0)
 		_hands[slot].visible = true
 		var anchor := _anchor_for(slot, taken)
@@ -278,6 +289,17 @@ func _second_hand(taken: Array[int], delta: float) -> void:
 	_anchor_of[OTHER_HAND] = free
 	_fed[OTHER_HAND] = _fed[face]
 	_pose(OTHER_HAND, free, _fed[face], player.leech.gulp(), player.leech.coming())
+
+
+func _covering() -> float:
+	if not player.is_dead:
+		return 0.0
+
+	for slot in 3:
+		if player.leech.holds_face(slot):
+			return 0.0
+
+	return smoothstep(0.0, 0.6, float(player.leech.last_gulp()))
 
 
 func _face_for(slot: int) -> Node3D:
@@ -336,7 +358,16 @@ func _pose(slot: int, anchor: int, fed: float, gulp: float, coming: float) -> vo
 	# Rearing, it tips its open palm up at you; down the rake it comes back over.
 	var rears_up: float = wind if not raking else (1.0 - eased)
 	var facing := Basis(Vector3.RIGHT, -REAR_TIP * rears_up) * Basis.looking_at(fingers, BACKS[anchor]).rotated(fingers, side * (0.35 * eased - 0.2))
-	_hands[slot].transform = Transform3D(facing.scaled(Vector3.ONE * SIZE), ANCHORS[anchor] + offset)
+	var at_rest: Vector3 = ANCHORS[anchor] + offset
+	# Only hands on you, as you die: the last of it, they close over your eyes.
+	var covering := _covering()
+
+	if covering > 0.0:
+		var over := Vector3(side * OVER_EYES.x, OVER_EYES.y, OVER_EYES.z)
+		at_rest = at_rest.lerp(over, covering)
+		facing = facing.slerp(Basis.looking_at(Vector3.UP + Vector3(-side * 0.25, 0.0, 0.0), Vector3.BACK), covering)
+
+	_hands[slot].transform = Transform3D(facing.scaled(Vector3.ONE * SIZE), at_rest)
 	_squeeze[slot] = clampf(0.25 + fed_share * 0.2 + gulp * 0.55, 0.0, 1.0)
 	var skeleton := _skeletons[slot]
 	_meshes[slot].set_instance_shader_parameter(&"fed", fed_share)

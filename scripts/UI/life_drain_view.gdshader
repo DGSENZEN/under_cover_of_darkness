@@ -26,6 +26,8 @@ uniform float with_flesh = 0.0;
 // to all of it. Neither spares the middle.
 uniform float no_colour = 0.0;
 uniform float sight_fails = 0.0;
+// The last of your life going into what has you, in a torrent: the one colour left.
+uniform float pouring = 0.0;
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform sampler2D stroke_sheet : repeat_enable, filter_linear_mipmap;
 
@@ -156,6 +158,22 @@ void fragment() {
 
 	// Going.
 	col = mix(col, vec3(dot(col, vec3(0.3, 0.55, 0.15))), no_colour);
+
+	if (pouring > 0.001) {
+		for (int i = 0; i < 3; i++) {
+			if (threads[i].z > 0.01) {
+				vec2 to = vec2((threads[i].x * 2.0 - 1.0) * aspect, threads[i].y * 2.0 - 1.0);
+				vec2 from_it = a - to;
+				float away = length(from_it);
+				vec2 way = from_it / max(away, 0.001);
+				float rush = textureLod(stroke_sheet, way * 1.3 + vec2(away * 0.8 + TIME * 1.5, float(i) * 0.7), 0.0).r;
+				float fine = textureLod(stroke_sheet, way * 2.9 + vec2(away * 1.9 + TIME * 2.6, float(i)), 0.0).r;
+				float stream = smoothstep(0.5, 0.66, rush) * smoothstep(0.08, 0.3, away) * exp(-away * 0.45);
+				float thread_of = smoothstep(0.58, 0.68, fine) * smoothstep(0.03, 0.14, away) * exp(-away * 0.9);
+				col = mix(col, SICK * 0.75 + vec3(0.1, 0.12, 0.04), clamp(stream * 0.62 + thread_of * 0.7, 0.0, 0.85) * pouring);
+			}
+		}
+	}
 
 	if (sight_fails > 0.001) {
 		float edge = mix(2.0, -0.3, sight_fails);

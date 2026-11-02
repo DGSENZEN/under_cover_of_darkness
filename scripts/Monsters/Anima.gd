@@ -12,18 +12,23 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
 
-enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN, REST, WAKE, WIND_UP, SWIPE, BACK_OFF, LEAVE }
+enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN, REST, WAKE, WIND_UP, SWIPE, BACK_OFF, LEAVE, CROWD }
 
 const DOING := {
 	State.RISE: &"rise", State.RUSH: &"rush", State.CIRCLE: &"circle", State.TELL: &"tell",
 	State.LEAP: &"leap", State.MISSED: &"missed", State.ON: &"on", State.THROWN: &"thrown",
 	State.REST: &"rest", State.WAKE: &"wake",
-	State.WIND_UP: &"wind_up", State.SWIPE: &"swipe", State.BACK_OFF: &"back_off", State.LEAVE: &"leave",
+	State.WIND_UP: &"wind_up", State.SWIPE: &"swipe", State.BACK_OFF: &"back_off", State.LEAVE: &"leave", State.CROWD: &"crowd",
 }
 const RISE_TIME := 0.5
 ## Finished with you: how fast it crawls off, and how long before it rests.
 const LEAVE_SPEED := 1.4
 const LEAVE_TIME := 6.0
+## What is near while you are being finished comes to watch, and hopes: from how far, how fast,
+## how close it stands.
+const CROWD_REACH := 12.0
+const CROWD_SPEED := 6.0
+const CROWD_RING := 1.3
 ## A swipe (its damage, reach and wind-up by form, in Bestiary): how long the swing, how hard it
 ## lunges into it; how long it backs off, how fast; how long till the next.
 const SWIPE_TIME := 0.16
@@ -305,8 +310,17 @@ func _after_you(you: Node3D, delta: float) -> Vector3:
 			return Vector3.ZERO
 
 		_enter(State.LEAVE)
-	elif state != State.LEAVE and state != State.REST:
-		_enter(State.LEAVE)
+	elif state != State.LEAVE and state != State.REST and state != State.CROWD:
+		_enter(State.CROWD if you.death.holding() and global_position.distance_to(you.global_position) <= CROWD_REACH else State.LEAVE)
+
+	if state == State.CROWD:
+		if not you.death.holding():
+			_enter(State.LEAVE)
+		else:
+			var spot := you.global_position + Vector3(cos(_spread_turn), 0.0, sin(_spread_turn)) * CROWD_RING
+			var to_spot := spot - global_position
+			to_spot.y = 0.0
+			return _hold_height(to_spot.limit_length(1.0) * CROWD_SPEED, delta)
 
 	if state == State.LEAVE:
 		if _state_t >= LEAVE_TIME:

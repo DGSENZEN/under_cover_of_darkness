@@ -132,6 +132,7 @@ Name each file as in the **File** column. Tell me where they are and I'll trim, 
 | `death_heart_stops` | 3 s | A human heartbeat heard from inside the chest, racing faster and faster, then two weak beats, then nothing |
 | `death_eye_tears_open` | 0.8 s | Living wet flesh tearing open slowly right against the ear, membrane stretching and parting, a slick wet click at the end |
 | `death_flesh_slack` | 1.2 s | A heavy mass of wet flesh going limp and sagging, slow slick sliding, a last settling, quiet and close |
+| `death_candle_lit` | 1.5 s | In total silence, a single match struck and a small candle wick catching, very quiet and very close, a soft flutter of flame |
 | `death_breath_out` | 1.5 s | A man's long last breath out, weak and rattling, fading to nothing, no voice |
 
 ## If a take is wrong

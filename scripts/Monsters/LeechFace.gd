@@ -16,7 +16,7 @@ const MOUTH := Vector3(0.0, -0.13, -0.11)
 const DRAWS_BACK := 0.13
 const LUNGES := 0.17
 ## How near it comes for the last long gulp, as you die: all you can see.
-const LAST_COMES := 0.34
+const LAST_COMES := 0.52
 const REARS := 0.26
 const BITES_DOWN := 0.16
 ## The jaw: sucking between gulps, gaping winding up, clamped on the gulp. How much it works.
@@ -101,7 +101,7 @@ func drink(delta: float, gulp: float, coming: float, arrived: float, fed: float,
 	var worry := 1.0 - maxf(wind, biting)
 	# Its jaw: snapped to where it should be, faster on the clamp.
 	var sucking := JAW_SUCKS + sin(_clock * 9.0) * JAW_WORKS + sin(_clock * 15.7) * JAW_WORKS * 0.5
-	var jaw_to := lerpf(lerpf(lerpf(sucking, JAW_GAPES, wind), JAW_CLAMPS, smoothstep(0.1, 0.55, gulp)), JAW_CLAMPS, last)
+	var jaw_to := lerpf(lerpf(lerpf(sucking, JAW_GAPES, wind), JAW_CLAMPS, smoothstep(0.1, 0.55, gulp)), JAW_GAPES, last)
 	var jaw_rate := minf(TAU * (15.0 if gulp > 0.4 else 7.0), 0.8 / delta)
 	_jaw_speed += (jaw_rate * jaw_rate * (jaw_to - _jaw) - 2.0 * 0.8 * jaw_rate * _jaw_speed) * delta
 	_jaw += _jaw_speed * delta
@@ -113,7 +113,7 @@ func drink(delta: float, gulp: float, coming: float, arrived: float, fed: float,
 	_tongue = lerpf(_tongue, 1.0 if gulp > 0.25 else 0.32 + sin(_clock * 7.3) * 0.28 * worry, 1.0 - exp(-18.0 * delta))
 	_rig.open_to(clampf(_jaw, 0.0, 1.0), clampf(_tongue, 0.0, 1.0))
 	# The light goes down it with each swallow, and stays a little higher the more it has had.
-	_flare = lerpf(_flare, 0.1 + fed * 0.2 + gulp * 0.8, 1.0 - exp(-14.0 * delta))
+	_flare = lerpf(_flare, 0.1 + fed * 0.2 + maxf(gulp, last) * 0.8, 1.0 - exp(-14.0 * delta))
 	_rig.throat_to(_flare)
 	_rig.paint(fed, 0.0, 0.0)
 	var tilt := Basis(Vector3.RIGHT, wind * REARS - biting * BITES_DOWN + sin(_clock * 2.1) * 0.02)

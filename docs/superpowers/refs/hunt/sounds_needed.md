@@ -44,4 +44,5 @@ Stand-ins from the existing library until the user chooses real ones.
 | The last eye tearing open (`death_eye_tears_open`) | `PlayerDeath._sound` | `flesh_heavy`, low |
 | The flesh going slack (`death_flesh_slack`) | not yet played | |
 | The last breath out (`death_breath_out`) | not yet played | |
+| A match, a candle catching, very quiet (`death_candle_lit`) | `DeathQuote.after` | `ignite`, quiet |
 

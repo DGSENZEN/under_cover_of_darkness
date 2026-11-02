@@ -5,6 +5,7 @@ extends Node
 ## fight on to its end, without a cut. Anything else that kills you is the old fall.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 
 signal finished
 ## The words have landed (or you pressed): the page may come.
@@ -14,15 +15,24 @@ signal page_due
 const FALL_TAKES := 2.0
 const QUOTE_TAKES := 3.4
 ## How long each takes (s).
-const LENGTHS := {&"eyes": 3.0, &"animas": 3.5, &"both": 4.0, &"swipe": 2.0}
+const LENGTHS := {&"eyes": 3.0, &"animas": 4.2, &"both": 4.6, &"swipe": 2.0}
 ## An attack press ends it, after this long. The words come up over this much at the very end.
 const SKIP_AFTER := 1.0
 const WORDS_FROM_END := 0.5
 ## How long in what has you goes on holding you (s): its gulps slowing to this many times as long,
 ## and a last long one taking this long.
-const LETS_GO := {&"animas": 2.6, &"both": 3.0, &"swipe": 0.4}
+const LETS_GO := {&"animas": 3.2, &"both": 3.6, &"swipe": 0.4}
 const GULPS_SLOW_TO := 3.0
-const LAST_GULP_TAKES := 0.8
+const LAST_GULP_TAKES := 1.0
+## What has you hauls you down: buckled at once, a lurch with each gulp, the floor with the last;
+## how quick and how loose the lurch; how hard each hits, and the last.
+const BUCKLES := 0.24
+const LURCH := 0.2
+const LURCH_RATE := 3.2
+const LURCH_LOOSE := 0.42
+const GULP_HITS := 0.24
+const LAST_HITS := 0.5
+const LAST_STOPS := 0.07
 ## How far down your head goes to reach the floor, how far it rolls, and how far aside. Kneeling,
 ## as the eyes have you, how far down and how far your head has dropped. How quick a swipe's is.
 const GOES_DOWN := 1.3
@@ -38,7 +48,7 @@ const SWIPE_DOWN_TAKES := 0.7
 const HEART_GAPS := Vector2(0.55, 0.26)
 const HEART_STOPS_AT := 0.7
 ## When you hit the floor (s), for each; when the last eye tears open (share).
-const FLOORED := {&"eyes": 2.7, &"animas": 2.5, &"both": 2.9, &"swipe": 0.65}
+const FLOORED := {&"eyes": 2.7, &"animas": 3.1, &"both": 3.5, &"swipe": 0.65}
 const EYE_TEARS_AT := 0.6
 
 ## How many beats of your heart it has played.
@@ -51,6 +61,9 @@ var _at := 0.0
 var _running := false
 var _since := 0.0
 var _page_called := false
+var _haul := 0.0
+var _haul_speed := 0.0
+var _haul_to := 0.0
 var _was_cursed := false
 var _floored := false
 var _beat_in := 0.0
@@ -71,6 +84,17 @@ func begin(last_blow: StringName) -> void:
 	_since = 0.0
 	_running = LENGTHS.has(kind)
 	_side = _falls_to()
+
+	if kind == &"animas" or kind == &"both":
+		_haul_to = BUCKLES
+		player.leech.gulped.connect(_hauled)
+		_hauled()
+
+
+## A gulp as you go: down another lurch.
+func _hauled() -> void:
+	_haul_to = minf(_haul_to + LURCH, 1.0)
+	player.juice.add_trauma(GULP_HITS)
 
 
 func _falls_to() -> float:
@@ -94,7 +118,7 @@ func camera_pose() -> Dictionary:
 			var lie := smoothstep(length - 1.0, length - 0.2, _at)
 			return {"down": lerpf(KNEELS * kneel, GOES_DOWN, lie), "turn": Vector3(-HEAD_DROPS * kneel * (1.0 - lie) + 0.25 * lie, 0.0, -_side * ROLLS * lie), "side": GOES_ASIDE * _side * lie}
 		&"animas", &"both":
-			return _laid_down(smoothstep(0.0, float(LETS_GO[kind]), _at))
+			return _laid_down(clampf(_haul, 0.0, 1.05))
 		&"swipe":
 			return _laid_down(smoothstep(0.0, SWIPE_DOWN_TAKES, _at))
 
@@ -166,6 +190,19 @@ func words_share() -> float:
 	return clampf((_at - (float(LENGTHS[kind]) - WORDS_FROM_END)) / WORDS_FROM_END, 0.0, 1.0) if LENGTHS.has(kind) else 0.0
 
 
+func _haul_down(delta: float) -> void:
+	if kind != &"animas" and kind != &"both":
+		return
+
+	# The last of it takes you to the floor.
+	if last_gulp() > 0.0 or not holding():
+		_haul_to = 1.0
+
+	var w := minf(TAU * LURCH_RATE, 0.8 / delta)
+	_haul_speed += (w * w * (_haul_to - _haul) - 2.0 * LURCH_LOOSE * w * _haul_speed) * delta
+	_haul += _haul_speed * delta
+
+
 ## Stand-ins until the takes come (docs/superpowers/refs/hunt/sounds_needed.md).
 func _sound(delta: float) -> void:
 	if not _floored and _at >= float(FLOORED[kind]):
@@ -185,6 +222,8 @@ func _sound(delta: float) -> void:
 			Sfx.play_flat(self, &"flesh_heavy", 0.0, 0.7)
 	elif (kind == &"animas" or kind == &"both") and not _gulped_last and last_gulp() > 0.0:
 		_gulped_last = true
+		player.juice.add_trauma(LAST_HITS)
+		TimeFx.hitstop(get_tree(), LAST_STOPS)
 		Sfx.play_flat(self, &"flesh_heavy", -2.0, 0.55)
 		Sfx.play_flat(self, &"anima_moan", -6.0, 0.5)
 
@@ -207,6 +246,7 @@ func _physics_process(delta: float) -> void:
 	_at += delta
 
 	_sound(delta)
+	_haul_down(delta)
 
 	if _at >= SKIP_AFTER and _at < length - WORDS_FROM_END and Input.is_action_just_pressed("throw"):
 		_at = length - WORDS_FROM_END

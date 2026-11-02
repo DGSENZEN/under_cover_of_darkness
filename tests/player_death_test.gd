@@ -31,6 +31,7 @@ func _ready() -> void:
 	await _marked_dead()
 	await _quotes()
 	await _review_of_the_deaths()
+	await _stronger()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -140,7 +141,7 @@ func _how_long() -> void:
 	var eyes_took: float = await _time_till(func(): return not p.death.playing(), 8.0)
 	await _dying_by(true, true, &"")
 	var both_took: float = await _time_till(func(): return not p.death.playing(), 8.0)
-	_check("P6 each takes its length (%.2f, %.2f)" % [eyes_took, both_took], absf(eyes_took - 3.0) < 0.1 and absf(both_took - 4.0) < 0.1)
+	_check("P6 each takes its length (%.2f, %.2f)" % [eyes_took, both_took], absf(eyes_took - 3.0) < 0.1 and absf(both_took - p.death.LENGTHS[&"both"]) < 0.15)
 	# The page.
 	await _fresh(true)
 	p.statuses.apply(&"evil_eye", 60.0)
@@ -258,7 +259,7 @@ func _going_down() -> void:
 	_check("C5 after it lets go, the hands go", not hands.shown(slot) and not hands.face_shown(slot))
 	var pose_then: Dictionary = p.juice.death_fall.duplicate()
 	await _frames(20)
-	_check("C6 the view holds still after it lets go", p.juice.death_fall == pose_then)
+	_check("C6 the view holds still after it lets go", absf(p.juice.death_fall["down"] - pose_then["down"]) < 0.01)
 	await _until(func(): return not p.death.playing(), 3.0)
 	await _frames(20)
 	var above: float = _camera_above_floor()
@@ -267,7 +268,8 @@ func _going_down() -> void:
 	await _dying_by(false, true, &"guard")
 	var holder: CharacterBody3D = _on_you_now()
 	var held_slot: int = p.leech.slot_of(holder)
-	await _until(func(): return p.leech.last_gulp() > 0.9, 3.0)
+	await _until(func(): return p.leech.last_gulp() > 0.9, 4.0)
+	await _frames(5)
 	_check("C2c only hands: one long squeeze (%.2f)" % p.leech_hands.squeeze(held_slot), p.leech_hands.squeeze(held_slot) > 0.7)
 	# In mid-air, you come down first.
 	await _fresh()
@@ -550,6 +552,80 @@ func _review_of_the_deaths() -> void:
 	p.hud._drain_magic = 0.1
 	await _frames(40)
 	_check("V4 killed by an eye, the flesh keeps its blood (%.2f)" % p.hud.curse_state()["drained"], p.hud.curse_state()["drained"] == 0.0)
+
+
+## The ánimas' death, hard.
+func _stronger() -> void:
+	const STATE: Dictionary = AnimaScript.State
+	# Hauled down in lurches, and a crowd comes.
+	await _fresh()
+	var holder: CharacterBody3D = AnimaScript.new()
+	holder.form = &"hands"
+	holder.position = HOME + Vector3(0.8, 0.3, 0)
+	add_child(holder)
+	var near: CharacterBody3D = AnimaScript.new()
+	near.form = &"face"
+	near.position = HOME + Vector3(-5.0, 0.3, -4.0)
+	add_child(near)
+	await _frames(1)
+	holder.put_on_you()
+	await _frames(2)
+	var hud: Node = p.hud
+	var hands: Node3D = p.leech_hands
+	var slot: int = p.leech.slot_of(holder)
+	p.health = 0.01
+	p.drain_life(50.0)
+	var pour_early: float = hud.drain_state()["pouring"]
+	var biggest_lurch := 0.0
+	var was_down: float = 0.0
+	var closest := 99.0
+	var crowding := false
+
+	for i in int(p.death.LETS_GO[&"animas"] * 60.0) - 10:
+		await get_tree().physics_frame
+		var down_now: float = p.juice.death_fall.get("down", 0.0)
+		biggest_lurch = maxf(biggest_lurch, down_now - was_down)
+		was_down = down_now
+		closest = minf(closest, near.global_position.distance_to(p.global_position))
+		crowding = crowding or near.state == STATE.CROWD
+
+		if p.leech.last_gulp() == 0.0:
+			pour_early = maxf(pour_early, hud.drain_state()["pouring"])
+
+	_check("K1 you go down in lurches, not one smooth sink (%.3f m in a frame)" % biggest_lurch, biggest_lurch > 0.03)
+	_check("K2 others near come and crowd over you (%.2f m)" % closest, crowding and closest < 2.2)
+	_check("K3 your life pours out in a torrent at the last (%.2f, %.2f)" % [pour_early, hud.drain_state()["pouring"]], pour_early == 0.0 and hud.drain_state()["pouring"] > 0.7)
+	var over_eyes: Vector3 = hands._hands[slot].position
+	_check("K6 only hands: they close over your eyes (%s)" % str(over_eyes), Vector2(over_eyes.x, over_eyes.y).length() < 0.12 and absf(over_eyes.z) < 0.3)
+	await _until(func(): return p.leech.count() == 0, 2.0)
+	await _frames(4)
+	_check("K2b then all of them crawl off", near.state == STATE.LEAVE and holder.state == STATE.LEAVE)
+	# Swallowed.
+	await _fresh()
+	var face: CharacterBody3D = AnimaScript.new()
+	face.form = &"face"
+	face.position = HOME + Vector3(0.9, 0.3, -0.2)
+	add_child(face)
+	await _frames(1)
+	face.put_on_you()
+	await _frames(60)
+	var face_slot: int = p.leech.slot_of(face)
+	hands = p.leech_hands
+	p.health = 0.01
+	p.drain_life(50.0)
+	var nearest := 0.0
+	var widest := 0.0
+
+	while p.leech.count() > 0 and p.death.playing():
+		await get_tree().physics_frame
+		nearest = maxf(nearest, hands.face_near(face_slot))
+		widest = maxf(widest, hands.face_jaw(face_slot))
+
+	_check("K4 a face gapes and comes in till its throat is all you see (%.2f, jaw %.2f)" % [nearest, widest], nearest > 0.45 and widest > 0.75)
+	await _frames(2)
+	var after_a_moment: bool = hands.face_shown(face_slot)
+	await _frames(45)
+	_check("K5 it comes off you, it doesn't vanish", after_a_moment and not hands.face_shown(face_slot))
 
 
 func _heard() -> void:

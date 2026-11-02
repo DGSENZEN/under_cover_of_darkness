@@ -121,6 +121,7 @@ var _failing := 0.0
 var _beat_clock := 0.0
 var _going_slack := 0.0
 var _no_colour := 0.0
+var _pouring := 0.0
 var _no_colour_to := 0.0
 var _sight_fails := 0.0
 var _feeders := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
@@ -1218,6 +1219,7 @@ func _show_drain(delta: float) -> void:
 	look.set_shader_parameter(&"drain", _drain_shown)
 	look.set_shader_parameter(&"release", _drain_release)
 	look.set_shader_parameter(&"no_colour", _no_colour)
+	look.set_shader_parameter(&"pouring", _pouring)
 	look.set_shader_parameter(&"sight_fails", _sight_fails)
 	look.set_shader_parameter(&"gulp", leech.gulp())
 	# Claw marks: each gulp's rake, opened and then fading.
@@ -1274,6 +1276,7 @@ func _feel_sight_go(delta: float, leech: Node) -> void:
 		_no_colour = move_toward(_no_colour, _no_colour_to, delta * COLOUR_GOES)
 		var left: float = float(death.LENGTHS[death.kind]) - lets_go
 		_sight_fails = smoothstep(lets_go + left * SIGHT_FAILS_FROM, float(death.LENGTHS[death.kind]), death.at())
+		_pouring = maxf(float(death.last_gulp()), 0.0) if death.holding() else 0.0
 	elif death.kind == &"swipe":
 		_sight_fails = smoothstep(SWIPE_SIGHT_FAILS_FROM, float(death.LENGTHS[&"swipe"]), death.at())
 
@@ -1397,7 +1400,7 @@ func drain_target(thread: int) -> Vector2:
 
 func drain_state() -> Dictionary:
 	return {"drain": _drain_shown, "release": _drain_release, "threads": _drain_threads, "gulp": player.leech.gulp() if player != null and player.leech != null else 0.0, "magic": _drain_magic, "life": _drain_life, "pull": _drain_shown,
-		"claws": smoothstep(0.0, 0.16, _drain_claw_age) * (1.0 - smoothstep(0.4, 1.0, _drain_claw_age)), "no_colour": _no_colour, "sight_fails": _sight_fails}
+		"claws": smoothstep(0.0, 0.16, _drain_claw_age) * (1.0 - smoothstep(0.4, 1.0, _drain_claw_age)), "no_colour": _no_colour, "sight_fails": _sight_fails, "pouring": _pouring}
 
 
 ## The evil eye's marks are on screen.

@@ -518,6 +518,12 @@ func _dying_stills(how: String) -> void:
 
 	await _frames(70)
 
+	if how == "hands":
+		var only := _feeder(&"hands", p.global_position + Vector3(0.9, -0.5, -0.3))
+		await _frames(1)
+		only.put_on_you()
+		await _frames(70)
+
 	if how == "both" or how == "animas":
 		var face := _feeder(&"face", p.global_position + Vector3(0.9, -0.5, -0.3))
 		var hands := _feeder(&"hands", p.global_position + Vector3(-0.9, -0.5, -0.3))
@@ -525,6 +531,11 @@ func _dying_stills(how: String) -> void:
 		face.put_on_you()
 		hands.put_on_you()
 		await _frames(70)
+		# Near, and awake: what comes when you are being finished.
+		for i in 3:
+			_feeder(&"hands" if i < 2 else &"face", p.global_position + Vector3(float(i) * 3.0 - 3.0, -0.6, 5.0))
+
+		await _frames(2)
 
 	# The real thing that kills you is the last blow; it stays in the room, to be seen leaving.
 	var blow: Node3D = _feeder(&"hands", p.global_position + Vector3(0.7, -0.7, 1.4))
@@ -549,7 +560,7 @@ func _dying_stills(how: String) -> void:
 
 	var was := 0.0
 
-	for t in [0.5, 1.2, 2.0, 2.5, 3.0, 3.4, 3.8]:
+	for t in [0.5, 1.2, 2.0, 2.5, 2.9, 3.2, 3.5, 3.9, 4.4]:
 		await _frames(int((t - was) * 60.0))
 		was = t
 
