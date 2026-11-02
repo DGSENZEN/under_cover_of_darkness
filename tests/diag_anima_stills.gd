@@ -55,6 +55,9 @@ func _ready() -> void:
 	if only == "swipe":
 		await _swipe()
 
+	if only == "eye_turned":
+		await _eye_turned()
+
 	if only == "both":
 		await _both()
 
@@ -482,6 +485,50 @@ func _shard() -> void:
 	e.queue_free()
 	p.neck.rotation.x = 0.0
 	await _frames(3)
+
+
+## The eye and the eye turned, side by side, in the game's looks: lit room and dark yard.
+func _eye_turned() -> void:
+	var EyeBodyScript: GDScript = load("res://scripts/Monsters/EyeBody.gd")
+	var plain: Node3D = EyeBodyScript.new()
+	var worse: Node3D = EyeBodyScript.new()
+	worse.model = EyeBodyScript.TURNED_MODEL
+	# (A body moves itself about its holder.)
+	var plain_at := Node3D.new()
+	var worse_at := Node3D.new()
+	add_child(plain_at)
+	add_child(worse_at)
+	plain_at.add_child(plain)
+	worse_at.add_child(worse)
+
+	for place in [[Vector3(0.0, 1.05, -2.7), Vector3(-0.85, 1.7, -0.9), Vector3(0.75, 1.7, -0.9), "room"], [Vector3(-2.0, 1.05, -24.0), Vector3(-2.85, 1.7, -22.2), Vector3(-1.25, 1.7, -22.2), "yard"]]:
+		p.teleport(Transform3D(Basis(Vector3.UP, PI), place[0]))
+		plain_at.global_position = place[1]
+		worse_at.global_position = place[2]
+
+		for i in 40:
+			plain.tick(1.0 / 60.0, &"circle", p, Vector3.ZERO, false, false, 1.0)
+			worse.tick(1.0 / 60.0, &"circle", p, Vector3.ZERO, false, false, 0.5)
+			await get_tree().physics_frame
+
+		await _shot("eye_turned_%s" % place[3])
+
+	for i in 30:
+		worse.tick(1.0 / 60.0, &"tell", p, Vector3.ZERO, false, false, 0.5)
+		await get_tree().physics_frame
+
+	plain.queue_free()
+	await _frames(2)
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0.0, 1.05, -2.0)))
+	worse_at.global_position = Vector3(0.0, 1.75, -0.8)
+
+	for i in 30:
+		worse.tick(1.0 / 60.0, &"tell", p, Vector3.ZERO, false, false, 0.5)
+		await get_tree().physics_frame
+
+	await _shot("eye_turned_close")
+	worse_at.queue_free()
+	await _frames(2)
 
 
 ## A swipe, close: its wind-up and its rake, hands and face.

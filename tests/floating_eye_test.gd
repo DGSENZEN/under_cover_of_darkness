@@ -827,6 +827,26 @@ func _dead_player() -> void:
 
 ## Its whole body moves: drawn back in its tell, shaking harder, recoiling; starting at rest.
 func _alive() -> void:
+	var turned: PackedScene = load("res://assets/monsters/floating_eye_turned.glb")
+	_check("T0 the turned eye's model is there", turned != null)
+
+	if turned != null:
+		var plain: Node = (load("res://assets/monsters/floating_eye.glb") as PackedScene).instantiate()
+		var worse: Node = turned.instantiate()
+		var names := {}
+
+		for mesh in worse.find_children("*", "MeshInstance3D", true, false):
+			names[StringName(mesh.name)] = true
+
+		var all_there := true
+
+		for mesh in plain.find_children("*", "MeshInstance3D", true, false):
+			all_there = all_there and names.has(StringName(mesh.name))
+
+		_check("T0b every part of the eye, and the new ones", all_there and names.has(&"Pupil_2") and names.has(&"Pupil_3") and names.has(&"Meat"))
+		plain.free()
+		worse.free()
+
 	var e := _eye(HOME + Vector3(0, 1.5, -40), 3)
 	await _frames(3)
 	var body: Node3D = e.body

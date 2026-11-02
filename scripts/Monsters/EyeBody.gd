@@ -6,6 +6,7 @@ extends Node3D
 ## doesn't disturb anyone else's.
 
 const MODEL := "res://assets/monsters/floating_eye.glb"
+const TURNED_MODEL := "res://assets/monsters/floating_eye_turned.glb"
 const FleshShader := preload("res://scripts/Monsters/eye_flesh.gdshader")
 const BallShader := preload("res://scripts/Monsters/eye_ball.gdshader")
 const NerveShader := preload("res://scripts/Monsters/eye_nerve.gdshader")
@@ -84,6 +85,8 @@ var tears := 0
 
 var _rng := RandomNumberGenerator.new()
 var _parts := {}
+## Which model it wears.
+var model := MODEL
 ## Resin burning on it while it is smoked, 0..1, and how fast that takes and dies.
 var smoulder := 0.0
 const SMOULDER_TAKES := 6.0
@@ -110,7 +113,7 @@ func _ready() -> void:
 	_saccade_in = _rng.randf_range(SACCADE_EVERY.x, SACCADE_EVERY.y)
 	_blink_in = _rng.randf_range(BLINK_EVERY.x, BLINK_EVERY.y)
 	_clock = _rng.randf() * 10.0
-	var made: Node = (load(MODEL) as PackedScene).instantiate()
+	var made: Node = (load(model) as PackedScene).instantiate()
 
 	for mesh in made.find_children("*", "MeshInstance3D", true, false):
 		_parts[StringName(mesh.name)] = mesh
@@ -146,9 +149,14 @@ func _dress() -> void:
 	black.set_shader_parameter(&"paint", _BLACK)
 	part(&"Pupil").set_surface_override_material(0, black)
 
-	for id in [&"Flesh", &"LidTop", &"LidBottom"]:
-		part(id).set_surface_override_material(0, _flesh_look)
-		_living.append(part(id))
+	for id in [&"Pupil_2", &"Pupil_3"]:
+		if part(id) != null:
+			part(id).set_surface_override_material(0, black)
+
+	for id in [&"Flesh", &"LidTop", &"LidBottom", &"Meat"]:
+		if part(id) != null:
+			part(id).set_surface_override_material(0, _flesh_look)
+			_living.append(part(id))
 
 	part(&"Ball").set_surface_override_material(0, _ball_look)
 	_living.append(part(&"Ball"))
