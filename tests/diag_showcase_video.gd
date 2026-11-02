@@ -22,9 +22,13 @@ var p: CharacterBody3D
 var target: Node3D
 var look_point := Vector3.ZERO
 var _failed := 0
+## Eyes held where the camera can see them, hovering (they would orbit behind the cover).
+var pins := {}
 
 
 func _ready() -> void:
+	# (After the monsters have moved, so a pin holds.)
+	process_physics_priority = 100
 	var shot := "pack"
 
 	for arg in OS.get_cmdline_user_args():
@@ -58,6 +62,10 @@ func _light_the_yard() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	for eye in pins:
+		if is_instance_valid(eye) and not eye.dead:
+			eye.global_position = pins[eye] + Vector3(sin(float(Engine.get_physics_frames()) * 0.03) * 0.25, sin(float(Engine.get_physics_frames()) * 0.05) * 0.12, 0.0)
+
 	if p == null or not is_instance_valid(p) or p.is_dead:
 		return
 
@@ -120,6 +128,12 @@ func _eye(at: Vector3, near := 3.6, high := 2.3, turned := false) -> CharacterBo
 	one.spit_in = 100.0
 	one._radius = near
 	one._height = high
+	return one
+
+
+func _pinned_eye(at: Vector3, turned := false) -> CharacterBody3D:
+	var one := await _eye(at, at.distance_to(p.global_position), at.y - 0.05, turned)
+	pins[one] = at
 	return one
 
 
@@ -199,7 +213,7 @@ func _choose() -> void:
 
 func _swipes_by(form: StringName) -> void:
 	await _stand(0.5)
-	var one := await _anima(form, _ahead(0.6, 5.0, 0.3 if form == &"face" else -0.5))
+	var one := await _anima(form, _ahead(0.5, 3.4, 0.3 if form == &"face" else -0.5))
 	target = one
 	var cuts := [0]
 	one.swiped.connect(func(hit): cuts[0] += 1 if hit else 0)
@@ -218,7 +232,7 @@ func _swipe_face() -> void:
 
 func _latch_whip() -> void:
 	await _stand(0.5)
-	var one := await _anima(&"hands", _ahead(-0.5, 6.0, -0.5), 1.0)
+	var one := await _anima(&"hands", _ahead(-0.4, 3.4, -0.5), 1.0)
 	target = one
 	var got: bool = await _until(func(): return p.leech.count() > 0, 8.0)
 	target = null
@@ -233,8 +247,8 @@ func _face_drinks() -> void:
 	await _stand()
 	var one := await _anima(&"face", _ahead(0.8, 0.5, 0.3))
 	one.put_on_you()
-	await _gulps(3, 7.0)
-	await _frames(20)
+	await _gulps(4, 8.0)
+	await _frames(40)
 	_expect("a face on you, drinking", p.leech.count() == 1)
 
 
@@ -276,7 +290,7 @@ func _shard() -> void:
 
 func _ward() -> void:
 	await _stand()
-	var eye := await _eye(_ahead(0.0, 8.0, 1.0), 8.0, 2.2, true)
+	var eye := await _pinned_eye(_ahead(0.0, 7.0, 0.9), true)
 	target = eye
 	await _frames(40)
 	await _spell("spell_2", 34)
@@ -320,8 +334,8 @@ func _blink() -> void:
 
 func _weak_kill() -> void:
 	await _stand(0.2)
-	var hands := await _anima(&"hands", _ahead(-1.5, 5.0, -0.5))
-	var face := await _anima(&"face", _ahead(1.5, 5.5, 0.2))
+	var hands := await _anima(&"hands", _ahead(-1.0, 3.6, -0.5))
+	var face := await _anima(&"face", _ahead(1.2, 4.0, 0.2))
 
 	for one in [hands, face]:
 		_holds_off(one)
@@ -345,14 +359,18 @@ func _swoop_bat() -> void:
 	await _until(func(): return eye.global_position.distance_to(p.camera.global_position) < 3.0, 2.0)
 	p.revolver.try_whip()
 	var batted: bool = await _until(func(): return eye.state == eye.State.BATTED, 1.0)
+	# (Stays on the yard: not up after it into the sky.)
+	target = null
+	look_point = _ahead(0.0, 8.0, 1.0)
 	await _frames(110)
 	_expect("it told, swooped, and was whipped back", swooped and batted)
 
 
 func _turn() -> void:
 	await _stand()
-	var eye := await _eye(_ahead(0.0, 4.0, 1.0), 4.0)
+	var eye := await _pinned_eye(_ahead(0.0, 3.6, 0.8))
 	target = eye
+	p.revolver.cylinder_round = &"lead"
 	await _frames(60)
 	# (However hard the round: this one hit is the one that tears it open.)
 	eye.health = 500.0
@@ -367,7 +385,7 @@ func _turn() -> void:
 
 func _spit_bat() -> void:
 	await _stand()
-	var eye := await _eye(_ahead(0.0, 7.0, 1.0), 7.0, 2.0, true)
+	var eye := await _pinned_eye(_ahead(0.0, 5.5, 0.8), true)
 	eye.health = 500.0
 	var hurt := [false]
 	eye.struck.connect(func(_result, _source): hurt[0] = true)
@@ -397,7 +415,7 @@ func _spit_bat() -> void:
 
 func _spit_curse() -> void:
 	await _stand()
-	var eye := await _eye(_ahead(0.0, 7.0, 1.0), 7.0, 2.0, true)
+	var eye := await _pinned_eye(_ahead(0.0, 5.5, 0.8), true)
 	target = eye
 	await _frames(40)
 	await _spit_at_you(eye)
@@ -413,8 +431,8 @@ func _spit_curse() -> void:
 
 func _egg() -> void:
 	await _stand()
-	var eye := await _eye(_ahead(1.0, 6.0, 1.0), 6.0)
-	var eye_two := await _eye(_ahead(-1.5, 6.0, 1.0), 6.0)
+	var eye := await _pinned_eye(_ahead(1.2, 5.0, 0.8))
+	var eye_two := await _pinned_eye(_ahead(-1.4, 5.0, 0.8))
 	p.statuses.apply(&"evil_eye", 60.0)
 
 	for i in 3:
@@ -424,8 +442,10 @@ func _egg() -> void:
 	await _frames(80)
 	p.loadout.selected = p.loadout.items.find(&"egg")
 	await _press("use_item")
-	await _frames(100)
-	await _frames(80)
+	# (Off the pins as it takes: they are flung, and sink.)
+	await _frames(55)
+	pins.clear()
+	await _frames(125)
 	_expect("the egg took it, and sent it back", not p.statuses.has(&"evil_eye") and (eye.state == eye.State.DAZED or eye_two.state == eye.State.DAZED))
 
 
@@ -482,9 +502,9 @@ func _die_eyes() -> void:
 	await _stand()
 	p.statuses.apply(&"evil_eye", 60.0)
 	p.curse.deepen()
-	var eye := await _eye(_ahead(0.0, 6.0, 1.0), 6.0)
+	var eye := await _eye(_ahead(0.0, 4.5, 1.0), 4.5)
 	target = eye
-	await _frames(70)
+	await _frames(40)
 	eye.next_swoop_in = 0.0
 	p.invulnerable = false
 	p.health = 1.0
@@ -524,7 +544,7 @@ func _die_hands() -> void:
 
 func _die_swipe() -> void:
 	await _stand(0.4)
-	var one := await _anima(&"hands", _ahead(0.5, 4.0, -0.5))
+	var one := await _anima(&"hands", _ahead(0.5, 3.2, -0.5))
 	target = one
 	p.invulnerable = false
 	p.health = 1.0
