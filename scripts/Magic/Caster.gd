@@ -2,7 +2,7 @@ extends Node
 ## The left hand's magic: which way it is held with the revolver drawn (a
 ## bare casting hand or the tome; aiming, both hands are on the gun), and the cast
 ## itself. The more powerful a spell, the longer it takes (Spells.gd): hold
-## its key (1 Shard, 2 Ward, 3 Empower) while the circle closes or the
+## its key (1 Shard, 2 Ward, 3 Empower, 4 the burst) while the circle closes or the
 ## pages turn; let go early and nothing is cast or spent. Innate spells (cantrips) need no hand; the
 ## movement ones work from anywhere. Runs as the player's "Caster" child and
 ## draws on its "Power" (PowerPool.gd).
@@ -12,6 +12,7 @@ const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
 const Blink := preload("res://scripts/Magic/Blink.gd")
 const ShardScript := preload("res://scripts/Magic/Shard.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
+const ObsidianBurst := preload("res://scripts/Magic/ObsidianBurst.gd")
 const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
@@ -33,7 +34,7 @@ enum Loadout {
 const BREAKS_AT := 25.0
 const BREAKING_KINDS := [&"power", &"blast", &"crush"]
 ## Spell keys, in order.
-const KEYED := [&"shard", &"ward", &"empower"]
+const KEYED := [&"shard", &"ward", &"empower", &"burst"]
 ## Seconds the casting hand stays up after a hand spell is let go.
 const FOLLOW_THROUGH := 0.18
 ## Blink aimed: the left hand reaching out toward the mark, and how fast
@@ -100,6 +101,7 @@ func _ready() -> void:
 	_ensure_action(&"spell_1", KEY_1)
 	_ensure_action(&"spell_2", KEY_2)
 	_ensure_action(&"spell_3", KEY_3)
+	_ensure_action(&"spell_4", KEY_4)
 	_ensure_action(&"blink", KEY_Q)
 
 
@@ -319,6 +321,8 @@ func _effect(id: StringName) -> void:
 		&"ward":
 			WardScript.cast_on(player)
 			player.leech.free_all()
+		&"burst":
+			ObsidianBurst.cast_on(player)
 		&"empower":
 			empowered_until = _game_time + EMPOWER_TIME
 			Sfx.play_flat(player, &"heartbeat", -2.0, 0.85)

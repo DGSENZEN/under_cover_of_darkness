@@ -75,11 +75,11 @@ func _ready() -> void:
 func _run() -> void:
 	var power: Node = player.power
 
-	# S1 the four spells, as data
+	# S1 the five spells, as data
 	var empower: Dictionary = Spells.info(&"empower")
 	_check("S1 the spells are data: Empower is a tome spell of 50 and 1.2 s",
 		empower.get("tier") == Spells.Tier.TOME and _near(empower.get("cost", 0.0), 50.0, 0.001) and _near(empower.get("cast_time", 0.0), 1.2, 0.001)
-			and Spells.all().size() == 4 and [&"blink", &"shard", &"ward", &"empower"].all(func(id): return id in Spells.all()),
+			and Spells.all().size() == 5 and [&"blink", &"shard", &"ward", &"empower", &"burst"].all(func(id): return id in Spells.all()),
 		"empower %s all %s" % [empower, Spells.all()])
 
 	# S2 the pool refills, but only after a rest

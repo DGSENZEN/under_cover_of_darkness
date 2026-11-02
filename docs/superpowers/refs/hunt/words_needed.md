@@ -9,3 +9,7 @@ Every word here is a stand-in. Replace the text, keep the ids.
 | `scripts/Hunt/KitPiece.gd` | `verb` | "Pack", "Put back" | The prompt at the kit table |
 | `scripts/UI/StealthHUD.gd` | prompt | "Egg" | Offered when the evil eye is on you and you carry an egg |
 | `scripts/Hunt/KitTable.gd` | pieces | none yet | Names for lead, copal, the egg, if they should show |
+
+## Ravenous ánimas
+
+- The new spell, stand-in id `burst`: its name.

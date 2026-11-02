@@ -16,6 +16,7 @@ const TABLE := {
 	&"blink": {"school": &"obsidian", "tier": Tier.INNATE, "cost": 20.0, "cast_time": 0.0, "movement": true},
 	&"shard": {"school": &"obsidian", "tier": Tier.HAND, "cost": 15.0, "cast_time": 0.4, "movement": false},
 	&"ward": {"school": &"copal", "tier": Tier.HAND, "cost": 35.0, "cast_time": 0.4, "movement": false},
+	&"burst": {"school": &"obsidian", "tier": Tier.HAND, "cost": 40.0, "cast_time": 0.3, "movement": false},
 	&"empower": {"school": &"nahual", "tier": Tier.TOME, "cost": 50.0, "cast_time": 1.2, "movement": false},
 }
 
