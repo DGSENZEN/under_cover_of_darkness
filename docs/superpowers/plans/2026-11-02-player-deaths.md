@@ -120,7 +120,7 @@ _check("L8 the last feeder killed mid-death: the death goes on, no error", p.lee
   - eyes: sinks slowly to kneeling (down 0.7), head dropping forward, then to the floor in the last second
   - animas, both: dragged toward the side the first holder has you (`player.leech.slot_side`), down onto your side (down 1.3, roll 1.15) by `LETS_GO`, then still, breathing less
   - swipe: rolled off the rake's side (`StealthHUD._cut_at.x`), quick, floor by 0.7 s
-- Produces: `LeechHands` and `LeechFace` read `player.death.playing()` where they read `is_dead` today. `LeechFace.drink` gains `last: float`: the face comes in to fill the view (`near` up to its held-close limit), jaw clamped, throat working.
+- Produces: `LeechHands` and `LeechFace` read `player.death.playing()` where they read `is_dead` today. `LeechFace.drink` gains `last: float`: the face comes in to fill the view (`near` up to its held-close limit), jaw clamped, throat working. With only hands on you, `last` closes them in one long squeeze, and they stop.
 
 - [ ] **Step 1: Write the failing checks:**
 
@@ -128,6 +128,7 @@ _check("L8 the last feeder killed mid-death: the death goes on, no error", p.lee
 _check("C1 the fall's camera is as it was", fall_pose_equals_old_formula)
 _check("C2 dying with one on you, the hands stay shown", hands.shown(slot) and p.is_dead)
 _check("C2b the face too, and it comes in", hands.face_shown(slot) and face_near_at_last > face_near_before + 0.2)
+_check("C2c only hands: one long squeeze, then still", hands_squeeze_at_last > 0.8 and hands_still_after)
 _check("C3 dragged toward its side", sign(view_roll_or_lean) == sign(slot_side_x))
 _check("C4 you end low on the floor, not through it", cam_y_above_floor > 0.08 and cam_y_above_floor < 0.5)
 _check("C4b dying in mid-air, you come down first", ended_near_floor)
@@ -149,7 +150,7 @@ _check("C6 the view holds still after it lets go", moved_after_let_go < 0.02)
 
 **Interfaces:**
 - Consumes: `player.death`.
-- Produces: `evil_eye_view` uniforms `dying` (0..1, the flesh closing past where it ever goes, all the way in), `last_eye` (0..1, the eye tearing open in the very middle, size about a third of the view's height), `failing` (0..1, the beat faster, then stopping). `StealthHUD.curse_state()` gains `dying`, `last_eye`, `failing`. HUD constants for the beat: `CLOSES_FROM := 0.15`, `LAST_EYE_AT := 0.6`, `FAILS_FROM := 0.7` (shares of the death).
+- Produces: `evil_eye_view` uniforms `dying` (0..1, the flesh closing past where it ever goes, all the way in), `last_eye` (0..1, the eye tearing open in the very middle, size about a third of the view's height), `extra_eyes` (0..1, four more eyes than the curse's six tearing open across the closing flesh), `failing` (0..1, the beat faster, then stopping). `StealthHUD.curse_state()` gains `dying`, `last_eye`, `extra_eyes`, `failing`. HUD constants for the beat: `CLOSES_FROM := 0.15`, `LAST_EYE_AT := 0.6`, `FAILS_FROM := 0.7` (shares of the death).
 - The curse's `alive` in `_show_curse` is true while `player.death.playing()`, so its ring stays. All six rings open during this death, whatever the depth was. `middle_kept_clear` is only asked of the living.
 
 - [ ] **Step 1: Write the failing checks:**
@@ -157,7 +158,7 @@ _check("C6 the view holds still after it lets go", moved_after_let_go < 0.02)
 ```gdscript
 _check("E1 killed by an eye with no curse on you: the flesh still comes", state["dying"] > 0.0 and curse_view_shown)
 _check("E2 it closes all the way", state_late["dying"] > 0.95)
-_check("E3 every eye opens", state_late["ring_open"] == 6)
+_check("E3 every eye opens, and more than the curse ever had", state_late["ring_open"] == 6 and state_late["extra_eyes"] > 0.9)
 _check("E4 the last eye opens in the middle, late", at_half["last_eye"] == 0.0 and state_late["last_eye"] > 0.9)
 _check("E5 the fall: none of it", fall_state["dying"] == 0.0)
 _check("E6 using the egg as you die: the egg stops, and the page still comes", gather_zero and finished)
@@ -188,7 +189,7 @@ _check("A3 then your sight fails", end["sight_fails"] > 0.95)
 _check("B1 both: the eyes watch them to the end", watching_until_last_gulp)
 _check("B2 on the last gulp all shut and the flesh goes slack, together", absf(shut_at - slack_at) < 0.05 and shut_at_gulp)
 _check("B3 no eye in the middle", both_state["last_eye"] == 0.0)
-_check("B4 the heart stops", heartbeats_after_shut == 0)
+_check("B4 the heart stops: the flesh's beat is still", failing_after_shut == 1.0)
 _check("S1 the swipe: its marks stay open to the end", swipe_claw_age < 0.5)
 _check("S2 cursed, its flesh falls slack, with no ending of its own", swipe_cursed["slack"] > 0.9 and swipe_cursed["last_eye"] == 0.0)
 _check("R1 the next life starts clean: nothing stuck", clean_after_reload)
@@ -208,7 +209,7 @@ _check("R1 the next life starts clean: nothing stuck", clean_after_reload)
 - Consumes: everything above.
 - Produces: `PlayerDeath` plays its beats with stand-ins: the heartbeat slowing and stopping (`heartbeat`), the last gulp (`flesh`, `anima_moan`), the body down (`body_fall`), the eye tearing (`flesh_heavy`). New wanted takes: `death_last_gulp`, `death_heart_stops`, `death_eye_tears_open`, `death_flesh_slack`, `death_breath_out`.
 
-- [ ] **Step 1: Write the failing check:** `_check("H1 the heart stops: no heartbeat sound after the shut", beats_after == 0)` with the existing `Sfx` test hook used by `sound_test`.
+- [ ] **Step 1: Write the failing check:** `_check("H1 the heart stops: no heartbeat sound after the shut", beats_after == 0)`, reading a new `PlayerDeath.heartbeats: int`, counted where it plays one.
 - [ ] **Step 2:** Run. Expected: FAIL.
 - [ ] **Step 3: Implement** the sounds and the docs.
 - [ ] **Step 4:** Add a death to `diag_mixed_perf`, measure with vsync on. Expected: no frames over 16.7 ms that the fight before it didn't have.
