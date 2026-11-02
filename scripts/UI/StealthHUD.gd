@@ -1068,6 +1068,7 @@ func _show_drain(delta: float) -> void:
 	var look := _drain_view.material as ShaderMaterial
 	look.set_shader_parameter(&"drain", _drain_shown)
 	look.set_shader_parameter(&"release", _drain_release)
+	look.set_shader_parameter(&"gulp", leech.gulp())
 	var threads := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
 	_drain_threads = 0
 
@@ -1099,7 +1100,7 @@ func drain_view_shown() -> bool:
 
 
 func drain_state() -> Dictionary:
-	return {"drain": _drain_shown, "release": _drain_release, "threads": _drain_threads}
+	return {"drain": _drain_shown, "release": _drain_release, "threads": _drain_threads, "gulp": player.leech.gulp() if player != null and player.leech != null else 0.0}
 
 
 ## The evil eye's marks are on screen.

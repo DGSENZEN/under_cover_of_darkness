@@ -1,76 +1,79 @@
 extends Node3D
-## The hands of whatever is on you, seen where they have hold of you: at your collar
-## and shoulder, on the side each is on, clutching harder as it feeds, never over the
-## crosshair. Drawn as the viewmodel is (HandSlot.gd). A camera child of the player;
-## LifeLeech says who is on. Stand-in hands until the models are made.
+## The hands of whatever is on you, clutching AT you: withered and real, coming up from
+## out in the world on the side each is on, palm to you, nails hooked at your face. With
+## every gulp they lunge closer and close on you, and clench harder as they feed. Never
+## over the crosshair. Drawn as the viewmodel is (HandSlot.gd). A camera
+## child of the player; LifeLeech says who is on.
 
 const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
+const FleshShader := preload("res://scripts/Monsters/anima_flesh.gdshader")
+const BRUSH := preload("res://textures/painted/eclipse/brush.png")
+const HANDS_MODEL := "res://assets/monsters/anima_hands.glb"
 
 const VIEWMODEL_LAYER := 1 << 18
-## Where a pair sits as you look: to the left, the right, or low, if those are taken.
-const ANCHORS := [Vector3(-0.27, -0.16, -0.42), Vector3(0.27, -0.16, -0.42), Vector3(-0.03, -0.25, -0.4)]
-const CLUTCH := 0.45
-const FINGERS := 4
-const WITHERED := Color(0.17, 0.15, 0.12)
+const FINGER_NAMES := ["index", "middle", "ring", "pinky", "thumb"]
+## Where a hand has hold, as you look (its wrist): left, right, or low if those are taken.
+const ANCHORS := [Vector3(-0.33, -0.21, -0.66), Vector3(0.36, -0.21, -0.66), Vector3(-0.05, -0.31, -0.66)]
+## The way its fingers point from there: AT you. Up and toward your face, the palm
+## turned to you, the arm running away behind it into the world, to what it belongs to.
+const POINTS := [Vector3(0.28, 0.42, 0.86), Vector3(-0.28, 0.42, 0.86), Vector3(0.02, 0.5, 0.86)]
+const BACKS := [Vector3(-0.1, 0.9, -0.42), Vector3(0.1, 0.9, -0.42), Vector3(0.0, 0.9, -0.5)]
+## How big, in the view's miniature.
+const SIZE := 0.44
+## How far the fingers curl at rest, and how much harder with a gulp: they close on you.
+const CURL := 0.5
+const CURL_GULP := 0.55
+## With a gulp it lunges at you, this far.
+const LUNGE := 0.07
+const FULL := 60.0
 
 var player: CharacterBody3D
-var _pairs: Array[Node3D] = []
-var _look: StandardMaterial3D
+var _hands: Array[Node3D] = []
+var _skeletons: Array[Skeleton3D] = []
+var _meshes: Array[MeshInstance3D] = []
+var _anchor_of: Array[int] = [0, 1, 2]
+var _squeeze: Array[float] = [0.0, 0.0, 0.0]
 var _clock := 0.0
 
 
 func _ready() -> void:
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	_look = StandardMaterial3D.new()
-	_look.albedo_color = WITHERED
-	_look.emission_enabled = true
-	_look.emission = WITHERED * 0.5
-	_look.roughness = 1.0
-	_look.use_z_clip_scale = true
-	_look.z_clip_scale = ViewArmsScript.Z_CLIP
-	_look.use_fov_override = true
-	_look.fov_override = ViewArmsScript.VIEW_FOV
-	_look.render_priority = 11
+	var look := ShaderMaterial.new()
+	look.shader = FleshShader
+	look.set_shader_parameter(&"stroke_sheet", BRUSH)
+	look.set_shader_parameter(&"wet", 0.0)
+	look.set_shader_parameter(&"fill", 0.5)
+	look.set_shader_parameter(&"rim", 0.3)
+	look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+	look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV)
+	var scene := load(HANDS_MODEL) as PackedScene
 
 	for slot in 3:
-		var pair := Node3D.new()
-		pair.visible = false
-		pair.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-		add_child(pair)
-		_build_hand(pair)
-		_pairs.append(pair)
-
-
-func _build_hand(pair: Node3D) -> void:
-	_piece(pair, Vector3(0.06, 0.018, 0.08), Vector3(0, 0, 0.0))
-
-	for i in FINGERS:
-		var finger := Node3D.new()
-		finger.name = "Finger%d" % i
-		finger.position = Vector3((float(i) - 1.5) * 0.016, 0.0, -0.04)
-		pair.add_child(finger)
-		_piece(finger, Vector3(0.011, 0.011, 0.075), Vector3(0, 0, -0.037))
-
-
-func _piece(parent: Node3D, size: Vector3, at: Vector3) -> void:
-	var piece := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = size
-	box.material = _look
-	piece.mesh = box
-	piece.position = at
-	piece.layers = VIEWMODEL_LAYER
-	piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(piece)
+		var hand: Node3D = scene.instantiate()
+		hand.visible = false
+		hand.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		add_child(hand)
+		_hands.append(hand)
+		_skeletons.append(hand.find_children("*", "Skeleton3D", true, false)[0])
+		var mesh: MeshInstance3D = hand.find_children("*", "MeshInstance3D", true, false)[0]
+		mesh.layers = VIEWMODEL_LAYER
+		mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mesh.set_surface_override_material(0, look)
+		_meshes.append(mesh)
 
 
 func shown(slot: int) -> bool:
-	return _pairs[slot].visible
+	return _hands[slot].visible
 
 
-## Where the pair in `slot` is on the screen, 0..1.
+## How hard the hand in `slot` has hold, 0..1.
+func squeeze(slot: int) -> float:
+	return _squeeze[slot]
+
+
+## Where the hand in `slot` has hold on the screen, 0..1.
 func on_screen(slot: int) -> Vector2:
-	var at := _pairs[slot].position
+	var at := _hands[slot].position
 	var tall := tan(deg_to_rad(ViewArmsScript.VIEW_FOV) * 0.5) * maxf(-at.z, 0.001)
 	var size := get_viewport().get_visible_rect().size
 	var aspect := size.x / maxf(size.y, 1.0)
@@ -87,14 +90,14 @@ func _process(delta: float) -> void:
 
 	for slot in 3:
 		var who: Node3D = player.leech.who_in(slot)
-		_pairs[slot].visible = who != null and not player.is_dead
+		_hands[slot].visible = who != null and not player.is_dead
 
 		if who == null:
 			continue
 
 		var anchor := _anchor_for(who, taken)
 		taken.append(anchor)
-		_pose(_pairs[slot], anchor, slot, float(who.fed))
+		_pose(slot, anchor, float(who.fed), player.leech.gulp())
 
 
 ## The side of your view it is on; low, if that side is taken.
@@ -112,12 +115,19 @@ func _anchor_for(who: Node3D, taken: Array[int]) -> int:
 	return 1 - wanted
 
 
-func _pose(pair: Node3D, anchor: int, slot: int, fed: float) -> void:
-	var from_side := -signf(ANCHORS[anchor].x) if anchor < 2 else 0.0
-	var beat := sin(_clock * (5.0 + fed * 0.1) + float(slot) * 2.1) * 0.5 + 0.5
-	pair.position = ANCHORS[anchor]
-	pair.rotation = Vector3(-0.5, from_side * 0.9, from_side * 0.25)
+func _pose(slot: int, anchor: int, fed: float, gulp: float) -> void:
+	var fingers: Vector3 = POINTS[anchor].normalized()
+	var haul := fingers * LUNGE * gulp * gulp
+	# The model's fingers go along its -Z, the back of the hand its +Y.
+	_hands[slot].transform = Transform3D(Basis.looking_at(fingers, BACKS[anchor]).scaled(Vector3.ONE * SIZE), ANCHORS[anchor] + haul)
+	var tremble := sin(_clock * 31.0 + float(slot) * 2.1) * 0.03
+	_squeeze[slot] = clampf(0.25 + clampf(fed / FULL, 0.0, 1.0) * 0.2 + gulp * 0.55, 0.0, 1.0)
+	var curl: float = CURL + CURL_GULP * gulp + tremble
+	var skeleton := _skeletons[slot]
+	_meshes[slot].set_instance_shader_parameter(&"fed", clampf(fed / FULL, 0.0, 1.0))
 
-	for child in pair.get_children():
-		if child.name.begins_with("Finger"):
-			child.rotation.x = -CLUTCH - beat * 0.5
+	for finger in FINGER_NAMES:
+		for k in range(1, 4):
+			var bone := skeleton.find_bone("%s_%02d" % [finger, k])
+			var rest: Basis = skeleton.get_bone_rest(bone).basis
+			skeleton.set_bone_pose_rotation(bone, (rest * Basis(Vector3.RIGHT, -curl * (0.8 if k == 1 else 1.0))).get_rotation_quaternion())

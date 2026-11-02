@@ -27,6 +27,7 @@ func _ready() -> void:
 	p.inventory.select_by_id(&"revolver")
 	p.inventory.ammo[&"copal_rounds"] = 60
 	await _frames(60)
+	await _hands_model()
 	await _forms()
 	await _rush()
 	await _leeching()
@@ -35,6 +36,48 @@ func _ready() -> void:
 	await _dying()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
+
+
+## The hands' model: a real hand, withered, up on its fingertips.
+func _hands_model() -> void:
+	var e := _anima(&"hands", Vector3(0, 0.3, -30))
+	await _frames(3)
+	var body: Node3D = e.body
+	_check("V1 the model loads, with its skeleton", body.skeleton() != null and body.skeleton().find_bone("middle_02") >= 0 and body.skeleton().find_bone("arm_2") >= 0)
+	var mesh: MeshInstance3D = body.part(&"Hand")
+	_check("V1a a hand, and its claws, in one mesh", mesh != null)
+	var colours: PackedColorArray = mesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var pale := 0
+	var dark := 0
+
+	for colour in colours:
+		if colour.get_luminance() > 0.25:
+			pale += 1
+		elif colour.get_luminance() < 0.08:
+			dark += 1
+
+	_check("V1b vertex colours arrive, painted, not white (%d pale, %d dark, of %d)" % [pale, dark, colours.size()], colours.size() > 0 and pale > 20 and pale < colours.size() / 2 and dark > colours.size() / 10)
+	var tris: int = mesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size() / 3
+	_check("V4 under its budget (%d tris)" % tris, tris <= 9000)
+	e.state = STATE.RUSH
+	var skeleton: Skeleton3D = body.skeleton()
+	var bone := skeleton.find_bone("index_02")
+	var other := skeleton.find_bone("middle_02")
+	var was: Quaternion = skeleton.get_bone_pose_rotation(bone)
+	var other_was: Quaternion = skeleton.get_bone_pose_rotation(other)
+	e.global_position = Vector3(0, 0.3, -40)
+	await _frames(7)
+	var moved_a: float = skeleton.get_bone_pose_rotation(bone).angle_to(was)
+	var moved_b: float = skeleton.get_bone_pose_rotation(other).angle_to(other_was)
+	_check("V2 it walks: its fingers move, not together (%.3f, %.3f)" % [moved_a, moved_b], moved_a > 0.01 and moved_b > 0.01 and skeleton.get_bone_pose_rotation(bone).angle_to(skeleton.get_bone_pose_rotation(other)) > 0.01)
+	var tip_low: float = body.lowest_tip()
+	_check("V2b on its fingertips: they reach the floor (%.2f)" % tip_low, absf(tip_low) < 0.1)
+	_check("V2c the palm stands clear of the floor (%.2f)" % body.palm_height(), body.palm_height() > 0.2)
+	e.fed = 60.0
+	await _frames(3)
+	_check("V3 it shows what it drank", body.fed_shown > 0.5)
+	e.queue_free()
+	await _frames(2)
 
 
 func _forms() -> void:
@@ -290,8 +333,8 @@ func _getting_off() -> void:
 	await _frames(100)
 	_check("W5b and they can't enter it (%.2f m)" % outsider.global_position.distance_to(p.global_position), p.leech.slot_of(outsider) < 0 and outsider.state != STATE.ON and not WardScript.covers(outsider.global_position))
 	_free(warded + [outsider])
-	await _until(func(): return not WardScript.covers(p.global_position + Vector3.UP), 6.0)
-	await _frames(3)
+	# (Being hauled at can carry you out of a ward that is still up: wait it out.)
+	await _frames(int(WardScript.LIFE * 60.0) + 90)
 
 	# A blink.
 	p.power.power = 100.0
@@ -309,7 +352,7 @@ func _getting_off() -> void:
 	Input.action_press("spell_2")
 	await _frames(40)
 	Input.action_release("spell_2")
-	_check("W7 no power: the Ward refuses", not WardScript.covers(p.global_position + Vector3.UP) and bound[0].state == STATE.ON)
+	_check("W7 no power: the Ward refuses (covered %s, state %d, power %.1f)" % [str(WardScript.covers(p.global_position + Vector3.UP)), bound[0].state, p.power.power], not WardScript.covers(p.global_position + Vector3.UP) and bound[0].state == STATE.ON)
 	_face(bound[0])
 	await _whip()
 	_check("W7b the whip still works", bound[0].state == STATE.THROWN)
@@ -360,6 +403,36 @@ func _drained_view() -> void:
 	_check("S2b deepens with each (%.2f, %.2f)" % [d1, d3], d3 > d1 + 0.2)
 	_check("S3c the right one on the right, and each shown", hands.on_screen(p.leech.slot_of(b)).x > 0.5 and hands.shown(p.leech.slot_of(c)))
 	_check("S4b a thread for each, even from behind you", hud.drain_state()["threads"] == 3)
+	# It drinks in gulps.
+	var gulps := [0]
+	var tugged := [0.0]
+	var gulped_watch := func(): gulps[0] += 1
+	p.leech.gulped.connect(gulped_watch)
+	var gulp_seen := 0.0
+	var squeeze_low := 9.0
+	var squeeze_high := -9.0
+	var trauma_seen := 0.0
+	p.power.power = 100.0
+
+	for i in 130:
+		await get_tree().physics_frame
+		gulp_seen = maxf(gulp_seen, hud.drain_state()["gulp"])
+		squeeze_low = minf(squeeze_low, hands.squeeze(slot_a))
+		squeeze_high = maxf(squeeze_high, hands.squeeze(slot_a))
+		trauma_seen = maxf(trauma_seen, p.juice._trauma)
+
+	p.leech.gulped.disconnect(gulped_watch)
+	_check("S7 it drinks in gulps, not a steady bleed (%d in 2.2 s)" % gulps[0], gulps[0] >= 2 and gulps[0] <= 4)
+	_check("S7b each one shows on your sight (%.2f)" % gulp_seen, gulp_seen > 0.5)
+	_check("S7c its hands squeeze with each (%.2f to %.2f)" % [squeeze_low, squeeze_high], squeeze_high > squeeze_low + 0.2)
+	_check("S7d and it jolts your view (%.3f)" % trauma_seen, trauma_seen > 0.02)
+	p.power.power = 5.0
+	await _frames(40)
+	var sag: float = p.leech.sag()
+	_check("S8 your will gone, your gun arm sags (%.2f)" % sag, sag > 0.6)
+	_check("S8b it shows (%.3f)" % p.hand.position.y, p.hand.position.y < -0.005)
+	_check("S8c and your view is heavy", p.juice.unsteady() > 0.3)
+	p.power.power = 100.0
 	p.statuses.apply(&"evil_eye", 8.0)
 	await _frames(40)
 	_check("S6 with the curse on too, both show", hud.curse_view_shown() and hud.drain_view_shown())
@@ -371,6 +444,7 @@ func _drained_view() -> void:
 	_check("S5 thrown off: colour floods back at once (%.2f, %.2f)" % [state["drain"], state["release"]], state["release"] > 0.5 and state["drain"] < d3 * 0.5)
 	_check("S5b and the hands are gone", not hands.shown(slot_a) and not hands.shown(slot_b))
 	await _frames(60)
+	_check("S8d your arm comes back up", absf(p.hand.position.y) < 0.002 and p.leech.sag() < 0.01)
 	_check("S5c and then nothing shows", not hud.drain_view_shown())
 	_free([a, b, c])
 	await _frames(3)

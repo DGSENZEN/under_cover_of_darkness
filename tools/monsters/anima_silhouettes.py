@@ -7,6 +7,8 @@ here and in docs/superpowers/specs/2026-11-01-ravenous-animas-design.md.
         --python tools/monsters/anima_silhouettes.py -- <repo root>
 
 Saves docs/superpowers/refs/hunt/anima_silhouettes.png.
+
+The user's picks: Hands A, Face B, Torso A.
 """
 
 import math

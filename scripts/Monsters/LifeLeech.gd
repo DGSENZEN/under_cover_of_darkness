@@ -6,6 +6,8 @@ extends Node
 
 signal latched(who: Node3D)
 signal released(who: Node3D)
+## A gulp: it drinks in beats, and each is felt.
+signal gulped
 
 const MOST := 3
 ## Your pace by how many are on you.
@@ -17,16 +19,28 @@ const APART := 1.1
 ## Your chest, from the middle of you.
 const CHEST := 0.15
 
-## A drink: the voice now and then, and your heart slowing as your will goes.
-const DRINK_EVERY := 2.6
-const HEART_FAST := 0.9
-const HEART_SLOW := 1.7
+## The gulps: slower as your will goes, as your heart does, sharper the more are on
+## you. How long each is felt, what it does to your view, how hard it hauls at you.
+const GULP_FAST := 0.72
+const GULP_SLOW := 1.25
+const GULP_FADES := 0.5
+const GULP_TRAUMA := 0.05
+const GULP_HAUL := 0.9
 const MUFFLE := 0.65
+## Your gun arm under it: how fast it sinks, and comes back; how far it can sink (m and
+## radians). Your view goes heavy.
+const SAG_TAKES := 0.8
+const SAG_RETURNS := 4.0
+const SAG_DROP := 0.016
+const SAG_TURN := 0.05
+const HEAVY := 0.55
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 var player: CharacterBody3D
-var _drink_in := 0.0
-var _heart_in := 0.0
+var _gulp_in := 0.25
+var _gulp := 0.0
+var _sag := 0.0
+var _was_held := false
 var _slots: Array = [null, null, null]
 var _sides: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
 
@@ -70,6 +84,58 @@ func has_room() -> bool:
 
 func slot_of(who: Node3D) -> int:
 	return _slots.find(who)
+
+
+## A gulp: its hands squeeze (LeechHands.gd), your sight dips, it hauls you toward it,
+## and you hear it, and your heart.
+func _gulp_now() -> void:
+	var will: float = player.power.power / player.power.MAX
+	_gulp_in = lerpf(GULP_SLOW, GULP_FAST, will)
+	_gulp = 1.0
+	var drinker: Node3D = on_me()[randi() % count()]
+	var felt := 0.7 + 0.15 * float(count())
+	Sfx.play(drinker, &"flesh", drinker.global_position, -5.0, 0.55)
+	Sfx.play(drinker, &"anima_moan", drinker.global_position, -8.0, 0.7)
+	Sfx.play_flat(self, &"heartbeat", -3.0, lerpf(0.8, 1.0, will))
+	player.velocity -= _sides[_slots.find(drinker)] * -GULP_HAUL
+	var juice = player.get("juice")
+
+	if juice != null:
+		juice.add_trauma(GULP_TRAUMA * felt)
+		# Rolled toward it, not aimed at it: a kick here would walk your aim off.
+		var way: Vector3 = player.global_basis.inverse() * _sides[_slots.find(drinker)]
+		juice.punch(0.0, 0.0, way.x * 1.2 * felt)
+
+	gulped.emit()
+
+
+## Free: you get your breath, and your head comes up.
+func _gasp() -> void:
+	_gulp_in = 0.25
+	Sfx.play_flat(self, &"whoosh_light", -6.0, 0.72)
+	var juice = player.get("juice")
+
+	if juice != null:
+		juice.add_trauma(0.08)
+
+
+## Your gun arm, sinking as your will goes.
+func _feel_arm(delta: float) -> void:
+	if player == null:
+		return
+
+	var wanted := 0.0
+
+	if count() > 0 and not player.is_dead:
+		wanted = maxf(1.0 - player.power.power / player.power.MAX, 0.25)
+
+	_sag = move_toward(_sag, wanted, delta * (SAG_TAKES if wanted > _sag else SAG_RETURNS))
+	var hand: Node3D = player.get("hand")
+
+	if hand != null:
+		var shake := sin(Time.get_ticks_msec() * 0.031) * 0.002 * _sag
+		hand.position = Vector3(shake, -SAG_DROP * _sag - 0.005 * _gulp, 0.0)
+		hand.rotation.x = -SAG_TURN * _sag
 
 
 ## Where the one in `slot` is held, in the world.
@@ -120,28 +186,39 @@ func tear_free() -> void:
 		who.let_go()
 
 
+## The last gulp, felt: 1 as it lands, 0 when it has passed.
+func gulp() -> float:
+	return _gulp
+
+
+## How far your arm has sunk under them, 0..1.
+func sag() -> float:
+	return _sag
+
+
 func _physics_process(delta: float) -> void:
 	for i in _slots.size():
 		if _slots[i] != null and not is_instance_valid(_slots[i]):
 			_slots[i] = null
 
+	_gulp = move_toward(_gulp, 0.0, delta / GULP_FADES)
+	_feel_arm(delta)
+
 	if player == null or count() == 0:
 		Sfx.drain_muffle = 0.0
+
+		if _was_held and player != null and not player.is_dead:
+			_gasp()
+
+		_was_held = false
 		return
 
+	_was_held = true
 	Sfx.drain_muffle = MUFFLE
-	_drink_in -= delta
-	_heart_in -= delta
+	_gulp_in -= delta
 
-	if _drink_in <= 0.0:
-		_drink_in = DRINK_EVERY
-		var drinker: Node3D = on_me()[randi() % count()]
-		Sfx.play(drinker, &"anima_moan", drinker.global_position, -3.0, 0.72)
-
-	if _heart_in <= 0.0:
-		var will: float = player.power.power / player.power.MAX
-		_heart_in = lerpf(HEART_SLOW, HEART_FAST, will)
-		Sfx.play_flat(self, &"heartbeat", -6.0, 0.9)
+	if _gulp_in <= 0.0:
+		_gulp_now()
 
 	if player.is_dead:
 		free_all()

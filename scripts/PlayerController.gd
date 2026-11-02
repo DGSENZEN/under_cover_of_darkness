@@ -1262,7 +1262,7 @@ func _feel_statuses() -> void:
 		combat.stamina_regen_scale = curse.stamina_regen()
 
 	if juice != null:
-		juice.set_unsteady(curse.unsteady())
+		juice.set_unsteady(maxf(curse.unsteady(), leech.HEAVY if leech != null and leech.count() > 0 else 0.0))
 
 
 func _update_timers(delta: float) -> void:

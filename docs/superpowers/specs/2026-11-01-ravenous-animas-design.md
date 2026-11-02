@@ -67,6 +67,8 @@ The roles below are *my call*.
 | **Face** | Withered hands and a face: a sunken face that is mostly open mouth, two hands reaching ahead of it, nothing else | Floats at chest height, surges forward, stops to lunge | 70 | Middling |
 | **Torso** | A starved torso dragged by its arms: ribs, shoulders, a sunken head; below the ribs only burnt-out fire | Slow, hand over hand, then a long telegraphed lunge across the floor | 130 | Strong: a single whip is not enough to break it |
 
+**The user's picks from `docs/superpowers/refs/hunt/anima_silhouettes.png`:** Hands A (up on its fingertips, walking, the back of the hand toward you, the arm dragged behind), Face B (two great hands thrust at you, a small dried face behind and between them), Torso A (flat to the floor, dragged by its arms, dead candles on its back).
+
 Models are built one at a time and reviewed by the user before the next (`models-one-by-one-supervised`), in this order: hands, face, torso. Each is judged in the game, not in Blender renders.
 
 ## What they do
