@@ -12,12 +12,21 @@ const MOST := 3
 const PACE := [1.0, 0.8, 0.65, 0.5]
 ## Each holds on from the side it came at you, this far out from your chest, and
 ## stays there as you turn, so you can turn on it and shoot it. No two share a side.
-const HOLD_OUT := 0.75
-const HOLD_LOW := 0.2
+const HOLD_OUT := 0.85
 const APART := 1.1
-const CHEST := 1.45
+## Your chest, from the middle of you.
+const CHEST := 0.15
+
+## A drink: the voice now and then, and your heart slowing as your will goes.
+const DRINK_EVERY := 2.6
+const HEART_FAST := 0.9
+const HEART_SLOW := 1.7
+const MUFFLE := 0.65
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 var player: CharacterBody3D
+var _drink_in := 0.0
+var _heart_in := 0.0
 var _slots: Array = [null, null, null]
 var _sides: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
 
@@ -41,6 +50,12 @@ func release(who: Node3D) -> void:
 		released.emit(who)
 
 
+## Who is in `slot`, or null.
+func who_in(slot: int) -> Node3D:
+	var who: Variant = _slots[slot]
+	return who if is_instance_valid(who) else null
+
+
 func on_me() -> Array:
 	return _slots.filter(func(who): return is_instance_valid(who))
 
@@ -59,7 +74,7 @@ func slot_of(who: Node3D) -> int:
 
 ## Where the one in `slot` is held, in the world.
 func slot_position(slot: int) -> Vector3:
-	return player.global_position + Vector3.UP * (CHEST - HOLD_LOW) + _sides[slot] * HOLD_OUT
+	return player.global_position + Vector3.UP * CHEST + _sides[slot] * HOLD_OUT
 
 
 ## The way out from you to the one in `slot`, on the level.
@@ -111,7 +126,22 @@ func _physics_process(delta: float) -> void:
 			_slots[i] = null
 
 	if player == null or count() == 0:
+		Sfx.drain_muffle = 0.0
 		return
+
+	Sfx.drain_muffle = MUFFLE
+	_drink_in -= delta
+	_heart_in -= delta
+
+	if _drink_in <= 0.0:
+		_drink_in = DRINK_EVERY
+		var drinker: Node3D = on_me()[randi() % count()]
+		Sfx.play(drinker, &"anima_moan", drinker.global_position, -3.0, 0.72)
+
+	if _heart_in <= 0.0:
+		var will: float = player.power.power / player.power.MAX
+		_heart_in = lerpf(HEART_SLOW, HEART_FAST, will)
+		Sfx.play_flat(self, &"heartbeat", -6.0, 0.9)
 
 	if player.is_dead:
 		free_all()

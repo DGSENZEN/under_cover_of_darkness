@@ -7,3 +7,4 @@ Stand-ins until posed by hand (never computed and shown as final).
 | Egg limpia, left hand: passed across your sight | `Loadout.left_frame`, `HandSlot.EGG_GRIP` | Computed stand-in |
 | Gun dodge: body leaning into it, gun held up | `PlayerCombat._try_dodge` | Camera lean only |
 | Slide: low, off hand down to the floor | `PlayerController._try_slide` | Camera drop and roll only |
+| A withered hand clutching at your collar and shoulder | `LeechHands.ANCHORS` | Computed stand-in |

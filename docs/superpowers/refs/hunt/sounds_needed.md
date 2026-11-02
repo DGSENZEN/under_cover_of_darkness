@@ -16,3 +16,9 @@ Stand-ins from the existing library until the user chooses real ones.
 | The egg drawing the curse in, rising | `Loadout.use_item` | `whoosh_heavy` low |
 | A ribbon of the curse landing in the egg | `Loadout._land_ribbons` | `flesh` quiet, rising pitch |
 | The egg's release: the crack and sting of a dispel | `Loadout._release` | `ting` + `bone_crack` |
+
+## Ravenous ánimas
+
+| Sound | Where | Stand-in |
+|---|---|---|
+| A rasping drink, while one is on you | `LifeLeech._physics_process` | `anima_moan`, pitched down |

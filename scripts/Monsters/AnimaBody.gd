@@ -65,7 +65,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 
 	# A tell you can read: it draws itself up, shaking.
 	position.y = 0.16 + sin(_clock * 40.0) * 0.015 if doing == &"tell" else 0.0
-	_look.emission_energy_multiplier = 0.25 + fed * 1.6 + (0.8 if exposed else 0.0)
+	_look.emission_energy_multiplier = 0.2 + fed * 0.5 + (0.3 if exposed else 0.0)
 	_look.emission = Color(1.0, 0.5, 0.1) if smoked else Color(0.38, 0.5, 0.08)
 
 

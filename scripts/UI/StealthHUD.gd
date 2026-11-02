@@ -5,6 +5,7 @@ extends CanvasLayer
 
 const HuntReadoutScript := preload("res://scripts/UI/HuntReadout.gd")
 const EvilEyeView := preload("res://scripts/UI/evil_eye_view.gdshader")
+const LifeDrainView := preload("res://scripts/UI/life_drain_view.gdshader")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const AdrenalineViewScript := preload("res://scripts/Visual/AdrenalineView.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -96,6 +97,13 @@ var _font: SystemFont
 var _ammo: HuntReadoutScript
 ## The evil eye's lids of ink, and how far closed they are shown.
 var _curse_view: ColorRect
+var _drain_view: ColorRect
+var _drain_shown := 0.0
+var _drain_release := 0.0
+var _drain_threads := 0
+var _drain_held_was := 0
+## Between the two, or the curse's own look at the screen wouldn't have the drain in it.
+var _drain_copy: BackBufferCopy
 var _curse_shown := 0.0
 var _stared_shown := 0.0
 var _dispel := 0.0
@@ -117,6 +125,12 @@ const DISPEL_TIME := 0.35
 ## those at the corners first, where the flesh first comes in.
 const RING_ORDER := [2, 4, 0, 1, 5, 3]
 const CURSE_LEAST := 0.62
+## How deep the drain shows by how many are on you; how fast it comes and goes; how
+## long colour floods back for.
+const DRAIN_DEPTH := [0.0, 0.45, 0.72, 1.0]
+const DRAIN_COMES := 1.2
+const DRAIN_GOES := 5.0
+const DRAIN_RELEASE_TIME := 0.5
 const RELIEF_TIME := 1.2
 const LEAVE_TIME := 0.8
 var _crosshair: Crosshair
@@ -759,6 +773,19 @@ func setup(p_player: CharacterBody3D) -> void:
 	_white.visible = false
 	_play.add_child(_white)
 
+	_drain_view = ColorRect.new()
+	_drain_view.name = "LifeDrain"
+	_drain_view.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_drain_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_drain_view.material = ShaderMaterial.new()
+	_drain_view.material.shader = LifeDrainView
+	_drain_view.material.set_shader_parameter(&"stroke_sheet", load("res://textures/painted/eclipse/brush.png"))
+	_drain_view.visible = false
+	_play.add_child(_drain_view)
+	_drain_copy = BackBufferCopy.new()
+	_drain_copy.copy_mode = BackBufferCopy.COPY_MODE_VIEWPORT
+	_drain_copy.visible = false
+	_play.add_child(_drain_copy)
 	_curse_view = ColorRect.new()
 	_curse_view.name = "EvilEye"
 	_curse_view.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1013,6 +1040,68 @@ func egg_broke() -> void:
 	_dispel = 0.001
 
 
+## Being drunk from (life_drain_view.gdshader): deepening with each one on you, a
+## thread to each, and colour flooding back when the last is off you.
+func _show_drain(delta: float) -> void:
+	var leech: Node = player.get("leech") if player != null else null
+
+	if leech == null or _drain_view == null:
+		return
+
+	var held: int = leech.count() if not player.is_dead else 0
+
+	if held == 0 and _drain_held_was > 0:
+		_drain_release = 1.0
+
+	_drain_held_was = held
+	_drain_release = move_toward(_drain_release, 0.0, delta / DRAIN_RELEASE_TIME)
+	var wanted: float = DRAIN_DEPTH[held]
+	_drain_shown = move_toward(_drain_shown, wanted, delta * (DRAIN_COMES if wanted > _drain_shown else DRAIN_GOES))
+	var shown := _drain_shown > 0.01 or _drain_release > 0.01
+	_drain_view.visible = shown
+	_drain_copy.visible = shown and _curse_view.visible
+
+	if not shown:
+		_drain_threads = 0
+		return
+
+	var look := _drain_view.material as ShaderMaterial
+	look.set_shader_parameter(&"drain", _drain_shown)
+	look.set_shader_parameter(&"release", _drain_release)
+	var threads := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
+	_drain_threads = 0
+
+	if held > 0:
+		for who in leech.on_me():
+			var on: Vector2 = _on_screen_or_off(who.global_position)
+			threads[_drain_threads] = Vector3(on.x, on.y, 1.0)
+			_drain_threads += 1
+
+	look.set_shader_parameter(&"threads", threads)
+
+
+## Where a point is on the screen, 0..1; out of sight, off the edge on its side.
+func _on_screen_or_off(at: Vector3) -> Vector2:
+	var camera: Camera3D = player.camera
+	var size: Vector2 = get_viewport().get_visible_rect().size
+
+	if not camera.is_position_behind(at):
+		return camera.unproject_position(at) / size
+
+	var local: Vector3 = camera.to_local(at)
+	var way := Vector2(local.x, -local.y)
+	way = way.normalized() if way.length() > 0.001 else Vector2.DOWN
+	return Vector2(0.5, 0.5) + way * 0.9
+
+
+func drain_view_shown() -> bool:
+	return _drain_view.visible
+
+
+func drain_state() -> Dictionary:
+	return {"drain": _drain_shown, "release": _drain_release, "threads": _drain_threads}
+
+
 ## The evil eye's marks are on screen.
 func curse_view_shown() -> bool:
 	return _curse_view.visible
@@ -1063,6 +1152,7 @@ func _process(delta: float) -> void:
 	_ammo.position = Vector2(maxf(28.0, view.x - 190.0), maxf(0.0, view.y - 140.0))
 	_ammo.size = Vector2(170, 120)
 	_show_curse(delta)
+	_show_drain(delta)
 	_ammo.visible = not _ammo.snapshot().is_empty()
 	_ammo.queue_redraw()
 

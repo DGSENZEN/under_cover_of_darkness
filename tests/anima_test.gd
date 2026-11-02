@@ -31,6 +31,7 @@ func _ready() -> void:
 	await _rush()
 	await _leeching()
 	await _getting_off()
+	await _drained_view()
 	await _dying()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
@@ -329,6 +330,50 @@ func _getting_off() -> void:
 	_free(rider)
 	await _frames(3)
 	p.power.power = 100.0
+
+
+func _drained_view() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(40)
+	var hud: Node = p.hud
+	var hands: Node = p.leech_hands
+	_check("S1 nothing on you, nothing shows", hud.drain_state()["drain"] < 0.01 and not hud.drain_view_shown())
+	# One to your left, as you look.
+	var a := _anima(&"face", p.global_position + Vector3(-0.9, 0.5, -0.2))
+	await _frames(1)
+	a.put_on_you()
+	await _frames(50)
+	var d1: float = hud.drain_state()["drain"]
+	_check("S2 one on you: it starts (%.2f)" % d1, d1 > 0.2 and hud.drain_view_shown())
+	var slot_a: int = p.leech.slot_of(a)
+	_check("S3 hands in your view on its side (%.2f)" % hands.on_screen(slot_a).x, hands.shown(slot_a) and hands.on_screen(slot_a).x < 0.5)
+	_check("S3b never over the crosshair (%.2f)" % hands.on_screen(slot_a).distance_to(Vector2(0.5, 0.5)), hands.on_screen(slot_a).distance_to(Vector2(0.5, 0.5)) > 0.28)
+	_check("S4 a thread toward the one holding you", hud.drain_state()["threads"] == 1)
+	var b := _anima(&"face", p.global_position + Vector3(0.9, 0.5, -0.2))
+	var c := _anima(&"hands", p.global_position + Vector3(0.0, 0.5, 0.9))
+	await _frames(1)
+	b.put_on_you()
+	c.put_on_you()
+	await _frames(60)
+	var d3: float = hud.drain_state()["drain"]
+	_check("S2b deepens with each (%.2f, %.2f)" % [d1, d3], d3 > d1 + 0.2)
+	_check("S3c the right one on the right, and each shown", hands.on_screen(p.leech.slot_of(b)).x > 0.5 and hands.shown(p.leech.slot_of(c)))
+	_check("S4b a thread for each, even from behind you", hud.drain_state()["threads"] == 3)
+	p.statuses.apply(&"evil_eye", 8.0)
+	await _frames(40)
+	_check("S6 with the curse on too, both show", hud.curse_view_shown() and hud.drain_view_shown())
+	p.statuses.clear(&"evil_eye")
+	var slot_b: int = p.leech.slot_of(b)
+	p.leech.free_all()
+	await _frames(10)
+	var state: Dictionary = hud.drain_state()
+	_check("S5 thrown off: colour floods back at once (%.2f, %.2f)" % [state["drain"], state["release"]], state["release"] > 0.5 and state["drain"] < d3 * 0.5)
+	_check("S5b and the hands are gone", not hands.shown(slot_a) and not hands.shown(slot_b))
+	await _frames(60)
+	_check("S5c and then nothing shows", not hud.drain_view_shown())
+	_free([a, b, c])
+	await _frames(3)
 
 
 ## Walks at the ledge and over: the highest you got.

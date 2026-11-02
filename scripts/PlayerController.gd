@@ -24,6 +24,7 @@ const CasterScript := preload("res://scripts/Magic/Caster.gd")
 const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
 const EvilEyeCurseScript := preload("res://scripts/Monsters/EvilEyeCurse.gd")
 const LifeLeechScript := preload("res://scripts/Monsters/LifeLeech.gd")
+const LeechHandsScript := preload("res://scripts/Monsters/LeechHands.gd")
 const LoadoutScript := preload("res://scripts/Hunt/Loadout.gd")
 const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -417,6 +418,7 @@ var statuses: Node = null
 var curse: Node = null
 ## What is on you and drinking (LifeLeech.gd).
 var leech: Node = null
+var leech_hands: Node3D = null
 ## What you took on the hunt (Loadout.gd).
 var loadout: Node = null
 var _hazard_cooldown := 0.0
@@ -647,6 +649,10 @@ func _ready() -> void:
 	leech.name = "Leech"
 	leech.player = self
 	add_child(leech)
+	leech_hands = LeechHandsScript.new()
+	leech_hands.name = "LeechHands"
+	leech_hands.player = self
+	camera.add_child(leech_hands)
 	add_child(statuses)
 	loadout = LoadoutScript.new()
 	loadout.name = "Loadout"

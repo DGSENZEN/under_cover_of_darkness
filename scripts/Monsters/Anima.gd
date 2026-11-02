@@ -247,7 +247,7 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 
 
 func _chest(you: Node3D) -> Vector3:
-	return you.global_position + Vector3.UP * 0.5
+	return you.global_position + Vector3.UP * 0.15
 
 
 func _chest_distance(you: Node3D) -> float:

@@ -344,6 +344,8 @@ static var enabled := DisplayServer.get_name() != "headless"
 static var volume_db := 0.0
 ## Inside a Ward (Ward.gd sets it, 0..1, eased): the world's sounds dull.
 static var ward_muffle := 0.0
+## The world dull while something drinks from you (LifeLeech.gd).
+static var drain_muffle := 0.0
 
 static var _bank := {}
 ## The take each sound last played, so the next is another.
@@ -981,7 +983,7 @@ func _process(_delta: float) -> void:
 	var health := health_of(get_tree().get_first_node_in_group(&"player"))
 
 	_ringing = maxf(_ringing - real / 0.8, 0.0)
-	var cutoff := world_cutoff_for(health, _ringing, ward_muffle)
+	var cutoff := world_cutoff_for(health, _ringing, maxf(ward_muffle, drain_muffle))
 
 	for bus in [BUS_WORLD, BUS_FAR, BUS_AMBIENCE, BUS_MACHINE]:
 		var index := AudioServer.get_bus_index(bus)

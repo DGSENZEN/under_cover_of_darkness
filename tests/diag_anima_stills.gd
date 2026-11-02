@@ -30,7 +30,36 @@ func _ready() -> void:
 	if only == "" or only == "burst":
 		await _burst()
 
+	if only == "" or only == "drain":
+		await _drain()
+
 	get_tree().quit()
+
+
+func _drain() -> void:
+	var spots := [Vector3(-0.9, 0.5, -0.3), Vector3(0.9, 0.5, -0.3), Vector3(0.0, 0.5, 1.0)]
+	var forms := [&"face", &"torso", &"hands"]
+	var on: Array = []
+
+	for i in 3:
+		var e: CharacterBody3D = AnimaScript.new()
+		e.form = forms[i]
+		e.position = p.global_position + spots[i]
+		add_child(e)
+		await _frames(1)
+		e.put_on_you()
+		on.append(e)
+		await _frames(70)
+		await _shot("drain_%d" % (i + 1))
+
+	p.statuses.apply(&"evil_eye", 40.0)
+	await _frames(70)
+	await _shot("drain_with_curse")
+	p.statuses.clear(&"evil_eye")
+	await _frames(70)
+	p.leech.free_all()
+	await _frames(4)
+	await _shot("drain_released")
 
 
 func _burst() -> void:
