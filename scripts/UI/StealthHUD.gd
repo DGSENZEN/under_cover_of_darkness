@@ -1279,6 +1279,11 @@ func claw_at(side: float) -> void:
 	_cut_at = Vector2(0.5 + signf(side if side != 0.0 else 1.0) * CUT_OFF_MIDDLE, CUT_HIGH)
 
 
+## Which side the last cut came from: - left.
+func cut_side() -> float:
+	return _cut_at.x - 0.5
+
+
 func drain_view_shown() -> bool:
 	return _drain_view.visible
 

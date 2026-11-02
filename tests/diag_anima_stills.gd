@@ -8,6 +8,7 @@ const MagicFxScript := preload("res://scripts/Visual/MagicFx.gd")
 
 var out := "user://"
 var only := ""
+var place := "room"
 var gym: Node3D
 var p: CharacterBody3D
 
@@ -18,6 +19,8 @@ func _ready() -> void:
 			out = arg.trim_prefix("--out=")
 		elif arg.begins_with("--only="):
 			only = arg.trim_prefix("--only=")
+		elif arg.begins_with("--place="):
+			place = arg.trim_prefix("--place=")
 
 	gym = GYM.instantiate()
 	add_child(gym)
@@ -57,6 +60,11 @@ func _ready() -> void:
 
 	if only == "eye_turned":
 		await _eye_turned()
+
+	if only.begins_with("die_"):
+		await _dying_stills(only.trim_prefix("die_"))
+		get_tree().quit()
+		return
 
 	if only == "spit":
 		await _spit()
@@ -493,6 +501,60 @@ func _shard() -> void:
 
 
 ## The eye and the eye turned, side by side, in the game's looks: lit room and dark yard.
+## A death, as it plays, one a run (it can't be taken back): --only=die_eyes|animas|both|swipe,
+## --place=room|yard.
+func _dying_stills(how: String) -> void:
+	var at := Vector3(0, 1.05, -3.0) if place == "room" else Vector3(-2.0, 1.05, 8.0)
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), at))
+	await _frames(10)
+	p.reload_on_death = false
+	p.invulnerable = false
+
+	if how == "both" or how == "eyes":
+		p.statuses.apply(&"evil_eye", 60.0)
+
+		for i in 3:
+			p.curse.deepen()
+
+	await _frames(70)
+
+	if how == "both" or how == "animas":
+		var face := _feeder(&"face", p.global_position + Vector3(0.9, -0.5, -0.3))
+		var hands := _feeder(&"hands", p.global_position + Vector3(-0.9, -0.5, -0.3))
+		await _frames(1)
+		face.put_on_you()
+		hands.put_on_you()
+		await _frames(70)
+
+	# The real thing that kills you is the last blow; it stays in the room, to be seen leaving.
+	var blow: Node3D = _feeder(&"hands", p.global_position + Vector3(0.7, -0.7, 1.4))
+	blow.leap_chance = 0.0
+	await _frames(1)
+	p.health = 0.01
+
+	match how:
+		"eyes":
+			var eye: Node3D = load("res://scripts/Monsters/FloatingEye.gd").new()
+			eye.position = p.global_position + Vector3(0, 1.5, 30)
+			add_child(eye)
+			eye.sleep()
+			blow.sleep()
+			blow.visible = false
+			p.take_damage(50.0, eye)
+		"swipe":
+			p.hud.claw_at(1.0)
+			p.take_damage(50.0, blow)
+		_:
+			p.drain_life(50.0)
+
+	var was := 0.0
+
+	for t in [0.5, 1.2, 2.0, 2.5, 3.0, 3.4, 3.8]:
+		await _frames(int((t - was) * 60.0))
+		was = t
+		await _shot("die_%s_%s_%.1f" % [how, place, t])
+
+
 ## A turned eye, real, gathering its spit and the gob on its way to you.
 func _spit() -> void:
 	var EyeScript: GDScript = load("res://scripts/Monsters/FloatingEye.gd")

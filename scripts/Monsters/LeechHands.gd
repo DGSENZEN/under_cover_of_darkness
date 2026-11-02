@@ -200,8 +200,8 @@ func _process(delta: float) -> void:
 	for slot in 3:
 		var who: Node3D = player.leech.who_in(slot)
 
-		if who == null or player.is_dead:
-			if _held[slot] and not player.is_dead:
+		if who == null:
+			if _held[slot]:
 				_flung[slot] = FLUNG_FOR
 
 			_held[slot] = false
@@ -229,10 +229,12 @@ func _process(delta: float) -> void:
 		taken.append(anchor)
 		_anchor_of[slot] = anchor
 		_fed[slot] = float(who.fed)
-		_pose(slot, anchor, float(who.fed), player.leech.gulp(), player.leech.coming())
+		# (The last long gulp, as you die: held shut on you.)
+		var last: float = player.leech.last_gulp()
+		_pose(slot, anchor, float(who.fed), maxf(player.leech.gulp(), last), player.leech.coming() * (1.0 - last))
 
 		if player.leech.holds_face(slot):
-			_face_for(slot).drink(delta, player.leech.gulp(), player.leech.coming(), _arrive[slot], clampf(float(who.fed) / FULL, 0.0, 1.0), player.leech.face_offset(slot), float(slot) * 0.09)
+			_face_for(slot).drink(delta, player.leech.gulp(), player.leech.coming(), _arrive[slot], clampf(float(who.fed) / FULL, 0.0, 1.0), player.leech.face_offset(slot), float(slot) * 0.09, player.leech.last_gulp())
 
 	_second_hand(taken, delta)
 

@@ -23,6 +23,8 @@ const PowerPoolScript := preload("res://scripts/Magic/PowerPool.gd")
 const CasterScript := preload("res://scripts/Magic/Caster.gd")
 const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
 const EvilEyeCurseScript := preload("res://scripts/Monsters/EvilEyeCurse.gd")
+## How far off the floor your head comes to rest.
+const DEATH_ABOVE_FLOOR := 0.22
 const PlayerDeathScript := preload("res://scripts/PlayerUtils/PlayerDeath.gd")
 const LifeLeechScript := preload("res://scripts/Monsters/LifeLeech.gd")
 const LeechHandsScript := preload("res://scripts/Monsters/LeechHands.gd")
@@ -4489,8 +4491,14 @@ func _update_view(delta: float) -> void:
 	_update_lean(delta)
 	_update_wall_lean(delta)
 
+	# Killed by what you were fighting: it takes you down, as it takes you.
+	if is_dead and death.kind != &"fall":
+		juice.death_fall = death.camera_pose()
+		# (No lower than the floor, however low you were.)
+		var feet := global_position.y - _capsule.height * 0.5
+		juice.death_fall["down"] = minf(juice.death_fall["down"], maxf(neck.global_position.y - feet - DEATH_ABOVE_FLOOR, 0.0))
 	# Killed: down you go, and your head meets the floor.
-	if is_dead and _death_fall < 1.0:
+	elif is_dead and _death_fall < 1.0:
 		_death_fall = move_toward(_death_fall, 1.0, delta / 0.9)
 
 		if _death_fall >= 1.0:

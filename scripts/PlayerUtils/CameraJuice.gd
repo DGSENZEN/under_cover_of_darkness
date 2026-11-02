@@ -108,6 +108,8 @@ var view_rotation := Vector3.ZERO
 ## Killed: 0 standing, 1 lying on the floor. The head drops (faster and
 ## faster) and rolls onto its side.
 var death := 0.0
+## How a death that isn't the old fall takes you down (PlayerDeath.camera_pose): empty for the fall.
+var death_fall := {}
 
 var _roll_kick := 0.0
 var _zoom := 0.0
@@ -563,6 +565,10 @@ func update(
 		var settle := smoothstep(0.0, 1.0, death)
 		view_position += Vector3(0.12 * settle, -1.3 * fall, 0.0)
 		view_rotation += Vector3(0.35 * settle, 0.25 * settle, 1.15 * settle)
+
+	if not death_fall.is_empty():
+		view_position += Vector3(death_fall["side"], -death_fall["down"], 0.0)
+		view_rotation += death_fall["turn"]
 
 
 ## Returns the current eye-local cosmetic/lean transform from view_position and rotation.

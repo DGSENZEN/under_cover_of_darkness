@@ -23,6 +23,7 @@ func _ready() -> void:
 	await _paused()
 	await _freed()
 	await _staying()
+	await _going_down()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -211,6 +212,97 @@ func _freed() -> void:
 	await _fresh()
 	await _frames(10)
 	_check("P11 freed mid-death, the next starts clean", Sfx.drain_muffle == 0.0 and p.death.kind == &"")
+
+
+func _camera_above_floor() -> float:
+	return p.camera.global_position.y
+
+
+func _going_down() -> void:
+	await _dying_by(false, false, &"guard")
+	await _frames(30)
+	_check("C1 the fall's camera is as it was", p.juice.death_fall.is_empty() and p.juice.death > 0.0)
+	# A face on you, to your right.
+	await _fresh()
+	var face: CharacterBody3D = AnimaScript.new()
+	face.form = &"face"
+	face.position = HOME + Vector3(0.9, 0.3, -0.2)
+	add_child(face)
+	await _frames(1)
+	face.put_on_you()
+	await _frames(40)
+	var slot: int = p.leech.slot_of(face)
+	var hands: Node3D = p.leech_hands
+	var near_before: float = hands.face_near(slot)
+	p.health = 0.01
+	p.drain_life(50.0)
+	await _frames(30)
+	_check("C2 dying with it on you, the hands stay shown", p.is_dead and hands.shown(slot))
+	_check("C3 you go down toward its side", signf(p.juice.death_fall["side"]) == signf((p.global_basis.inverse() * p.leech.slot_side(slot)).x) and p.juice.death_fall["down"] > 0.0)
+	await _until(func(): return p.leech.last_gulp() > 0.9, 3.0)
+	await _frames(4)
+	_check("C2b the face too, and it comes in for the last (%.2f, %.2f)" % [near_before, hands.face_near(slot)], hands.face_shown(slot) and hands.face_near(slot) > near_before + 0.2)
+	await _until(func(): return p.leech.count() == 0, 2.0)
+	await _frames(int(0.8 * 60.0))
+	_check("C5 after it lets go, the hands go", not hands.shown(slot) and not hands.face_shown(slot))
+	var pose_then: Dictionary = p.juice.death_fall.duplicate()
+	await _frames(20)
+	_check("C6 the view holds still after it lets go", p.juice.death_fall == pose_then)
+	await _until(func(): return not p.death.playing(), 3.0)
+	await _frames(20)
+	var above: float = _camera_above_floor()
+	_check("C4 you end low on the floor, not through it (%.2f)" % above, above > 0.08 and above < 0.5)
+	# Only hands on you.
+	await _dying_by(false, true, &"guard")
+	var holder: CharacterBody3D = _on_you_now()
+	var held_slot: int = p.leech.slot_of(holder)
+	await _until(func(): return p.leech.last_gulp() > 0.9, 3.0)
+	_check("C2c only hands: one long squeeze (%.2f)" % p.leech_hands.squeeze(held_slot), p.leech_hands.squeeze(held_slot) > 0.7)
+	# In mid-air, you come down first.
+	await _fresh()
+	p.global_position = HOME + Vector3(0, 3, 0)
+	p.health = 0.01
+	var eye: CharacterBody3D = EyeScript.new()
+	eye.position = HOME + Vector3(0, 2, -40)
+	add_child(eye)
+	eye.sleep()
+	p.take_damage(50.0, eye)
+	await _until(func(): return not p.death.playing(), 5.0)
+	await _frames(20)
+	above = _camera_above_floor()
+	_check("C4b dying in mid-air, you come down first (%.2f)" % above, above > 0.08 and above < 0.5)
+	# On a ledge.
+	await _fresh()
+	p.movement_state = p.MoveState.HANGING
+	p.health = 0.01
+	var man := Node3D.new()
+	add_child(man)
+	var cutter: CharacterBody3D = AnimaScript.new()
+	cutter.form = &"hands"
+	cutter.position = HOME + Vector3(0, 0, -40)
+	add_child(cutter)
+	cutter.sleep()
+	p.take_damage(50.0, cutter)
+	man.queue_free()
+	await _until(func(): return not p.death.playing(), 5.0)
+	await _frames(20)
+	above = _camera_above_floor()
+	_check("C4c dying on a ledge: you land, no error (%.2f)" % above, above > 0.08 and above < 0.5)
+	# Crouched: not through the floor.
+	await _fresh()
+	Input.action_press("crouch")
+	await _frames(30)
+	p.health = 0.01
+	var eye2: CharacterBody3D = EyeScript.new()
+	eye2.position = HOME + Vector3(0, 2, -40)
+	add_child(eye2)
+	eye2.sleep()
+	p.take_damage(50.0, eye2)
+	await _until(func(): return not p.death.playing(), 5.0)
+	await _frames(20)
+	Input.action_release("crouch")
+	above = _camera_above_floor()
+	_check("C4d dying crouched, not through the floor (%.2f)" % above, above > 0.08)
 
 
 func _on_you_now() -> CharacterBody3D:

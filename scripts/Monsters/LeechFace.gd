@@ -15,6 +15,8 @@ const MOUTH := Vector3(0.0, -0.13, -0.11)
 ## Winding up: how far it draws back; on the gulp: how far it comes at you. Its tilt.
 const DRAWS_BACK := 0.13
 const LUNGES := 0.17
+## How near it comes for the last long gulp, as you die: all you can see.
+const LAST_COMES := 0.34
 const REARS := 0.26
 const BITES_DOWN := 0.16
 ## The jaw: sucking between gulps, gaping winding up, clamped on the gulp. How much it works.
@@ -92,19 +94,19 @@ func mouth_on_screen(aspect: float) -> Vector2:
 ## It drinks. `gulp` is 1 as one lands and fades to 0; `coming`, how near the next is, 0..1;
 ## `arrived`, how far in from out of your sight it has come; `lag`, of the gulp, so two don't
 ## move as one.
-func drink(delta: float, gulp: float, coming: float, arrived: float, fed: float, across: float, lag: float) -> void:
+func drink(delta: float, gulp: float, coming: float, arrived: float, fed: float, across: float, lag: float, last := 0.0) -> void:
 	_clock += delta
 	var wind := smoothstep(0.5, 1.0, coming + lag) if gulp <= 0.0 else 0.0
 	var biting := gulp * gulp
 	var worry := 1.0 - maxf(wind, biting)
 	# Its jaw: snapped to where it should be, faster on the clamp.
 	var sucking := JAW_SUCKS + sin(_clock * 9.0) * JAW_WORKS + sin(_clock * 15.7) * JAW_WORKS * 0.5
-	var jaw_to := lerpf(lerpf(sucking, JAW_GAPES, wind), JAW_CLAMPS, smoothstep(0.1, 0.55, gulp))
+	var jaw_to := lerpf(lerpf(lerpf(sucking, JAW_GAPES, wind), JAW_CLAMPS, smoothstep(0.1, 0.55, gulp)), JAW_CLAMPS, last)
 	var jaw_rate := minf(TAU * (15.0 if gulp > 0.4 else 7.0), 0.8 / delta)
 	_jaw_speed += (jaw_rate * jaw_rate * (jaw_to - _jaw) - 2.0 * 0.8 * jaw_rate * _jaw_speed) * delta
 	_jaw += _jaw_speed * delta
 	# It comes at you on the gulp, and draws back to wind up: with the weight to overshoot.
-	var near_to := biting * LUNGES - wind * DRAWS_BACK
+	var near_to := lerpf(biting * LUNGES - wind * DRAWS_BACK, LAST_COMES, last)
 	var near_rate := minf(TAU * 8.0, 0.8 / delta)
 	_near_speed += (near_rate * near_rate * (near_to - _near) - 2.0 * 0.45 * near_rate * _near_speed) * delta
 	_near += _near_speed * delta
