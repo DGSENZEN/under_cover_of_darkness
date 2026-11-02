@@ -37,6 +37,7 @@ func _ready() -> void:
 	await _getting_off()
 	await _drained_view()
 	await _mouth_drain()
+	await _death()
 	await _dying()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
@@ -878,6 +879,84 @@ func _clear_clouds() -> void:
 
 
 ## Left to the last: the player stays dead.
+## Their deaths: they go limp, their own fire takes them, and they burn down to ash.
+func _death() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(5)
+	await _dies_as(&"face", Vector3(0, 1.3, -6), 0.16)
+	await _dies_as(&"hands", Vector3(3, 0.3, -6), 0.25)
+	# Killed on your face: it falls off you, there in front of you.
+	var on := _anima(&"face", p.global_position + Vector3(0.9, 0.5, -0.2))
+	await _frames(1)
+	on.put_on_you()
+	await _frames(20)
+	var slot: int = p.leech.slot_of(on)
+	on.health = 1.0
+	_hit(on, &"bullet", &"copal")
+	await _frames(2)
+	var fallen: Array = get_tree().get_nodes_in_group(&"anima_ash")
+	_check("D9 killed on you: it lets go, and leaves your face at once", p.leech.count() == 0 and not p.leech_hands.face_shown(slot))
+	_check("D9b and the body is there in front of you, seen", fallen.size() == 1 and fallen[0].is_visible_in_tree())
+	await _frames(10)
+	for node in fallen:
+		node.queue_free()
+
+	await _frames(2)
+	_check("D10 nothing burns on once it is gone", get_tree().get_nodes_in_group(&"anima_ash").is_empty())
+	_free([on])
+	await _frames(2)
+
+
+func _dies_as(form: StringName, at: Vector3, rests_at: float) -> void:
+	var e := _anima(form, at)
+	e.state = STATE.REST
+	e.rests = true
+	e.notice = 0.0
+	await _frames(20)
+	e.state = STATE.REST
+	var body: Node3D = e.body
+	var height_was: float = body.global_position.y
+	e.health = 1.0
+	_hit(e, &"bullet", &"copal")
+	_check("D1 %s: dead, the monster gives up its body to burn" % form, e.dead and e.body == null and body.is_inside_tree() and body.is_in_group(&"anima_ash"))
+	_check("D1b it can be seen, though the monster is out of play", body.is_visible_in_tree())
+	await _frames(60)
+	var floor_y := 0.0
+	_check("D2 %s: limp, it drops to the floor (%.2f from %.2f)" % [form, body.global_position.y, height_was], absf(body.global_position.y - floor_y - rests_at) < 0.08)
+	var skeleton: Skeleton3D = body.hand_on(1.0) if form == &"face" else body.skeleton()
+	var bone := skeleton.find_bone("middle_02")
+	var pose: Quaternion = skeleton.get_bone_pose_rotation(bone)
+	await _frames(12)
+	_check("D3 %s: nothing left in it: its fingers still (%.4f)" % [form, skeleton.get_bone_pose_rotation(bone).angle_to(pose)], skeleton.get_bone_pose_rotation(bone).angle_to(pose) < 0.02)
+
+	if form == &"face":
+		_check("D3b its jaw hangs slack (%.2f)" % body.jaw_open(), body.jaw_open() > 0.3)
+
+	var burn: Node = body.burning()
+	_check("D4 %s: its own fire comes up on it (%.2f, %d flames)" % [form, body.ember_flare(), burn.flames_lit()], body.ember_flare() > 0.7 and burn.flames_lit() >= 4)
+	_check("D5 %s: it is charring, from the fire's edge (%.2f)" % [form, burn.charred()], burn.charred() > 0.3 and burn.charred() < 1.0)
+	_check("D5b it has not begun to fall apart (%.2f)" % burn.crumbled(), burn.crumbled() < 0.05)
+	var flakes := false
+
+	for i in 90:
+		await get_tree().physics_frame
+		flakes = flakes or burn.flakes_falling()
+
+	_check("D6 %s: ash, and it comes apart, flakes off it" % form, burn.charred() >= 1.0 and burn.crumbled() >= 1.0 and flakes)
+	_check("D6b nothing left of it standing, and its fire out", not body.part(&"Skull" if form == &"face" else &"Hand").visible and burn.flames_lit() == 0)
+	_check("D7 %s: a heap of ash on the floor (%.2f high)" % [form, burn.heap_height()], burn.heap_height() > 0.02 and absf(burn.heap_floor() - floor_y) < 0.05)
+	for i in 720:
+		if not is_instance_valid(body):
+			break
+
+		await get_tree().physics_frame
+
+	_check("D8 %s: and in a while, that is gone too" % form, not is_instance_valid(body))
+	_free([e])
+	await _frames(2)
+
+
 func _dying() -> void:
 	await _place_player(HOME)
 	p.power.power = 100.0

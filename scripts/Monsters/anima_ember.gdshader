@@ -12,6 +12,8 @@ uniform sampler2D noise : filter_linear_mipmap, repeat_enable;
 uniform float z_clip = 1.0;
 uniform float fov_override = 0.0;
 instance uniform float flare = 0.0;
+// Burning it down, its licks stream upward off it, this far (m).
+instance uniform float rise = 0.0;
 
 varying vec3 local;
 
@@ -19,6 +21,8 @@ void vertex() {
 	local = VERTEX;
 	float lick = texture(noise, vec2(VERTEX.x * 3.0 + VERTEX.z, VERTEX.y * 2.4 - TIME * 1.1)).r;
 	VERTEX += NORMAL * thickness * (0.5 + 1.1 * lick + flare * 0.5);
+	vec3 up = normalize((inverse(MODEL_MATRIX) * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+	VERTEX += up * rise * lick * lick * clamp(dot(NORMAL, up) * 0.5 + 0.7, 0.0, 1.0);
 	Z_CLIP_SCALE = z_clip;
 
 	if (fov_override > 0.0) {

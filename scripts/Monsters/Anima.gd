@@ -202,6 +202,12 @@ func _die(by: Node3D) -> void:
 	if is_instance_valid(you) and you.get("power") != null and fed > 0.0:
 		you.power.refund(fed * 0.5)
 
+	# Its body stays to burn; the monster goes out of play.
+	if body != null:
+		var burning := body
+		body = null
+		burning.burn_away(get_parent(), _push)
+
 	super._die(by)
 
 
