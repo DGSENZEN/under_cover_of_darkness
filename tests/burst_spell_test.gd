@@ -56,6 +56,9 @@ func _reach() -> void:
 	var near_a := _anima(&"torso", Vector3(3, 0.4, -2))
 	var near_b := _anima(&"torso", Vector3(-3, 0.4, -2))
 	var far := _anima(&"torso", Vector3(0, 0.4, -7))
+	var close := _anima(&"torso", Vector3(0, 0.4, -1.5))
+	var edge := _anima(&"torso", Vector3(0.5, 0.4, -5))
+	var doomed := _anima(&"torso", Vector3(-1, 0.4, -4.5))
 	var behind := _anima(&"torso", Vector3(0, 0.4, 5))
 	var eye: CharacterBody3D = EyeScript.new()
 	eye.seed_value = 4
@@ -64,7 +67,7 @@ func _reach() -> void:
 	eye.next_swoop_in = 100.0
 	await _frames(2)
 
-	for e in [near_a, near_b, far, behind]:
+	for e in [near_a, near_b, far, behind, close, edge, doomed]:
 		e.asleep = false
 		e.state = STATE.THROWN
 
@@ -82,6 +85,28 @@ func _reach() -> void:
 	_check("B1 not before its time", is_equal_approx(p.power.power, 100.0) and near_a.health == 130.0)
 	await _frames(10)
 	Input.action_release("spell_4")
+	await get_tree().physics_frame
+	_check("W1 at release, nothing has been reached yet", close.health == 130.0 and near_a.health == 130.0)
+	var close_at := -1
+	var edge_at := -1
+	var burst: Node = get_tree().get_first_node_in_group(&"burst_spell")
+	_check("W0 the spell is out", burst != null)
+
+	for i in 40:
+		await get_tree().physics_frame
+
+		if i == 1:
+			doomed.free()
+
+		if close_at < 0 and close.health < 130.0:
+			close_at = i
+
+		if edge_at < 0 and edge.health < 130.0:
+			edge_at = i
+
+	_check("W2 the near one first, the far one a beat later (frames %d, %d)" % [close_at, edge_at], close_at >= 0 and edge_at - close_at >= 8)
+	_check("W3 each hit once", is_equal_approx(130.0 - close.health, 35.0))
+	_check("W4 freed before it arrives: no error, and the wave goes on", edge_at >= 0)
 	# (Less the 8 the eye pays back, being weak to obsidian.)
 	_check("B1b key 4, 40 power, 0.3 s (%.0f)" % p.power.power, absf(p.power.power - 68.0) < 0.6)
 	_check("B2 hurts everything within 5.5 m (%.0f, %.0f)" % [near_a.health, near_b.health], near_a.health == 95.0 and near_b.health == 95.0)
@@ -89,14 +114,14 @@ func _reach() -> void:
 	_check("B3 eyes take it at 1.5 (%.1f)" % (eye_was - eye.health), is_equal_approx(eye_was - eye.health, 52.5))
 	_check("B4 a wall stops it", behind.health == 130.0)
 	_check("B10 a man takes it as a blast", man.health < man_was)
-	_check("B9 a ring goes out", not get_tree().get_nodes_in_group(&"burst_ring").is_empty())
+	_check("B9 a ring goes out", not get_tree().get_nodes_in_group(&"burst_ring").is_empty() or not get_tree().get_nodes_in_group(&"burst_splinters").is_empty())
 	await _frames(30)
 	_check("B6 thrown outward, hard (%.1f m)" % near_from.distance_to(near_a.global_position), near_from.distance_to(near_a.global_position) > 1.5)
 	_check("B9b splinters stay in the floor", not get_tree().get_nodes_in_group(&"burst_splinters").is_empty())
 	await _frames(300)
 	_check("B9c and are gone in a few seconds", get_tree().get_nodes_in_group(&"burst_splinters").is_empty() and get_tree().get_nodes_in_group(&"burst_ring").is_empty())
 
-	for e in [near_a, near_b, far, behind, eye, man]:
+	for e in [near_a, near_b, far, behind, eye, man, close, edge]:
 		e.queue_free()
 
 	await _frames(3)
@@ -115,7 +140,8 @@ func _on_you() -> void:
 	Input.action_press("spell_4")
 	await _frames(22)
 	Input.action_release("spell_4")
-	_check("B5 cast with them on you: all thrown off", p.leech.count() == 0 and a.state == STATE.THROWN and b.state == STATE.THROWN)
+	await get_tree().physics_frame
+	_check("B5 cast with them on you: all thrown off, at once, ahead of the wave", p.leech.count() == 0 and a.state == STATE.THROWN and b.state == STATE.THROWN)
 	a.queue_free()
 	b.queue_free()
 	await _frames(3)

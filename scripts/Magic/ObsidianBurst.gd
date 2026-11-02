@@ -1,7 +1,7 @@
 extends Node3D
-## The crowd's answer: splinters of black glass flung out in a ring all round you.
-## Everything within REACH in your sight is hurt and thrown out, a wall stops it, and
-## anything on you is thrown off first. The glass stays in the floor a little while.
+## The crowd's answer: a wave of black glass up through the floor, out from where you stood.
+## Everything it reaches in REACH, in your sight, is hurt and thrown out as it arrives, the
+## nearest first; a wall stops it; anything on you is thrown off at once, ahead of it.
 ## Obsidian, so it answers any crowd, not only spirits (Spells: `burst`, a stand-in
 ## name). The wind-up is the hand's own circle (HandSlot.set_circle).
 
@@ -11,6 +11,8 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 
 const REACH := 5.5
+## How long the wave takes to get there.
+const WAVE_TIME := 0.5
 const DAMAGE := 35.0
 const RELEASE_STOP := 0.05
 const RELEASE_TRAUMA := 0.28
@@ -31,11 +33,14 @@ const SPLINTER := Vector3(0.09, 0.8, 0.05)
 const WAVE_CORE := Color("#F4F1FF")
 const WAVE_BODY := Color("#9A86C8")
 const WAVE_EDGE := Color("#2C2140")
-const WAVE_TIME := 0.28
+const RING_SPREADS := 0.28
 const WAVE_ENERGY := 2.6
 const FLASH_COLOUR := Color(0.78, 0.72, 1.0)
 
 var _rng := RandomNumberGenerator.new()
+var _player: CharacterBody3D
+var _t := 0.0
+var _hit: Dictionary = {}
 
 
 static func cast_on(player: CharacterBody3D) -> Node3D:
@@ -48,8 +53,9 @@ static func cast_on(player: CharacterBody3D) -> Node3D:
 
 func _go(player: CharacterBody3D) -> void:
 	_rng.seed = hash(global_position)
+	_player = player
+	add_to_group(&"burst_spell")
 	player.leech.free_all()
-	_strike(player)
 	TimeFx.hitstop(get_tree(), RELEASE_STOP)
 	player.juice.add_trauma(RELEASE_TRAUMA)
 	Sfx.play_flat(self, &"whoosh_heavy", -2.0, 1.25)
@@ -62,28 +68,50 @@ func _go(player: CharacterBody3D) -> void:
 	get_tree().create_timer(STUCK_STAYS + STUCK_GOES + 0.1, false, true).timeout.connect(queue_free)
 
 
-func _strike(player: CharacterBody3D) -> void:
-	var from := player.global_position + Vector3.UP * (CHEST - 1.0)
-	var space := player.get_world_3d().direct_space_state
+## How far out the wave has come (m).
+func wave_reach() -> float:
+	return minf(REACH * _t / WAVE_TIME, REACH)
+
+
+## Whether the wave has hit that.
+func was_hit(target: Node3D) -> bool:
+	return _hit.has(target.get_instance_id())
+
+
+func _physics_process(delta: float) -> void:
+	_t += delta
+
+	if is_instance_valid(_player):
+		_strike_what_it_reached()
+
+	if wave_reach() >= REACH:
+		set_physics_process(false)
+
+
+func _strike_what_it_reached() -> void:
+	var out := wave_reach()
+	var from := global_position + Vector3.UP * (CHEST - 1.0)
+	var space := get_world_3d().direct_space_state
 
 	for target in get_tree().get_nodes_in_group(&"monsters") + get_tree().get_nodes_in_group(&"guards"):
-		if not (target is Node3D) or not target.has_method("take_hit") or target.get("asleep") == true or target.get("dead") == true:
+		if not (target is Node3D) or was_hit(target) or not target.has_method("take_hit") or target.get("asleep") == true or target.get("dead") == true:
 			continue
 
 		var at: Vector3 = (target as Node3D).global_position
 
-		if at.distance_to(player.global_position) > REACH:
+		if at.distance_to(global_position) > out:
 			continue
 
-		var ray := PhysicsRayQueryParameters3D.create(from, at + Vector3.UP * 0.2, 1, [player.get_rid(), (target as CollisionObject3D).get_rid()])
+		_hit[target.get_instance_id()] = true
+		var ray := PhysicsRayQueryParameters3D.create(from, at + Vector3.UP * 0.2, 1, [_player.get_rid(), (target as CollisionObject3D).get_rid()])
 
 		if not space.intersect_ray(ray).is_empty():
 			continue
 
-		var way := at - player.global_position
+		var way := at - global_position
 		way.y = 0.0
 		var kind := &"burst" if target.is_in_group(&"monsters") else &"blast"
-		target.take_hit(DAMAGE, player, kind, at, way.normalized() if way.length() > 0.01 else Vector3.FORWARD)
+		target.take_hit(DAMAGE, _player, kind, at, way.normalized() if way.length() > 0.01 else Vector3.FORWARD)
 
 
 func _floor_under(at: Vector3) -> Vector3:
@@ -104,8 +132,8 @@ func _wave(floor_at: Vector3) -> void:
 	wave.global_position = floor_at + Vector3.UP * 0.06
 	wave.scale = Vector3.ONE * 0.5
 	var goes := wave.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS).set_parallel(true)
-	goes.tween_property(wave, "scale", Vector3(REACH, 1.0, REACH), WAVE_TIME).set_ease(Tween.EASE_OUT)
-	goes.tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), 0.1, 0.95, WAVE_TIME).set_ease(Tween.EASE_IN)
+	goes.tween_property(wave, "scale", Vector3(REACH, 1.0, REACH), RING_SPREADS).set_ease(Tween.EASE_OUT)
+	goes.tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), 0.1, 0.95, RING_SPREADS).set_ease(Tween.EASE_IN)
 	goes.chain().tween_callback(wave.queue_free)
 
 
