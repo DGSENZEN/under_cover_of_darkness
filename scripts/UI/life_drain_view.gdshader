@@ -20,6 +20,8 @@ uniform float claw_age = 1.0;
 uniform vec3 threads[3];
 // Where each is clawing at you from: its hand, wherever its mouth is.
 uniform vec3 claws_from[3];
+// How much of the curse's flesh is on your sight too: the marks then keep further out, with its.
+uniform float with_flesh = 0.0;
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform sampler2D stroke_sheet : repeat_enable, filter_linear_mipmap;
 
@@ -29,6 +31,7 @@ const vec3 ROT = vec3(0.012, 0.03, 0.012);
 const vec3 SICK = vec3(0.56, 0.78, 0.12);
 const vec3 WARM = vec3(1.0, 0.58, 0.28);
 const float CLEAR = 0.42;
+const vec2 CLAWS_WITH_FLESH = vec2(0.48, 0.62);
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);

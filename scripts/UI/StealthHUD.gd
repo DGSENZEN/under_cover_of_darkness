@@ -112,6 +112,10 @@ var _cut_at := Vector2(0.7, 0.62)
 var _drain_held_was := 0
 ## Between the two, or the curse's own look at the screen wouldn't have the drain in it.
 var _drain_copy: BackBufferCopy
+var _drained_shown := 0.0
+var _feeders := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
+var _claws_now := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
+var _claw_age_now := 1.0
 var _curse_shown := 0.0
 var _stared_shown := 0.0
 var _dispel := 0.0
@@ -126,6 +130,8 @@ var _gazers := {}
 const MOST_GAZERS := 4
 const GAZER_MARGIN := 0.07
 const GAZER_CLEAR := 0.22
+## A stare's patch of meat at its largest, half-wide and half-high (evil_eye_view.gdshader).
+const GAZER_PATCH := Vector2(0.194, 0.1375)
 ## How long the egg's dispel takes; how long it takes to fade when it runs out.
 const ROUNDS := preload("res://scripts/Combat/Rounds.gd")
 const DISPEL_TIME := 0.35
@@ -136,6 +142,14 @@ const CURSE_LEAST := 0.62
 ## How deep the drain shows by how many are on you; how fast it comes and goes; how
 ## long colour floods back for.
 const DRAIN_DEPTH := [0.0, 0.45, 0.72, 1.0]
+## The curse told of the drain: how fast the flesh pales and flushes back, how fast the eyes turn
+## to what is on you and away, how far a gulp squeezes the flesh in (of its closing), and how far
+## out of the middle the claws keep with both up (its corner's own distance, then full).
+const DRAINED_COMES := 0.9
+const DRAINED_GOES := 0.7
+const EYES_TURN_TIME := 0.35
+const SQUEEZE_IN := 0.14
+const CLAWS_CLEAR_FROM := 0.48
 const DRAIN_COMES := 1.2
 const DRAIN_GOES := 5.0
 const DRAIN_RELEASE_TIME := 0.5
@@ -238,6 +252,8 @@ class Crosshair:
 	## (stray_px) is drawn round the aim.
 	var cursed := 0.0
 	var stray_px := 11.0
+	## How drained you are, with the curse on you too: one mark says both (_draw_both).
+	var drained := 0.0
 	## The loaded round's colour, worn by the dot; white with no gun up.
 	var round_ink := Color.WHITE
 	var short := false
@@ -246,6 +262,34 @@ class Crosshair:
 	var contact_hold := 0.0
 	const KILL_HOLD := 0.35
 	var contact_amount := 0.0
+	const BOTH_INK := Color(0.66, 0.62, 0.48)
+	const BOTH_GULP := Color(0.62, 0.8, 0.2)
+	const BOTH_STROKE := 0.95
+
+	## Both on you at once.
+	func both_up() -> bool:
+		return cursed > 0.01 and drained > 0.01
+
+	## How many marks round the aim are saying what is being done to you.
+	func marks_shown() -> int:
+		if both_up():
+			return 1
+
+		return (1 if cursed > 0.01 else 0) + (1 if power_alpha > 0.01 else 0)
+
+	## The one mark, with both on you: as wide as a shot may stray, as much of it left as you
+	## have power, swelling sick green on a gulp.
+	func _draw_both(c: Vector2) -> void:
+		var wander := float(Time.get_ticks_msec()) * 0.0011
+		var ink := BOTH_INK.lerp(BOTH_GULP, power_drunk).lerp(Color(1.0, 0.78, 0.36), power_gain_flash).lerp(Color(0.95, 0.3, 0.2), power_short_flash)
+		ink.a = 0.85 * minf(cursed, 1.0)
+
+		for i in 4:
+			var at := wander + TAU * i / 4.0
+			draw_arc(c, stray_px, at, at + BOTH_STROKE, 8, Color(0, 0, 0, 0.4), 3.0, true)
+
+			if power > 0.001:
+				draw_arc(c, stray_px, at, at + BOTH_STROKE * power, 8, ink, 1.5 + power_drunk * 2.5, true)
 
 	## A hit mark's colour (the ones the hunts added).
 	func mark_ink(kind: StringName) -> Color:
@@ -272,7 +316,7 @@ class Crosshair:
 
 		# Power: an arc over the crosshair, draining from the right; red for
 		# a moment when a spell asked for more than there was.
-		if power_alpha > 0.01 or power_short_flash > 0.01 or power_gain_flash > 0.01:
+		if not both_up() and (power_alpha > 0.01 or power_short_flash > 0.01 or power_gain_flash > 0.01):
 			var seen := maxf(maxf(power_alpha, power_short_flash), power_gain_flash)
 			var start := PI * 1.18
 			var end := PI * 1.82
@@ -295,7 +339,9 @@ class Crosshair:
 		# Brief contact shapes: crossed cuts in flesh, brackets on steel,
 		# a diamond for an earned punish/deathblow. No persistent combat text.
 		# The stray: four broken strokes round the aim, as far as a shot may wander.
-		if cursed > 0.01:
+		if both_up():
+			_draw_both(c)
+		elif cursed > 0.01:
 			var round_ink := Color(0.62, 0.14, 0.14, cursed * 0.85)
 			var wander := float(Time.get_ticks_msec()) * 0.0011
 
@@ -1042,6 +1088,13 @@ func _edge_mark(camera: Camera3D, at: Vector3, view: Vector2) -> Vector2:
 	if off.length() < GAZER_CLEAR:
 		off = (off.normalized() if off.length() > 0.001 else Vector2.UP) * GAZER_CLEAR
 
+	# Nor may its patch of meat lie over the middle third.
+	var need := _gazer_needs()
+	var into := maxf(absf(off.x) / need.x, absf(off.y) / need.y)
+
+	if into < 1.0:
+		off /= into
+
 	return (Vector2(0.5, 0.5) + off).clamp(Vector2.ONE * GAZER_MARGIN, Vector2.ONE * (1.0 - GAZER_MARGIN))
 
 
@@ -1093,7 +1146,8 @@ func _show_drain(delta: float) -> void:
 
 	_drain_gulp_was = leech.gulp()
 	_drain_claw_age = minf(_drain_claw_age + delta / DRAIN_CLAW_TIME, 1.0)
-	look.set_shader_parameter(&"claw_age", _drain_claw_age if held > 0 or cut_open else 1.0)
+	_claw_age_now = _drain_claw_age if held > 0 or cut_open else 1.0
+	look.set_shader_parameter(&"claw_age", _claw_age_now)
 	_drain_magic = float(player.power.power) / float(player.power.MAX)
 	look.set_shader_parameter(&"magic", _drain_magic)
 	_drain_life = float(player.health) / maxf(float(player.max_health), 1.0)
@@ -1120,6 +1174,102 @@ func _show_drain(delta: float) -> void:
 
 	look.set_shader_parameter(&"threads", threads)
 	look.set_shader_parameter(&"claws_from", claws)
+	_claws_now = claws
+
+
+## The curse and the drain are one body under attack: the flesh loses its blood as you do, beats
+## with the gulps, its eyes turn to what is feeding, and the claws tear it as they tear your sight.
+func _tell_each_other(delta: float) -> void:
+	var leech: Node = player.get("leech") if player != null else null
+
+	if leech == null or _drain_view == null:
+		return
+
+	var held: int = leech.count() if not player.is_dead else 0
+	var wanted: float = maxf(_drain_shown, 1.0 - _drain_magic) if held > 0 else 0.0
+	_drained_shown = move_toward(_drained_shown, wanted, delta * (DRAINED_COMES if wanted > _drained_shown else DRAINED_GOES))
+
+	for i in _feeders.size():
+		var on_you := held > 0 and i < _drain_threads
+		var feeder := _feeders[i]
+
+		if on_you:
+			feeder.x = _drain_into[i].x
+			feeder.y = _drain_into[i].y
+
+		feeder.z = move_toward(feeder.z, 1.0 if on_you else 0.0, delta / EYES_TURN_TIME)
+		_feeders[i] = feeder
+
+	_crosshair.drained = _drained_shown if held > 0 else 0.0
+
+	if _drain_view.visible:
+		(_drain_view.material as ShaderMaterial).set_shader_parameter(&"with_flesh", _curse_shown)
+
+	if not _curse_view.visible:
+		return
+
+	var look := _curse_view.material as ShaderMaterial
+	look.set_shader_parameter(&"drained", _drained_shown)
+	look.set_shader_parameter(&"gulp", _squeeze())
+	look.set_shader_parameter(&"claw_age", _claw_age_now if _drain_view.visible else 1.0)
+	look.set_shader_parameter(&"claws_from", _claws_now)
+	look.set_shader_parameter(&"feeders", _feeders)
+
+
+func _squeeze() -> float:
+	return float(player.leech.gulp()) if player != null and player.get("leech") != null and _curse_shown > 0.01 else 0.0
+
+
+## Where the eyes are looking: what is on you, or nowhere in particular.
+func _eyes_to() -> Vector2:
+	var sum := Vector2.ZERO
+	var weight := 0.0
+
+	for feeder in _feeders:
+		sum += Vector2(feeder.x, feeder.y) * feeder.z
+		weight += feeder.z
+
+	return sum / weight if weight > 0.001 else Vector2(0.5, 0.5)
+
+
+## Whether, at the worst the moment can do, the effects leave the middle third of your view free
+## of opaque flesh, eyes and claws. (By what evil_eye_view.gdshader draws, its brush at its worst.)
+func middle_kept_clear() -> bool:
+	const THIRD := 1.0 / 3.0
+	const BRUSH_MOST := 0.13
+	const EYE_HIGH := 0.155 * 1.1
+	var closing := _curse_shown + SQUEEZE_IN
+	var open := lerpf(1.42, 0.84, closing) * (1.0 - THIRD * THIRD * 0.5)
+	var flesh_clear := THIRD + BRUSH_MOST < open and THIRD + BRUSH_MOST < lerpf(1.5, 1.02, closing)
+	# The eyes sit in it, at the least this far out, and a gulp brings them this far in.
+	var eyes_clear := true
+
+	for i in _ring_open.size():
+		if _ring_open[i] > 0.01:
+			var across := (float(i % 3) - 1.0) * 0.72
+			var out := minf(lerpf(1.42, 0.84, _curse_shown) * (1.0 - across * across * 0.5) + 0.11, 0.84)
+			eyes_clear = eyes_clear and out - 0.05 - EYE_HIGH > THIRD
+
+	var gazers_clear := true
+
+	for gazer in _gazers.values():
+		gazers_clear = gazers_clear and gazer_keeps_clear(Vector2(gazer.x, gazer.y))
+
+	return flesh_clear and eyes_clear and gazers_clear and CLAWS_CLEAR_FROM >= sqrt(2.0) * THIRD
+
+
+## Whether a stare's patch of meat, there on the screen, stays out of the middle third.
+func gazer_keeps_clear(at: Vector2) -> bool:
+	var off := (at - Vector2(0.5, 0.5)).abs()
+	var need := _gazer_needs()
+	return off.x >= need.x - 0.001 or off.y >= need.y - 0.001
+
+
+## How far from the screen's middle, on each axis, a stare's patch must sit (0..1 of the screen).
+func _gazer_needs() -> Vector2:
+	var view := get_viewport().get_visible_rect().size
+	var aspect := view.x / maxf(view.y, 1.0)
+	return Vector2(1.0 / 6.0 + GAZER_PATCH.x * 0.5 / aspect, 1.0 / 6.0 + GAZER_PATCH.y * 0.5)
 
 
 ## Cut, with or without anything on you: the claw marks open on that side of your view (- left).
@@ -1151,7 +1301,7 @@ func curse_view_shown() -> bool:
 ## What the screen is saying about the evil eye, for whoever asks.
 func curse_state() -> Dictionary:
 	return {"stared": _stared_shown, "curse": _curse_shown, "gazers": _gazers.values(), "ring_open": Array(_ring_open).filter(func(o): return o > 0.5).size(),
-		"dispel": _dispel, "gather": _gather, "relief": _relief, "egg_at": _egg_at, "leaving": _leaving_shown, "cleansed": _cleansed_shown}
+		"dispel": _dispel, "gather": _gather, "relief": _relief, "egg_at": _egg_at, "leaving": _leaving_shown, "cleansed": _cleansed_shown, "drained": _drained_shown, "squeeze": _squeeze(), "eyes_to": _eyes_to()}
 
 
 func show_death_page() -> void:
@@ -1194,6 +1344,7 @@ func _process(delta: float) -> void:
 	_ammo.size = Vector2(170, 120)
 	_show_curse(delta)
 	_show_drain(delta)
+	_tell_each_other(delta)
 	_ammo.visible = not _ammo.snapshot().is_empty()
 	_ammo.queue_redraw()
 

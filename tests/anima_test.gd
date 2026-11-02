@@ -38,6 +38,7 @@ func _ready() -> void:
 	await _leeching()
 	await _getting_off()
 	await _drained_view()
+	await _both_view()
 	await _mouth_drain()
 	await _death()
 	await _character()
@@ -466,6 +467,83 @@ func _getting_off() -> void:
 	_free(rider)
 	await _frames(3)
 	p.power.power = 100.0
+
+
+## The curse and the drain at once: one body under attack.
+func _both_view() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(40)
+	var hud: Node = p.hud
+	var eye_look: ShaderMaterial = hud._curse_view.material
+	var power_was: float = p.power.power
+	# The curse alone.
+	p.statuses.apply(&"evil_eye", 300.0)
+
+	for i in 5:
+		p.curse.deepen()
+
+	await _frames(90)
+	var alone: Dictionary = hud.curse_state()
+	_check("B7 curse alone: as it was", alone["drained"] == 0.0 and alone["squeeze"] == 0.0 and eye_look.get_shader_parameter(&"drained") == 0.0)
+	# One on you, to your right, and little will left.
+	var a := _anima(&"hands", p.global_position + Vector3(0.9, 0.5, -0.2))
+	await _frames(1)
+	a.put_on_you()
+	a.health = 500.0
+	p.power.power = p.power.MAX * 0.2
+	await _frames(70)
+	var state: Dictionary = hud.curse_state()
+	_check("B1 drained, the flesh goes pale (%.2f)" % state["drained"], state["drained"] > 0.5 and float(eye_look.get_shader_parameter(&"drained")) > 0.5)
+	_check("B3 the eyes turn to what is on you (%.2f)" % state["eyes_to"].x, state["eyes_to"].x > 0.5 and eye_look.get_shader_parameter(&"feeders")[0].z > 0.5)
+	var squeeze_low := 1.0
+	var squeeze_high := 0.0
+	var age_least := 1.0
+
+	for i in 240:
+		await get_tree().physics_frame
+		var now: float = hud.curse_state()["squeeze"]
+		squeeze_low = minf(squeeze_low, now)
+		squeeze_high = maxf(squeeze_high, now)
+		age_least = minf(age_least, eye_look.get_shader_parameter(&"claw_age"))
+
+	_check("B2 on a gulp the flesh squeezes in (%.2f to %.2f)" % [squeeze_low, squeeze_high], squeeze_high > squeeze_low + 0.3)
+	_check("B4 a rake reaching the flesh tears it (%.2f)" % age_least, age_least < 0.5)
+	hud.claw_at(1.0)
+	await _frames(2)
+	var claws: PackedVector3Array = eye_look.get_shader_parameter(&"claws_from")
+	_check("B4b so does a swipe", float(eye_look.get_shader_parameter(&"claw_age")) < 0.5 and claws[0].z + claws[1].z + claws[2].z > 0.0)
+	_check("B5 one crosshair", hud._crosshair.marks_shown() == 1)
+	# The worst: all six, and three on you.
+	var b := _anima(&"face", p.global_position + Vector3(-0.9, 0.5, -0.2))
+	var c := _anima(&"hands", p.global_position + Vector3(0.0, 0.5, 0.9))
+	await _frames(1)
+	b.put_on_you()
+	c.put_on_you()
+	await _frames(70)
+	_check("B6 at the worst, the middle is clear", hud.middle_kept_clear())
+	var ahead: Vector3 = p.camera.global_position - p.camera.global_transform.basis.z * 6.0
+	_check("B6b a stare from dead ahead keeps out of it", hud.gazer_keeps_clear(hud._edge_mark(p.camera, ahead, get_viewport().get_visible_rect().size)))
+	# The drain gone, the flesh comes back; nor do the eyes stay turned.
+	p.leech.free_all()
+	await _frames(120)
+	var back: Dictionary = hud.curse_state()
+	var left_on: PackedVector3Array = eye_look.get_shader_parameter(&"feeders")
+	_check("B7b the drain gone, the flesh comes back (%.2f)" % back["drained"], back["drained"] < 0.05 and float(eye_look.get_shader_parameter(&"drained")) < 0.05)
+	_check("B7d and no eye stays turned", left_on[0].z < 0.01 and left_on[1].z < 0.01 and left_on[2].z < 0.01)
+	# The curse gone, the drain as it was.
+	_clear_all()
+	await _frames(4)
+	var d := _anima(&"face", p.global_position + Vector3(0.9, 0.5, -0.2))
+	await _frames(1)
+	d.put_on_you()
+	p.statuses.clear(&"evil_eye")
+	await _frames(240)
+	_check("B7c the curse gone, the drain as it was", not hud.curse_view_shown() and hud.drain_view_shown())
+	p.power.power = power_was
+	p.leech.free_all()
+	_clear_all()
+	await _frames(30)
 
 
 func _drained_view() -> void:

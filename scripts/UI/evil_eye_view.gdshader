@@ -13,6 +13,14 @@ shader_type canvas_item;
 //   - dispel: the egg is spent, 0..1. What was left goes in, and the egg bursts.
 //   - relief: after it, 0..1: your sight a little brighter.
 //   - egg_at: where the egg is on the screen, 0..1.
+//   - drained: your life and magic being drunk, 0..1 (life_drain_view is under this). The
+//     flesh loses its blood, the reds going to the drain's own pale sick tone; orange irises
+//     and sick green stay the only colours that shout. The eyes weep longer.
+//   - gulp: the last gulp, 0..1: one heartbeat. The flesh squeezes in, the eyes flinch, their
+//     pupils jump.
+//   - feeders: what has hold of you (x, y on the screen, z how much): every eye turns to the
+//     nearest.
+//   - claw_age, claws_from: the drain's marks, the same marks, torn through the flesh too.
 uniform float stared = 0.0;
 uniform float curse = 0.0;
 uniform float gather = 0.0;
@@ -22,6 +30,11 @@ uniform vec2 egg_at = vec2(0.3, 0.7);
 uniform float leaving = 0.0;
 uniform float cleansed = 0.0;
 uniform vec3 gazers[4];
+uniform float drained = 0.0;
+uniform float gulp = 0.0;
+uniform float claw_age = 1.0;
+uniform vec3 claws_from[3];
+uniform vec3 feeders[3];
 uniform float ring[6];
 // The eye's own painting (the model's ball).
 uniform sampler2D eye_paint : source_color, filter_linear_mipmap, repeat_disable;
@@ -60,6 +73,33 @@ float noise(vec2 p) {
 	vec2 f = fract(p);
 	vec2 u = f * f * (3.0 - 2.0 * f);
 	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+// What being drained does to any of its reds: they go to the drain's pale and sick.
+vec3 bloodless(vec3 c) {
+	float value = dot(c, vec3(0.3, 0.55, 0.15));
+	return mix(c, value * vec3(1.3, 1.34, 0.9) + vec3(0.03, 0.034, 0.02), drained * 0.85);
+}
+
+// Where an eye at `at` looks: `idle`, or the nearest thing with hold of you.
+vec2 watching(vec2 at, vec2 idle, float aspect) {
+	float nearest = 100.0;
+	vec2 way = idle;
+	float how_much = 0.0;
+
+	for (int i = 0; i < 3; i++) {
+		if (feeders[i].z > 0.01) {
+			vec2 it = vec2((feeders[i].x * 2.0 - 1.0) * aspect, feeders[i].y * 2.0 - 1.0) - at;
+
+			if (length(it) < nearest) {
+				nearest = length(it);
+				way = it / max(nearest, 0.001);
+				how_much = feeders[i].z;
+			}
+		}
+	}
+
+	return mix(idle, way, how_much);
 }
 
 // Lub-dub, 0..1.
@@ -108,7 +148,7 @@ vec3 meat_at(vec2 a, float body, float time, float pulse) {
 	// The wet dab: small, hard, muted, only here and there.
 	float dab = smoothstep(0.93, 0.95, facing) * smoothstep(0.66, 0.72, h) * step(0.55, noise(a * 3.0));
 	c = mix(c, DAB, dab * 0.8);
-	return c * (0.85 + body * 0.15);
+	return bloodless(c) * (0.85 + body * 0.15);
 }
 
 // One eye sunk in the meat at `c`, `size` half-wide: the swollen lids, the painted
@@ -136,6 +176,7 @@ vec4 sunk_eye(vec2 a, vec2 c, float size, float open, vec2 look, float seed, flo
 	// A heavy lash line, and a heavy line round the lid.
 	col = mix(col, INK, 1.0 - smoothstep(0.03, 0.08, d));
 	col = mix(col, INK, smoothstep(0.235, 0.26, d + max(-wide, 0.0) * 0.8));
+	col = bloodless(col);
 
 	if (d < 0.0 && open > 0.02) {
 		// The ball, in the middle of the painting, turned to look.
@@ -148,7 +189,7 @@ vec4 sunk_eye(vec2 a, vec2 c, float size, float open, vec2 look, float seed, flo
 		ball *= mix(vec3(1.0), vec3(0.52, 0.46, 0.4), white_of_it);
 		ball *= 0.85 + strokes(a * 3.0 + seed) * 0.3 * white_of_it;
 		// Its pupil, breathing.
-		float pupil = 0.2 + 0.03 * sin(time * 2.1 + seed * 9.0);
+		float pupil = 0.2 + 0.03 * sin(time * 2.1 + seed * 9.0) + gulp * 0.09;
 		ball = mix(ball, INK, 1.0 - smoothstep(pupil - 0.012, pupil + 0.012, r));
 		// In shadow under the upper lid, and a hard wet dab.
 		ball *= 0.55 + 0.45 * smoothstep(-lid, -lid * 0.2, q.y);
@@ -161,6 +202,8 @@ vec4 sunk_eye(vec2 a, vec2 c, float size, float open, vec2 look, float seed, flo
 
 // Blood run down from an eye: a few thin lines, each with its own slow drop.
 float tears_from(vec2 a, vec2 c, float size, float seed, float time) {
+	float longer = 1.0 + drained * 1.6;
+
 	float wept = 0.0;
 
 	for (int i = 0; i < 3; i++) {
@@ -168,7 +211,7 @@ float tears_from(vec2 a, vec2 c, float size, float seed, float time) {
 		float x = c.x + (hash(vec2(f, 1.0)) - 0.5) * size * 1.1;
 		float wander = sin(a.y * 12.0 + f) * 0.004;
 		float start = c.y + size * 0.3;
-		float run = size * (0.8 + hash(vec2(f, 2.0)) * 2.4) * (0.55 + 0.45 * fract(time * 0.07 + f * 0.37));
+		float run = size * (0.8 + hash(vec2(f, 2.0)) * 2.4) * (0.55 + 0.45 * fract(time * 0.07 + f * 0.37)) * longer;
 		float across = abs(a.x - x - wander);
 		float below = (a.y - start) / max(run, 0.001);
 		float width = 0.0035 + 0.0035 * smoothstep(0.75, 1.0, below);
@@ -267,9 +310,45 @@ void ribbon(inout vec3 col, vec2 a, vec2 from, vec2 bend, vec2 to, float tail, f
 		vec3 flesh = meat_at(vec2(across * 4.5 + seed, t * 0.7 + seed * 3.0), 0.9, time, pulse);
 		flesh = mix(flesh, flesh * 0.5 + LIVER * 0.1, smoothstep(0.08, -0.08, twist));
 		float wet_edge = smoothstep(0.3, 0.62, across / half_wide) * (1.0 - smoothstep(0.62, 0.86, across / half_wide));
-		flesh = mix(flesh, WET, wet_edge * 0.6 * step(0.0, twist));
+		flesh = mix(flesh, bloodless(WET), wet_edge * 0.6 * step(0.0, twist));
 		col = mix(col, INK, smoothstep(-0.012, -0.002, inside));
 		col = mix(col, flesh, smoothstep(0.0, 0.006, inside));
+	}
+}
+
+// The drain's four marks (life_drain_view: the same marks, from the same places), through the
+// flesh: dark, with a raw lip down one side. `flesh` is how much of it is here.
+void claws_through(inout vec3 col, vec2 a, float aspect, float flesh, float out_from_middle) {
+	float show = smoothstep(0.0, 0.16, claw_age);
+	float fade = 1.0 - smoothstep(0.4, 1.0, claw_age);
+
+	if (show * fade * flesh <= 0.001) {
+		return;
+	}
+
+	float keep = fade * flesh * smoothstep(0.48, 0.62, out_from_middle);
+
+	for (int i = 0; i < 3; i++) {
+		if (claws_from[i].z > 0.01) {
+			vec2 hand_at = vec2((claws_from[i].x * 2.0 - 1.0) * aspect, claws_from[i].y * 2.0 - 1.0);
+			float side = sign(hand_at.x + 0.0001);
+
+			for (int k = 0; k < 4; k++) {
+				float across = (float(k) - 1.5) * 0.105;
+				float seed = float(k) + float(i) * 4.0;
+				vec2 top = hand_at + vec2(across + side * 0.16, -0.72 - hash(vec2(seed, 1.0)) * 0.1);
+				vec2 down = vec2(-side * 0.16 + across * 0.25, 0.64 + hash(vec2(seed, 2.0)) * 0.12) * show;
+				float along = clamp(dot(a - top, down) / max(dot(down, down), 0.0001), 0.0, 1.0);
+				vec2 runs = normalize(down + vec2(0.0001));
+				float off = dot(a - (top + down * along), vec2(-runs.y, runs.x));
+				float broken = textureLod(stroke_sheet, vec2(along * 1.4 + seed * 0.31, seed * 0.13), 0.0).r;
+				float wide = (0.004 + 0.016 * pow(sin(along * 3.1416), 0.7)) * (0.5 + broken) * mix(1.0, 0.5, claw_age);
+				float past_ends = step(0.002, along) * step(along, 0.998);
+				col = mix(col, INK, (1.0 - smoothstep(wide * 0.6, wide, abs(off))) * past_ends * keep);
+				float lip = smoothstep(wide * 0.55, wide, off) * (1.0 - smoothstep(wide, wide * 1.7, off)) * past_ends;
+				col = mix(col, bloodless(WET * 1.5), lip * keep * 0.8);
+			}
+		}
 	}
 }
 
@@ -280,7 +359,7 @@ void fragment() {
 	float out_from_middle = length(p);
 	float edges = smoothstep(0.5, 1.2, out_from_middle);
 	float time = TIME;
-	float heart = beat(time * mix(1.0, 1.7, curse) * (1.0 + gather * 1.4));
+	float heart = max(beat(time * mix(1.0, 1.7, curse) * (1.0 + gather * 1.4)), gulp);
 
 	// The egg, and how far through being taken the curse is. What is left of the last
 	// ribbons goes in as it bursts.
@@ -296,7 +375,7 @@ void fragment() {
 	vec3 sharp = texture(screen_tex, SCREEN_UV).rgb;
 	vec3 doubled = (texture(screen_tex, SCREEN_UV + slip).rgb + texture(screen_tex, SCREEN_UV - slip * 0.7).rgb) * 0.5;
 	vec3 col = mix(sharp, doubled, edges * strength * 0.85);
-	col = mix(col, col * vec3(1.05, 0.6, 0.6), edges * strength * 0.8);
+	col = mix(col, col * mix(vec3(1.05, 0.6, 0.6), vec3(0.88, 0.88, 0.76), drained), edges * strength * 0.8);
 
 	// Veins reaching in ahead of the flesh, as the stare builds.
 	float reach = max(stared * 0.62, curse * 0.9) * (1.0 - smoothstep(0.1, 0.5, taken)) * (1.0 - leaving * (1.0 - curse));
@@ -304,13 +383,16 @@ void fragment() {
 	if (reach > 0.001) {
 		float vein = reaching(a, 0.009 + reach * 0.004) * smoothstep(0.3, 0.6, strokes(a * 1.2));
 		float limit = smoothstep(1.5 - reach * 0.8, 1.68 - reach * 0.8, out_from_middle);
-		col = mix(col, ARTERY * (0.75 + heart * 0.3), vein * limit * 0.7);
+		col = mix(col, bloodless(ARTERY) * (0.75 + heart * 0.3), vein * limit * 0.7);
 	}
 
 	float remains = (1.0 - smoothstep(0.0, 0.2, dispel)) * (1.0 - leaving * (1.0 - curse));
 
 	// The flesh, closing in from above and below, and torn back as the ribbons go.
 	float closing = max(curse, stared * 0.28) * (1.0 - smoothstep(0.2, 0.9, pull));
+	// One heartbeat with the gulp that is drinking you.
+	closing += gulp * 0.14 * step(0.001, closing);
+	float flesh_here = 0.0;
 
 	if (closing > 0.001) {
 		float bristle = strokes(vec2(p.x * 1.7 + 0.3, p.y * 0.25)) * 0.6 + strokes(vec2(p.x * 4.3, p.y * 0.5 + 0.7)) * 0.4;
@@ -328,11 +410,12 @@ void fragment() {
 			float body = smoothstep(0.0, 0.015, past);
 			// A wet lit lip just inside its edge, where it folds over.
 			float lip = smoothstep(0.012, 0.03, past) * (1.0 - smoothstep(0.03, 0.06 + bristle * 0.03, past));
-			flesh = mix(flesh, WET, lip * 0.7);
+			flesh = mix(flesh, bloodless(WET), lip * 0.7);
 			// Pigment pools in a line of ink, thick and thin as the brush went.
 			float line = smoothstep(-0.03 - bristle * 0.02, -0.012, past) * (1.0 - body);
 			col = mix(col, INK, line * remains);
 			col = mix(col, flesh, body * remains);
+			flesh_here = body * remains;
 		}
 	}
 
@@ -359,7 +442,7 @@ void fragment() {
 			float side = i < 3 ? -1.0 : 1.0;
 			float rest = mix(1.42, 0.84, curse) * (1.0 - across * across * 0.5);
 			float seed = float(i) * 0.37 + 0.11;
-			vec2 at = vec2((across + (side > 0.0 ? 0.12 : -0.12)) * aspect, side * min(rest + 0.11, 0.84));
+			vec2 at = vec2((across + (side > 0.0 ? 0.12 : -0.12)) * aspect, side * (min(rest + 0.11, 0.84) - gulp * 0.05));
 			float set_off = PULL_FROM + float(RING_ORDER[i]) * PULL_STAGGER;
 			float head = pow(clamp((pull - set_off) / PULL_TAKES, 0.0, 1.0), 2.2);
 			float tail = pow(clamp((pull - set_off - TAIL_LAG) / PULL_TAKES, 0.0, 1.0), 2.4);
@@ -390,16 +473,19 @@ void fragment() {
 			vec2 eye_here = eye_at + turned * (a - eye_at) / shrink;
 			float shut = 1.0 - smoothstep(0.78, 0.97, head);
 			vec2 twitch = vec2(noise(vec2(time * 1.7, seed * 11.0)), noise(vec2(time * 1.7, seed * 17.0))) * 0.2 - 0.1;
-			vec2 look = turned * mix(-normalize(at) + twitch, normalize(egg - eye_at), smoothstep(0.0, 0.2, taken));
+			vec2 jumped = vec2(hash(vec2(seed, 9.0)), hash(vec2(seed, 10.0))) - 0.5;
+			vec2 look = turned * mix(watching(at, -normalize(at) + twitch, aspect) + jumped * gulp * 0.6, normalize(egg - eye_at), smoothstep(0.0, 0.2, taken));
 			float shed = tears_from(a, at, size, seed, time) * ring[i] * (1.0 - loose);
-			col = mix(col, BLOOD, shed * presence * 0.95);
+			col = mix(col, bloodless(BLOOD), shed * presence * 0.95);
 			// Set deep: the meat dark around it.
 			float pit = 1.0 - smoothstep(0.9, 1.5, length((eye_here - eye_at) / vec2(size * 1.35, size * 0.95)));
 			col *= 1.0 - pit * 0.55 * presence;
-			vec4 eye = sunk_eye(eye_here, eye_at, size, ring[i] * blink * shut, look, seed, time);
+			vec4 eye = sunk_eye(eye_here, eye_at, size, ring[i] * blink * shut * (1.0 - gulp * 0.55), look, seed, time);
 			col = mix(col, eye.rgb, eye.a * presence);
 		}
 	}
+
+	claws_through(col, a, aspect, flesh_here, out_from_middle);
 
 	// Whoever is looking at you, from where they are: a patch of meat, an eye in it.
 	for (int i = 0; i < 4; i++) {
@@ -412,7 +498,7 @@ void fragment() {
 			float line = (1.0 - smoothstep(0.92, 0.97, patch_edge)) * (1.0 - body);
 			col = mix(col, INK, line * gazers[i].z);
 			col = mix(col, meat_at(a * 2.0, 1.0, time, stared), body * gazers[i].z);
-			vec4 eye = sunk_eye(a, at, size, gazers[i].z, -normalize(at + vec2(0.0001)), seed, time);
+			vec4 eye = sunk_eye(a, at, size, gazers[i].z * (1.0 - gulp * 0.55), watching(at, -normalize(at + vec2(0.0001)), aspect), seed, time);
 			col = mix(col, eye.rgb, eye.a * gazers[i].z);
 		}
 	}

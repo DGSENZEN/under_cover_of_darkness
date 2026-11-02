@@ -609,29 +609,67 @@ func _until_state(e: CharacterBody3D, wanted: int) -> void:
 
 ## The curse and the drain at once: what you see with both on you.
 func _both() -> void:
-	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 1.05, -3.0)))
-	await _frames(10)
-	p.statuses.apply(&"evil_eye", 60.0)
+	for place in [[Vector3(0, 1.05, -3.0), "room"], [Vector3(-2.0, 1.05, 8.0), "yard"]]:
+		p.teleport(Transform3D(Basis(Vector3.UP, PI), place[0]))
+		await _frames(10)
+		var a := _feeder(&"hands", p.global_position + Vector3(0.9, -0.5, -0.3))
+		await _frames(1)
+		a.put_on_you()
+		await _frames(50)
+		await _until_gulp()
+		await _frames(4)
+		await _shot("both_%s_0_drain_alone" % place[1])
+		p.leech.free_all()
+		a.queue_free()
+		await _frames(30)
+		p.statuses.apply(&"evil_eye", 60.0)
 
-	for i in 5:
-		p.curse.deepen()
+		for i in 2:
+			p.curse.deepen()
 
-	await _frames(50)
-	await _shot("both_0_curse")
-	var a: CharacterBody3D = AnimaScript.new()
-	a.form = &"hands"
-	a.position = p.global_position + Vector3(0.9, -0.5, -0.3)
-	add_child(a)
-	await _frames(1)
-	a.put_on_you()
-	await _until_gulp()
-	await _frames(5)
-	await _shot("both_1_gulp")
-	await _frames(30)
-	await _shot("both_2_between")
-	p.leech.free_all()
-	a.queue_free()
-	await _frames(3)
+		await _frames(70)
+		await _shot("both_%s_1_curse_alone" % place[1])
+		var b := _feeder(&"face", p.global_position + Vector3(0.9, -0.5, -0.3))
+		await _frames(1)
+		b.put_on_you()
+		p.power.power = p.power.MAX * 0.45
+		await _frames(60)
+		await _until_gulp()
+		await _frames(3)
+		await _shot("both_%s_2_one_gulp" % place[1])
+		await _frames(30)
+		await _shot("both_%s_3_one_between" % place[1])
+
+		for i in 3:
+			p.curse.deepen()
+
+		var c := _feeder(&"face", p.global_position + Vector3(-0.9, -0.5, -0.3))
+		var d := _feeder(&"hands", p.global_position + Vector3(0.0, -0.5, 0.9))
+		await _frames(1)
+		c.put_on_you()
+		d.put_on_you()
+		p.power.power = p.power.MAX * 0.1
+		await _frames(80)
+		await _shot("both_%s_4_worst" % place[1])
+		await _until_gulp()
+		await _frames(3)
+		await _shot("both_%s_5_worst_gulp" % place[1])
+		p.leech.free_all()
+		p.statuses.clear(&"evil_eye")
+		p.power.power = p.power.MAX
+
+		for one in [b, c, d]:
+			one.queue_free()
+
+		await _frames(60)
+
+
+func _feeder(form: StringName, at: Vector3) -> CharacterBody3D:
+	var one: CharacterBody3D = AnimaScript.new()
+	one.form = form
+	one.position = at
+	add_child(one)
+	return one
 
 
 ## What a cast into a full wave costs, in frames: before, during, and while they all burn.
