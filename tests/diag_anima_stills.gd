@@ -52,6 +52,9 @@ func _ready() -> void:
 	if only == "perf":
 		await _perf()
 
+	if only == "both":
+		await _both()
+
 	if only == "" or only == "shard":
 		await _shard()
 
@@ -475,6 +478,33 @@ func _shard() -> void:
 	pinned = null
 	e.queue_free()
 	p.neck.rotation.x = 0.0
+	await _frames(3)
+
+
+## The curse and the drain at once: what you see with both on you.
+func _both() -> void:
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 1.05, -3.0)))
+	await _frames(10)
+	p.statuses.apply(&"evil_eye", 60.0)
+
+	for i in 5:
+		p.curse.deepen()
+
+	await _frames(50)
+	await _shot("both_0_curse")
+	var a: CharacterBody3D = AnimaScript.new()
+	a.form = &"hands"
+	a.position = p.global_position + Vector3(0.9, -0.5, -0.3)
+	add_child(a)
+	await _frames(1)
+	a.put_on_you()
+	await _until_gulp()
+	await _frames(5)
+	await _shot("both_1_gulp")
+	await _frames(30)
+	await _shot("both_2_between")
+	p.leech.free_all()
+	a.queue_free()
 	await _frames(3)
 
 
