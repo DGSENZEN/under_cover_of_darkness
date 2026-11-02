@@ -32,6 +32,7 @@ func _ready() -> void:
 	await _face_life()
 	await _hands_life()
 	await _forms()
+	await _swipes()
 	await _rush()
 	await _leeching()
 	await _getting_off()
@@ -281,7 +282,8 @@ func _leeching() -> void:
 	# (One still leaping when the last place went misses first.)
 	await _frames(90)
 	var waiting: Array = pack.filter(func(a): return a.state != STATE.ON)
-	_check("A14 no more than three (%d); the rest wait, circling" % p.leech.count(), p.leech.count() == 3 and waiting.size() == 1 and waiting[0].state == STATE.CIRCLE)
+	var waits_in: Array = [STATE.CIRCLE, STATE.RUSH, STATE.WIND_UP, STATE.SWIPE, STATE.BACK_OFF]
+	_check("A14 no more than three (%d); the rest wait, circling or coming in to cut" % p.leech.count(), p.leech.count() == 3 and waiting.size() == 1 and waits_in.has(waiting[0].state))
 	_check("A13c three on you: pace 0.5", is_equal_approx(p.leech.speed(), 0.5))
 	_check("A10a the slots are all different", _slots_differ(pack.filter(func(a): return a.state == STATE.ON)))
 	var gone: Node3D = pack.filter(func(a): return a.state == STATE.ON)[0]
@@ -645,6 +647,126 @@ func _face(target: Node3D) -> void:
 	var way: Vector3 = (target.global_position - p.camera.global_position).normalized()
 	p.rotation.y = atan2(-way.x, -way.z)
 	p.neck.rotation = Vector3(asin(way.y), 0.0, 0.0)
+
+
+## Fighting, not only clinging: swipes that cut you and don't stay.
+func _swipes() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(3)
+	p.invulnerable = false
+	p.health = 500.0
+	p.power.power = 100.0
+	var e := _anima(&"hands", HOME + Vector3(0, -0.75, -1.3))
+	var wound_up := await _until(func(): return e.state == STATE.WIND_UP, 3.0)
+	_check("P1 in reach, it winds up to swipe, it doesn't leap", wound_up)
+	var was: float = p.health
+	var power_was: float = p.power.power
+	var from_you: float = e.global_position.distance_to(p.global_position)
+	await _until(func(): return e.state == STATE.BACK_OFF, 2.0)
+	var lost: float = was - p.health
+	_check("P2 the swipe hurts your life (%.1f), and takes no power" % lost, is_equal_approx(lost, 6.0) and p.power.power == power_was)
+	_check("P2b it doesn't get on you", p.leech.count() == 0)
+	await _until(func(): return e.state == STATE.RUSH, 2.0)
+	var backed: float = e.global_position.distance_to(p.global_position) - from_you
+	# (Only its swipes, here: on its way back in it could have leapt.)
+	e._leap_in = 99.0
+	var again := await _until(func(): return e.state == STATE.WIND_UP, 6.0)
+	_check("P3 then it backs off (%.2f m), and comes again" % backed, backed > 1.0 and again)
+	# A dodge avoids it.
+	was = p.health
+	e._state_t = 0.0
+	e.state = STATE.SWIPE
+	var fights: Node = p.combat
+
+	for i in 15:
+		fights.phase = fights.Phase.DODGE
+		await get_tree().physics_frame
+
+	fights.phase = fights.Phase.IDLE
+	_check("P4 a dodge avoids it", p.health == was)
+	_free([e])
+	await _frames(2)
+	# Its wind-up is an opening: anything but lead breaks it.
+	var broke := _anima(&"hands", HOME + Vector3(0, -0.75, -1.3))
+	await _until(func(): return broke.state == STATE.WIND_UP, 3.0)
+	broke.health = 500.0
+	_hit(broke, &"bullet", &"copal")
+	_check("P5 a non-lead hit in its wind-up breaks it, and opens it", broke.state == STATE.THROWN and broke.is_exposed())
+	_free([broke])
+	await _frames(2)
+	var leaded := _anima(&"face", HOME + Vector3(0, 0.25, -1.5))
+	await _until(func(): return leaded.state == STATE.WIND_UP, 3.0)
+	leaded.health = 500.0
+	was = p.health
+	_hit(leaded, &"bullet", &"lead")
+	var went_on := await _until(func(): return leaded.state == STATE.BACK_OFF, 2.0)
+	_check("P5b lead passes through, and it swipes anyway", went_on and p.health < was)
+	_free([leaded])
+	await _frames(2)
+	# Out of reach, in leap range, it may leap; and not again within 4 s.
+	var leaper := _anima(&"hands", HOME + Vector3(0, -0.75, -2.3))
+	leaper._state_t = 0.0
+	leaper.state = STATE.RUSH
+	var leaps := 0
+	var was_leaping := false
+
+	for i in 200:
+		await get_tree().physics_frame
+		leaper.global_position = HOME + Vector3(0, -0.75, -2.3)
+		leaper.state = leaper.state if leaper.state != STATE.ON else STATE.RUSH
+
+		if leaper.state == STATE.TELL and not was_leaping:
+			leaps += 1
+
+		was_leaping = leaper.state == STATE.TELL
+
+		if leaper.state == STATE.LEAP or leaper.state == STATE.MISSED or leaper.state == STATE.THROWN:
+			leaper._enter(STATE.RUSH)
+
+	_check("P6 in leap range it tells, and not again within 4 s (%d in 3.3 s)" % leaps, leaps == 1)
+	_free([leaper])
+	await _frames(2)
+	# Held by one, another can still cut you. And dead, you take nothing.
+	var holder := _anima(&"hands", HOME + Vector3(1.5, -0.75, 0))
+	var cutter := _anima(&"hands", HOME + Vector3(-1.3, -0.75, 0))
+	await _frames(1)
+	holder.put_on_you()
+	was = p.health
+	p.power.power = 0.0
+	await _until(func(): return cutter.state == STATE.BACK_OFF, 4.0)
+	_check("P8 held by one, another can still cut you (%.1f)" % (was - p.health), was - p.health >= 6.0)
+	_free([holder, cutter])
+	await _frames(2)
+	# Put on you mid wind-up: the swipe is gone.
+	var held := _anima(&"hands", HOME + Vector3(0, -0.75, -1.3))
+	await _until(func(): return held.state == STATE.WIND_UP, 3.0)
+	was = p.health
+	p.power.power = 100.0
+	held.put_on_you()
+	p.leech.player = p
+	await _frames(30)
+	_check("P10 put on you mid wind-up: the swipe is gone", held.state == STATE.ON and held.get("_swung") != true)
+	_free([held])
+	await _frames(2)
+	# The three forms, their numbers.
+	var taken := {}
+
+	for form in [&"hands", &"face", &"torso"]:
+		var one := _anima(form, HOME + Vector3(0, -0.75 if form != &"face" else 0.25, -1.3))
+		await _frames(2)
+		one._form = one._form.duplicate()
+		await _until(func(): return one.state == STATE.WIND_UP, 4.0)
+		was = p.health
+		await _until(func(): return one.state == STATE.BACK_OFF, 3.0)
+		taken[form] = was - p.health
+		_free([one])
+		await _frames(2)
+
+	_check("P11 the three forms, their numbers (%s)" % taken, is_equal_approx(taken[&"hands"], 6.0) and is_equal_approx(taken[&"face"], 10.0) and is_equal_approx(taken[&"torso"], 14.0))
+	p.health = p.get("max_health") if p.get("max_health") != null else p.health
+	p.invulnerable = true
+	await _frames(2)
 
 
 ## The face alive: resting, woken, in its attack, missing.

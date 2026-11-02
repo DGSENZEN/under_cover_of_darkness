@@ -4,6 +4,8 @@ extends "res://maps/hunt_gym.gd"
 ## No eyes, so they are judged alone. F5 starts it again, F6 calls the next wave.
 
 const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
+## How often one that could leap does: the rest come on and cut you.
+const LEAP_CHANCE := 0.45
 
 ## Each wave, by form.
 const ANIMA_WAVES := [{&"hands": 5}, {&"face": 2, &"hands": 4}, {&"torso": 1, &"face": 2, &"hands": 4}]
@@ -69,6 +71,7 @@ func _lay_out_waves() -> void:
 				var anima: Node3D = AnimaScript.new()
 				anima.form = form
 				anima.rests = true
+				anima.leap_chance = LEAP_CHANCE
 				anima.name = "Anima%d" % seed_value
 				seed_value += 1
 				var spot: Vector3 = spawns[next % spawns.size()]

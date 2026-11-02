@@ -1,7 +1,8 @@
 extends "res://scripts/Monsters/Monster.gd"
 ## A ravenous ánima: a soul no one lit a candle for, past begging. It comes up out
 ## of a drain and may lie there a while (`rests`) until something stirs it; then it rushes
-## you, tells, and leaps to get on you and drink your willpower and your life. Its forms are data (Bestiary): withered hands, hands and a face, a
+## you. Up close it cuts you and backs off; from further off it tells, and leaps to get on you
+## and drink your willpower and your life. Its forms are data (Bestiary): withered hands, hands and a face, a
 ## torso dragged by its arms. Lead passes through it. A hit in its tell from anything
 ## else breaks the leap and opens it up. The Metro's beggars (Animas.gd) are another
 ## thing altogether.
@@ -11,14 +12,27 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
 
-enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN, REST, WAKE }
+enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN, REST, WAKE, WIND_UP, SWIPE, BACK_OFF }
 
 const DOING := {
 	State.RISE: &"rise", State.RUSH: &"rush", State.CIRCLE: &"circle", State.TELL: &"tell",
 	State.LEAP: &"leap", State.MISSED: &"missed", State.ON: &"on", State.THROWN: &"thrown",
 	State.REST: &"rest", State.WAKE: &"wake",
+	State.WIND_UP: &"wind_up", State.SWIPE: &"swipe", State.BACK_OFF: &"back_off",
 }
 const RISE_TIME := 0.5
+## A swipe (its damage, reach and wind-up by form, in Bestiary): how long the swing, how hard it
+## lunges into it; how long it backs off, how fast; how long till the next.
+const SWIPE_TIME := 0.16
+const SWIPE_LUNGE := 4.0
+const BACK_OFF_TIME := 0.7
+const BACK_OFF_SPEED := 3.0
+const SWIPE_EVERY := Vector2(1.4, 2.4)
+## How far past its reach a swing still finds you (m); how it edges round you, waiting.
+const SWIPE_FINDS := 0.3
+const EDGES_ROUND := 1.0
+## At most one leap in this long (s).
+const LEAP_EVERY := 4.0
 ## At rest: how near you can come (m), how long it can lie there at most (hunger gets it up
 ## in the end), how long it takes to come to, and how far off that stirs the others.
 const NOTICE := 9.0
@@ -57,6 +71,9 @@ const LINE_LOOKS := 0.5
 ## How much it has to drink to be fully fed (shown on it).
 const FULL := 60.0
 
+## It has swung at you, and whether it cut.
+signal swiped(hit: bool)
+
 @export var form: StringName = &"hands"
 ## Lies where it came up until something stirs it.
 @export var rests := false
@@ -64,6 +81,8 @@ const FULL := 60.0
 var notice := NOTICE
 ## Which of its form's deaths it dies (AnimaDeaths.gd), or any.
 var death_kind := -1
+## How likely, each time it could leap, that it does. If not, it comes on to cut you.
+var leap_chance := 1.0
 var state: int = State.RISE
 var body: Node3D
 var whip_reach := 1.6
@@ -81,6 +100,10 @@ var _fall := 0.0
 var _surge_in := 0.6
 var _surge_left := 0.0
 var _lift := 0.0
+var _swipe_in := 0.0
+var _leap_in := 0.0
+var _swung := false
+var _back_way := Vector3.ZERO
 
 
 func _init() -> void:
@@ -116,7 +139,7 @@ func _ready() -> void:
 
 
 func _is_opening() -> bool:
-	return state == State.TELL
+	return state == State.TELL or state == State.WIND_UP
 
 
 ## Lead passes through it, even then.
@@ -223,6 +246,8 @@ func _brain(delta: float) -> Vector3:
 	_state_t += delta
 	# (Whatever it is doing: a leap and a hold on you never ask for its height.)
 	_lift = move_toward(_lift, 0.0, FLUNG_DIES * delta)
+	_swipe_in = maxf(_swipe_in - delta, 0.0)
+	_leap_in = maxf(_leap_in - delta, 0.0)
 	var you: Node3D = target()
 
 	if you == null:
@@ -272,18 +297,30 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 				_enter(State.RUSH)
 		State.RUSH:
 			var reach: float = float(_form["leap_reach"])
+			var close: float = float(_form["swipe_reach"])
 			var leech: Node = _leech()
+			var far: float = _chest_distance(you)
+			var line_clear: bool = CopalLine.crossing(get_tree(), global_position, _chest(you)) == null
 
-			if leech != null and not leech.has_room() and global_position.distance_to(you.global_position) <= CIRCLE_AT:
+			if far <= close:
+				if _swipe_in <= 0.0 and line_clear:
+					_enter(State.WIND_UP)
+				else:
+					return _hold_height(_round_you(you) * EDGES_ROUND, delta)
+			elif leech != null and not leech.has_room() and far <= CIRCLE_AT and _swipe_in > 0.0:
 				_enter(State.CIRCLE)
-			elif _chest_distance(you) <= reach and (leech == null or leech.has_room()) and CopalLine.crossing(get_tree(), global_position, _chest(you)) == null:
-				_enter(State.TELL)
+			elif far <= reach and (leech == null or leech.has_room()) and line_clear and _leap_in <= 0.0:
+				_leap_in = LEAP_EVERY
+
+				if randf() < leap_chance:
+					_enter(State.TELL)
 			else:
 				return _hold_height(_toward(you) * float(_form["speed"]) * _hunger() * _slowed(), delta)
 		State.CIRCLE:
 			var leech: Node = _leech()
 
-			if leech == null or leech.has_room():
+			# Waiting its turn on you, it can still come in and cut you.
+			if leech == null or leech.has_room() or _swipe_in <= 0.0:
 				_enter(State.RUSH)
 			else:
 				var round_you := (global_position - you.global_position)
@@ -291,6 +328,27 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 				var side := Vector3(-round_you.z, 0.0, round_you.x).normalized()
 				var in_out := round_you.normalized() * (CIRCLE_AT - round_you.length())
 				return _hold_height(side * CIRCLE_SPEED + in_out, delta)
+		State.WIND_UP:
+			if _state_t >= float(_form["swipe_wind"]):
+				_swung = false
+				_enter(State.SWIPE)
+		State.SWIPE:
+			if not _swung and _state_t >= SWIPE_TIME * 0.5:
+				_swung = true
+				_cut(you)
+
+			if _state_t >= SWIPE_TIME:
+				_swung = false
+				_swipe_in = BACK_OFF_TIME + randf_range(SWIPE_EVERY.x, SWIPE_EVERY.y)
+				_back_way = ((global_position - you.global_position) * Vector3(1.0, 0.0, 1.0)).normalized() + _round_you(you) * 0.6
+				_enter(State.BACK_OFF)
+			else:
+				return _hold_height(_toward(you) * SWIPE_LUNGE, delta)
+		State.BACK_OFF:
+			if _state_t >= BACK_OFF_TIME:
+				_enter(State.RUSH)
+			else:
+				return _hold_height(_back_way * BACK_OFF_SPEED * _slowed(), delta)
 		State.TELL:
 			if _state_t >= float(_form["tell"]):
 				_leap_way = (_chest(you) - global_position).normalized()
@@ -323,6 +381,26 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 				_enter(State.RUSH)
 
 	return _hold_height(Vector3.ZERO, delta)
+
+
+## The way round you, its own side of you.
+func _round_you(you: Node3D) -> Vector3:
+	var off := global_position - you.global_position
+	off.y = 0.0
+	var side := Vector3(-off.z, 0.0, off.x).normalized()
+	return side if _spread_turn < PI else -side
+
+
+## The swing lands, if you are still in reach and not out of its way.
+func _cut(you: Node3D) -> void:
+	var dodged: bool = you.get("combat") != null and you.combat.is_dodging()
+	var clear: bool = CopalLine.crossing(get_tree(), global_position, _chest(you)) == null
+	var cut: bool = _chest_distance(you) <= float(_form["swipe_reach"]) + SWIPE_FINDS and not dodged and clear and you.get("is_dead") != true
+
+	if cut:
+		you.take_damage(float(_form["swipe_damage"]), self)
+
+	swiped.emit(cut)
 
 
 func _chest(you: Node3D) -> Vector3:
@@ -436,8 +514,8 @@ func _on_struck(result: StringName, source: StringName) -> void:
 
 	rouse()
 
-	# A hit from anything but lead breaks its leap.
-	if state == State.TELL and source != &"lead":
+	# A hit from anything but lead breaks its leap, or its swing.
+	if (state == State.TELL or state == State.WIND_UP) and source != &"lead":
 		throw_off(target().global_position if target() != null else global_position + Vector3.FORWARD)
 	elif state == State.ON:
 		# Copal loosens it at once; a blow, once its grip is spent.
