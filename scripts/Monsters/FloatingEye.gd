@@ -41,9 +41,8 @@ const BITE := 12.0
 ## How near your capsule's middle line a bite lands (m).
 const BITE_REACH := 0.8
 const GAZE_RANGE := 12.0
-## Seconds of being looked at, across the pack; a look away this long starts over.
+## Seconds of being looked at, across the pack.
 const GAZE_TO_CURSE := 2.0
-const GAZE_FORGOTTEN := 1.0
 const EVIL_EYE_TIME := 8.0
 ## At once, across the pack, in a tell or a swoop.
 const MOST_SWOOPING := 2
@@ -77,6 +76,8 @@ var state := State.DRIFT
 @export var seed_value := 1
 ## Seconds left circling before it wants to swoop.
 var next_swoop_in := 2.0
+## Whether it is staring at you right now (the HUD marks where from).
+var gazing := false
 
 var _rng := RandomNumberGenerator.new()
 var _ticks := 0
@@ -232,6 +233,8 @@ func _brain(delta: float) -> Vector3:
 	var you: Node3D = target()
 
 	if you == null or you.get("is_dead") == true:
+		gazing = false
+
 		if state != State.DRIFT:
 			_enter(State.DRIFT)
 
@@ -335,27 +338,22 @@ func _line_to(you: Node3D) -> bool:
 	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 
-## Being looked at, over the pack: kept on you, and forgotten after a look away.
+## Being looked at, added up over the pack on the bearer (Statuses.stare).
 func _gaze(you: Node3D, delta: float, smoked: bool) -> void:
+	gazing = false
+
 	if smoked or not _clear_line or state == State.DRIFT or state == State.BOUNCE or state == State.DAZED or global_position.distance_to(you.global_position) > GAZE_RANGE:
 		return
 
 	var bearer: Node = you.get("statuses")
 
-	if bearer == null or bearer.has(&"cleansed"):
+	if bearer == null or bearer.has(&"cleansed") or bearer.has(&"evil_eye"):
 		return
 
-	var now := _game_time
-	var last: float = you.get_meta(&"gaze_last", -100.0)
-	var held: float = you.get_meta(&"gaze", 0.0) if now - last <= GAZE_FORGOTTEN else 0.0
-	held += delta
-	you.set_meta(&"gaze_last", now)
+	gazing = true
 
-	if held >= GAZE_TO_CURSE:
+	if bearer.stare(delta, GAZE_TO_CURSE):
 		bearer.apply(&"evil_eye", EVIL_EYE_TIME)
-		held = 0.0
-
-	you.set_meta(&"gaze", held)
 
 
 func _room_to_swoop() -> bool:

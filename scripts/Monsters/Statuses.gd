@@ -7,13 +7,22 @@ extends Node
 signal started(id: StringName)
 signal ended(id: StringName)
 
+## Being stared at, building toward a curse, 0..1, kept here so a whole pack adds
+## up: forgotten slowly after a moment of nobody looking.
+const STARE_HELD := 0.5
+const STARE_FADES := 1.0
+
 var _left := {}
+var _full := {}
+var _stare := 0.0
+var _stare_rest := 0.0
 
 
 ## On for `seconds`, or on as long as it already was if that is longer.
 func apply(id: StringName, seconds: float) -> void:
 	var fresh := not _left.has(id)
 	_left[id] = maxf(float(_left.get(id, 0.0)), seconds)
+	_full[id] = _left[id]
 
 	if fresh:
 		started.emit(id)
@@ -25,6 +34,31 @@ func has(id: StringName) -> bool:
 
 func left(id: StringName) -> float:
 	return float(_left.get(id, 0.0))
+
+
+## How much of it is left, 0..1.
+func fraction(id: StringName) -> float:
+	return float(_left.get(id, 0.0)) / maxf(float(_full.get(id, 1.0)), 0.001)
+
+
+## A look at the bearer: true when, added up, it has been stared at for `needed` s.
+func stare(delta: float, needed: float) -> bool:
+	_stare += delta / needed
+	_stare_rest = STARE_HELD
+
+	if _stare >= 1.0:
+		_stare = 0.0
+		return true
+
+	return false
+
+
+func stared() -> float:
+	return _stare
+
+
+func forget_stare() -> void:
+	_stare = 0.0
 
 
 func clear(id: StringName) -> void:
@@ -44,6 +78,11 @@ func load_state(state: Dictionary) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_stare_rest -= delta
+
+	if _stare_rest <= 0.0:
+		_stare = move_toward(_stare, 0.0, delta * STARE_FADES)
+
 	for id in _left.keys():
 		_left[id] = float(_left[id]) - delta
 

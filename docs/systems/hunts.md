@@ -50,6 +50,8 @@ A shot need not be exact. `Monster.on_line` finds the monster a line passes near
 
 The egg sends the curse back (`Loadout`, `PrepItems` `returns`, `FloatingEye.limpia`): eyes within 14 m that can see you shut for 4 s, opening them to any hit, and you are `cleansed` of gaze for 12 s.
 
+The screen says what the evil eye is doing (`StealthHUD._show_curse`, `evil_eye_view.gdshader`). A stare builds on the bearer (`Statuses.stare`), and a painted eye opens on the side each one watching is on, veins creeping in. Cursed: lids of ink, doubled edges, six eyes that close as it runs out, a bruised power arc and the stray drawn round the aim. The egg: a pale wave, then a dry ward-coloured line for as long as you are cleansed.
+
 A kill holds 0.11 s and jolts the view (`Monster._die`). An eye leaves `Remains.gd` and makes others within 14 m flinch (`flinch`): 2 m further out for 3 s, and 1.5 s longer before swooping.
 
 ## Adding a monster

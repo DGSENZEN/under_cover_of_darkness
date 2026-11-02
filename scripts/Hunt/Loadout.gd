@@ -161,7 +161,11 @@ func can_offer() -> bool:
 	if is_using() or items.is_empty() or int(item_counts.get(items[0], 0)) <= 0:
 		return false
 
-	return player.statuses.has(PrepItems.info(items[0]).get("cures", &"")) or _watching_you(items[0]) >= OFFER_WATCHED_BY
+	if player.statuses.has(PrepItems.info(items[0]).get("cures", &"")):
+		return true
+
+	# Not while what it leaves still lies on you: no nagging.
+	return not player.statuses.has(PrepItems.info(items[0]).get("leaves", &"")) and _watching_you(items[0]) >= OFFER_WATCHED_BY
 
 
 ## How many monsters this item would be sent back at, here and now.
@@ -216,6 +220,11 @@ func _physics_process(delta: float) -> void:
 	Sfx.play_flat(self, &"ting", -6.0, 0.8)
 	Fx.flash(player, player.global_position, Color(1.0, 0.86, 0.6), 2.5, 7.0, 0.14)
 	item_used.emit(id)
+	var hud: Node = player.get("hud")
+
+	if hud != null and hud.has_method("egg_broke"):
+		hud.egg_broke()
+
 	changed.emit()
 
 

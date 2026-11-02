@@ -97,6 +97,16 @@ var _ammo: HuntReadoutScript
 ## The evil eye's lids of ink, and how far closed they are shown.
 var _curse_view: ColorRect
 var _curse_shown := 0.0
+var _stared_shown := 0.0
+var _clean_flash := 0.0
+var _cleansed_shown := 0.0
+var _ring_open := PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+## Monster to its mark: x, y on the screen (0..1), z how open.
+var _gazers := {}
+const MOST_GAZERS := 4
+const GAZER_MARGIN := 0.07
+const GAZER_CLEAR := 0.22
+const CLEAN_WASH_TIME := 0.7
 var _crosshair: Crosshair
 var _prompts: HBoxContainer
 var _prompt_signature := ""
@@ -182,6 +192,10 @@ class Crosshair:
 	var power_short_flash := 0.0
 	## A flash of brass when power comes back for fighting well.
 	var power_gain_flash := 0.0
+	## The evil eye on you, 0..1: the arc goes bruised, and how far your shots stray
+	## (stray_px) is drawn round the aim.
+	var cursed := 0.0
+	var stray_px := 11.0
 	var short := false
 	var contact_kind: StringName = &""
 	## Real seconds a mark is held full before it fades (a kill's).
@@ -219,7 +233,7 @@ class Crosshair:
 			var start := PI * 1.18
 			var end := PI * 1.82
 			draw_arc(c, 17.0, start, end, 24, Color(0, 0, 0, 0.4 * seen), 3.0, true)
-			var ink := Color(0.62, 0.78, 0.9).lerp(Color(1.0, 0.78, 0.36), power_gain_flash).lerp(Color(0.95, 0.3, 0.2), power_short_flash)
+			var ink := Color(0.62, 0.78, 0.9).lerp(Color(0.42, 0.1, 0.16), cursed).lerp(Color(1.0, 0.78, 0.36), power_gain_flash).lerp(Color(0.95, 0.3, 0.2), power_short_flash)
 
 			if power > 0.001:
 				draw_arc(c, 17.0, start, start + (end - start) * power, 24, Color(ink.r, ink.g, ink.b, 0.8 * seen), 2.0, true)
@@ -234,6 +248,15 @@ class Crosshair:
 
 		# Brief contact shapes: crossed cuts in flesh, brackets on steel,
 		# a diamond for an earned punish/deathblow. No persistent combat text.
+		# The stray: four broken strokes round the aim, as far as a shot may wander.
+		if cursed > 0.01:
+			var round_ink := Color(0.62, 0.14, 0.14, cursed * 0.85)
+			var wander := float(Time.get_ticks_msec()) * 0.0011
+
+			for i in 4:
+				var at := wander + TAU * i / 4.0
+				draw_arc(c, stray_px, at, at + 0.75, 8, round_ink, 1.5, true)
+
 		if contact_amount > 0.01:
 			var ink := Color(0.92, 0.86, 0.76, contact_amount * 0.85)
 			var r := lerpf(12.0, 8.0, contact_amount)
@@ -845,19 +868,119 @@ func _build_pause() -> void:
 
 
 ## The player is dead and has fallen: what now (DeathPage).
-## The lids close in over a second or so, and draw back as it lifts.
+## The evil eye on the screen (evil_eye_view.gdshader): the stare's warning and who
+## it comes from; the curse, its ring of eyes closing as it runs out; the egg.
 func _show_curse(delta: float) -> void:
-	var cursed: bool = player != null and player.statuses != null and player.statuses.has(&"evil_eye") and not player.is_dead
+	var watch: Node = player.statuses if player != null else null
+
+	if watch == null:
+		return
+
+	var alive: bool = not player.is_dead
+	var cursed: bool = alive and watch.has(&"evil_eye")
+	var left: float = watch.fraction(&"evil_eye") if cursed else 0.0
 	_curse_shown = move_toward(_curse_shown, 1.0 if cursed else 0.0, delta / (1.1 if cursed else 0.6))
-	_curse_view.visible = _curse_shown > 0.01
+	_stared_shown = move_toward(_stared_shown, float(watch.stared()) if alive else 0.0, delta * 3.0)
+	_clean_flash = move_toward(_clean_flash, 0.0, delta / CLEAN_WASH_TIME)
+	_cleansed_shown = float(watch.fraction(&"cleansed")) if alive and watch.has(&"cleansed") else 0.0
+	_crosshair.cursed = _curse_shown
+	_crosshair.stray_px = _stray_pixels()
 
-	if _curse_view.visible:
-		(_curse_view.material as ShaderMaterial).set_shader_parameter(&"amount", _curse_shown)
+	for i in _ring_open.size():
+		# They close last to first: the last with the curse itself.
+		var stays: bool = cursed and left > float(i) / float(_ring_open.size())
+		_ring_open[i] = move_toward(_ring_open[i], 1.0 if stays else 0.0, delta / 0.35)
+
+	_update_gazers(delta)
+	var shown := _curse_shown > 0.01 or _stared_shown > 0.01 or _clean_flash > 0.01 or _cleansed_shown > 0.001 or _gazers.values().any(func(g): return g.z > 0.01)
+	_curse_view.visible = shown
+
+	if shown:
+		var look := _curse_view.material as ShaderMaterial
+		look.set_shader_parameter(&"curse", _curse_shown)
+		look.set_shader_parameter(&"stared", _stared_shown)
+		look.set_shader_parameter(&"clean", _clean_flash)
+		look.set_shader_parameter(&"cleansed", _cleansed_shown)
+		look.set_shader_parameter(&"ring", _ring_open)
+		var marks := PackedVector3Array()
+		marks.resize(MOST_GAZERS)
+
+		for i in mini(_gazers.size(), MOST_GAZERS):
+			marks[i] = _gazers.values()[i]
+
+		look.set_shader_parameter(&"gazers", marks)
 
 
-## The evil eye's lids are on screen.
+## Each one staring at you: where on the screen's edge or face it is, and how open
+## its mark has come. Behind you, it is pushed out to the edge it is nearest.
+func _update_gazers(delta: float) -> void:
+	var camera: Camera3D = player.camera
+	var view := get_viewport().get_visible_rect().size
+
+	for monster in get_tree().get_nodes_in_group(&"monsters"):
+		var gazing: bool = monster.get("gazing") == true and not monster.dead and not monster.asleep and not player.is_dead
+
+		if not gazing and not _gazers.has(monster):
+			continue
+
+		var was: Vector3 = _gazers.get(monster, Vector3.ZERO)
+		var at := Vector2(was.x, was.y)
+
+		if gazing:
+			at = _edge_mark(camera, monster.global_position, view)
+
+		var open := move_toward(was.z, sqrt(clampf(_stared_shown * 1.4, 0.15, 1.0)) if gazing else 0.0, delta / 0.3)
+
+		if open <= 0.0 and not gazing:
+			_gazers.erase(monster)
+		else:
+			_gazers[monster] = Vector3(at.x, at.y, open)
+
+	for gone in _gazers.keys():
+		if not is_instance_valid(gone):
+			_gazers.erase(gone)
+
+
+func _edge_mark(camera: Camera3D, at: Vector3, view: Vector2) -> Vector2:
+	var local := camera.global_transform.affine_inverse() * at
+	var side := Vector2(local.x, -local.y)
+
+	if local.z > -0.2:
+		# Behind or beside you: straight out to the frame's edge on its side.
+		var out := side.normalized() if side.length() > 0.01 else Vector2.RIGHT
+		out /= maxf(absf(out.x), absf(out.y))
+		return Vector2(0.5, 0.5) + out * (0.5 - GAZER_MARGIN)
+
+	var screen := camera.unproject_position(at) / view
+	# On the screen, a mark close to it, kept out of the middle and inside the frame.
+	var off := screen - Vector2(0.5, 0.5)
+
+	if off.length() < GAZER_CLEAR:
+		off = (off.normalized() if off.length() > 0.001 else Vector2.UP) * GAZER_CLEAR
+
+	return (Vector2(0.5, 0.5) + off).clamp(Vector2.ONE * GAZER_MARGIN, Vector2.ONE * (1.0 - GAZER_MARGIN))
+
+
+## How wide the evil eye's stray is at the crosshair, in pixels.
+func _stray_pixels() -> float:
+	var view_height: float = get_viewport().get_visible_rect().size.y
+	return view_height * 0.5 * tan(deg_to_rad(player.revolver.EVIL_EYE_STRAY)) / tan(deg_to_rad(player.camera.fov) * 0.5)
+
+
+## The egg has gone: its pale wash.
+func egg_broke() -> void:
+	_clean_flash = 1.0
+
+
+## The evil eye's marks are on screen.
 func curse_view_shown() -> bool:
 	return _curse_view.visible
+
+
+## What the screen is saying about the evil eye, for whoever asks.
+func curse_state() -> Dictionary:
+	return {"stared": _stared_shown, "curse": _curse_shown, "gazers": _gazers.values(), "ring_open": Array(_ring_open).filter(func(o): return o > 0.5).size(),
+		"clean": _clean_flash, "cleansed": _cleansed_shown}
 
 
 func show_death_page() -> void:

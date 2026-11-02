@@ -39,6 +39,7 @@ func _ready() -> void:
 	await _deaths()
 	await _limpia()
 	await _looks()
+	await _curse_view()
 	await _killing()
 	await _long_run()
 	await _dead_player()
@@ -133,7 +134,7 @@ func _attacks() -> void:
 func _gaze() -> void:
 	await _place_player(HOME)
 	p.statuses.clear(&"evil_eye")
-	p.set_meta(&"gaze", 0.0)
+	p.statuses.forget_stare()
 	var e := _eye(Vector3(0, 2, -7), 5)
 	e.next_swoop_in = 100.0
 	await _frames(100)
@@ -280,7 +281,7 @@ func _answers() -> void:
 	# The Ward: it cannot see you.
 	await _place_player(HOME)
 	p.statuses.clear(&"evil_eye")
-	p.set_meta(&"gaze", 0.0)
+	p.statuses.forget_stare()
 	e = _eye(Vector3(0, 2, -7), 27)
 	e.state = STATE.CIRCLE
 	e.next_swoop_in = 0.1
@@ -408,7 +409,7 @@ func _limpia() -> void:
 	p.invulnerable = false
 	p.health = p.max_health
 	p.statuses.clear(&"evil_eye")
-	p.set_meta(&"gaze", 0.0)
+	p.statuses.forget_stare()
 	var lo: Node = p.loadout
 	lo.pack_item(&"egg")
 	lo.item_counts[&"egg"] = 2
@@ -543,6 +544,66 @@ func _looks() -> void:
 	await _frames(530)
 	_check("V8c all gone in time", get_tree().get_nodes_in_group(&"remains").is_empty() and get_tree().get_nodes_in_group(&"gibs").is_empty())
 	_free(e)
+
+
+## The screen says what the evil eye is doing.
+func _curse_view() -> void:
+	await _place_player(HOME)
+	p.neck.rotation = Vector3.ZERO
+	p.rotation = Vector3.ZERO
+	p.statuses.clear(&"evil_eye")
+	p.statuses.clear(&"cleansed")
+	p.statuses.forget_stare()
+	var hud: Node = p.hud
+	var cross: Control = hud.get("_crosshair")
+	await _frames(60)
+	_check("C0 nothing on you, nothing shown", not hud.curse_view_shown())
+	var e := _eye(Vector3(5, 2, -6), 80)
+	e.state = STATE.CIRCLE
+	e.next_swoop_in = 100.0
+	await _frames(40)
+	var state: Dictionary = hud.curse_state()
+	_check("C1 stared at, the warning builds before any curse (%.2f)" % state["stared"], state["stared"] > 0.1 and not p.statuses.has(&"evil_eye") and hud.curse_view_shown())
+	_check("C2 a painted eye opens on the side it is looking from (%s)" % [state["gazers"]], state["gazers"].size() == 1 and state["gazers"][0].x > 0.5 and state["gazers"][0].z > 0.1)
+	_free(e)
+
+	e = _eye(Vector3(-7, 2, 3), 81)
+	e.state = STATE.CIRCLE
+	e.next_swoop_in = 100.0
+	await _frames(40)
+	state = hud.curse_state()
+	var open_one: Array = state["gazers"].filter(func(g): return g.z > 0.1)
+	_check("C2b from behind you on the left, it opens at the left edge (%s)" % [state["gazers"]], open_one.size() >= 1 and open_one[-1].x < 0.2)
+	_free(e)
+	await _frames(100)
+	_check("C6 left alone, the warning fades (%.2f)" % hud.curse_state()["stared"], hud.curse_state()["stared"] < 0.05 and hud.curse_state()["gazers"].filter(func(g): return g.z > 0.1).is_empty())
+
+	p.statuses.apply(&"evil_eye", 8.0)
+	await _frames(70)
+	state = hud.curse_state()
+	_check("C3 cursed, a ring of six stares at you (%d)" % state["ring_open"], state["ring_open"] == 6)
+	_check("C4 the power arc goes bruised, and the stray is drawn", cross.cursed > 0.5)
+	await _frames(int(3.7 * 60.0))
+	state = hud.curse_state()
+	_check("C3b half gone, half of them have closed (%d)" % state["ring_open"], state["ring_open"] == 3 or state["ring_open"] == 4)
+	p.statuses.clear(&"evil_eye")
+	await _frames(70)
+	_check("C4b it lifts", cross.cursed < 0.1 and hud.curse_state()["ring_open"] == 0)
+
+	p.loadout.pack_item(&"egg")
+	p.loadout.item_counts[&"egg"] = 1
+	p.statuses.apply(&"evil_eye", 8.0)
+	await _press("use_item")
+	await _frames(52)
+	state = hud.curse_state()
+	_check("C5 the egg breaks in a pale wash (%.2f)" % state["clean"], state["clean"] > 0.1)
+	_check("C5b and a ward's ring shows how long you are clean (%.2f)" % state["cleansed"], state["cleansed"] > 0.8 and hud.curse_view_shown())
+	p.statuses.apply(&"cleansed", 0.2)
+	await _frames(30)
+	p.statuses.clear(&"cleansed")
+	await _frames(70)
+	_check("C5c and goes with it", not hud.curse_view_shown())
+	p.loadout.unpack_item(&"egg")
 
 
 func _face(target: Node3D) -> void:
