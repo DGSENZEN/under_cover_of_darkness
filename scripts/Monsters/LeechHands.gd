@@ -244,7 +244,7 @@ func _second_hand(taken: Array[int], delta: float) -> void:
 	var face := -1
 
 	for slot in 3:
-		if not player.is_dead and player.leech.holds_face(slot):
+		if player.leech.holds_face(slot):
 			face = slot
 			break
 
@@ -256,7 +256,7 @@ func _second_hand(taken: Array[int], delta: float) -> void:
 			break
 
 	if face < 0 or free < 0:
-		if _held[OTHER_HAND] and not player.is_dead:
+		if _held[OTHER_HAND]:
 			_flung[OTHER_HAND] = FLUNG_FOR
 
 		_held[OTHER_HAND] = false

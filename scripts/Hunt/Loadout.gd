@@ -279,6 +279,11 @@ func is_using() -> bool:
 	return _using != &""
 
 
+## You are dead: what was in your hand never goes off.
+func drop_use() -> void:
+	_using = &""
+
+
 func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("use_item") and not use_item():
 		Sfx.play_flat(self, &"gear", -12.0, 1.8)

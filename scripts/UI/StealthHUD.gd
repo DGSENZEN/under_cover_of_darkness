@@ -151,6 +151,8 @@ const RING_ORDER := [2, 4, 0, 1, 5, 3]
 const CURSE_LEAST := 0.62
 ## How deep the drain shows by how many are on you; how fast it comes and goes; how
 ## long colour floods back for.
+const DeathQuoteScript := preload("res://scripts/UI/DeathQuote.gd")
+const DeathQuotes := preload("res://scripts/UI/DeathQuotes.gd")
 const DRAIN_DEPTH := [0.0, 0.45, 0.72, 1.0]
 ## The curse told of the drain: how fast the flesh pales and flushes back, how fast the eyes turn
 ## to what is on you and away, how far a gulp squeezes the flesh in (of its closing), and how far
@@ -244,7 +246,7 @@ var _white: ColorRect
 var _white_amount := 0.0
 var _last_real := -1.0
 var _fade: ColorRect
-var _death: Label
+var _death: Control
 var _pause: PauseMenu
 ## After death: Load latest, Load, Main menu (the player shows it, reload_on_death).
 var death_page: DeathPage
@@ -958,8 +960,9 @@ func setup(p_player: CharacterBody3D) -> void:
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_play.add_child(_fade)
 
-	_death = _label(40, INK, HORIZONTAL_ALIGNMENT_CENTER)
-	_death.modulate.a = 0.0
+	_death = DeathQuoteScript.new()
+	_death.font = _font
+	_play.add_child(_death)
 
 	_build_pause()
 
@@ -967,7 +970,7 @@ func setup(p_player: CharacterBody3D) -> void:
 		player.damaged.connect(_on_damaged)
 
 	if player.has_signal("died"):
-		player.died.connect(func(): _death.text = "You were caught.")
+		player.died.connect(func(): _death.set_quote(DeathQuotes.choose(player.death.kind)))
 
 	var combat: Node = player.get("combat")
 
@@ -1284,7 +1287,8 @@ func _tell_each_other(delta: float) -> void:
 		return
 
 	var held: int = leech.count() if not player.is_dead or player.death.holds_screen() else 0
-	var wanted: float = maxf(_drain_shown, 1.0 - _drain_magic) if held > 0 or player.death.holds_screen() else 0.0
+	var drunk: bool = held > 0 or player.death.kind == &"animas" or player.death.kind == &"both"
+	var wanted: float = maxf(_drain_shown, 1.0 - _drain_magic) if drunk else 0.0
 	_drained_shown = move_toward(_drained_shown, wanted, delta * (DRAINED_COMES if wanted > _drained_shown else DRAINED_GOES))
 
 	for i in _feeders.size():
@@ -1635,16 +1639,15 @@ func _process(delta: float) -> void:
 			for mark in [_crosshair, _gem, _shields, _ammo, _adrenaline, _prompts]:
 				mark.visible = false
 
-		if player.death.playing():
-			# The fight is still on screen: the dark and the words wait for its very end.
-			var last: float = player.death.words_share()
-			_fade.color.a = 0.92 * last
-			_death.modulate.a = last
-		elif not player.death.holds_screen():
+		if player.death.holds_screen():
+			# The fight is still on screen: the dark waits for its very end.
+			_fade.color.a = 0.92 * player.death.words_share()
+		else:
 			_fade.color.a = move_toward(_fade.color.a, 0.92, delta * 0.8)
-			_death.modulate.a = move_toward(_death.modulate.a, 1.0, delta * 1.2)
 
-	_place(_death, Vector2(EDGE, centre.y - 40), Vector2(view.x - EDGE * 2.0, 60))
+		_death.after(player.death.since_end())
+
+	_death.visible = player.is_dead
 
 	# Find guards to listen to.
 	_scan_timer -= delta

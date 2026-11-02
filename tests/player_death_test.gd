@@ -8,6 +8,7 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
 const EyeScript := preload("res://scripts/Monsters/FloatingEye.gd")
 const EyeGobScript := preload("res://scripts/Monsters/EyeGob.gd")
+const DeathQuotes := preload("res://scripts/UI/DeathQuotes.gd")
 const HOME := Vector3(0, 1.05, 0)
 
 var failed := 0
@@ -28,6 +29,8 @@ func _ready() -> void:
 	await _the_rest()
 	await _heard()
 	await _marked_dead()
+	await _quotes()
+	await _review_of_the_deaths()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -147,18 +150,18 @@ func _how_long() -> void:
 	eye.sleep()
 	p.health = 0.01
 	p.take_damage(50.0, eye)
-	await _frames(int(2.9 * 60.0))
+	await _frames(int(5.9 * 60.0))
 	var shut: bool = not p.hud.death_page.visible
-	await _frames(20)
-	_check("P7 the page waits for the end", shut and p.hud.death_page.visible)
+	await _frames(45)
+	_check("P7 the page waits for the end, and for the words", shut and p.hud.death_page.visible)
 	p.hud.death_page.hide()
 	await _fresh(true)
 	var man := Node3D.new()
 	add_child(man)
 	p.health = 0.01
 	p.take_damage(50.0, man)
-	var fall_page: float = await _time_till(func(): return p.hud.death_page.visible, 4.0)
-	_check("P7b the fall's page still comes at 2 s (%.2f)" % fall_page, absf(fall_page - 2.0) < 0.1)
+	var fall_page: float = await _time_till(func(): return p.hud.death_page.visible, 8.0)
+	_check("P7b the fall's page comes after its words (%.2f)" % fall_page, absf(fall_page - (p.death.FALL_TAKES + p.death.QUOTE_TAKES)) < 0.1)
 	man.queue_free()
 	p.hud.death_page.hide()
 
@@ -166,10 +169,14 @@ func _how_long() -> void:
 func _the_words() -> void:
 	await _dying_by(false, false, &"eye")
 	await _frames(int(2.4 * 60.0))
-	var before: float = p.hud._death.modulate.a
+	var before: float = p.hud._fade.color.a
 	await _until(func(): return not p.death.playing(), 2.0)
-	var after: float = p.hud._death.modulate.a
-	_check("P8 the words start half a second from the end (%.2f, %.2f)" % [before, after], before == 0.0 and after > 0.9)
+	await _frames(2)
+	var after: float = p.hud._fade.color.a
+	_check("P8 the dark waits for the very end (%.2f, %.2f)" % [before, after], before == 0.0 and after > 0.85)
+	_check("P8c at the end there is a moment of nothing", p.hud._death.shown() == 0.0)
+	await _frames(int(p.hud._death.DARK_FOR * 60.0 + p.hud._death.CATCHES * 60.0) + 2)
+	_check("P8d then a candle", p.hud._death.shown() > 0.95)
 	await _dying_by(false, false, &"guard")
 	await _frames(30)
 	_check("P8b the fall's fade and words start at once (%.2f)" % p.hud._fade.color.a, p.hud._fade.color.a > 0.2)
@@ -425,6 +432,124 @@ func _marked_dead() -> void:
 	await _frames(5)
 	_check("Z1 marked dead with no death chosen: the old fall", p.juice.death_fall.is_empty() and p.juice.death > 0.0)
 	p.is_dead = false
+
+
+func _quotes() -> void:
+	_check("Q1 all eight of the user's quotes", DeathQuotes.ALL.size() == 8 and DeathQuotes.ALL[1]["text"] == "“Cada suspiro es como un sorbo de vida del que uno se deshace.”" and DeathQuotes.ALL[1]["by"] == "Juan Rulfo, Pedro Paramo")
+	var used := {}
+
+	for how in [&"eyes", &"animas", &"both", &"swipe", &"fall"]:
+		_check("Q2 %s has a few of its own" % how, DeathQuotes.FOR[how].size() >= 3)
+
+		for id in DeathQuotes.FOR[how]:
+			used[id] = true
+
+	_check("Q2b every quote can come up", used.size() == DeathQuotes.ALL.size())
+	_check("Q2c a sip of life is for what drinks you", DeathQuotes.FOR[&"animas"].has(1) and not DeathQuotes.FOR[&"eyes"].has(1))
+	var repeats := 0
+	var was: Dictionary = {}
+
+	for i in 30:
+		var now: Dictionary = DeathQuotes.choose(&"animas")
+
+		if now == was:
+			repeats += 1
+
+		was = now
+
+	_check("Q3 never the same one twice running", repeats == 0)
+	# In the game.
+	await _dying_by(false, true, &"guard")
+	var hud: Node = p.hud
+	var text: String = hud._death.quote()
+	_check("Q4 the ánimas' death takes one of theirs", DeathQuotes.FOR[&"animas"].any(func(id): return DeathQuotes.ALL[id]["text"] == text))
+	_check("Q5 there is nothing of the old words", not text.contains("caught"))
+	await _until(func(): return not p.death.playing(), 5.0)
+	await _frames(120)
+	_check("Q6 it is up under the page, on its background (%.2f)" % hud._death.shown(), hud._death.shown() > 0.95 and hud._death.visible)
+	await _dying_by(false, false, &"guard")
+	hud = p.hud
+	await _frames(200)
+	_check("Q7 a guard's kill has one too", DeathQuotes.FOR[&"fall"].any(func(id): return DeathQuotes.ALL[id]["text"] == hud._death.quote()) and hud._death.shown() > 0.9)
+	# Every one fits, at the size it is played.
+	var fits := true
+
+	for one in DeathQuotes.ALL:
+		hud._death.set_quote(one)
+		await _frames(2)
+		fits = fits and hud._death.bottom_of_words() < get_viewport().get_visible_rect().size.y
+
+	_check("Q8 the longest fits on the screen", fits)
+	await _fresh()
+	_check("Q9 a fresh life shows none of it", p.hud._death.shown() == 0.0 and not p.hud._death.visible)
+	# A press in the words brings the page.
+	await _fresh(true)
+	var man := Node3D.new()
+	add_child(man)
+	p.health = 0.01
+	p.take_damage(50.0, man)
+	man.queue_free()
+	await _frames(int(p.death.FALL_TAKES * 60.0) + 10)
+	await _press("throw")
+	await _frames(3)
+	_check("Q10 a press in the words brings the page", p.hud.death_page.visible)
+	p.hud.death_page.hide()
+
+
+## What the deaths' review found.
+func _review_of_the_deaths() -> void:
+	# A copal line under way as you die: it never goes off, so what has you keeps you.
+	await _fresh()
+	p.loadout.locked = false
+	p.loadout.items = [&"copal_line"] as Array[StringName]
+	p.loadout.item_counts = {&"copal_line": 2}
+	var one: CharacterBody3D = AnimaScript.new()
+	one.form = &"hands"
+	one.position = HOME + Vector3(0.8, 0.3, 0)
+	add_child(one)
+	await _frames(1)
+	one.put_on_you()
+	await _frames(2)
+	p.loadout.use_item(0)
+	_check("V0 the line is under way", p.loadout.is_using())
+	p.health = 0.01
+	p.drain_life(50.0)
+	await _frames(60)
+	_check("V1 an item in use as you die never goes off", not p.loadout.is_using() and p.loadout.item_counts[&"copal_line"] == 2 and p.leech.count() == 1)
+	# Looking far up or down, you still go straight down, in the same place.
+	await _fresh()
+	p.neck.rotation.x = -1.0
+	await _frames(2)
+	var flat_at := Vector2(p.camera.global_position.x, p.camera.global_position.z)
+	var eye: CharacterBody3D = EyeScript.new()
+	eye.position = HOME + Vector3(0, 2, -40)
+	add_child(eye)
+	eye.sleep()
+	p.health = 0.01
+	p.take_damage(50.0, eye)
+	await _until(func(): return not p.death.playing(), 5.0)
+	await _frames(10)
+	var moved: float = flat_at.distance_to(Vector2(p.camera.global_position.x, p.camera.global_position.z))
+	_check("V2 looking far down as you die, you go straight down (%.2f m aside, %.2f up)" % [moved, p.camera.global_position.y], moved < 0.35 and p.camera.global_position.y < 0.5)
+	# A face's second hand stays on you as you go.
+	await _fresh()
+	var face: CharacterBody3D = AnimaScript.new()
+	face.form = &"face"
+	face.position = HOME + Vector3(0.9, 0.3, -0.2)
+	add_child(face)
+	await _frames(1)
+	face.put_on_you()
+	await _frames(60)
+	var second_was: bool = p.leech_hands.other_hand_shown()
+	p.health = 0.01
+	p.drain_life(50.0)
+	await _frames(20)
+	_check("V3 a face's second hand stays on you as you go", second_was and p.leech_hands.other_hand_shown())
+	# Fed on, shaken off, then an eye: it isn't the drain that took you.
+	await _dying_by(false, false, &"eye")
+	p.hud._drain_magic = 0.1
+	await _frames(40)
+	_check("V4 killed by an eye, the flesh keeps its blood (%.2f)" % p.hud.curse_state()["drained"], p.hud.curse_state()["drained"] == 0.0)
 
 
 func _heard() -> void:

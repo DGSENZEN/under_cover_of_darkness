@@ -135,7 +135,7 @@ float swell_round(float round_about, float far, float time) {
 // How much of the way round has to come from the other side: atan jumps on the left, which only
 // shows when the flesh reaches that far in.
 float round_seam(vec2 a) {
-	return step(a.x, 0.0) * (1.0 - smoothstep(0.0, 0.3, abs(a.y) / max(-a.x, 0.001)));
+	return step(0.001, dying) * step(a.x, 0.0) * (1.0 - smoothstep(0.0, 0.3, abs(a.y) / max(-a.x, 0.001)));
 }
 
 float swell_at(vec2 a, float time) {

@@ -25,6 +25,7 @@ const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
 const EvilEyeCurseScript := preload("res://scripts/Monsters/EvilEyeCurse.gd")
 ## How far off the floor your head comes to rest.
 const DEATH_ABOVE_FLOOR := 0.22
+const DEATH_LEVELS := 7.0
 const PlayerDeathScript := preload("res://scripts/PlayerUtils/PlayerDeath.gd")
 const LifeLeechScript := preload("res://scripts/Monsters/LifeLeech.gd")
 const LeechHandsScript := preload("res://scripts/Monsters/LeechHands.gd")
@@ -1812,16 +1813,16 @@ func _die() -> void:
 			# Nothing keeps a dead man afloat: he sinks.
 			movement_state = MoveState.LOCOMOTION
 
+	if loadout != null:
+		loadout.drop_use()
+
 	death.begin(last_blow)
 	died.emit()
 
 	if reload_on_death:
 		# A paused game waits: pressing Esc while dead must not reload behind
 		# the pause screen.
-		if death.playing():
-			await death.finished
-		else:
-			await get_tree().create_timer(2.0, false).timeout
+		await death.page_due
 
 		if not is_inside_tree():
 			return
@@ -4494,6 +4495,8 @@ func _update_view(delta: float) -> void:
 	# Killed by what you were fighting: it takes you down, as it takes you.
 	if is_dead and death.holds_screen():
 		juice.death_fall = death.camera_pose()
+		# (Your head comes level as you go: the drop is along it.)
+		neck.rotation.x = lerpf(neck.rotation.x, 0.0, 1.0 - exp(-DEATH_LEVELS * delta))
 		# (No lower than the floor, however low you were.)
 		var feet := global_position.y - _capsule.height * 0.5
 		juice.death_fall["down"] = minf(juice.death_fall["down"], maxf(neck.global_position.y - feet - DEATH_ABOVE_FLOOR, 0.0))

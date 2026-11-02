@@ -7,7 +7,12 @@ extends Node
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 signal finished
+## The words have landed (or you pressed): the page may come.
+signal page_due
 
+## The fall takes this long, the words this long after any death (DeathQuote.TAKES).
+const FALL_TAKES := 2.0
+const QUOTE_TAKES := 3.4
 ## How long each takes (s).
 const LENGTHS := {&"eyes": 3.0, &"animas": 3.5, &"both": 4.0, &"swipe": 2.0}
 ## An attack press ends it, after this long. The words come up over this much at the very end.
@@ -44,6 +49,8 @@ var player: CharacterBody3D
 
 var _at := 0.0
 var _running := false
+var _since := 0.0
+var _page_called := false
 var _was_cursed := false
 var _floored := false
 var _beat_in := 0.0
@@ -61,6 +68,7 @@ func begin(last_blow: StringName) -> void:
 	_was_cursed = player.statuses.has(&"evil_eye")
 	kind = _which(last_blow)
 	_at = 0.0
+	_since = 0.0
 	_running = LENGTHS.has(kind)
 	_side = _falls_to()
 
@@ -144,6 +152,15 @@ func last_gulp() -> float:
 	return clampf((_at - (float(LETS_GO.get(kind, INF)) - LAST_GULP_TAKES)) / LAST_GULP_TAKES, 0.0, 1.0)
 
 
+func _ends_at() -> float:
+	return float(LENGTHS.get(kind, FALL_TAKES))
+
+
+## Seconds since the death itself was over; below 0 until then.
+func since_end() -> float:
+	return _since - _ends_at() if kind != &"" else -1.0
+
+
 ## The words and the last of the dark, 0 until near the end, then up to 1.
 func words_share() -> float:
 	return clampf((_at - (float(LENGTHS[kind]) - WORDS_FROM_END)) / WORDS_FROM_END, 0.0, 1.0) if LENGTHS.has(kind) else 0.0
@@ -173,7 +190,17 @@ func _sound(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if kind == &"":
+		return
+
+	_since += delta
+
+	# Over: the words, and a press or their landing brings the page.
 	if not _running:
+		if not _page_called and _since >= _ends_at() and (_since - _ends_at() >= QUOTE_TAKES or Input.is_action_just_pressed("throw")):
+			_page_called = true
+			page_due.emit()
+
 		return
 
 	var length: float = LENGTHS[kind]
@@ -183,6 +210,7 @@ func _physics_process(delta: float) -> void:
 
 	if _at >= SKIP_AFTER and _at < length - WORDS_FROM_END and Input.is_action_just_pressed("throw"):
 		_at = length - WORDS_FROM_END
+		_since = _at
 
 	if _at >= length:
 		_at = length

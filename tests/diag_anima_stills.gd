@@ -552,7 +552,19 @@ func _dying_stills(how: String) -> void:
 	for t in [0.5, 1.2, 2.0, 2.5, 3.0, 3.4, 3.8]:
 		await _frames(int((t - was) * 60.0))
 		was = t
-		await _shot("die_%s_%s_%.1f" % [how, place, t])
+
+		if p.death.since_end() < 0.2:
+			await _shot("die_%s_%s_%.1f" % [how, place, t])
+
+	for t in [0.9, 1.5, 2.2, 3.3, 4.5]:
+		while p.death.since_end() < t:
+			await get_tree().physics_frame
+
+		await _shot("die_%s_%s_quote_%.1f" % [how, place, t])
+
+	p.hud.show_death_page()
+	await _frames(20)
+	await _shot("die_%s_%s_page" % [how, place])
 
 
 ## A turned eye, real, gathering its spit and the gob on its way to you.
