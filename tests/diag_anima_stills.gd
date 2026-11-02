@@ -401,24 +401,32 @@ func _glass() -> void:
 
 
 func _burst() -> void:
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 1.05, -3.0)))
+	p.neck.rotation.x = -0.18
+	await _frames(10)
+
 	for i in 6:
 		var turn := float(i) * TAU / 6.0 + 0.2
 		var e: CharacterBody3D = AnimaScript.new()
-		e.form = [&"hands", &"face", &"torso"][i % 3]
-		e.position = p.global_position + Vector3(cos(turn) * 4.0, 0.0, sin(turn) * 4.0)
+		e.form = [&"hands", &"face", &"hands"][i % 3]
+		e.position = p.global_position + Vector3(cos(turn) * 4.0, 0.0, sin(turn) * 4.0 + 1.5)
 		add_child(e)
 
-	await _frames(30)
+	await _frames(14)
+	p.power.power = 100.0
 	Input.action_press("spell_4")
 	await _frames(12)
-	await _shot("burst_windup")
+	await _shot("burst_0_windup")
 	await _frames(7)
 	Input.action_release("spell_4")
-	await _shot("burst_release")
-	await _frames(6)
-	await _shot("burst_ring")
-	await _frames(40)
-	await _shot("burst_after")
+	var last := 0
+
+	for step in [2, 6, 12, 20, 32, 50, 80, 110, 140, 180, 240]:
+		await _frames(step - last)
+		last = step
+		await _shot("burst_%03d" % step)
+
+	p.neck.rotation.x = 0.0
 
 
 func _shot(name_of: String) -> void:

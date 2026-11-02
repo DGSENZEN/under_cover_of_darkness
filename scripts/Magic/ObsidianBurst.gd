@@ -9,32 +9,19 @@ const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
+const BurstWave := preload("res://scripts/Magic/BurstWave.gd")
 
 const REACH := 5.5
 ## How long the wave takes to get there.
 const WAVE_TIME := 0.5
 const DAMAGE := 35.0
+## How long it stays about, for what it has started. (The spikes are its children.)
+const SPELL_LASTS := 6.0
 const RELEASE_STOP := 0.05
 const RELEASE_TRAUMA := 0.28
 ## From your chest, level.
 const CHEST := 1.2
-## The ring: how many, how long it takes to get there, at what heights.
-const RING := 28
-const RING_TIME := 0.25
-const RING_LOW := 0.35
-const RING_HIGH := 1.4
-## Left in the floor: how many, how long they stay, and how long to go.
-const STUCK := 24
-const STUCK_STAYS := 3.0
-const STUCK_GOES := 1.0
-const SPLINTER := Vector3(0.09, 0.8, 0.05)
-## The wave across the floor, out to its true reach: cold bright on black glass, so
-## it reads in the dark; and the flash that lights what it reaches.
-const WAVE_CORE := Color("#F4F1FF")
-const WAVE_BODY := Color("#9A86C8")
-const WAVE_EDGE := Color("#2C2140")
-const RING_SPREADS := 0.28
-const WAVE_ENERGY := 2.6
+## The flash that lights what it reaches.
 const FLASH_COLOUR := Color(0.78, 0.72, 1.0)
 
 var _rng := RandomNumberGenerator.new()
@@ -61,11 +48,9 @@ func _go(player: CharacterBody3D) -> void:
 	Sfx.play_flat(self, &"whoosh_heavy", -2.0, 1.25)
 	Sfx.play_flat(self, &"ting", -7.0, 0.6)
 	var floor_at := _floor_under(global_position)
-	_wave(floor_at)
+	BurstWave.rise_at(self, floor_at, REACH, WAVE_TIME)
 	Fx.flash(self, global_position + Vector3.UP * 0.4, FLASH_COLOUR, 3.0, REACH * 1.8, 0.16)
-	_ring(floor_at)
-	_leave_stuck(floor_at)
-	get_tree().create_timer(STUCK_STAYS + STUCK_GOES + 0.1, false, true).timeout.connect(queue_free)
+	get_tree().create_timer(SPELL_LASTS, false, true).timeout.connect(queue_free)
 
 
 ## How far out the wave has come (m).
@@ -115,79 +100,6 @@ func _strike_what_it_reached() -> void:
 
 
 func _floor_under(at: Vector3) -> Vector3:
-	var ray := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.5, at + Vector3.DOWN * 3.0, 1)
+	var ray := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.5, at + Vector3.DOWN * 8.0, 1)
 	var hit := get_world_3d().direct_space_state.intersect_ray(ray)
 	return hit["position"] if not hit.is_empty() else at
-
-
-func _wave(floor_at: Vector3) -> void:
-	var wave := MeshInstance3D.new()
-	wave.mesh = MagicFx._ring_mesh(1.0, 0.09, 64)
-	var look := MeshVfx.look(WAVE_CORE, WAVE_BODY, WAVE_EDGE, WAVE_ENERGY, 0.1, 1.0)
-	wave.material_override = look
-	wave.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	wave.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	wave.add_to_group(&"burst_ring")
-	add_child(wave)
-	wave.global_position = floor_at + Vector3.UP * 0.06
-	wave.scale = Vector3.ONE * 0.5
-	var goes := wave.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS).set_parallel(true)
-	goes.tween_property(wave, "scale", Vector3(REACH, 1.0, REACH), RING_SPREADS).set_ease(Tween.EASE_OUT)
-	goes.tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), 0.1, 0.95, RING_SPREADS).set_ease(Tween.EASE_IN)
-	goes.chain().tween_callback(wave.queue_free)
-
-
-func _ring(floor_at: Vector3) -> void:
-	var mesh: ArrayMesh = MagicFx.splinter_mesh(SPLINTER.x, SPLINTER.y, SPLINTER.z)
-
-	for i in RING:
-		var turn := TAU * float(i) / float(RING) + _rng.randf() * 0.1
-		var way := Vector3(cos(turn), 0.0, sin(turn))
-		var piece := _splinter(mesh)
-		piece.add_to_group(&"burst_ring")
-		add_child(piece)
-		var height := _rng.randf_range(RING_LOW, RING_HIGH)
-		piece.global_transform = Transform3D(Basis.looking_at(way, Vector3.UP), floor_at + way * 0.5 + Vector3.UP * height)
-		var fly := piece.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
-		fly.tween_property(piece, "global_position", floor_at + way * REACH + Vector3.UP * height * 0.6, RING_TIME).set_ease(Tween.EASE_OUT)
-		fly.tween_callback(piece.queue_free)
-
-
-func _leave_stuck(floor_at: Vector3) -> void:
-	var mesh: ArrayMesh = MagicFx.splinter_mesh(SPLINTER.x, SPLINTER.y * 0.8, SPLINTER.z)
-	var space := get_world_3d().direct_space_state
-
-	for i in STUCK:
-		var turn := _rng.randf() * TAU
-		var way := Vector3(cos(turn), 0.0, sin(turn))
-		var out := _rng.randf_range(REACH * 0.45, REACH)
-		var spot := floor_at + way * out + Vector3.UP * 0.5
-		var along := PhysicsRayQueryParameters3D.create(floor_at + Vector3.UP * 0.5, spot, 1)
-
-		# Not through a wall.
-		if not space.intersect_ray(along).is_empty():
-			continue
-
-		var down := space.intersect_ray(PhysicsRayQueryParameters3D.create(spot, spot + Vector3.DOWN * 2.0, 1))
-
-		if down.is_empty():
-			continue
-
-		var piece := _splinter(mesh)
-		piece.add_to_group(&"burst_splinters")
-		add_child(piece)
-		var lean := (way + Vector3.UP * 0.8 + Vector3(_rng.randf() - 0.5, 0.0, _rng.randf() - 0.5) * 0.5).normalized()
-		piece.global_transform = Transform3D(Basis.looking_at(lean, Vector3.FORWARD if absf(lean.dot(Vector3.UP)) > 0.99 else Vector3.UP), down["position"] + lean * 0.1)
-		var goes := piece.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
-		goes.tween_interval(STUCK_STAYS + _rng.randf() * 0.3)
-		goes.tween_property(piece, "scale", Vector3.ONE * 0.01, STUCK_GOES * 0.7)
-		goes.tween_callback(piece.queue_free)
-
-
-func _splinter(mesh: ArrayMesh) -> MeshInstance3D:
-	var piece := MeshInstance3D.new()
-	piece.mesh = mesh
-	piece.material_override = MagicFx.obsidian_look()
-	piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	piece.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	return piece

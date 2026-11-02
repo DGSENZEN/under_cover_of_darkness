@@ -28,6 +28,7 @@ func _ready() -> void:
 	await _frames(60)
 	_glass()
 	await _reach()
+	await _spikes()
 	await _on_you()
 	await _refused()
 	print("==== RESULTS ====")
@@ -95,6 +96,10 @@ func _reach() -> void:
 	for i in 40:
 		await get_tree().physics_frame
 
+		# (It would drift out to where it likes to hover, right at the edge of the reach.)
+		if is_instance_valid(eye):
+			eye.global_position = Vector3(0, 2.2, -3)
+
 		if i == 1:
 			doomed.free()
 
@@ -114,17 +119,103 @@ func _reach() -> void:
 	_check("B3 eyes take it at 1.5 (%.1f)" % (eye_was - eye.health), is_equal_approx(eye_was - eye.health, 52.5))
 	_check("B4 a wall stops it", behind.health == 130.0)
 	_check("B10 a man takes it as a blast", man.health < man_was)
-	_check("B9 a ring goes out", not get_tree().get_nodes_in_group(&"burst_ring").is_empty() or not get_tree().get_nodes_in_group(&"burst_splinters").is_empty())
 	await _frames(30)
 	_check("B6 thrown outward, hard (%.1f m)" % near_from.distance_to(near_a.global_position), near_from.distance_to(near_a.global_position) > 1.5)
-	_check("B9b splinters stay in the floor", not get_tree().get_nodes_in_group(&"burst_splinters").is_empty())
-	await _frames(300)
-	_check("B9c and are gone in a few seconds", get_tree().get_nodes_in_group(&"burst_splinters").is_empty() and get_tree().get_nodes_in_group(&"burst_ring").is_empty())
-
 	for e in [near_a, near_b, far, behind, eye, man, close, edge]:
 		e.queue_free()
 
 	await _frames(3)
+
+
+## The spikes: up through the floor from you outward, tall to short, not through a wall; and down.
+func _spikes() -> void:
+	# (Each cast's spikes have to be gone before the next is counted.)
+	await _until(func(): return get_tree().get_nodes_in_group(&"burst_wave").is_empty(), 8.0)
+	p.power.power = 100.0
+	Input.action_press("spell_4")
+	await _frames(22)
+	Input.action_release("spell_4")
+	await get_tree().physics_frame
+	var wave: Node = get_tree().get_first_node_in_group(&"burst_wave")
+	_check("S0 a wave", wave != null)
+
+	if wave == null:
+		return
+
+	var total: int = wave.spikes_total()
+	_check("S1 a wave of them, thick on the ground (%d)" % total, total >= 60 and total <= 125)
+	await _frames(5)
+	var up_early: int = wave.spikes_up()
+	await _frames(35)
+	var up_late: int = wave.spikes_up()
+	_check("S2 near first: few up at 0.1 s (%d), all by 0.6 s (%d)" % [up_early, up_late], up_early < total / 3 and up_late >= total - 2)
+	var inner := 0.0
+	var inner_n := 0
+	var outer := 0.0
+	var outer_n := 0
+	var past_wall := 0
+	var floating := 0
+	var places: PackedVector3Array = wave.spike_places()
+
+	for i in places.size():
+		var out := Vector2(places[i].x - HOME.x, places[i].z - HOME.z).length()
+
+		if out < 2.5:
+			inner += wave.spike_height(i)
+			inner_n += 1
+		elif out > 4.0:
+			outer += wave.spike_height(i)
+			outer_n += 1
+
+		# The wall stands at z 3.8 to 4.2, from x -4 to 4.
+		if places[i].z > 3.8 and absf(places[i].x) < 4.0:
+			past_wall += 1
+
+		if absf(places[i].y) > 0.05:
+			floating += 1
+
+	_check("S3 tall near you, short at the edge (%.2f, %.2f)" % [inner / maxf(inner_n, 1), outer / maxf(outer_n, 1)], inner / maxf(inner_n, 1) > outer / maxf(outer_n, 1) * 1.6)
+	_check("S4 not through a wall (%d)" % past_wall, past_wall == 0)
+	_check("S5b each stands on the floor (%d off it)" % floating, floating == 0)
+	var was_rubble := 0
+
+	for i in 240:
+		await get_tree().physics_frame
+
+		if is_instance_valid(wave):
+			was_rubble = maxi(was_rubble, wave.rubble_left())
+
+	_check("S6 they collapse into rubble (%d pieces)" % was_rubble, was_rubble > 20)
+	await _frames(120)
+	_check("S7 gone in a few seconds", get_tree().get_nodes_in_group(&"burst_wave").is_empty())
+	# Cast in the air, off the ground: it still reaches them, and spikes only stand on a floor.
+	var near := _anima(&"torso", p.global_position + Vector3(2, -0.6, 0))
+	near.state = STATE.THROWN
+	await _frames(2)
+	p.power.power = 100.0
+	p.velocity.y = 9.0
+	Input.action_press("spell_4")
+	await _frames(22)
+	Input.action_release("spell_4")
+	await _frames(40)
+	_check("S5 cast in the air, it still hurts", near.health < 130.0)
+	near.queue_free()
+	# Two close together: both run, both end.
+	await _until(func(): return get_tree().get_nodes_in_group(&"burst_wave").is_empty(), 8.0)
+	await _frames(30)
+	p.power.power = 100.0
+	Input.action_press("spell_4")
+	await _frames(22)
+	Input.action_release("spell_4")
+	await _frames(3)
+	p.power.power = 100.0
+	Input.action_press("spell_4")
+	await _frames(22)
+	Input.action_release("spell_4")
+	await _frames(3)
+	_check("S8 two close together: both running (%d)" % get_tree().get_nodes_in_group(&"burst_wave").size(), get_tree().get_nodes_in_group(&"burst_wave").size() == 2)
+	await _frames(360)
+	_check("S8b and both end", get_tree().get_nodes_in_group(&"burst_wave").is_empty())
 
 
 func _on_you() -> void:
@@ -148,6 +239,8 @@ func _on_you() -> void:
 
 
 func _refused() -> void:
+	# (The last cast's wave has to have gone by.)
+	await _frames(40)
 	p.power.power = 30.0
 	await _frames(1)
 	var a := _anima(&"torso", Vector3(2, 0.4, -2))
