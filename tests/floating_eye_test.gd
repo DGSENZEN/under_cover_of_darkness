@@ -30,6 +30,7 @@ func _ready() -> void:
 	Props.give_revolver(p, 200, 40)
 	p.inventory.select_by_id(&"revolver")
 	await _frames(60)
+	await _alive()
 	await _noticing()
 	await _attacks()
 	await _gaze()
@@ -822,6 +823,39 @@ func _dead_player() -> void:
 	await _frames(180)
 	_check("E14 the player dead: eyes stop attacking, no errors", e.state != STATE.TELL and e.state != STATE.SWOOP)
 	_free(e)
+
+
+## Its whole body moves: drawn back in its tell, shaking harder, recoiling; starting at rest.
+func _alive() -> void:
+	var e := _eye(HOME + Vector3(0, 1.5, -40), 3)
+	await _frames(3)
+	var body: Node3D = e.body
+	e.state = STATE.DRIFT
+	var twitches: int = body.twitches
+	await _frames(300)
+	_check("E4 at rest it starts now and then (%d)" % (body.twitches - twitches), body.twitches - twitches >= 1)
+	e.state = STATE.TELL
+	e._state_t = -9.0
+	await _frames(3)
+	var shake_early: float = body.shake_now
+	await _frames(20)
+	var shake_late: float = body.shake_now
+	_check("E1 its tell draws it back (%.2f)" % body.lean_back(), body.lean_back() > 0.05)
+	_check("E2 it shakes harder the nearer it is to going (%.3f, %.3f)" % [shake_early, shake_late], shake_late > shake_early * 1.5)
+	e.state = STATE.DRIFT
+	await _frames(60)
+	var rest_at: float = body.lean_back()
+	e.health = 500.0
+	e.take_hit(1.0, p, &"bullet", e.global_position, Vector3.FORWARD)
+	var recoil := 0.0
+
+	for i in 12:
+		await get_tree().physics_frame
+		recoil = maxf(recoil, absf(body.lean_back() - rest_at))
+
+	_check("E3 hurt, it recoils (%.2f)" % recoil, recoil > 0.04)
+	_free(e)
+	await _frames(2)
 
 
 func _eye(at: Vector3, seed_value: int) -> CharacterBody3D:

@@ -32,6 +32,19 @@ const WEEP_EVERY := 0.2
 const WINCE_TIME := 0.14
 const HURT_FADE := 0.28
 const CHUNKS := 7
+## Its whole body, sprung: how far it draws back and rears in its tell, thrown forward in a swoop,
+## recoils when hit; how much it shakes as it gathers, least and most; how often something starts in
+## it when it isn't doing anything.
+const DRAWS_BACK := 0.14
+const REARS := 0.1
+const THROWN_FORWARD := 0.1
+const RECOILS := 3.2
+const SHAKE_LEAST := 0.005
+const SHAKE_MOST := 0.03
+const GATHERS := 0.5
+const TWITCH_EVERY := Vector2(1.2, 3.2)
+const TWITCH_KICK := 1.1
+const BOB := 0.03
 ## How much a crack adds to its shown wounds, and for how long.
 const CRACK_SHOWS := 0.3
 const CRACK_LASTS := 1.5
@@ -56,6 +69,16 @@ var rage := 0.0
 var hurt := 0.0
 var wounds := 0.0
 var _crack_left := 0.0
+var _doing: StringName = &""
+var _doing_for := 0.0
+var _back := 0.0
+var _back_speed := 0.0
+var _up := 0.0
+var _up_speed := 0.0
+var _twitch_in := 1.0
+## How hard it is shaking now, and how many starts it has had.
+var shake_now := 0.0
+var twitches := 0
 var sway := Vector3.ZERO
 var tears := 0
 
@@ -180,7 +203,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, exposed
 	_turn_ball(delta, doing, you)
 	_show_lids()
 	part(&"Pupil").scale = Vector3(pupil, pupil, 1.0)
-	_pose(doing)
+	_pose(doing, delta)
 	_shader_state()
 	_weep(delta, doing, smoked)
 
@@ -294,16 +317,52 @@ func _show_lids() -> void:
 	part(&"LidBottom").rotation.x = deg_to_rad(bottom)
 
 
-func _pose(doing: StringName) -> void:
+func _pose(doing: StringName, delta: float) -> void:
+	if doing != _doing:
+		_doing = doing
+		_doing_for = 0.0
+
+	_doing_for += delta
 	var stretched := 1.0
 
 	if doing == &"swoop":
 		stretched = 1.16
 
 	scale = scale.lerp(Vector3(1.0 / sqrt(stretched), 1.0 / sqrt(stretched), stretched), 0.2)
-	# It shudders as it gathers.
-	var shake := 0.016 if doing == &"tell" else (0.006 if _wince_left > 0.0 else 0.0)
-	position = Vector3(sin(_clock * 61.0), cos(_clock * 53.0), 0.0) * shake
+	var back_to := 0.0
+	var up_to := 0.0
+
+	match doing:
+		&"tell":
+			back_to = DRAWS_BACK
+			up_to = REARS
+		&"swoop":
+			back_to = -THROWN_FORWARD
+		&"dazed":
+			up_to = -REARS
+		&"drift", &"circle":
+			_twitch_in -= delta
+
+			if _twitch_in <= 0.0:
+				_twitch_in = _rng.randf_range(TWITCH_EVERY.x, TWITCH_EVERY.y)
+				twitches += 1
+				_back_speed += TWITCH_KICK * (-1.0 if _rng.randf() < 0.5 else 1.0)
+				_up_speed += TWITCH_KICK * (-1.0 if _rng.randf() < 0.5 else 1.0)
+
+	var w := minf(TAU * (9.0 if doing == &"tell" or doing == &"swoop" else 4.0), 0.8 / delta)
+	_back_speed += (w * w * (back_to - _back) - 2.0 * 0.5 * w * _back_speed) * delta
+	_back += _back_speed * delta
+	_up_speed += (w * w * (up_to - _up) - 2.0 * 0.5 * w * _up_speed) * delta
+	_up += _up_speed * delta
+	# It shudders as it gathers, harder the nearer it is to going.
+	shake_now = lerpf(SHAKE_LEAST, SHAKE_MOST, minf(_doing_for / GATHERS, 1.0)) if doing == &"tell" else (0.006 if _wince_left > 0.0 else 0.0)
+	var bob := sin(_clock * 1.7) * BOB * (0.0 if doing == &"swoop" else 1.0)
+	position = Vector3(sin(_clock * 61.0) * shake_now, cos(_clock * 53.0) * shake_now + _up + bob, _back)
+
+
+## How far back it is drawn (m), - thrown forward.
+func lean_back() -> float:
+	return _back
 
 
 func _shader_state() -> void:
@@ -343,6 +402,7 @@ func cracked() -> bool:
 
 func struck(point: Vector3, direction: Vector3, result: StringName) -> void:
 	_wince_left = WINCE_TIME
+	_back_speed += RECOILS
 	var strength := 0.3 if result == &"resisted" else (1.3 if result == &"weak" else 0.8)
 	hurt = maxf(hurt, 0.55 + strength * 0.35)
 	Fx.blood(self, point, -direction.normalized(), strength)
