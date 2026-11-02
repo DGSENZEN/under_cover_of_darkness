@@ -24,6 +24,7 @@ func _ready() -> void:
 	await _freed()
 	await _staying()
 	await _going_down()
+	await _the_eyes()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -303,6 +304,45 @@ func _going_down() -> void:
 	Input.action_release("crouch")
 	above = _camera_above_floor()
 	_check("C4d dying crouched, not through the floor (%.2f)" % above, above > 0.08)
+
+
+func _the_eyes() -> void:
+	await _dying_by(false, false, &"guard")
+	await _frames(60)
+	_check("E5 the fall: none of it", p.hud.curse_state()["dying"] == 0.0)
+	# Killed by an eye, no curse on you.
+	await _dying_by(false, false, &"eye")
+	await _frames(45)
+	var hud: Node = p.hud
+	var early: Dictionary = hud.curse_state()
+	_check("E1 killed by an eye with no curse on you: the flesh still comes (%.2f)" % early["dying"], early["dying"] > 0.0 and hud.curse_view_shown())
+	await _frames(45)
+	var half: Dictionary = hud.curse_state()
+	await _until(func(): return p.death.share() > 0.9, 2.0)
+	var late: Dictionary = hud.curse_state()
+	_check("E2 it closes all the way (%.2f)" % late["dying"], late["dying"] > 0.95)
+	_check("E8 nothing of the HUD's left over it", not hud._crosshair.visible and not hud._gem.visible and not hud._shields.visible and not hud._ammo.visible)
+	_check("E3 every eye opens, and more than the curse ever had (%d, %.2f)" % [late["ring_open"], late["extra_eyes"]], late["ring_open"] == 6 and late["extra_eyes"] > 0.9)
+	_check("E4 the last eye opens in the middle, late (%.2f, %.2f)" % [half["last_eye"], late["last_eye"]], half["last_eye"] == 0.0 and late["last_eye"] > 0.9)
+	_check("E4b the heart is failing by the end (%.2f)" % late["failing"], late["failing"] > 0.5 and half["failing"] == 0.0)
+	await _until(func(): return not p.death.playing(), 2.0)
+	await _frames(60)
+	_check("E7 and it stays, under the page: nothing comes back", hud.curse_state()["dying"] > 0.95 and hud.curse_view_shown())
+	# Using the egg as you die.
+	await _fresh()
+	hud = p.hud
+	hud.egg_broke()
+	await _frames(2)
+	var eye: CharacterBody3D = EyeScript.new()
+	eye.position = HOME + Vector3(0, 2, -40)
+	add_child(eye)
+	eye.sleep()
+	p.health = 0.01
+	p.take_damage(50.0, eye)
+	await _frames(5)
+	_check("E6 the egg going as you die: it stops", hud.curse_state()["dispel"] == 0.0 and hud.curse_state()["gather"] == 0.0)
+	await _until(func(): return not p.death.playing(), 4.0)
+	_check("E6b and the death finishes", not p.death.playing())
 
 
 func _on_you_now() -> CharacterBody3D:

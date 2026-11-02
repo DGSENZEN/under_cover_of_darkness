@@ -30,6 +30,15 @@ uniform vec2 egg_at = vec2(0.3, 0.7);
 uniform float leaving = 0.0;
 uniform float cleansed = 0.0;
 uniform vec3 gazers[4];
+//   - dying: as it kills you, 0..1. The flesh closes past where it ever goes, over everything.
+//     extra_eyes: four more than the six tear open across it. last_eye: one in the very middle,
+//     looking at you. failing: the heart, which has raced (beat_clock) and now stops, and the
+//     flesh going dark.
+uniform float dying = 0.0;
+uniform float extra_eyes = 0.0;
+uniform float last_eye = 0.0;
+uniform float failing = 0.0;
+uniform float beat_clock = 0.0;
 uniform float drained = 0.0;
 uniform float gulp = 0.0;
 uniform float claw_age = 1.0;
@@ -63,6 +72,9 @@ const float PULL_TAKES = 0.55;
 const float TAIL_LAG = 0.14;
 const vec3 PALE = vec3(0.86, 0.8, 0.66);
 const vec2 LIGHT_DIR = vec2(-0.45, -0.89);
+// The four more that tear open as it kills you: where (x by aspect), and the last eye's size.
+const vec2 EXTRA_AT[4] = {vec2(-0.42, -0.42), vec2(0.5, -0.36), vec2(-0.5, 0.4), vec2(0.42, 0.46)};
+const float LAST_EYE_SIZE = 0.34;
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -109,18 +121,37 @@ float beat(float time) {
 }
 
 // How the meat stands: rounded swells and folds running round the view.
-float swell_at(vec2 a, float time) {
-	vec2 p = vec2(atan(a.y, a.x) * 2.2, length(a) * 3.4 - time * 0.03);
+float swell_round(float round_about, float far, float time) {
+	vec2 p = vec2(round_about * 2.2, far * 3.4 - time * 0.03);
 	float big = noise(p * 1.1);
 	float fold = 1.0 - abs(noise(p * vec2(2.3, 3.4) + 4.0) * 2.0 - 1.0);
 	return big * 0.65 + fold * fold * 0.35;
 }
 
+// How much of the way round has to come from the other side: atan jumps on the left, which only
+// shows when the flesh reaches that far in.
+float round_seam(vec2 a) {
+	return step(a.x, 0.0) * (1.0 - smoothstep(0.0, 0.3, abs(a.y) / max(-a.x, 0.001)));
+}
+
+float swell_at(vec2 a, float time) {
+	float far = length(a);
+	float h = swell_round(atan(a.y, a.x), far, time);
+	float seam = round_seam(a);
+	return seam > 0.0 ? mix(h, swell_round(atan(-a.y, -a.x) + 13.0, far, time), seam) : h;
+}
+
 // Thin lines where noise crosses its middle, stretched to reach toward the aim.
-float reaching(vec2 a, float width) {
-	vec2 grown = vec2(atan(a.y, a.x) * 5.0, length(a) * 1.1);
+float reaching_round(float round_about, float far, float width) {
+	vec2 grown = vec2(round_about * 5.0, far * 1.1);
 	float line = min(abs(noise(grown) - 0.5), abs(noise(grown * 2.3 + 5.0) - 0.5) * 1.4);
 	return 1.0 - smoothstep(width * 0.4, width, line);
+}
+
+float reaching(vec2 a, float width) {
+	float h = reaching_round(atan(a.y, a.x), length(a), width);
+	float seam = round_seam(a);
+	return seam > 0.0 ? h * (1.0 - seam) : h;
 }
 
 // The brush's value here, 0..1.
@@ -359,7 +390,7 @@ void fragment() {
 	float out_from_middle = length(p);
 	float edges = smoothstep(0.5, 1.2, out_from_middle);
 	float time = TIME;
-	float heart = max(beat(time * mix(1.0, 1.7, curse) * (1.0 + gather * 1.4)), gulp);
+	float heart = max(beat(dying > 0.0 ? beat_clock : time * mix(1.0, 1.7, curse) * (1.0 + gather * 1.4)), gulp) * (1.0 - failing);
 
 	// The egg, and how far through being taken the curse is. What is left of the last
 	// ribbons goes in as it bursts.
@@ -399,6 +430,9 @@ void fragment() {
 		// Torn back past the edge of your sight, corners and all, as the last ones go.
 		float torn_back = smoothstep(0.45, 1.0, pull) * 0.7;
 		float past = flesh_past(p, closing, time, heart, bristle) - torn_back;
+		// As it kills you it comes in from all round, to nothing, torn at its edge by the brush.
+		float dying_hole = mix(1.9, -0.3, dying) + (bristle - 0.5) * 0.22 + (noise(a * 4.0) - 0.5) * 0.16;
+		past = dying > 0.0 ? max(past, length(p * vec2(0.72, 1.45)) - dying_hole) : past;
 
 		// Its shadow on your sight, cast down and in: it lies on top of the view.
 		float shadow_past = flesh_past(p - vec2(0.012, -sign(p.y) * 0.05 + 0.01), closing, time, heart, bristle) - torn_back;
@@ -486,6 +520,29 @@ void fragment() {
 	}
 
 	claws_through(col, a, aspect, flesh_here, out_from_middle);
+
+	// As it kills you: more of them, all on you, and the flesh's light going. Then the last.
+	if (dying > 0.001) {
+		for (int i = 0; i < 4; i++) {
+			float seed = float(i) * 0.71 + 0.4;
+			float open = smoothstep(float(i) * 0.2, float(i) * 0.2 + 0.4, extra_eyes);
+
+			if (open > 0.01) {
+				vec2 at = vec2(EXTRA_AT[i].x * aspect, EXTRA_AT[i].y);
+				vec4 eye = sunk_eye(a, at, 0.13 + hash(vec2(seed, 5.0)) * 0.03, open * (1.0 - gulp * 0.55), -normalize(at), seed, time);
+				col = mix(col, eye.rgb, eye.a * flesh_here);
+			}
+		}
+
+		col *= 1.0 - failing * 0.7;
+	}
+
+	if (last_eye > 0.01) {
+		vec4 eye = sunk_eye(a, vec2(0.0), mix(0.2, LAST_EYE_SIZE, last_eye), last_eye, vec2(0.0), 0.83, time);
+		float pit = 1.0 - smoothstep(0.9, 1.5, length(a / vec2(LAST_EYE_SIZE * 1.3, LAST_EYE_SIZE * 0.95)));
+		col *= 1.0 - pit * 0.6 * last_eye;
+		col = mix(col, eye.rgb, eye.a);
+	}
 
 	// Whoever is looking at you, from where they are: a patch of meat, an eye in it.
 	for (int i = 0; i < 4; i++) {

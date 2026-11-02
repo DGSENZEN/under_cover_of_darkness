@@ -113,6 +113,12 @@ var _drain_held_was := 0
 ## Between the two, or the curse's own look at the screen wouldn't have the drain in it.
 var _drain_copy: BackBufferCopy
 var _drained_shown := 0.0
+var _depth_when_died := 0
+var _dying_shown := 0.0
+var _extra_eyes := 0.0
+var _last_eye := 0.0
+var _failing := 0.0
+var _beat_clock := 0.0
 var _feeders := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
 var _claws_now := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
 var _claw_age_now := 1.0
@@ -149,6 +155,13 @@ const DRAINED_COMES := 0.9
 const DRAINED_GOES := 0.7
 const EYES_TURN_TIME := 0.35
 const SQUEEZE_IN := 0.14
+## The eyes' death, by its share: when the flesh starts closing, when the last eye opens, when the
+## heart fails. How fast it races first. How many of the six are open at the end of it.
+const EYES_CLOSE_FROM := 0.15
+const EYES_LAST_AT := 0.6
+const EYES_FAIL_FROM := 0.7
+const HEART_RACES := 3.4
+const MOST_RING := 6
 const CLAWS_CLEAR_FROM := 0.48
 const DRAIN_COMES := 1.2
 const DRAIN_GOES := 5.0
@@ -984,8 +997,10 @@ func _show_curse(delta: float) -> void:
 		return
 
 	var alive: bool = not player.is_dead
-	var cursed: bool = alive and watch.has(&"evil_eye")
-	var depth: int = player.curse.depth() if cursed else 0
+	var eyes_took_you: bool = player.death.kind == &"eyes"
+	var cursed: bool = (alive and watch.has(&"evil_eye")) or player.death.flesh_stays()
+	var depth: int = player.curse.depth() if alive and cursed else (MOST_RING if eyes_took_you else _depth_when_died)
+	_depth_when_died = depth
 	# One eye is flesh at the corners of your view; six, all that the old curse was.
 	var closed_in: float = lerpf(CURSE_LEAST, 1.0, float(depth - 1) / 5.0) if cursed else 0.0
 	_dispel = _dispel + delta / DISPEL_TIME if _dispel > 0.0 else 0.0
@@ -999,7 +1014,12 @@ func _show_curse(delta: float) -> void:
 		_curse_shown = move_toward(_curse_shown, closed_in, delta / (1.1 if cursed else LEAVE_TIME))
 
 	_relief = move_toward(_relief, 0.0, delta / RELIEF_TIME)
-	_gather = float(player.loadout.use_progress()) if player.loadout != null else 0.0
+	_gather = float(player.loadout.use_progress()) if player.loadout != null and alive else 0.0
+
+	if not alive and player.death.holds_screen():
+		_dispel = 0.0
+
+	_feel_the_eyes_end(delta, eyes_took_you)
 
 	if _gather > 0.0 and player.hand != null and player.hand.has_method("egg_on_screen"):
 		_egg_at = player.hand.egg_on_screen()
@@ -1031,6 +1051,11 @@ func _show_curse(delta: float) -> void:
 		look.set_shader_parameter(&"egg_at", _egg_at)
 		look.set_shader_parameter(&"leaving", _leaving_shown)
 		look.set_shader_parameter(&"cleansed", _cleansed_shown)
+		look.set_shader_parameter(&"dying", _dying_shown)
+		look.set_shader_parameter(&"extra_eyes", _extra_eyes)
+		look.set_shader_parameter(&"last_eye", _last_eye)
+		look.set_shader_parameter(&"failing", _failing)
+		look.set_shader_parameter(&"beat_clock", _beat_clock)
 		look.set_shader_parameter(&"ring", _ring_open)
 		var marks := PackedVector3Array()
 		marks.resize(MOST_GAZERS)
@@ -1039,6 +1064,17 @@ func _show_curse(delta: float) -> void:
 			marks[i] = _gazers.values()[i]
 
 		look.set_shader_parameter(&"gazers", marks)
+
+
+## The eyes' own death: the flesh all the way in, eyes opening on you, the last in the very middle,
+## the heart racing and then failing.
+func _feel_the_eyes_end(delta: float, eyes_took_you: bool) -> void:
+	var at: float = player.death.share() if eyes_took_you else 0.0
+	_dying_shown = smoothstep(EYES_CLOSE_FROM, EYES_LAST_AT, at)
+	_extra_eyes = smoothstep(EYES_CLOSE_FROM + 0.1, EYES_LAST_AT, at)
+	_last_eye = smoothstep(EYES_LAST_AT, EYES_LAST_AT + 0.14, at)
+	_failing = smoothstep(EYES_FAIL_FROM, 1.0, at)
+	_beat_clock += delta * lerpf(1.7, HEART_RACES, _dying_shown) * (1.0 - _failing)
 
 
 ## Each one staring at you: where on the screen's edge or face it is, and how open
@@ -1306,7 +1342,7 @@ func curse_view_shown() -> bool:
 ## What the screen is saying about the evil eye, for whoever asks.
 func curse_state() -> Dictionary:
 	return {"stared": _stared_shown, "curse": _curse_shown, "gazers": _gazers.values(), "ring_open": Array(_ring_open).filter(func(o): return o > 0.5).size(),
-		"dispel": _dispel, "gather": _gather, "relief": _relief, "egg_at": _egg_at, "leaving": _leaving_shown, "cleansed": _cleansed_shown, "drained": _drained_shown, "squeeze": _squeeze(), "eyes_to": _eyes_to()}
+		"dispel": _dispel, "gather": _gather, "relief": _relief, "egg_at": _egg_at, "leaving": _leaving_shown, "cleansed": _cleansed_shown, "drained": _drained_shown, "squeeze": _squeeze(), "eyes_to": _eyes_to(), "dying": _dying_shown, "extra_eyes": _extra_eyes, "last_eye": _last_eye, "failing": _failing}
 
 
 func show_death_page() -> void:
@@ -1532,12 +1568,17 @@ func _process(delta: float) -> void:
 		(_grade.material as ShaderMaterial).set_shader_parameter("amount", smoothstep(0.0, 0.35, _grade_amount))
 
 	if player.is_dead:
+		# Taken by what you were fighting: nothing of the game's own over it.
+		if player.death.holds_screen():
+			for mark in [_crosshair, _gem, _shields, _ammo, _adrenaline, _prompts]:
+				mark.visible = false
+
 		if player.death.playing():
 			# The fight is still on screen: the dark and the words wait for its very end.
 			var last: float = player.death.words_share()
 			_fade.color.a = 0.92 * last
 			_death.modulate.a = last
-		else:
+		elif not player.death.holds_screen():
 			_fade.color.a = move_toward(_fade.color.a, 0.92, delta * 0.8)
 			_death.modulate.a = move_toward(_death.modulate.a, 1.0, delta * 1.2)
 

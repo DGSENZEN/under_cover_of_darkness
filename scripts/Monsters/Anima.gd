@@ -443,12 +443,13 @@ func _cut(you: Node3D) -> void:
 	Sfx.play(self, &"whoosh_light", global_position, -7.0, randf_range(0.7, 0.95))
 
 	if cut:
-		you.take_damage(float(_form["swipe_damage"]), self)
-		Sfx.play(self, &"flesh", global_position, -6.0, randf_range(0.9, 1.15))
-
+		# (First: if it kills you, you fall away from this side.)
 		if you.get("hud") != null and you.hud.has_method("claw_at"):
 			var side: float = you.camera.to_local(global_position).x if you.get("camera") != null else 1.0
 			you.hud.claw_at(side)
+
+		you.take_damage(float(_form["swipe_damage"]), self)
+		Sfx.play(self, &"flesh", global_position, -6.0, randf_range(0.9, 1.15))
 
 		var juice = you.get("juice")
 

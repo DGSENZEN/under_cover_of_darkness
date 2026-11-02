@@ -32,6 +32,7 @@ var player: CharacterBody3D
 
 var _at := 0.0
 var _running := false
+var _was_cursed := false
 ## The side you go down on: + your right.
 var _side := 1.0
 
@@ -41,6 +42,7 @@ func begin(last_blow: StringName) -> void:
 	if kind != &"":
 		return
 
+	_was_cursed = player.statuses.has(&"evil_eye")
 	kind = _which(last_blow)
 	_at = 0.0
 	_running = LENGTHS.has(kind)
@@ -84,6 +86,16 @@ func _which(last_blow: StringName) -> StringName:
 		return &"both" if player.statuses.has(&"evil_eye") else &"animas"
 
 	return last_blow if last_blow == &"eyes" or last_blow == &"swipe" else &"fall"
+
+
+## One of these took you: what it has done to your sight stays, under the page.
+func holds_screen() -> bool:
+	return LENGTHS.has(kind)
+
+
+## The curse's flesh is part of how you are going.
+func flesh_stays() -> bool:
+	return holds_screen() and (kind == &"eyes" or _was_cursed)
 
 
 ## A death of this kind is running: the fight stays on screen.
