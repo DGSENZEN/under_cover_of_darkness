@@ -31,6 +31,9 @@ const SWIPE_EVERY := Vector2(1.4, 2.4)
 ## How far past its reach a swing still finds you (m); how it edges round you, waiting.
 const SWIPE_FINDS := 0.3
 const EDGES_ROUND := 1.0
+## What a cut does to your view.
+const CUT_TRAUMA := 0.14
+const CUT_ROLL := 1.1
 ## At most one leap in this long (s).
 const LEAP_EVERY := 4.0
 ## At rest: how near you can come (m), how long it can lie there at most (hunger gets it up
@@ -331,6 +334,7 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 		State.WIND_UP:
 			if _state_t >= float(_form["swipe_wind"]):
 				_swung = false
+				Sfx.play(self, &"anima_voice", global_position, -11.0, randf_range(1.0, 1.25))
 				_enter(State.SWIPE)
 		State.SWIPE:
 			if not _swung and _state_t >= SWIPE_TIME * 0.5:
@@ -397,8 +401,21 @@ func _cut(you: Node3D) -> void:
 	var clear: bool = CopalLine.crossing(get_tree(), global_position, _chest(you)) == null
 	var cut: bool = _chest_distance(you) <= float(_form["swipe_reach"]) + SWIPE_FINDS and not dodged and clear and you.get("is_dead") != true
 
+	Sfx.play(self, &"whoosh_light", global_position, -7.0, randf_range(0.7, 0.95))
+
 	if cut:
 		you.take_damage(float(_form["swipe_damage"]), self)
+		Sfx.play(self, &"flesh", global_position, -6.0, randf_range(0.9, 1.15))
+
+		if you.get("hud") != null and you.hud.has_method("claw_at"):
+			var side: float = you.camera.to_local(global_position).x if you.get("camera") != null else 1.0
+			you.hud.claw_at(side)
+
+		var juice = you.get("juice")
+
+		if juice != null:
+			juice.add_trauma(CUT_TRAUMA)
+			juice.punch(0.0, 0.0, CUT_ROLL * (-1.0 if randf() < 0.5 else 1.0))
 
 	swiped.emit(cut)
 

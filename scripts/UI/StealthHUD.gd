@@ -106,6 +106,9 @@ var _drain_magic := 1.0
 var _drain_life := 1.0
 var _drain_gulp_was := 0.0
 var _drain_claw_age := 1.0
+## A cut with nothing on you: how old, and where on the screen.
+var _cut_age := 1.0
+var _cut_at := Vector2(0.7, 0.62)
 var _drain_held_was := 0
 ## Between the two, or the curse's own look at the screen wouldn't have the drain in it.
 var _drain_copy: BackBufferCopy
@@ -139,6 +142,9 @@ const DRAIN_RELEASE_TIME := 0.5
 const DRAIN_CLAW_TIME := 1.1
 ## From the wrist of a hand in your view to its palm, on the screen.
 const DRAIN_INTO_PALM := Vector2(0.0, 0.05)
+## Where a cut's marks open on the screen, clear of your aim.
+const CUT_OFF_MIDDLE := 0.24
+const CUT_HIGH := 0.62
 const RELIEF_TIME := 1.2
 const LEAVE_TIME := 0.8
 var _crosshair: Crosshair
@@ -1067,7 +1073,9 @@ func _show_drain(delta: float) -> void:
 	_drain_release = move_toward(_drain_release, 0.0, delta / DRAIN_RELEASE_TIME)
 	var wanted: float = DRAIN_DEPTH[held]
 	_drain_shown = move_toward(_drain_shown, wanted, delta * (DRAIN_COMES if wanted > _drain_shown else DRAIN_GOES))
-	var shown := _drain_shown > 0.01 or _drain_release > 0.01
+	_cut_age = minf(_cut_age + delta / DRAIN_CLAW_TIME, 1.0)
+	var cut_open := _cut_age < 1.0
+	var shown := _drain_shown > 0.01 or _drain_release > 0.01 or cut_open
 	_drain_view.visible = shown
 	_drain_copy.visible = shown and _curse_view.visible
 
@@ -1085,7 +1093,7 @@ func _show_drain(delta: float) -> void:
 
 	_drain_gulp_was = leech.gulp()
 	_drain_claw_age = minf(_drain_claw_age + delta / DRAIN_CLAW_TIME, 1.0)
-	look.set_shader_parameter(&"claw_age", _drain_claw_age if held > 0 else 1.0)
+	look.set_shader_parameter(&"claw_age", _drain_claw_age if held > 0 or cut_open else 1.0)
 	_drain_magic = float(player.power.power) / float(player.power.MAX)
 	look.set_shader_parameter(&"magic", _drain_magic)
 	_drain_life = float(player.health) / maxf(float(player.max_health), 1.0)
@@ -1107,8 +1115,18 @@ func _show_drain(delta: float) -> void:
 			_drain_into[_drain_threads] = on
 			_drain_threads += 1
 
+	if cut_open and _drain_threads < 3:
+		claws[_drain_threads] = Vector3(_cut_at.x, _cut_at.y, 1.0)
+
 	look.set_shader_parameter(&"threads", threads)
 	look.set_shader_parameter(&"claws_from", claws)
+
+
+## Cut, with or without anything on you: the claw marks open on that side of your view (- left).
+func claw_at(side: float) -> void:
+	_cut_age = 0.0
+	_drain_claw_age = 0.0
+	_cut_at = Vector2(0.5 + signf(side if side != 0.0 else 1.0) * CUT_OFF_MIDDLE, CUT_HIGH)
 
 
 func drain_view_shown() -> bool:

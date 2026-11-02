@@ -52,6 +52,9 @@ func _ready() -> void:
 	if only == "perf":
 		await _perf()
 
+	if only == "swipe":
+		await _swipe()
+
 	if only == "both":
 		await _both()
 
@@ -479,6 +482,38 @@ func _shard() -> void:
 	e.queue_free()
 	p.neck.rotation.x = 0.0
 	await _frames(3)
+
+
+## A swipe, close: its wind-up and its rake, hands and face.
+func _swipe() -> void:
+	for form in [&"hands", &"face"]:
+		p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0.0, 1.05, -2.0)))
+		p.neck.rotation.x = -0.22 if form == &"hands" else 0.0
+		await _frames(10)
+		var e: CharacterBody3D = AnimaScript.new()
+		e.form = form
+		e.position = Vector3(0.0, 0.3 if form == &"hands" else 1.3, -0.6)
+		add_child(e)
+		await _until_state(e, e.State.WIND_UP)
+		await _frames(10)
+		await _shot("swipe_%s_0_wind" % form)
+		await _until_state(e, e.State.SWIPE)
+		await _frames(3)
+		await _shot("swipe_%s_1_rake" % form)
+		await _frames(5)
+		await _shot("swipe_%s_2_after" % form)
+		await _frames(25)
+		await _shot("swipe_%s_3_back" % form)
+		e.queue_free()
+		await _frames(3)
+
+
+func _until_state(e: CharacterBody3D, wanted: int) -> void:
+	var left := 300
+
+	while left > 0 and e.state != wanted:
+		left -= 1
+		await get_tree().physics_frame
 
 
 ## The curse and the drain at once: what you see with both on you.

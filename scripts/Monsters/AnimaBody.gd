@@ -64,6 +64,9 @@ const POSES := {
 	&"leap": {"nod": -0.28, "lift": -0.02, "back": -0.2, "jaw": 1.0, "hand": Vector3(0.2, -0.02, -0.74), "pitch": -0.08, "shut": 0.26, "fan": 1.2, "snap": 9.0},
 	&"missed": {"nod": -0.52, "lift": -0.12, "back": -0.06, "jaw": 0.0, "hand": Vector3(0.3, -0.36, -0.42), "pitch": -0.75, "shut": 1.05, "fan": 0.6, "snap": 11.0},
 	&"thrown": {"nod": 0.7, "lift": 0.05, "back": 0.16, "jaw": 0.7, "hand": Vector3(0.48, 0.14, 0.18), "pitch": 0.9, "shut": 0.2, "fan": 1.6, "snap": 7.0},
+	&"wind_up": {"nod": 0.12, "lift": 0.05, "back": 0.13, "jaw": 0.85, "hand": Vector3(0.44, 0.14, -0.1), "pitch": 0.65, "shut": 0.02, "fan": 1.7, "snap": 10.0},
+	&"swipe": {"nod": -0.32, "lift": -0.02, "back": -0.24, "jaw": 0.12, "hand": Vector3(-0.1, -0.02, -0.62), "pitch": -0.1, "shut": 0.95, "fan": 0.7, "snap": 15.0},
+	&"back_off": {"nod": -0.08, "lift": 0.02, "back": 0.1, "jaw": 0.3, "hand": Vector3(0.34, -0.2, -0.2), "pitch": -0.3, "shut": 0.5, "fan": 1.0, "snap": 5.0},
 	&"dead": {"nod": -0.42, "lift": 0.0, "back": 0.0, "jaw": 0.72, "hand": Vector3(0.36, -0.02, -0.26), "pitch": -0.04, "shut": 0.1, "fan": 1.25, "snap": 2.1},
 	&"on": {"nod": 0.0, "lift": 0.0, "back": 0.0, "jaw": 0.6, "hand": Vector3(0.3, 0.0, -0.3), "pitch": 0.0, "shut": 0.5, "fan": 1.0, "snap": 5.0},
 }
@@ -110,6 +113,9 @@ const SKULL_LATE := 0.26
 const JAW_LATE := 0.14
 ## Flung by the Burst: how long it tumbles.
 const TUMBLES := 0.65
+## Its swing, as the hands do it: how long, how far over it rolls.
+const RAKE_TAKES := 0.16
+const RAKE_ROLLS := 1.05
 ## A Shard through it: how long the knock lasts, how far it turns it.
 const JOLTS := 0.3
 const JOLT_ROLL := 0.7
@@ -163,6 +169,8 @@ var _you: Node3D
 var _curl_shown := 0.0
 var _tumble := 0.0
 var _jolt := 0.0
+var _rake_roll := 0.0
+var _rake_side := 1.0
 var _last_wound: StringName = &""
 var _nod := 0.0
 var _back := 0.0
@@ -369,6 +377,9 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 		_doing = doing
 		_doing_for = 0.0
 
+		if doing == &"swipe":
+			_rake_side = -1.0 if _rng.randf() < 0.5 else 1.0
+
 	_doing_for += delta
 	_tumble = move_toward(_tumble, 0.0, delta / TUMBLES)
 	_jolt = move_toward(_jolt, 0.0, delta / JOLTS)
@@ -377,7 +388,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 	smoulder = move_toward(smoulder, 1.0 if smoked else 0.0, delta * (6.0 if smoked else 3.0))
 	var flat := Vector3(moving.x, 0.0, moving.z)
 
-	if you != null and doing != &"rest" and (flat.length() < 0.2 or doing == &"tell" or doing == &"on"):
+	if you != null and doing != &"rest" and (flat.length() < 0.2 or doing == &"tell" or doing == &"on" or doing == &"wind_up" or doing == &"swipe"):
 		var way := you.global_position - global_position
 		way.y = 0.0
 
@@ -424,7 +435,7 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 	# A step per stride, faster the faster it goes, up to what can still be seen as
 	# fingers; at rest, they still work.
 	_walk += delta * minf(speed * (1.0 - SWING) / STEP + 0.35, MOST_STEPS)
-	var rear_wanted := 1.0 if doing == &"tell" or doing == &"wake" else (0.6 if doing == &"leap" else 0.0)
+	var rear_wanted := 1.0 if doing == &"tell" or doing == &"wake" or doing == &"wind_up" else (0.6 if doing == &"leap" else 0.0)
 	_rear = lerpf(_rear, rear_wanted, 1.0 - exp(-14.0 * delta))
 	_rest = lerpf(_rest, 1.0 if doing == &"rest" else 0.0, 1.0 - exp(-(3.5 if doing == &"rest" else 12.0) * delta))
 	# A miss throws it flat, and it gathers itself up again.
@@ -439,7 +450,10 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 	hand_at.y -= smoothstep(0.0, 1.0, _flip) * 0.1
 	# It rolls with each step, and drops its head into a surge.
 	var surging := smoothstep(2.4, 4.5, speed)
-	var roll := sin(_walk * TAU) * 0.1 + shake + smoothstep(0.0, 1.0, _flip) * PI + _jolt * JOLT_ROLL * _lies_side
+	# Its swing: rolled hard over as it rakes, its fingers shutting through it.
+	_rake_roll = sin(clampf(_doing_for / RAKE_TAKES, 0.0, 1.0) * PI) * RAKE_ROLLS * _rake_side if doing == &"swipe" else 0.0
+	_curl_shown = _spring(&"rake_curl", 1.0 if doing == &"swipe" else 0.0, 16.0, 0.8, delta)
+	var roll := sin(_walk * TAU) * 0.1 + shake + smoothstep(0.0, 1.0, _flip) * PI + _jolt * JOLT_ROLL * _lies_side + _rake_roll
 	var tilt := Basis(Vector3.RIGHT, (-TIP - _rear * 0.5 - surging * 0.16) * (1.0 - low * 0.9) + slam * 0.2) * Basis(Vector3.BACK, roll * (1.0 - _rest * 0.7))
 	var hand_bone := _skeleton.find_bone("hand")
 	var rest: Transform3D = _skeleton.get_bone_rest(hand_bone)
@@ -683,7 +697,12 @@ func _foot_for(i: int, knuckle_rest: Transform3D, hand_pose: Transform3D, doing:
 		var lifted := sin(tap / 0.14 * PI) * 0.05 if tap < 0.14 else 0.0
 		return Vector3(knuckle.x + side * SPLAY[i] * 0.6, _floor_y + lifted, knuckle.z - REACH[i] * 0.72 + sin(_clock * 1.1 + float(i) * 1.7) * 0.022 + lifted * 0.5)
 
-	if doing == &"tell" or doing == &"leap" or doing == &"on" or doing == &"wake":
+	if doing == &"swipe":
+		# Shut, one after another, through the rake.
+		var shuts := smoothstep(0.0, 1.0, _doing_for / RAKE_TAKES * 1.6 - float(i) * 0.14)
+		return Vector3(knuckle.x + side * SPLAY[i] * (1.0 - shuts) * 1.4, knuckle.y - 0.02 - shuts * 0.1, knuckle.z - float(REACH[i]) * lerpf(1.3, 0.3, shuts))
+
+	if doing == &"tell" or doing == &"leap" or doing == &"on" or doing == &"wake" or doing == &"wind_up":
 		# Up, spread, and hooked at you.
 		return Vector3(knuckle.x * 1.5 + side * SPLAY[i], knuckle.y + 0.02 + sin(_clock * 30.0 + float(i)) * 0.012, knuckle.z - REACH[i] * 1.25)
 
@@ -780,6 +799,16 @@ func jolt(_way: Vector3) -> void:
 	_kick(&"nod", 3.0)
 	_kick(&"roll", 4.0 * _lies_side)
 	_kick(&"jaw", 4.0)
+
+
+## How far over its swing has it rolled (radians).
+func rake_roll() -> float:
+	return _rake_roll
+
+
+## The face: how far out from its middle its hands are, at most; below nothing, they have crossed.
+func hand_across() -> float:
+	return minf(_face_roots[0].position.x, -_face_roots[1].position.x)
 
 
 ## How much of a knock is left, 0..1.

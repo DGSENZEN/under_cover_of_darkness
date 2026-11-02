@@ -33,6 +33,7 @@ func _ready() -> void:
 	await _hands_life()
 	await _forms()
 	await _swipes()
+	await _swipes_seen()
 	await _rush()
 	await _leeching()
 	await _getting_off()
@@ -673,18 +674,13 @@ func _swipes() -> void:
 	e._leap_in = 99.0
 	var again := await _until(func(): return e.state == STATE.WIND_UP, 6.0)
 	_check("P3 then it backs off (%.2f m), and comes again" % backed, backed > 1.0 and again)
-	# A dodge avoids it.
+	# A dodge avoids it: and takes you out of its reach.
+	await _until(func(): return e.state == STATE.WIND_UP, 6.0)
 	was = p.health
-	e._state_t = 0.0
-	e.state = STATE.SWIPE
-	var fights: Node = p.combat
-
-	for i in 15:
-		fights.phase = fights.Phase.DODGE
-		await get_tree().physics_frame
-
-	fights.phase = fights.Phase.IDLE
+	await _press("gun_dodge")
+	await _until(func(): return e.state == STATE.BACK_OFF, 2.0)
 	_check("P4 a dodge avoids it", p.health == was)
+	await _place_player(HOME)
 	_free([e])
 	await _frames(2)
 	# Its wind-up is an opening: anything but lead breaks it.
@@ -767,6 +763,42 @@ func _swipes() -> void:
 	p.health = p.get("max_health") if p.get("max_health") != null else p.health
 	p.invulnerable = true
 	await _frames(2)
+
+
+## How a swipe looks: drawn back and open, then raked shut; a cut on your view.
+func _swipes_seen() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(3)
+	var hud: Node = p.hud
+	var e := _anima(&"hands", HOME + Vector3(0, -0.75, -1.3))
+	await _until(func(): return e.state == STATE.WIND_UP, 3.0)
+	await _frames(14)
+	var open: float = e.body.finger_curl()
+	_check("Q1 wind-up: drawn up, fingers open (%.2f, %.2f high)" % [open, e.body.palm_height()], open < 0.25 and e.body.palm_height() > 0.4)
+	await _until(func(): return e.state == STATE.SWIPE, 1.0)
+	var shut := 0.0
+	var claws_seen := 0.0
+	var rolled := 0.0
+
+	for i in 12:
+		await get_tree().physics_frame
+		shut = maxf(shut, e.body.finger_curl())
+		rolled = maxf(rolled, absf(e.body.rake_roll()))
+		claws_seen = maxf(claws_seen, hud.drain_state()["claws"])
+
+	_check("Q2 the swing shuts its fingers through the rake (%.2f), and rolls it (%.2f)" % [shut, rolled], shut > open + 0.4 and rolled > 0.3)
+	_check("Q4 cut, your view shows the claw marks, with nothing on you (%.2f)" % claws_seen, claws_seen > 0.1 and p.leech.count() == 0)
+	_free([e])
+	await _frames(100)
+	_check("Q4b and they go, leaving no drain", not hud.drain_view_shown() and hud.drain_state()["drain"] < 0.01)
+	var face := _anima(&"face", HOME + Vector3(0, 0.25, -1.5))
+	await _until(func(): return face.state == STATE.WIND_UP, 3.0)
+	await _until(func(): return face.state == STATE.SWIPE, 1.0)
+	await _frames(6)
+	_check("Q3 a face's hands cross (%.2f)" % face.body.hand_across(), face.body.hand_across() < 0.05)
+	_free([face])
+	await _frames(40)
 
 
 ## The face alive: resting, woken, in its attack, missing.
