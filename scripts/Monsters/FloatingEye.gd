@@ -17,7 +17,7 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const Remains := preload("res://scripts/Monsters/Remains.gd")
 
-enum State { DRIFT, CIRCLE, TELL, SWOOP, BOUNCE, BATTED }
+enum State { DRIFT, CIRCLE, TELL, SWOOP, BOUNCE, BATTED, DAZED }
 
 ## Sees you this far, with a clear line (m).
 const NOTICE := 18.0
@@ -62,6 +62,12 @@ const FLINCH_WITHIN := 14.0
 const FLINCH_OUT := 2.0
 const FLINCH_TIME := 3.0
 const FLINCH_WAIT := 1.5
+## The limpia sent back on it (the egg): how long it stays shut, how narrow it
+## squeezes, how fast it sinks and how low.
+const DAZED_TIME := 2.5
+const DAZED_SHUT := 0.28
+const DAZED_SINK := 0.7
+const DAZED_LOWEST := 0.9
 const LINE_EVERY := 6
 const HIT_RADIUS := 0.42
 const BODY_RADIUS := 0.36
@@ -116,7 +122,26 @@ func _ready() -> void:
 
 
 func _is_opening() -> bool:
-	return state == State.TELL
+	return state == State.TELL or state == State.DAZED
+
+
+## Whether it has you in its line, right now.
+func sees(you: Node3D) -> bool:
+	return _line_to(you)
+
+
+## The evil eye sent back on it: it squeezes shut, sinks and can do nothing for a
+## while, and whatever hits it counts as weak.
+func limpia(_by: Node3D) -> void:
+	_enter(State.DAZED)
+	_set_shut(true)
+	statuses.apply(&"exposed", DAZED_TIME)
+	Fx.blood(self, global_position, Vector3.DOWN, 0.4)
+
+
+func _set_shut(shut: bool) -> void:
+	if _body_mesh != null:
+		_body_mesh.scale = Vector3(1.0, DAZED_SHUT if shut else 1.0, 1.0)
 
 
 ## How far off the whip can meet it (Revolver.try_whip).
@@ -161,8 +186,12 @@ func _batted(you: Node3D) -> Vector3:
 	return _bat_way * BAT_SPEED
 
 
-## A weak hit throws it back, away from you, off whatever it was doing.
+## A weak hit throws it back, away from you, off whatever it was doing. Shut, it
+## stays shut.
 func _stagger() -> void:
+	if state == State.DAZED:
+		return
+
 	var you: Node3D = target()
 
 	if you != null:
@@ -214,7 +243,8 @@ func _brain(delta: float) -> Vector3:
 
 	var smoked: bool = statuses.has(&"smoked")
 	_gaze(you, delta, smoked)
-	_turn_to(you)
+	if state != State.DAZED:
+		_turn_to(you)
 
 	match state:
 		State.DRIFT:
@@ -245,6 +275,14 @@ func _brain(delta: float) -> Vector3:
 			return _swoop(you, delta)
 		State.BATTED:
 			return _batted(you)
+		State.DAZED:
+			if _state_t >= DAZED_TIME:
+				next_swoop_in = _rng.randf_range(SWOOP_WAIT.x, SWOOP_WAIT.y)
+				_set_shut(false)
+				_enter(State.CIRCLE)
+				return Vector3.ZERO
+
+			return Vector3.DOWN * DAZED_SINK if global_position.y > you.global_position.y - 1.0 + DAZED_LOWEST else Vector3.ZERO
 		State.BOUNCE:
 			if _state_t >= BOUNCE_TIME:
 				next_swoop_in = _rng.randf_range(SWOOP_WAIT.x, SWOOP_WAIT.y)
@@ -304,12 +342,12 @@ func _line_to(you: Node3D) -> bool:
 
 ## Being looked at, over the pack: kept on you, and forgotten after a look away.
 func _gaze(you: Node3D, delta: float, smoked: bool) -> void:
-	if smoked or not _clear_line or state == State.DRIFT or state == State.BOUNCE or global_position.distance_to(you.global_position) > GAZE_RANGE:
+	if smoked or not _clear_line or state == State.DRIFT or state == State.BOUNCE or state == State.DAZED or global_position.distance_to(you.global_position) > GAZE_RANGE:
 		return
 
 	var bearer: Node = you.get("statuses")
 
-	if bearer == null:
+	if bearer == null or bearer.has(&"cleansed"):
 		return
 
 	var now := _game_time

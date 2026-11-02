@@ -346,3 +346,13 @@ The user played the gym: "a good first vertical slice", "a lot of promising game
 **The slide:** a sharper drop and an FOV kick at the start, speed held for the first 40 %, then bled off, 0.9 s long; a scrape and floor dust; a lean into the way you steer; a quicker rise at the end.
 
 Stand-ins: the pop and scrape use the existing library, listed in `refs/hunt/sounds_needed.md`. The body is the stand-in ball until the eye's model is made.
+
+## Polish round one: the egg (after the user's second play, 2026-11-01)
+
+The user: "there is actual difficulty in this now, there is real tension and fights take actual thinking and make the player move. We need to have the egg have an actual effect on the eyes though, we need to justify it's scarcity."
+
+*(Claude's call, on the user's ask:)* the limpia draws the evil eye out and sends it back. After its 0.8 s, with the hand busy, every eye within 14 m that can see you squeezes shut and sinks for 2.5 s, unable to attack, and any hit on it counts as weak at six times the damage. The curse lifts, and gaze cannot stick for 8 s. It can be used uncursed; the HUD offers it when you are cursed or two or more eyes are on you.
+
+## What comes after this prototype
+
+The user: "Once we are done with the prototype working properly let's try with making another type of enemy, and another type of item, this will allow us to truly test each enemy in isolation and then start mixing them, and as we mix them, we need to create a class based skill tree with each archetype (thaumaturge, factotum, devire), where each power is part of the world but based on the actual archetype evolution."

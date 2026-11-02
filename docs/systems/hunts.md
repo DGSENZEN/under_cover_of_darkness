@@ -46,6 +46,8 @@ Everything that hurts calls `take_hit(damage, attacker, kind, point, direction)`
 | Bunched | Copal round | `CopalCloud.gd`: 3.5 m of smoke for 4 s |
 | Lined up | Shard | Goes through two monsters (`Shard.PIERCES`) |
 
+The egg sends the curse back (`Loadout`, `PrepItems` `returns`, `FloatingEye.limpia`): eyes within 14 m that can see you shut for 2.5 s, opening them to any hit, and you are `cleansed` of gaze for 8 s.
+
 A kill holds 0.11 s and jolts the view (`Monster._die`). An eye leaves `Remains.gd` and makes others within 14 m flinch (`flinch`): 2 m further out for 3 s, and 1.5 s longer before swooping.
 
 ## Adding a monster

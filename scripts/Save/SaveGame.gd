@@ -30,6 +30,8 @@ var globals := {}
 var gone: Array[String] = []
 ## A save read and waiting for its map to be built: {header, body}.
 var pending := {}
+## What the last load could not put back ("nothing in <map> has the id <id>").
+var last_problems: Array[String] = []
 ## A load is under way (from asking until it is applied).
 var loading := false
 ## The frame on screen as the pause opened (a named save's picture).
@@ -502,7 +504,9 @@ func apply_pending(scene: Node) -> Error:
 		loading = false
 		return ERR_CANT_CREATE
 
-	for problem in apply(body):
+	last_problems = apply(body)
+
+	for problem in last_problems:
 		push_warning("save: %s" % problem)
 
 	loading = false

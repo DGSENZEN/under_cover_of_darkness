@@ -197,6 +197,10 @@ func has_pose(pose: StringName) -> bool:
 
 
 func _process_modification() -> void:
+	# A map being taken away still poses its last frame, out of the tree.
+	if not is_inside_tree():
+		return
+
 	var skeleton := get_skeleton()
 
 	if skeleton == null or man == null:

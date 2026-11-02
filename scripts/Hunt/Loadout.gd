@@ -9,6 +9,7 @@ const PrepItems := preload("res://scripts/Hunt/PrepItems.gd")
 const Rounds := preload("res://scripts/Combat/Rounds.gd")
 const SaveFields := preload("res://scripts/Save/SaveFields.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
+const Fx := preload("res://scripts/Visual/Fx.gd")
 
 ## An item was spent; the pack or a count changed.
 signal item_used(id: StringName)
@@ -21,6 +22,8 @@ const MAX_ROUND_TYPES := 2
 const MAX_ITEM_KINDS := 2
 ## What a pouch holds, carried.
 const CARRY := {&"rounds": 24, &"copal_rounds": 12, &"shells": 6}
+## This many watching you and the HUD offers what would answer them, uncursed.
+const OFFER_WATCHED_BY := 2
 const SAVED := ["rounds", "items", "item_counts", "locked", "owned"]
 
 var rounds: Array[StringName] = [&"lead"]
@@ -133,9 +136,10 @@ func unlock() -> void:
 	locked = false
 
 
-## Takes up the packed item at `index`, if there is one left and you have what
-## it cures on you (so one is never wasted). The hand is busy for its time, then
-## it is spent and the cure done. False if not.
+## Takes up the packed item at `index`, if there is one left and it would do
+## something: you have what it cures on you, or something is watching you to send
+## it back at (so one is never wasted). The hand is busy for its time, then it is
+## spent and done. False if not.
 func use_item(index := 0) -> bool:
 	if is_using() or index >= items.size() or player.is_dead or not player.combat.is_able():
 		return false
@@ -143,7 +147,7 @@ func use_item(index := 0) -> bool:
 	var id := items[index]
 	var info := PrepItems.info(id)
 
-	if int(item_counts.get(id, 0)) <= 0 or not player.statuses.has(info.get("cures", &"")):
+	if int(item_counts.get(id, 0)) <= 0 or not (player.statuses.has(info.get("cures", &"")) or _watching_you(id) > 0):
 		return false
 
 	_using = id
@@ -157,7 +161,22 @@ func can_offer() -> bool:
 	if is_using() or items.is_empty() or int(item_counts.get(items[0], 0)) <= 0:
 		return false
 
-	return player.statuses.has(PrepItems.info(items[0]).get("cures", &""))
+	return player.statuses.has(PrepItems.info(items[0]).get("cures", &"")) or _watching_you(items[0]) >= OFFER_WATCHED_BY
+
+
+## How many monsters this item would be sent back at, here and now.
+func _watching_you(id: StringName) -> int:
+	return _sent_back_at(id).size()
+
+
+func _sent_back_at(id: StringName) -> Array:
+	var reach := float(PrepItems.info(id).get("returns", 0.0))
+
+	if reach <= 0.0:
+		return []
+
+	return get_tree().get_nodes_in_group(&"monsters").filter(func(monster):
+		return monster.has_method("limpia") and not monster.dead and not monster.asleep and monster.global_position.distance_to(player.global_position) <= reach and monster.sees(player))
 
 
 ## The item being taken up, or &"".
@@ -185,8 +204,17 @@ func _physics_process(delta: float) -> void:
 	var id := _using
 	_using = &""
 	item_counts[id] = int(item_counts[id]) - 1
-	player.statuses.clear(PrepItems.info(id)["cures"])
-	Sfx.play_flat(self, &"ting", -10.0, 0.8)
+	var info := PrepItems.info(id)
+	player.statuses.clear(info["cures"])
+
+	if info.has("leaves"):
+		player.statuses.apply(info["leaves"], float(info["leaves_for"]))
+
+	for monster in _sent_back_at(id):
+		monster.limpia(player)
+
+	Sfx.play_flat(self, &"ting", -6.0, 0.8)
+	Fx.flash(player, player.global_position, Color(1.0, 0.86, 0.6), 2.5, 7.0, 0.14)
 	item_used.emit(id)
 	changed.emit()
 

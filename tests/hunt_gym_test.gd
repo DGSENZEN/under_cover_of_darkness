@@ -69,6 +69,8 @@ func _ready() -> void:
 	var side: Vector3 = gym.BEAM_AT + Vector3(gym.BEAM_WIDTH * 0.5 + 0.2, 1.0, 0)
 	_check("H5b there is no way past it on your feet", not scanner.fits(side, false))
 
+	var unnamed: Array = gym.get_children().filter(func(n): return n.name.begins_with("@") and SaveGame.is_registered(n))
+	_check("H12 everything saved in the map has a name a save can find (%d)" % unnamed.size(), unnamed.is_empty())
 	_check("H8 the lit room and the dark yard are both lit at all", gym.find_children("*", "Light3D", true, false).size() >= 3)
 	var run: String = CityState.run_id
 	# Back in, and the map taken away around you: that is no walking out.

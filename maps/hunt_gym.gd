@@ -193,11 +193,10 @@ func _yard() -> void:
 	Props.block(self, BEAM_AT + Vector3(0, clear + 1.2, 0), Vector3(BEAM_WIDTH, 2.4, 1.0), STONE)
 	Props.block(self, BEAM_AT + Vector3(-BEAM_WIDTH * 0.5 - 3.0, 1.8, 0), Vector3(6.0, 3.6, 1.0), STONE)
 	Props.block(self, BEAM_AT + Vector3(BEAM_WIDTH * 0.5 + 1.25, 1.8, 0), Vector3(2.5, 3.6, 1.0), STONE)
-	Lights.torch_at(self, Vector3(-14.5, 3.0, -18), 2.4, 10.0, true)
-	Lights.torch_at(self, Vector3(14.5, 3.0, -28), 2.4, 10.0, true)
-	Lights.torch_at(self, Vector3(-14.5, 3.0, -33), 2.4, 10.0, true)
-	Lights.torch_at(self, Vector3(14.5, 3.0, -9), 2.4, 10.0, true)
-	Lights.torch_at(self, Vector3(-14.5, 3.0, -7), 2.4, 10.0, true)
+	for at in [Vector3(-15.0, 3.0, -18), Vector3(15.0, 3.0, -28), Vector3(-15.0, 3.0, -33), Vector3(15.0, 3.0, -9), Vector3(-15.0, 3.0, -7)]:
+		var torch: Node = Lights.wall_torch(self, at, Vector3.RIGHT * -signf(at.x), {"energy": 2.4, "light_range": 10.0})
+		# Named, so a save finds it again.
+		torch.name = "Torch_%d_%d" % [int(at.x), int(at.z)]
 
 
 func _environment() -> void:

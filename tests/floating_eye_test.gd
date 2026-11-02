@@ -37,6 +37,7 @@ func _ready() -> void:
 	await _stagger()
 	await _answers()
 	await _deaths()
+	await _limpia()
 	await _killing()
 	await _long_run()
 	await _dead_player()
@@ -399,6 +400,75 @@ func _deaths() -> void:
 	p.power.refund(8.0)
 	await _frames(2)
 	_check("D6 power coming back flashes the arc", cross.power_gain_flash > 0.0)
+
+
+func _limpia() -> void:
+	await _place_player(Vector3(55, 1.05, 0))
+	p.invulnerable = false
+	p.health = p.max_health
+	p.statuses.clear(&"evil_eye")
+	p.set_meta(&"gaze", 0.0)
+	var lo: Node = p.loadout
+	lo.pack_item(&"egg")
+	lo.item_counts[&"egg"] = 2
+	var seen := _eye(Vector3(55, 2, -7), 60)
+	var also := _eye(Vector3(50, 2, -6), 61)
+	var hidden := _eye(Vector3(66, 2, 0), 62)
+	var distant := _eye(Vector3(55, 2, -30), 63)
+
+	for e in [seen, also]:
+		e.state = STATE.CIRCLE
+		e.next_swoop_in = 100.0
+
+	await _frames(14)
+	_check("EG8 two eyes on you and an egg: it is offered, uncursed", lo.can_offer())
+	await _press("use_item")
+	await _frames(1)
+	_check("EG1 uncursed, with eyes on you, the egg can be used", lo.is_using())
+	await _frames(25)
+	_check("EG2a nothing happens until it is done", seen.state != STATE.DAZED)
+	await _frames(30)
+	_check("EG2 what can see you squeezes shut", seen.state == STATE.DAZED and also.state == STATE.DAZED and seen.is_exposed())
+	_check("EG2b what can't see you or is too far doesn't", hidden.state != STATE.DAZED and distant.state != STATE.DAZED)
+	_check("EG9 it spends one", lo.item_counts[&"egg"] == 1)
+	_check("EG6 you are cleansed", p.statuses.has(&"cleansed"))
+	var was: float = seen.health
+	var result: StringName = seen.take_hit(55.0, p, &"bullet", seen.global_position, Vector3.FORWARD)
+	_check("EG4 a lead ball on a shut eye is weak, six times over (%.0f)" % (was - seen.health), result == &"weak" and is_equal_approx(was - seen.health, 55.0 * 0.3 * 3.0 * 2.0))
+	_check("EG5 and doesn't wake it", seen.state == STATE.DAZED)
+	var height: float = also.global_position.y
+	var bit := false
+
+	for i in 100:
+		await get_tree().physics_frame
+		bit = bit or also.state == STATE.TELL or also.state == STATE.SWOOP
+
+	_check("EG3 shut, it sinks and doesn't attack", not bit and also.global_position.y < height)
+	await _frames(70)
+	_check("EG3b after 2.5 s it opens again", also.state == STATE.CIRCLE)
+	await _frames(100)
+	_check("EG6b cleansed, no gaze sticks", not p.statuses.has(&"evil_eye"))
+	p.statuses.clear(&"cleansed")
+
+	for e in [seen, also, hidden, distant]:
+		_free(e)
+
+	await _place_player(HOME)
+	lo.item_counts[&"egg"] = 1
+	var one := _eye(Vector3(0, 2, -7), 64)
+	one.state = STATE.CIRCLE
+	one.next_swoop_in = 100.0
+	await _frames(14)
+	_check("EG8b one eye and no curse: not offered, though it would work", not lo.can_offer())
+	p.statuses.apply(&"evil_eye", 8.0)
+	_check("EG7 the curse on you: offered", lo.can_offer())
+	await _press("use_item")
+	await _frames(55)
+	_check("EG7b and the egg lifts it", not p.statuses.has(&"evil_eye"))
+	p.statuses.clear(&"cleansed")
+	lo.unpack_item(&"egg")
+	p.invulnerable = true
+	_free(one)
 
 
 func _face(target: Node3D) -> void:

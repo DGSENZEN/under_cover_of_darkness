@@ -1,10 +1,12 @@
 extends RefCounted
 ## What you can pack beside the gun, as data: what each one takes off you, how
-## long the hand is busy with it, and how many you carry. The egg: the
-## curanderas' limpia, rolled over you, draws the evil eye off into itself.
+## long the hand is busy with it, how many you carry, and whether it is sent back
+## at what is watching you (`returns`, how far). The egg: the curanderas' limpia,
+## rolled over you, draws the evil eye out into itself and back on the eyes that
+## cast it: they squeeze shut, and you are clean of it for a while.
 
 const TABLE := {
-	&"egg": {"cures": &"evil_eye", "use_time": 0.8, "carry": 2, "colour": Color(0.9, 0.86, 0.76)},
+	&"egg": {"cures": &"evil_eye", "use_time": 0.8, "carry": 2, "colour": Color(0.9, 0.86, 0.76), "returns": 14.0, "leaves": &"cleansed", "leaves_for": 8.0},
 }
 
 
