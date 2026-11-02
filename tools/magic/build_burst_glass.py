@@ -1,8 +1,9 @@
 """The Burst's black glass (docs/superpowers/specs/2026-11-02-burst-floor-wave-design.md): five
 thick spikes that tear up through a floor, and six broken chunks they fall into. Knapped, not
 turned: few big flat facets, a bent line, a shoulder broken out here and there, a blade or two
-grown from the same root. They wear the Shard's look (vfx_obsidian.gdshader), which draws a
-hairline along each facet from the barycentric corners in their colours.
+grown from the same root. They wear scripts/Magic/burst_glass.gdshader, which draws a hairline
+along each real ridge, not along the triangles a flat facet is cut into: each corner's colour is
+half its barycentric corner, and half more for an edge that is no ridge.
 
 Each is one closed solid: blades are unioned into their spike. The script refuses an open edge.
 A spike's root is at the origin, it runs a metre up +Z (the game's +Y), and it starts a little
@@ -44,7 +45,8 @@ SPIKES = (
 RINGS = ((0.0, 1.0, 0.1), (0.3, 0.78, 0.22), (0.62, 0.45, 0.3), (0.86, 0.17, 0.35))
 CHUNKS = 6
 CHUNK_SIZE = (0.16, 0.3)
-CORNERS = ((1.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.0, 1.0), (0.0, 0.0, 1.0, 1.0))
+## How sharply two faces must meet to be a ridge (degrees).
+RIDGE_BENDS = 20.0
 
 
 def loft(rng, tall, wide, sides, bend, snapped, turn=0.0, lean=0.0):
@@ -130,13 +132,23 @@ def finish(obj):
         raise RuntimeError("%s has %d open edges" % (obj.name, len(bad)))
 
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.normal_update()
     layer = bm.loops.layers.color.new("Color")
+
+    def ridge(edge):
+        a, b = edge.link_faces
+        return a.normal.angle(b.normal, 0.0) > math.radians(RIDGE_BENDS)
 
     for face in bm.faces:
         face.smooth = False
+        loops = list(face.loops)
+        # What is opposite each corner: the edge from the next corner to the one after.
+        no_ridge = [0.0 if ridge(loops[(k + 1) % 3].edge) else 0.5 for k in range(3)]
 
-        for k, loop in enumerate(face.loops):
-            loop[layer] = CORNERS[k]
+        for k, loop in enumerate(loops):
+            values = [(0.5 if i == k else 0.0) + no_ridge[i] for i in range(3)]
+            # (The export takes colours as sRGB: as paint_value does for the face.)
+            loop[layer] = (values[0] ** (1.0 / 2.2), values[1] ** (1.0 / 2.2), values[2] ** (1.0 / 2.2), 1.0)
 
     bm.to_mesh(obj.data)
     bm.free()

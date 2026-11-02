@@ -365,6 +365,7 @@ func _glass() -> void:
 		piece.mesh = spikes[i].mesh
 		piece.material_override = MagicFxScript.big_glass_look()
 		piece.scale = Vector3.ONE * heights[i]
+		piece.scale = Vector3(1.25, 1.0, 1.25) * heights[i]
 		piece.position = Vector3(float(i) * 0.72 - 1.45, 0.0, 1.0)
 		piece.rotation.y = float(i) * 1.3
 		add_child(piece)
@@ -379,15 +380,15 @@ func _glass() -> void:
 		add_child(piece)
 		shown.append(piece)
 
-	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(-0.2, 1.05, -2.8)))
-	p.neck.rotation.x = -0.32
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(-0.2, 1.05, -1.7)))
+	p.neck.rotation.x = -0.4
 	await _frames(25)
 	await _shot("glass_room")
 	# In the dark yard too.
 	for i in shown.size():
 		shown[i].position += Vector3(-2.0, 0.0, -20.0)
 
-	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(-2.2, 1.05, -22.8)))
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(-2.2, 1.05, -21.7)))
 	await _frames(25)
 	await _shot("glass_yard")
 	p.neck.rotation.x = 0.0

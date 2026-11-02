@@ -456,16 +456,13 @@ static func spearhead_mesh(width: float, length: float, depth: float, from_heel 
 	return st.commit()
 
 
-## Obsidian for what stands metres tall (the Burst's spikes): the same glass, its facets' flash
-## and edges drawn in, or at this size the glint swallows the black.
-static func big_glass_look() -> ShaderMaterial:
+## Obsidian for what stands metres tall (the Burst's spikes): deep glass with the spell's light
+## in it. `charge`: how much is still in it (a MultiMesh's spikes add their own).
+static func big_glass_look(charge := 0.3) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
-	m.shader = OBSIDIAN_SHADER
-	m.set_shader_parameter(&"glass", GLASS)
-	m.set_shader_parameter(&"glint", GLINT)
-	m.set_shader_parameter(&"glint_energy", 0.5)
-	m.set_shader_parameter(&"edge_energy", 0.32)
-	m.set_shader_parameter(&"edge_width", 0.03)
+	m.shader = load("res://scripts/Magic/burst_glass.gdshader")
+	m.set_shader_parameter(&"noise", MeshVfx.noise())
+	m.set_shader_parameter(&"charge", charge)
 	return m
 
 
