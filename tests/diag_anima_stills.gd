@@ -49,6 +49,9 @@ func _ready() -> void:
 	if only == "" or only == "burst":
 		await _burst()
 
+	if only == "perf":
+		await _perf()
+
 	if only == "" or only == "drain":
 		await _drain()
 
@@ -421,12 +424,61 @@ func _burst() -> void:
 	Input.action_release("spell_4")
 	var last := 0
 
-	for step in [2, 6, 12, 20, 32, 50, 80, 110, 140, 180, 240]:
+	for step in [2, 6, 12, 20, 26, 32, 40, 50, 80, 110, 140, 180, 240]:
 		await _frames(step - last)
 		last = step
 		await _shot("burst_%03d" % step)
 
 	p.neck.rotation.x = 0.0
+
+
+## What a cast into a full wave costs, in frames: before, during, and while they all burn.
+func _perf() -> void:
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 1.05, -8.0)))
+	await _frames(20)
+	var crowd: Array = []
+
+	for i in 7:
+		var turn := float(i) * TAU / 7.0
+		var e: CharacterBody3D = AnimaScript.new()
+		e.form = [&"hands", &"face", &"hands", &"hands"][i % 4]
+		e.position = p.global_position + Vector3(cos(turn) * 3.5, 0.0 if e.form == &"hands" else 0.3, sin(turn) * 3.5)
+		add_child(e)
+		crowd.append(e)
+
+	await _frames(30)
+	print("PERF before: ", await _frame_ms(120))
+	p.power.power = 100.0
+	Input.action_press("spell_4")
+	await _frames(19)
+	Input.action_release("spell_4")
+	print("PERF wave, none dying: ", await _frame_ms(120))
+	await get_tree().create_timer(4.0).timeout
+
+	for e in crowd:
+		if is_instance_valid(e):
+			e.health = 1.0
+
+	p.power.power = 100.0
+	Input.action_press("spell_4")
+	await _frames(19)
+	Input.action_release("spell_4")
+	print("PERF wave, all burning: ", await _frame_ms(240))
+
+
+func _frame_ms(frames: int) -> String:
+	var worst := 0
+	var total := 0
+	var last := Time.get_ticks_usec()
+
+	for i in frames:
+		await get_tree().process_frame
+		var now := Time.get_ticks_usec()
+		worst = maxi(worst, now - last)
+		total += now - last
+		last = now
+
+	return "mean %.1f ms, worst %.1f ms" % [float(total) / float(frames) / 1000.0, float(worst) / 1000.0]
 
 
 func _shot(name_of: String) -> void:

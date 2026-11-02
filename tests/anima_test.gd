@@ -768,7 +768,8 @@ func _hands_life() -> void:
 	var bone := skeleton.find_bone("index_02")
 	var seen: Array[Quaternion] = []
 
-	for i in 60:
+	# (Over a whole cycle of its slow tapping: its phase is its own.)
+	for i in 200:
 		await get_tree().physics_frame
 		seen.append(skeleton.get_bone_pose_rotation(bone))
 
