@@ -124,6 +124,16 @@ Name each file as in the **File** column. Tell me where they are and I'll trim, 
 | `copal_round_hit` | 0.6 s | A resin bullet bursting into hot sacred smoke, a soft bright pop and a wide hissing bloom |
 | `copal_line_lay` | 1 s | Hot resin poured in a line across a stone floor, sizzling as it lands, thin smoke rising |
 
+## The Exsecrator's deaths
+
+| File | Length | Prompt |
+|---|---|---|
+| `death_last_gulp` | 1 s | One long deep swallow through a withered throat, slowing down, with a low body-felt pull, the last of something being taken |
+| `death_heart_stops` | 3 s | A human heartbeat heard from inside the chest, racing faster and faster, then two weak beats, then nothing |
+| `death_eye_tears_open` | 0.8 s | Living wet flesh tearing open slowly right against the ear, membrane stretching and parting, a slick wet click at the end |
+| `death_flesh_slack` | 1.2 s | A heavy mass of wet flesh going limp and sagging, slow slick sliding, a last settling, quiet and close |
+| `death_breath_out` | 1.5 s | A man's long last breath out, weak and rattling, fading to nothing, no voice |
+
 ## If a take is wrong
 
 - **Too clean or synthetic:** add `organic, physical, recorded foley`.

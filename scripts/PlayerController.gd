@@ -4492,7 +4492,7 @@ func _update_view(delta: float) -> void:
 	_update_wall_lean(delta)
 
 	# Killed by what you were fighting: it takes you down, as it takes you.
-	if is_dead and death.kind != &"fall":
+	if is_dead and death.holds_screen():
 		juice.death_fall = death.camera_pose()
 		# (No lower than the floor, however low you were.)
 		var feet := global_position.y - _capsule.height * 0.5

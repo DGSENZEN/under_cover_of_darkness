@@ -41,6 +41,11 @@ func _ready() -> void:
 			on_you += 1
 
 	await _measure("the worst: six curse eyes, three on you (%d)" % on_you, 600)
+	p.invulnerable = false
+	p.reload_on_death = false
+	p.health = 0.01
+	p.drain_life(50.0)
+	await _measure("dying with all of it on you", 200)
 	SaveFiles.delete_run(CityState.run_id)
 	get_tree().quit()
 

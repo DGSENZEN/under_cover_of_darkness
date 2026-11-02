@@ -4,6 +4,8 @@ extends Node
 ## go, and timed here. The camera, the leech, its hands and the HUD read the clock and carry the
 ## fight on to its end, without a cut. Anything else that kills you is the old fall.
 
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
+
 signal finished
 
 ## How long each takes (s).
@@ -26,6 +28,16 @@ const HEAD_DROPS := 0.5
 const KNEELS_TAKES := 1.6
 const SWIPE_DOWN_TAKES := 0.7
 
+## The eyes' death: your heart, how long between beats at the start and at its fastest, and from
+## how far through it stops (as the HUD's flesh fails: StealthHUD.EYES_FAIL_FROM).
+const HEART_GAPS := Vector2(0.55, 0.26)
+const HEART_STOPS_AT := 0.7
+## When you hit the floor (s), for each; when the last eye tears open (share).
+const FLOORED := {&"eyes": 2.7, &"animas": 2.5, &"both": 2.9, &"swipe": 0.65}
+const EYE_TEARS_AT := 0.6
+
+## How many beats of your heart it has played.
+var heartbeats := 0
 ## &"" alive, or which death: &"eyes", &"animas", &"both", &"swipe", &"fall".
 var kind: StringName = &""
 var player: CharacterBody3D
@@ -33,6 +45,10 @@ var player: CharacterBody3D
 var _at := 0.0
 var _running := false
 var _was_cursed := false
+var _floored := false
+var _beat_in := 0.0
+var _eye_torn := false
+var _gulped_last := false
 ## The side you go down on: + your right.
 var _side := 1.0
 
@@ -133,12 +149,37 @@ func words_share() -> float:
 	return clampf((_at - (float(LENGTHS[kind]) - WORDS_FROM_END)) / WORDS_FROM_END, 0.0, 1.0) if LENGTHS.has(kind) else 0.0
 
 
+## Stand-ins until the takes come (docs/superpowers/refs/hunt/sounds_needed.md).
+func _sound(delta: float) -> void:
+	if not _floored and _at >= float(FLOORED[kind]):
+		_floored = true
+		Sfx.play_flat(self, &"body_fall", 2.0, 0.9)
+
+	if kind == &"eyes":
+		_beat_in -= delta
+
+		if _beat_in <= 0.0 and share() < HEART_STOPS_AT:
+			heartbeats += 1
+			_beat_in = lerpf(HEART_GAPS.x, HEART_GAPS.y, share() / HEART_STOPS_AT)
+			Sfx.play_flat(self, &"heartbeat", -2.0, lerpf(0.9, 1.15, share() / HEART_STOPS_AT))
+
+		if not _eye_torn and share() >= EYE_TEARS_AT:
+			_eye_torn = true
+			Sfx.play_flat(self, &"flesh_heavy", 0.0, 0.7)
+	elif (kind == &"animas" or kind == &"both") and not _gulped_last and last_gulp() > 0.0:
+		_gulped_last = true
+		Sfx.play_flat(self, &"flesh_heavy", -2.0, 0.55)
+		Sfx.play_flat(self, &"anima_moan", -6.0, 0.5)
+
+
 func _physics_process(delta: float) -> void:
 	if not _running:
 		return
 
 	var length: float = LENGTHS[kind]
 	_at += delta
+
+	_sound(delta)
 
 	if _at >= SKIP_AFTER and _at < length - WORDS_FROM_END and Input.is_action_just_pressed("throw"):
 		_at = length - WORDS_FROM_END

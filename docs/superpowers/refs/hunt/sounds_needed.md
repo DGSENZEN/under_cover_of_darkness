@@ -34,3 +34,14 @@ Stand-ins from the existing library until the user chooses real ones.
 | Tearing open (`eye_turn_tear`) | `FloatingEye.turn` | `flesh_heavy` + `bone_crack`, low |
 | The spit (`eye_spit`) | `EyeGob._launch` | `flesh`, low |
 | A gob on you, and on a wall (`eye_gob_hit`, `eye_gob_wall`) | `EyeGob._burst` | `flesh_heavy` |
+
+## The Exsecrator's deaths
+
+| Sound | Where | Stand-in |
+|---|---|---|
+| The last long gulp (`death_last_gulp`) | `PlayerDeath._sound` | `flesh_heavy`, `anima_moan`, low |
+| The heart racing, and stopping (`death_heart_stops`) | `PlayerDeath._sound` | `heartbeat` |
+| The last eye tearing open (`death_eye_tears_open`) | `PlayerDeath._sound` | `flesh_heavy`, low |
+| The flesh going slack (`death_flesh_slack`) | not yet played | |
+| The last breath out (`death_breath_out`) | not yet played | |
+

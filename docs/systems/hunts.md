@@ -101,3 +101,13 @@ Each round reads at a glance, from `Rounds.TABLE`: its colour on the readout's c
 - **The gob (`EyeGob.gd`, `assets/monsters/eye_gob.glb`, `tools/monsters/build_eye_gob.py`):** hurts, and starts or deepens the curse. A wall or the Ward stops it. The whip finds it (`Revolver.try_whip`, group `eye_gobs`), and batted it hurts what it meets and never you. It outlives its eye.
 - **One body under attack (`StealthHUD._tell_each_other`):** both screen effects stay, each told about the other. The flesh pales with `drained`, squeezes in on `gulp`, its eyes turn to `feeders`, and `claws_through` tears it along the drain's own marks. One crosshair mark says both (`Crosshair._draw_both`). `middle_kept_clear` reports the middle third free at the worst.
 - **Play:** `maps/mixed_gym.tscn`, three waves mixed, F5 and F6 as the other gyms. Stills: `diag_anima_stills --only=spit`, `--only=eye_turned`, `--only=both`. Frame cost: `tests/diag_mixed_perf.tscn`, windowed, with `--disable-vsync`.
+
+## The Exsecrator's deaths
+
+`scripts/PlayerUtils/PlayerDeath.gd` chooses once, at `_die`, from what is true then: curse and something feeding, both; something feeding, the ánimas; an eye's bite or a gob, the eyes (`kills_as`); an ánima's swipe, the swipe; anything else, the old fall, untouched. It runs the clock; the page waits for `finished` (2 s for the fall). An attack press after 1 s jumps to the last half second.
+
+- **The camera:** `PlayerDeath.camera_pose` through `CameraJuice.death_fall`, held once over. No lower than `DEATH_ABOVE_FLOOR`.
+- **What has you stays:** `LifeLeech._finish` goes on gulping, slower, to `last_gulp`, then each `Anima.lose_interest`. `State.LEAVE` crawls off and rests; every awake ánima does this once you are dead, under the fall too.
+- **On screen:** `StealthHUD._feel_the_end` and `_feel_sight_go` drive `evil_eye_view` (`dying`, `extra_eyes`, `last_eye`, `failing`, `slack`, `eyes_shut`) and `life_drain_view` (`no_colour`, `sight_fails`). `holds_screen` keeps it all under the page, and the HUD's own marks stay off.
+- **Tests:** `player_death_test`; stills `diag_anima_stills --only=die_eyes|animas|both|swipe --place=room|yard`.
+

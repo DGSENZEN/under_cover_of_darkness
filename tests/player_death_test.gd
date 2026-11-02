@@ -26,6 +26,8 @@ func _ready() -> void:
 	await _going_down()
 	await _the_eyes()
 	await _the_rest()
+	await _heard()
+	await _marked_dead()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -414,6 +416,25 @@ func _the_rest() -> void:
 	await _fresh()
 	await _frames(10)
 	_check("R1 the next life starts clean: nothing stuck", p.hud.curse_state()["slack"] == 0.0 and p.hud.drain_state()["no_colour"] == 0.0 and not p.hud.drain_view_shown())
+
+
+## Set dead by something else, with no death chosen: no pose asked of nothing.
+func _marked_dead() -> void:
+	await _fresh()
+	p.is_dead = true
+	await _frames(5)
+	_check("Z1 marked dead with no death chosen: the old fall", p.juice.death_fall.is_empty() and p.juice.death > 0.0)
+	p.is_dead = false
+
+
+func _heard() -> void:
+	await _dying_by(false, false, &"eye")
+	await _until(func(): return p.death.share() > 0.6, 3.0)
+	var by_then: int = p.death.heartbeats
+	await _until(func(): return p.hud.curse_state()["failing"] > 0.5, 2.0)
+	var at_failing: int = p.death.heartbeats
+	await _until(func(): return not p.death.playing(), 2.0)
+	_check("H1 the heart races, and then it stops: no beat after it fails (%d, %d, %d)" % [by_then, at_failing, p.death.heartbeats], by_then >= 3 and p.death.heartbeats == at_failing)
 
 
 func _on_you_now() -> CharacterBody3D:
