@@ -84,6 +84,26 @@ For Parts 1, 2 and 4 there is one sensible way: new states and poses on the appr
 - Merge into one effect: cleanest and one pass, but a rewrite of two approved looks, and it buys nothing visible today.
 - Reorder or tint alike: rejected. It gives no shared heartbeat and no eyes watching.
 
+## Settled before planning
+
+From the project as it stands:
+
+- **A swipe's hit** uses `player.take_damage(amount, self)`, as the eye's bite does. A dodge avoids it through `combat.is_dodging()`, as `Anima._lands_on` checks for a leap. Its wind-up is an opening through `Monster._is_opening` and `Anima._is_opening_to` (any source but lead), as the tell is.
+- **Who owns what:** the HUD (`StealthHUD._show_curse`, `_show_drain`) already feeds both shaders every frame, so it is where they are told about each other. No new autoload. The crosshair is `StealthHUD._crosshair`.
+- **The eyes' target:** `evil_eye_view.gdshader` already takes `gazers[4]`, the sides eyes are watching from. The feeder's place comes from what `leech_hands` already says on screen (`on_screen`, `mouth_on_screen`); something behind you is taken at its side.
+- **The claw marks** are `life_drain_view.gdshader`'s `claw_age` and `claws_from`. A swipe uses the same marks, not a second kind.
+- **Every eye can turn**, in every map. There are no variants.
+
+Claude's calls:
+
+- **Ranges:** a swipe within its form's reach; a leap only beyond that reach, out to the existing `leap_reach`, and no more than once every 4 s, so it is rarer. The leap's numbers, the latch and the drain do not change.
+- **The torso** gets a working swipe with its stand-in boxes lunging, in the logic checks. Its readable wind-up comes with its model (the plan's Task 12).
+- **The eye model** is a real stop in the plan: its picture goes to the user, and nothing depending on the turned look is built before the verdict. Its poses are sprung on its existing parts (`EyeBody.part`). The turned form is a new model with the same part names, swapped in at the turn.
+- **A batted gob** hurts whatever it meets, monsters included, as a batted eye does. It cannot hurt the eye that spat it until it has been batted.
+- **The bar for frame cost:** the mixed gym's worst wave holds 60 fps on this machine (Apple M4 Pro), at 1152x648 as the user plays.
+- **The bar for "the middle stays clear":** with six curse eyes and three on you, the screen effects leave the middle third of the view free of opaque flesh, eyes and claws; checked in code by what the effects report, and by eye in stills.
+- **The worst case** is six curse eyes and three ánimas on you. A check and a stills tool can force it (a turned eye can be started turned, for tests only). The gym's last wave aims at it by play.
+
 ## Left to the builder
 
 - Exact shader wiring, poses, and how a swipe's hit is resolved, within the numbers above, which are first guesses to tune.
