@@ -23,7 +23,7 @@ const LIFT := 0.1
 const STEP := 0.22
 ## The palm: how high it stands off the floor, how the hand is tipped (radians: wrist
 ## up), and how far it rears in a tell.
-const MOST_STEPS := 4.5
+const MOST_STEPS := 3.4
 const PALM_HIGH := 0.34
 const TIP := 0.16
 const REAR := 0.26
@@ -183,7 +183,8 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 	var rear_wanted := 1.0 if doing == &"tell" else (0.6 if doing == &"leap" else 0.0)
 	_rear = lerpf(_rear, rear_wanted, 1.0 - exp(-14.0 * delta))
 	var hand_at := Vector3(0.0, PALM_HIGH - 0.25 + _rear * REAR + sin(_walk * TAU * 2.0) * 0.016, 0.22 - _rear * 0.1)
-	var shake := sin(_clock * 46.0) * 0.012 * rear_wanted
+	# It never holds still: a palsy all the time, worse when it rears. Hungry.
+	var shake := sin(_clock * 46.0) * 0.012 * rear_wanted + sin(_clock * 23.0) * 0.012 + sin(_clock * 37.0) * 0.008
 	var tilt := Basis(Vector3.RIGHT, -TIP - _rear * 0.5 + (0.4 if doing == &"thrown" else 0.0)) * Basis(Vector3.BACK, shake)
 	var hand_bone := _skeleton.find_bone("hand")
 	var rest: Transform3D = _skeleton.get_bone_rest(hand_bone)

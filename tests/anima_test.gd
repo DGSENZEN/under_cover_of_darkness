@@ -109,8 +109,21 @@ func _rush() -> void:
 	await _frames(60)
 	var hands_covered := hands_from.distance_to(hands.global_position)
 	var torso_covered := torso_from.distance_to(torso.global_position)
-	_check("A5 from far off it rushes you (%.1f m)" % hands_covered, hands.global_position.distance_to(p.global_position) < hands_from.distance_to(p.global_position) - 4.0)
-	_check("A5b hands are faster than a torso (%.1f, %.1f)" % [hands_covered, torso_covered], hands_covered > torso_covered * 2.0)
+	_check("A5 from far off it rushes you (%.1f m)" % hands_covered, hands.global_position.distance_to(p.global_position) < hands_from.distance_to(p.global_position) - 1.5)
+	_check("A5b hands are faster than a torso, but slow enough to aim at (%.1f, %.1f)" % [hands_covered, torso_covered], hands_covered > torso_covered * 1.4 and hands_covered < 4.2)
+	# It goes hungrily: a slow creep you can hit, broken by surges.
+	var slowest := 99.0
+	var fastest := 0.0
+
+	for i in 240:
+		await get_tree().physics_frame
+
+		if hands.state == STATE.RUSH:
+			var flat := Vector2(hands.velocity.x, hands.velocity.z).length()
+			slowest = minf(slowest, flat)
+			fastest = maxf(fastest, flat)
+
+	_check("A5c it creeps and surges (%.1f to %.1f m/s)" % [slowest, fastest], slowest < 2.2 and fastest > slowest * 2.0 and fastest < 6.0)
 	_check("A8 hands and torso keep to the floor (%.2f, %.2f)" % [hands.global_position.y, torso.global_position.y], absf(hands.global_position.y - 0.25) < 0.2 and absf(torso.global_position.y - 0.35) < 0.2)
 	_free([hands, torso])
 	var face := _anima(&"face", Vector3(0, 1.3, -14))
@@ -439,10 +452,17 @@ func _drained_view() -> void:
 
 	_check("S9 your magic goes in lurches, with each gulp (%.3f to %.3f a tick)" % [least, worst], worst > least * 3.0)
 	_check("S9b your magic and your shields are up where you can see them go", hud.get("_crosshair").power_alpha > 0.9 and hud.get("_shields").modulate.a > 0.5)
-	_check("S9c its ribbons go into the hands that hold you", hud.drain_state()["into_hands"])
+	_check("S9c your sight is pulled toward the hands that hold you (%.3f)" % hud.drain_state()["pull"], hud.drain_state()["pull"] > 0.0)
 	p.power.power = 0.0
 	await _frames(30)
-	_check("S9d no magic left, its ribbon is gone: only your life still runs (%.2f)" % hud.drain_state()["magic"], hud.drain_state()["magic"] < 0.05)
+	_check("S9d no magic left, your sight knows it (%.2f)" % hud.drain_state()["magic"], hud.drain_state()["magic"] < 0.05)
+	p.invulnerable = false
+	var life_was: float = p.health
+	p.health = p.max_health * 0.2
+	await _frames(5)
+	_check("S9e your life low, your sight knows that too (%.2f)" % hud.drain_state()["life"], hud.drain_state()["life"] < 0.25)
+	p.health = life_was
+	p.invulnerable = true
 	p.power.power = 100.0
 	await _frames(30)
 	_check("S7 it drinks in gulps, not a steady bleed (%d in 2.2 s)" % gulps[0], gulps[0] >= 2 and gulps[0] <= 4)

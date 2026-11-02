@@ -7,6 +7,7 @@ extends "res://scripts/Monsters/Monster.gd"
 ## thing altogether.
 
 const AnimaBody := preload("res://scripts/Monsters/AnimaBody.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
 
@@ -34,6 +35,11 @@ const CIRCLE_SPEED := 2.5
 ## Smoked: how much slower it goes, and how much less it drinks.
 const SMOKED_SPEED := 0.5
 const SMOKED_DRAIN := 0.5
+## The creep and the surge, of its speed; how long a surge lasts, and how long between.
+const CREEP := 0.55
+const SURGE := 2.1
+const SURGE_TIME := 0.32
+const SURGE_EVERY := Vector2(0.7, 1.5)
 ## How far ahead it looks for a line of copal (m).
 const LINE_LOOKS := 0.5
 ## How much it has to drink to be fully fed (shown on it).
@@ -54,6 +60,8 @@ var _leap_way := Vector3.ZERO
 var _spread_turn := 0.0
 var _agent: NavigationAgent3D
 var _fall := 0.0
+var _surge_in := 0.6
+var _surge_left := 0.0
 
 
 func _init() -> void:
@@ -225,7 +233,7 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 			elif _chest_distance(you) <= reach and (leech == null or leech.has_room()) and CopalLine.crossing(get_tree(), global_position, _chest(you)) == null:
 				_enter(State.TELL)
 			else:
-				return _hold_height(_toward(you) * float(_form["speed"]) * _slowed(), delta)
+				return _hold_height(_toward(you) * float(_form["speed"]) * _hunger() * _slowed(), delta)
 		State.CIRCLE:
 			var leech: Node = _leech()
 
@@ -277,6 +285,21 @@ func _chest(you: Node3D) -> Vector3:
 
 func _chest_distance(you: Node3D) -> float:
 	return global_position.distance_to(_chest(you))
+
+
+## It doesn't run at you: it creeps, shaking, slow enough to hit, and then the hunger
+## takes it and it surges a little way, and creeps again. Its own rhythm, not the others'.
+func _hunger() -> float:
+	_surge_in -= get_physics_process_delta_time()
+
+	if _surge_in <= 0.0:
+		_surge_left = SURGE_TIME
+		_surge_in = SURGE_TIME + randf_range(SURGE_EVERY.x, SURGE_EVERY.y)
+		Sfx.play(self, &"anima_voice", global_position, -9.0, randf_range(0.7, 0.95))
+		Sfx.play(self, &"gear", global_position, -20.0, randf_range(0.5, 0.75))
+
+	_surge_left = maxf(_surge_left - get_physics_process_delta_time(), 0.0)
+	return SURGE if _surge_left > 0.0 else CREEP
 
 
 func _slowed() -> float:

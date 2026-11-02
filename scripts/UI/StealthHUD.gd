@@ -102,6 +102,7 @@ var _drain_shown := 0.0
 var _drain_release := 0.0
 var _drain_threads := 0
 var _drain_magic := 1.0
+var _drain_life := 1.0
 var _drain_held_was := 0
 ## Between the two, or the curse's own look at the screen wouldn't have the drain in it.
 var _drain_copy: BackBufferCopy
@@ -1075,7 +1076,9 @@ func _show_drain(delta: float) -> void:
 	look.set_shader_parameter(&"release", _drain_release)
 	look.set_shader_parameter(&"gulp", leech.gulp())
 	_drain_magic = float(player.power.power) / float(player.power.MAX)
-	look.set_shader_parameter(&"magic", clampf(_drain_magic * 5.0, 0.0, 1.0))
+	look.set_shader_parameter(&"magic", _drain_magic)
+	_drain_life = float(player.health) / maxf(float(player.max_health), 1.0)
+	look.set_shader_parameter(&"life", _drain_life)
 	var threads := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
 	_drain_threads = 0
 
@@ -1094,7 +1097,7 @@ func drain_view_shown() -> bool:
 
 
 func drain_state() -> Dictionary:
-	return {"drain": _drain_shown, "release": _drain_release, "threads": _drain_threads, "gulp": player.leech.gulp() if player != null and player.leech != null else 0.0, "magic": clampf(_drain_magic * 5.0, 0.0, 1.0), "into_hands": true}
+	return {"drain": _drain_shown, "release": _drain_release, "threads": _drain_threads, "gulp": player.leech.gulp() if player != null and player.leech != null else 0.0, "magic": _drain_magic, "life": _drain_life, "pull": _drain_shown}
 
 
 ## The evil eye's marks are on screen.
