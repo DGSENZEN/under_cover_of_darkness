@@ -358,7 +358,8 @@ static func trail(context: Node, from: Vector3, to: Vector3, eye: Vector3) -> No
 
 
 ## What a ball did to a monster, big enough to read at range: `read` &"glance", a
-## small cold star and a spark skipping off, it told for little; &"burst", a star in
+## small cold star and a spark skipping off, it told for little; &"through", the same
+## star with the ball going straight on, it found nothing to hit; &"burst", a star in
 ## its round's colours, `size` 1 for its full measure.
 static func impact(context: Node, read: StringName, spec: Dictionary, at: Vector3, eye: Vector3, shot: int, size := 1.0, coming := Vector3.FORWARD) -> Node3D:
 	if context == null or not context.is_inside_tree():
@@ -367,7 +368,7 @@ static func impact(context: Node, read: StringName, spec: Dictionary, at: Vector
 	var core: Color = spec.get("tracer_core", FLASH_CORE)
 	var edge: Color = spec.get("tracer_edge", FLASH_EDGE)
 	var body: Color = spec.get("colour", FLASH_BODY)
-	var glance := read == &"glance"
+	var glance := read != &"burst"
 	var mark := MeshInstance3D.new()
 	mark.name = "RoundImpact"
 	mark.set_meta(&"read", read)
@@ -397,10 +398,11 @@ static func impact(context: Node, read: StringName, spec: Dictionary, at: Vector
 	_keep(mark, life)
 
 	if glance:
-		# Off it goes, back the way it came and aside.
+		# Off it goes, back the way it came and aside; or straight on, as if nothing
+		# were there at all.
 		var turn := roll * 2.0
 		var off := (-coming.normalized() + Vector3(cos(turn), 0.6, sin(turn)) * 0.9).normalized()
-		tracer(context, at, at + off * RICOCHET, eye, &"", spec)
+		tracer(context, at, at + (coming.normalized() if read == &"through" else off) * RICOCHET, eye, &"", spec)
 
 	return mark
 

@@ -11,6 +11,7 @@ const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const Casings := preload("res://scripts/Visual/Casings.gd")
 const GunFx := preload("res://scripts/Visual/GunFx.gd")
+const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
 const GunWisp := preload("res://scripts/Visual/GunWisp.gd")
 const SoundBus := preload("res://scripts/StimuliSystem/SoundBus.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -412,6 +413,24 @@ func reset_for_practice() -> void:
 
 # The pistol-whip
 
+## Whatever is on you that your aim is nearest, wherever it is: it has hold of you.
+func _whip_at_on_you(at: Transform3D) -> Node3D:
+	var best: Node3D = null
+	var closest := -2.0
+
+	if player.get("leech") == null:
+		return null
+
+	for who in player.leech.on_me():
+		var how_near: float = (who.global_position - at.origin).normalized().dot(-at.basis.z)
+
+		if how_near > closest:
+			closest = how_near
+			best = who
+
+	return best
+
+
 ## F with a man in arm's reach and in front of you: the gun's butt, not the
 ## boot (PlayerCombat asks first). False with nobody there.
 func try_whip() -> bool:
@@ -421,10 +440,10 @@ func try_whip() -> bool:
 	var at := aim()
 	var ahead := -at.basis.z
 	ahead.y = 0.0
-	var best: Node3D = null
+	var best: Node3D = _whip_at_on_you(at)
 	var nearest := INF
 
-	for guard in get_tree().get_nodes_in_group(&"guards") + get_tree().get_nodes_in_group(&"monsters"):
+	for guard in [] if best != null else get_tree().get_nodes_in_group(&"guards") + get_tree().get_nodes_in_group(&"monsters"):
 		if not (guard is Node3D) or not guard.has_method("take_hit") or float(guard.get("health")) <= 0.0 or guard.get("asleep") == true:
 			continue
 
@@ -913,7 +932,8 @@ func _show_hit(target: Node3D, result: StringName, point: Vector3, direction: Ve
 	if result == &"none" or target.get("round_hint") == null:
 		return
 
-	var read := &"glance" if result == &"resisted" else &"burst"
+	var lead_read: StringName = Bestiary.info(target.get("kind")).get("lead_read", &"glance")
+	var read := lead_read if result == &"resisted" else &"burst"
 	var size := 1.0 if result == &"weak" or result == &"killed" else 0.6
 	GunFx.impact(player, read, Rounds.info(cylinder_round), point, player.camera.global_position, _shots, size, direction)
 

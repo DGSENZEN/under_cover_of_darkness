@@ -10,20 +10,25 @@ signal released(who: Node3D)
 const MOST := 3
 ## Your pace by how many are on you.
 const PACE := [1.0, 0.8, 0.65, 0.5]
-## Where each sits, in the yaw of your view: in front of you, where it can be seen
-## and shot, and off the crosshair. From your chest.
-const SLOTS := [Vector3(-0.55, -0.2, -0.6), Vector3(0.55, -0.2, -0.6), Vector3(0.0, -0.55, -0.7)]
+## Each holds on from the side it came at you, this far out from your chest, and
+## stays there as you turn, so you can turn on it and shoot it. No two share a side.
+const HOLD_OUT := 0.75
+const HOLD_LOW := 0.2
+const APART := 1.1
 const CHEST := 1.45
 
 var player: CharacterBody3D
 var _slots: Array = [null, null, null]
+var _sides: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
 
 
 func latch(who: Node3D) -> bool:
 	if player == null or player.is_dead or count() >= MOST:
 		return false
 
-	_slots[_slots.find(null)] = who
+	var slot := _slots.find(null)
+	_slots[slot] = who
+	_sides[slot] = _side_for(who)
 	latched.emit(who)
 	return true
 
@@ -54,8 +59,33 @@ func slot_of(who: Node3D) -> int:
 
 ## Where the one in `slot` is held, in the world.
 func slot_position(slot: int) -> Vector3:
-	var yaw := Basis(Vector3.UP, player.global_rotation.y)
-	return player.global_position + Vector3.UP * CHEST + yaw * SLOTS[slot]
+	return player.global_position + Vector3.UP * (CHEST - HOLD_LOW) + _sides[slot] * HOLD_OUT
+
+
+## The way out from you to the one in `slot`, on the level.
+func slot_side(slot: int) -> Vector3:
+	return _sides[slot]
+
+
+## The side it came from, turned clear of any already taken.
+func _side_for(who: Node3D) -> Vector3:
+	var side := who.global_position - player.global_position
+	side.y = 0.0
+	side = side.normalized() if side.length() > 0.01 else -player.global_basis.z
+
+	for i in 6:
+		var clear := true
+
+		for slot in _slots.size():
+			if _slots[slot] != null and _slots[slot] != who and _sides[slot].angle_to(side) < APART:
+				clear = false
+
+		if clear:
+			break
+
+		side = side.rotated(Vector3.UP, APART)
+
+	return side
 
 
 ## Your pace under them.

@@ -318,6 +318,7 @@ func _effect(id: StringName) -> void:
 			player.juice.punch(0.8, 0.15)
 		&"ward":
 			WardScript.cast_on(player)
+			player.leech.free_all()
 		&"empower":
 			empowered_until = _game_time + EMPOWER_TIME
 			Sfx.play_flat(player, &"heartbeat", -2.0, 0.85)
@@ -506,6 +507,9 @@ func _blink_to(at: Vector3, ledge := {}) -> void:
 	if not player.power.pay(float(Spells.info(&"blink")["cost"])):
 		player.power.refused()
 		return
+
+	# Torn free of whatever had hold of you: it isn't hurt, and it is coming.
+	player.leech.tear_free()
 
 	# Empowered, the charge went into this one's reach (its wave where you land).
 	var beast := spend_empower(&"blink")

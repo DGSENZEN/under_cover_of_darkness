@@ -7,6 +7,7 @@ const Props := preload("res://scripts/Interaction/Props.gd")
 const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
 const STATE: Dictionary = AnimaScript.State
 const SafePlace := preload("res://scripts/Hunt/SafePlace.gd")
+const WardScript := preload("res://scripts/Magic/Ward.gd")
 const HOME := Vector3(0, 1.05, 0)
 
 var p: CharacterBody3D
@@ -29,6 +30,7 @@ func _ready() -> void:
 	await _forms()
 	await _rush()
 	await _leeching()
+	await _getting_off()
 	await _dying()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
@@ -190,6 +192,194 @@ func _slots_differ(on: Array) -> bool:
 		seen[p.leech.slot_of(a)] = true
 
 	return seen.size() == on.size() and on.size() == 3
+
+
+## Those on you, from these forms, put there directly.
+func _on_you(forms: Array) -> Array:
+	var list: Array = []
+
+	for i in forms.size():
+		var turn := float(i) * TAU / 3.0 + 0.4
+		var e := _anima(forms[i], p.global_position + Vector3(cos(turn) * 0.8, 0.5, sin(turn) * 0.8))
+		await _frames(1)
+		e.put_on_you()
+		list.append(e)
+
+	await _frames(2)
+	return list
+
+
+func _whip() -> bool:
+	var went: bool = p.revolver.try_whip()
+	await _frames(int(p.revolver.WHIP_TIME * 60.0) + 4)
+	return went
+
+
+func _getting_off() -> void:
+	await _place_player(HOME)
+	p.invulnerable = true
+	p.power.power = 100.0
+	_clear_all()
+	await _frames(3)
+	var two: Array = await _on_you([&"face", &"face"])
+	_check("W0 what is on you can be aimed at: it stays where it came from", _stays_put(two[0]))
+	_face(two[0])
+	await _frames(2)
+	var whipped: bool = await _whip()
+	_check("W1 a whip throws off the one you aim at, only that one", whipped and two[0].state == STATE.THROWN and two[1].state == STATE.ON)
+	_check("W1a from anywhere you stand: it needs no cone", p.leech.count() == 1)
+	await _frames(25)
+	_check("W1b thrown clear, stunned and exposed (%.1f m)" % two[0].global_position.distance_to(p.global_position), two[0].global_position.distance_to(p.global_position) > 1.5 and two[0].is_exposed() and two[0].state == STATE.THROWN)
+	_free(two)
+	await _frames(3)
+
+	var torso: Array = await _on_you([&"torso"])
+	_face(torso[0])
+	await _whip()
+	_check("W2 a torso needs two whips (%d left)" % torso[0].grip_left, torso[0].state == STATE.ON and torso[0].grip_left == 1)
+	await _whip()
+	_check("W2b and the second throws it off", torso[0].state == STATE.THROWN)
+	_free(torso)
+	await _frames(3)
+
+	var pair: Array = await _on_you([&"torso", &"torso"])
+	p.power.power = 50.0
+	_hit(pair[0], &"bullet", &"copal")
+	_check("W3 a copal round throws off the one it hits, and pays you", pair[0].state == STATE.THROWN and pair[1].state == STATE.ON and p.power.power > 50.0)
+	await _frames(30)
+	p.power.power = 80.0
+	p.invulnerable = false
+	var was_power: float = p.power.power
+	await _frames(60)
+	p.invulnerable = true
+	_check("W3b its cloud doesn't: the other holds on, draining at half (%.1f)" % (was_power - p.power.power), pair[1].state == STATE.ON and absf(was_power - p.power.power - 6.0) < 0.6)
+	var smoked := _anima(&"hands", p.global_position + Vector3(0, 0, -3.0))
+	await _frames(150)
+	_check("W3c nothing can latch inside the cloud", smoked.state != STATE.ON and p.leech.slot_of(smoked) < 0)
+	_free(pair + [smoked])
+	_clear_clouds()
+	await _frames(3)
+
+	var kept: Array = await _on_you([&"torso"])
+	var was: float = kept[0].health
+	_hit(kept[0], &"bullet", &"lead")
+	_check("W4 lead doesn't free you", kept[0].state == STATE.ON and kept[0].health < was)
+	was = kept[0].health
+	_hit(kept[0], &"shot", &"lead")
+	var after_shell: float = kept[0].health
+	_hit(kept[0], &"shard", &"lead")
+	_check("W4b nor a shell, nor a shard, though both hurt", kept[0].state == STATE.ON and after_shell < was and kept[0].health < after_shell)
+	_face(kept[0])
+	await _until(func(): return p.revolver.ready_to_fire(), 4.0)
+	var read := await _fired_read()
+	_check("W4c a lead ball is seen to pass through (%s)" % str(read), read == &"through")
+	_free(kept)
+	await _frames(3)
+
+	# The Ward.
+	await _until(func(): return p.revolver.ready_to_fire(), 4.0)
+	p.power.power = 100.0
+	var warded: Array = await _on_you([&"hands", &"face"])
+	Input.action_press("spell_2")
+	await _frames(40)
+	Input.action_release("spell_2")
+	await _frames(2)
+	_check("W5 the Ward throws off everything", p.leech.count() == 0 and warded[0].state == STATE.THROWN and warded[1].state == STATE.THROWN)
+	var outsider := _anima(&"hands", p.global_position + Vector3(0, 0, -3.0))
+	await _frames(100)
+	_check("W5b and they can't enter it (%.2f m)" % outsider.global_position.distance_to(p.global_position), p.leech.slot_of(outsider) < 0 and outsider.state != STATE.ON and not WardScript.covers(outsider.global_position))
+	_free(warded + [outsider])
+	await _until(func(): return not WardScript.covers(p.global_position + Vector3.UP), 6.0)
+	await _frames(3)
+
+	# A blink.
+	p.power.power = 100.0
+	var blinked: Array = await _on_you([&"face"])
+	p.caster._blink_to(p.global_position + Vector3(0, 0, -3.0))
+	await _frames(1)
+	_check("W6 a blink tears you free, but they aren't thrown or hurt", p.leech.count() == 0 and blinked[0].state != STATE.ON and blinked[0].state != STATE.THROWN and not blinked[0].is_exposed() and is_equal_approx(blinked[0].health, 70.0))
+	_free(blinked)
+	await _place_player(HOME)
+
+	# No power.
+	var bound: Array = await _on_you([&"face"])
+	p.power.power = 0.0
+	await _until(func(): return p.revolver.ready_to_fire(), 4.0)
+	Input.action_press("spell_2")
+	await _frames(40)
+	Input.action_release("spell_2")
+	_check("W7 no power: the Ward refuses", not WardScript.covers(p.global_position + Vector3.UP) and bound[0].state == STATE.ON)
+	_face(bound[0])
+	await _whip()
+	_check("W7b the whip still works", bound[0].state == STATE.THROWN)
+	_free(bound)
+	await _frames(3)
+
+	# Over a ledge with one on you.
+	Props.block(self, Vector3(30, 0.6, -2), Vector3(4, 1.2, 2))
+	await _place_player(Vector3(30, 1.05, 0.2))
+	p.rotation.y = 0.0
+	p.neck.rotation = Vector3.ZERO
+	var alone: float = await _over_the_ledge()
+	_check("W8a with nothing on you it mantles (%.2f)" % alone, alone > 1.6)
+	await _place_player(Vector3(30, 1.05, 0.2))
+	var rider: Array = await _on_you([&"hands"])
+	var ridden: float = await _over_the_ledge()
+	_check("W8 mantling with one on you: it holds on (%.2f)" % ridden, ridden > 1.6 and p.leech.count() == 1 and rider[0].state == STATE.ON)
+	_free(rider)
+	await _frames(3)
+	p.power.power = 100.0
+
+
+## Walks at the ledge and over: the highest you got.
+func _over_the_ledge() -> float:
+	var peak := 0.0
+	Input.action_press("move_forward")
+	await _until(func(): return p.global_position.z < -0.35, 3.0)
+	Input.action_press("jump")
+
+	for i in 120:
+		await get_tree().physics_frame
+		peak = maxf(peak, p.global_position.y)
+
+	Input.action_release("move_forward")
+	Input.action_release("jump")
+	return peak
+
+
+func _stays_put(e: Node3D) -> bool:
+	var was := e.global_position
+	var yaw_was: float = p.rotation.y
+	p.rotation.y += 1.2
+	var same := e.global_position.distance_to(was) < 0.01
+	p.rotation.y = yaw_was
+	return same
+
+
+func _face(target: Node3D) -> void:
+	var way: Vector3 = (target.global_position - p.camera.global_position).normalized()
+	p.rotation.y = atan2(-way.x, -way.z)
+	p.neck.rotation = Vector3(asin(way.y), 0.0, 0.0)
+
+
+## One shot, and the mark it left.
+func _fired_read() -> StringName:
+	var seen := &""
+	Input.action_press("throw")
+
+	for i in 5:
+		await get_tree().physics_frame
+
+		for mark in get_tree().get_nodes_in_group(&"round_fx_impact"):
+			seen = mark.get_meta(&"read", &"")
+
+	Input.action_release("throw")
+	return seen
+
+
+func _clear_clouds() -> void:
+	for cloud in get_tree().get_nodes_in_group(&"copal_clouds"):
+		cloud.queue_free()
 
 
 ## Left to the last: the player stays dead.

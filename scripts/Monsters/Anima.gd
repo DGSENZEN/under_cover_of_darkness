@@ -7,6 +7,7 @@ extends "res://scripts/Monsters/Monster.gd"
 ## thing altogether.
 
 const AnimaBody := preload("res://scripts/Monsters/AnimaBody.gd")
+const WardScript := preload("res://scripts/Magic/Ward.gd")
 
 enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN }
 
@@ -41,6 +42,8 @@ var body: Node3D
 var whip_reach := 1.6
 ## What it has drunk of your power. Half of it comes back when it dies.
 var fed := 0.0
+## Whips it can still take before it is thrown off (from its form).
+var grip_left := 1
 
 var _form := {}
 var _state_t := 0.0
@@ -68,6 +71,7 @@ func _body_shape() -> Shape3D:
 func _ready() -> void:
 	_form = Bestiary.form(&"anima", form)
 	health = float(_form["health"])
+	grip_left = int(_form["grip"])
 	super._ready()
 	_spread_turn = TAU * fmod(absf(position.x) * 0.37 + absf(position.z) * 0.61, 1.0)
 	_agent = NavigationAgent3D.new()
@@ -109,6 +113,18 @@ func drain_power() -> float:
 
 func drain_life() -> float:
 	return float(_form["life_drain"]) * (SMOKED_DRAIN if statuses.has(&"smoked") else 1.0)
+
+
+## On you, at once (a leap that lands).
+func put_on_you() -> bool:
+	var leech: Node = _leech()
+
+	if leech == null or not leech.latch(self):
+		return false
+
+	grip_left = int(_form["grip"])
+	_enter(State.ON)
+	return true
 
 
 ## Knocked off you: thrown clear of `from`, stunned, and exposed.
@@ -156,6 +172,21 @@ func _brain(delta: float) -> Vector3:
 	if you == null:
 		return _hold_height(Vector3.ZERO, delta)
 
+	var wish := _wish(you, delta)
+
+	# Nothing of theirs goes into a ward's smoke.
+	if WardScript.covers(global_position + Vector3(wish.x, 0.0, wish.z) * delta) and state != State.ON:
+		if state == State.LEAP:
+			_enter(State.MISSED)
+
+		wish.x = 0.0
+		wish.z = 0.0
+
+	return wish
+
+
+## The velocity it wants, as it is now.
+func _wish(you: Node3D, delta: float) -> Vector3:
 	match state:
 		State.RISE:
 			if _state_t >= RISE_TIME:
@@ -237,7 +268,10 @@ func _lands_on(you: Node3D) -> bool:
 	if you.get("combat") != null and you.combat.is_dodging():
 		return false
 
-	return leech.latch(self)
+	if WardScript.covers(_chest(you)):
+		return false
+
+	return put_on_you()
 
 
 func _enter(next: int) -> void:
@@ -291,3 +325,12 @@ func _on_struck(result: StringName, source: StringName) -> void:
 	# A hit from anything but lead breaks its leap.
 	if state == State.TELL and source != &"lead":
 		throw_off(target().global_position if target() != null else global_position + Vector3.FORWARD)
+	elif state == State.ON:
+		# Copal loosens it at once; a blow, once its grip is spent.
+		if source == &"copal" or source == &"blast":
+			throw_off(target().global_position)
+		elif source == &"blow":
+			grip_left -= 1
+
+			if grip_left <= 0:
+				throw_off(target().global_position)
