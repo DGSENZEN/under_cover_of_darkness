@@ -18,6 +18,9 @@ const ShardTrail := preload("res://scripts/Visual/ShardTrail.gd")
 
 signal struck(target: Object, damage: float)
 
+var _pierced := 0
+var _passed: Array[RID] = []
+
 const SPEED := 70.0
 const DAMAGE := 40.0
 const LIFETIME := 3.0
@@ -28,6 +31,8 @@ const HISS_DB := 36.0
 const CONVERGE := 0.06
 ## Its size: a spearhead this long, this wide and deep at the waist (m).
 const LENGTH := 0.32
+## It goes on through this many monsters. A man stops it.
+const PIERCES := 2
 const WIDTH := 0.05
 const DEPTH := 0.022
 ## How fast it spins about its length (radians a second).
@@ -107,6 +112,8 @@ func _physics_process(delta: float) -> void:
 	if shooter is CollisionObject3D:
 		exclude.append((shooter as CollisionObject3D).get_rid())
 
+	exclude.append_array(_passed)
+
 	# A ward in the way (not its owner's own): turned aside into its smoke.
 	var warded := WardScript.stopped_by(from, to, shooter)
 
@@ -147,6 +154,16 @@ func _hit(hit: Dictionary, direction: Vector3) -> void:
 
 	if collider != null and collider.has_method("take_hit"):
 		var target := collider as Node3D
+
+		# Through a monster, on to the next.
+		if target.is_in_group(&"monsters") and _pierced < PIERCES:
+			_pierced += 1
+			_passed.append((target as CollisionObject3D).get_rid())
+			global_position = point
+			collider.take_hit(damage, shooter, &"shard", point, direction)
+			struck.emit(collider, damage)
+			return
+
 		var health_before: float = float(target.get("health")) if target.get("health") != null else damage
 
 		# Killing him, it takes the limb it went into.

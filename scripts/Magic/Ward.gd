@@ -176,6 +176,17 @@ static func stopped_by(from: Vector3, to: Vector3, shooter: Object) -> Dictionar
 	return found
 
 
+## Whether `point` is inside any ward's smoke.
+static func covers(point: Vector3) -> bool:
+	for ref in active:
+		var ward: Node3D = ref.get_ref()
+
+		if ward != null and is_instance_valid(ward) and not ward.is_queued_for_deletion() and point.distance_to(ward.global_position) <= RADIUS:
+			return true
+
+	return false
+
+
 ## Where a shot first comes into a ward (stopped_by); Vector3.INF if none.
 static func stops(from: Vector3, to: Vector3, shooter: Object) -> Vector3:
 	var found := stopped_by(from, to, shooter)

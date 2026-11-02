@@ -118,6 +118,7 @@ const WHIP_CONE := 35.0
 const WHIP_LANDS := 0.15
 const WHIP_TIME := 0.35
 const WHIP_DAMAGE := 20.0
+const WHIP_ABOVE := 2.4
 
 ## A reload under way: the gate opening (or shutting), rounds going in, or
 ## the shell.
@@ -416,17 +417,23 @@ func try_whip() -> bool:
 	var ahead := -at.basis.z
 	ahead.y = 0.0
 	var best: Node3D = null
-	var nearest := WHIP_REACH
+	var nearest := INF
 
 	for guard in get_tree().get_nodes_in_group(&"guards") + get_tree().get_nodes_in_group(&"monsters"):
 		if not (guard is Node3D) or not guard.has_method("take_hit") or float(guard.get("health")) <= 0.0 or guard.get("asleep") == true:
 			continue
 
 		var to: Vector3 = (guard as Node3D).global_position - player.global_position
+		# A monster in the air says how far it can be reached, and only near your height.
+		var limit: Variant = guard.get("whip_reach")
+
+		if limit != null and absf(to.y) > WHIP_ABOVE:
+			continue
+
 		to.y = 0.0
 		var reach := to.length()
 
-		if reach > nearest or reach < 0.01:
+		if reach > nearest or reach > (float(limit) if limit != null else WHIP_REACH) or reach < 0.01:
 			continue
 
 		if rad_to_deg(ahead.normalized().angle_to(to / reach)) > WHIP_CONE:
@@ -463,7 +470,11 @@ func _update_whip(delta: float) -> void:
 			_whip_target.take_hit(WHIP_DAMAGE * player.caster.EMPOWER_BLOW, player, &"blast", at, blow)
 			_hint_gib(_whip_target, false)
 		else:
-			_whip_target.take_hit(WHIP_DAMAGE, player, &"power", at, blow)
+			var felt: StringName = _whip_target.take_hit(WHIP_DAMAGE, player, &"power", at, blow)
+
+			if _whip_target.is_in_group(&"monsters"):
+				_confirm(felt, false)
+
 		player.juice.add_trauma(0.25)
 		player.juice.punch(0.3, 0.0)
 		Sfx.play(player, &"thud", at, 0.0, 0.9)

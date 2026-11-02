@@ -34,6 +34,19 @@ Everything that hurts calls `take_hit(damage, attacker, kind, point, direction)`
 
 - **Weak:** scaled by the table, exposes it for 0.8 s (any hit in that time is doubled), and refunds 8 power, once per 0.25 s so a shell pays once.
 - **Resisted:** scaled by the table, no hold, a dull sound.
+- **Opening:** a kind can open itself (`_is_opening`; an eye's tell). Any hit then counts as weak, at three times the damage.
+
+## Answers to an eye
+
+| Moment | Answer | Result |
+|---|---|---|
+| The tell | Any hit | Breaks the swoop, exposes it, refunds power |
+| A swoop | Whip or boot | Batted back along your aim, reachable at 3.2 m (`whip_reach`); it hurts what it meets |
+| Gazing | Ward | No line of sight (`_line_to`), so no gaze and no swoop; one flying in is smoked |
+| Bunched | Copal round | `CopalCloud.gd`: 3.5 m of smoke for 4 s |
+| Lined up | Shard | Goes through two monsters (`Shard.PIERCES`) |
+
+A kill holds 0.11 s and jolts the view (`Monster._die`). An eye leaves `Remains.gd` and makes others within 14 m flinch (`flinch`): 2 m further out for 3 s, and 1.5 s longer before swooping.
 
 ## Adding a monster
 

@@ -13,7 +13,7 @@ func _ready() -> void:
 	_check("B1 a bullet counts as its round", Bestiary.source_of(&"bullet", &"lead") == &"lead" and Bestiary.source_of(&"bullet", &"copal") == &"copal")
 	_check("B2 shot, blast, shard and fire count as themselves", Bestiary.source_of(&"shot", &"lead") == &"shot" and Bestiary.source_of(&"blast", &"lead") == &"blast" and Bestiary.source_of(&"shard", &"lead") == &"obsidian" and Bestiary.source_of(&"fire", &"lead") == &"fire")
 	_check("B3 anything else is a blow", Bestiary.source_of(&"whip", &"lead") == &"blow" and Bestiary.source_of(&"quick", &"copal") == &"blow")
-	_check("B4 an eye takes 0.4 from lead", is_equal_approx(Bestiary.scale_for(&"floating_eye", &"lead"), 0.4))
+	_check("B4 an eye takes 0.3 from lead", is_equal_approx(Bestiary.scale_for(&"floating_eye", &"lead"), 0.3))
 	_check("B5 a source it has no word on is 1.0", is_equal_approx(Bestiary.scale_for(&"floating_eye", &"blow"), 1.0))
 	_check("B6 weak and resisted are told apart", Bestiary.is_weak(&"floating_eye", &"copal") and not Bestiary.is_weak(&"floating_eye", &"lead") and Bestiary.is_resisted(&"floating_eye", &"lead") and not Bestiary.is_resisted(&"floating_eye", &"shot"))
 	_check("B6b rounds are data", Rounds.info(&"copal")["stock"] == &"copal_rounds" and Rounds.info(&"lead")["source"] == &"lead" and Rounds.info(&"nothing").is_empty())

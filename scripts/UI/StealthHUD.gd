@@ -180,6 +180,8 @@ class Crosshair:
 	var power := 1.0
 	var power_alpha := 0.0
 	var power_short_flash := 0.0
+	## A flash of brass when power comes back for fighting well.
+	var power_gain_flash := 0.0
 	var short := false
 	var contact_kind: StringName = &""
 	## Real seconds a mark is held full before it fades (a kill's).
@@ -212,12 +214,12 @@ class Crosshair:
 
 		# Power: an arc over the crosshair, draining from the right; red for
 		# a moment when a spell asked for more than there was.
-		if power_alpha > 0.01 or power_short_flash > 0.01:
-			var seen := maxf(power_alpha, power_short_flash)
+		if power_alpha > 0.01 or power_short_flash > 0.01 or power_gain_flash > 0.01:
+			var seen := maxf(maxf(power_alpha, power_short_flash), power_gain_flash)
 			var start := PI * 1.18
 			var end := PI * 1.82
 			draw_arc(c, 17.0, start, end, 24, Color(0, 0, 0, 0.4 * seen), 3.0, true)
-			var ink := Color(0.62, 0.78, 0.9).lerp(Color(0.95, 0.3, 0.2), power_short_flash)
+			var ink := Color(0.62, 0.78, 0.9).lerp(Color(1.0, 0.78, 0.36), power_gain_flash).lerp(Color(0.95, 0.3, 0.2), power_short_flash)
 
 			if power > 0.001:
 				draw_arc(c, 17.0, start, start + (end - start) * power, 24, Color(ink.r, ink.g, ink.b, 0.8 * seen), 2.0, true)
@@ -1015,9 +1017,11 @@ func _process(delta: float) -> void:
 		_crosshair.power = p
 		_crosshair.power_alpha = move_toward(_crosshair.power_alpha, 1.0 if p < 0.995 else 0.0, delta * (3.0 if p < 0.995 else 1.0))
 		_crosshair.power_short_flash = move_toward(_crosshair.power_short_flash, 0.0, delta / 0.5)
+		_crosshair.power_gain_flash = move_toward(_crosshair.power_gain_flash, 0.0, delta / 0.6)
 
 		if not pool.refused_cast.is_connected(_on_power_refused):
 			pool.refused_cast.connect(_on_power_refused)
+			pool.refunded.connect(func(): _crosshair.power_gain_flash = 1.0)
 
 	# The revolver's hits, marked on the crosshair.
 	var gun: Node = player.get("revolver")

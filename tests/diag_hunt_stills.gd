@@ -58,6 +58,41 @@ func _ready() -> void:
 	await _shot("reloading")
 	g._stop_loading()
 
+	# Polish round one: what answers look like.
+	var eyes: Array = get_tree().get_nodes_in_group(&"monsters").filter(func(m): return not m.asleep and not m.dead)
+	var at: Transform3D = g.aim()
+	var ahead: Vector3 = at.origin - at.basis.z * 6.0
+	eyes[0].global_position = ahead + Vector3(-1.0, 0.0, 0.0)
+	eyes[1].global_position = ahead + Vector3(1.0, 0.0, 0.0)
+	eyes[0].round_hint = &"copal"
+	eyes[0].take_hit(55.0, p, &"bullet", eyes[0].global_position, Vector3.FORWARD)
+	await _frames(25)
+	await _shot("cloud_rising")
+	await _frames(70)
+	await _shot("cloud_full")
+	for cloud in get_tree().get_nodes_in_group(&"copal_clouds"):
+		cloud.queue_free()
+	var close: Vector3 = g.aim().origin - g.aim().basis.z * 4.0
+	eyes[1].global_position = close
+	eyes[1].take_hit(5000.0, p, &"blast", close, Vector3.FORWARD)
+	await _frames(4)
+	await _shot("death_burst")
+	await _frames(40)
+	await _shot("death_remains")
+	await _frames(40)
+	await _shot("death_lying")
+
+	Input.action_press("sprint")
+	Input.action_press("move_forward")
+	await _frames(30)
+	Input.action_press("crouch")
+	await _frames(10)
+	await _shot("slide")
+	Input.action_release("crouch")
+	Input.action_release("sprint")
+	Input.action_release("move_forward")
+	await _frames(30)
+
 	p.statuses.apply(&"evil_eye", 30.0)
 	await _frames(100)
 	await _shot("evil_eye")
@@ -76,7 +111,8 @@ func _shot(name_of: String) -> void:
 	var close := image.get_region(crop)
 	close.resize(crop.size.x * 3, crop.size.y * 3, Image.INTERPOLATE_NEAREST)
 	close.save_png(out.path_join("crop_" + name_of + ".png"))
-	print("STILL ", name_of)
+	var p: Node = get_tree().get_first_node_in_group(&"player")
+	print("STILL ", name_of, " eggs ", p.loadout.item_counts, " using ", p.loadout.using(), " input ", Input.is_action_pressed("use_item"))
 
 
 func _frames(count: int) -> void:

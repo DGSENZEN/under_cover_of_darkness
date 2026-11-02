@@ -578,15 +578,22 @@ var _assist_speed := 0.0
 ## A slide out of a sprint: seconds left of it, the way it goes, and the speed
 ## it set off at.
 const SLIDE_BOOST := 1.5
-const SLIDE_TIME := 0.8
+const SLIDE_TIME := 0.9
+## How much of it holds the speed it set off at, before it bleeds away.
+const SLIDE_HOLD := 0.4
+## A scrape and a puff of dust, this often.
+const SLIDE_SCRAPE_EVERY := 0.09
 const SLIDE_MIN_SPEED := 7.0
 const SLIDE_STEER := 3.0
 
 signal slid
+signal slide_scraped
 
 var _slide_left := 0.0
 var _slide_direction := Vector3.ZERO
 var _slide_speed := 0.0
+var _slide_steer := 0.0
+var _slide_scrape_in := 0.0
 
 ## Shoved: a dodge, a kick, a blast. The legs have no say until it runs out.
 var _shove_velocity := Vector3.ZERO
@@ -1221,6 +1228,9 @@ func _update_jump_windows(delta: float) -> void:
 
 ## What the evil eye does to you, for as long as it lies on you.
 func _feel_statuses() -> void:
+	if juice != null:
+		juice.set_slide(1.0 if is_sliding() else 0.0, _slide_steer)
+
 	var cursed: bool = statuses != null and statuses.has(&"evil_eye")
 
 	if power != null:
@@ -2130,8 +2140,11 @@ func _try_slide() -> void:
 	_slide_left = SLIDE_TIME
 	Sfx.play_flat(self, &"cloth", -4.0)
 
+	_slide_steer = 0.0
+	_slide_scrape_in = 0.0
+
 	if juice != null:
-		juice.punch(0.0, 0.0, -1.6)
+		juice.add_trauma(0.08)
 
 	slid.emit()
 
@@ -2147,11 +2160,22 @@ func _update_slide(wish_direction: Vector3, delta: float) -> bool:
 		return false
 
 	var across := wish_direction - _slide_direction * wish_direction.dot(_slide_direction)
-	var speed := lerpf(crouch_speed, _slide_speed, _slide_left / SLIDE_TIME)
+	var through := 1.0 - _slide_left / SLIDE_TIME
+	var bleeding := clampf((through - SLIDE_HOLD) / (1.0 - SLIDE_HOLD), 0.0, 1.0)
+	var speed := lerpf(_slide_speed, crouch_speed, bleeding * bleeding)
 	_slide_direction = (_slide_direction * speed + across * SLIDE_STEER * delta).normalized()
+	_slide_steer = wish_direction.dot(global_basis.x)
 	velocity.x = _slide_direction.x * speed
 	velocity.z = _slide_direction.z * speed
 	_slide_left = maxf(_slide_left - delta, 0.0)
+	_slide_scrape_in -= delta
+
+	if _slide_scrape_in <= 0.0:
+		_slide_scrape_in = SLIDE_SCRAPE_EVERY
+		Fx.dust(self, global_position + Vector3(0.0, -0.45, 0.0), Vector3.UP, 0.45, _surface_name())
+		Sfx.play_flat(self, &"cloth", -14.0, 0.7 + (1.0 - bleeding) * 0.3)
+		slide_scraped.emit()
+
 	return true
 
 

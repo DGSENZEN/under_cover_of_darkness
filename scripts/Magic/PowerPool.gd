@@ -6,6 +6,8 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 ## A spell asked for what the pool does not have (the HUD's arc flashes).
 signal refused_cast
+## Power came back for fighting well.
+signal refunded
 
 const MAX := 100.0
 ## Per second, once REFILL_DELAY seconds have passed since the last spend.
@@ -47,6 +49,7 @@ func pay(cost: float) -> bool:
 ## stays as it was.
 func refund(amount: float) -> void:
 	power = minf(power + amount, MAX)
+	refunded.emit()
 
 
 ## A spell that could not be paid for: a dry click, and the arc flashes.

@@ -6,7 +6,7 @@ extends RefCounted
 
 const TABLE := {
 	&"lead": {"stock": &"rounds", "source": &"lead", "colour": Color(0.55, 0.48, 0.3)},
-	&"copal": {"stock": &"copal_rounds", "source": &"copal", "colour": Color(0.72, 0.55, 0.22), "status": &"smoked"},
+	&"copal": {"stock": &"copal_rounds", "source": &"copal", "colour": Color(0.72, 0.55, 0.22), "status": &"smoked", "cloud": true},
 }
 
 

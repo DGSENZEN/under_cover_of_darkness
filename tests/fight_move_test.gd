@@ -30,6 +30,7 @@ func _ready() -> void:
 	await _strafing()
 	await _gun_dodge()
 	await _slide()
+	await _slide_feel()
 	print("==== RESULTS ====")
 	print("%d failed" % failed)
 	get_tree().quit(1 if failed > 0 else 0)
@@ -226,6 +227,47 @@ func _slide() -> void:
 	Input.action_press("crouch")
 	await _frames(20)
 	_check("FM25 at a ledge, sprint + crouch still climbs down", p.movement_state != p.MoveState.LOCOMOTION)
+
+
+func _slide_feel() -> void:
+	await _sprint_for(40)
+	var eye_was: float = p.camera.global_position.y
+	var scrapes := [0]
+	var on_scrape := func(): scrapes[0] += 1
+	p.slide_scraped.connect(on_scrape)
+	Input.action_press("crouch")
+	await _frames(2)
+	var start: float = _flat()
+	_check("FM26a it kicks the view wide", p.juice.slide_amount() > 0.0)
+	await _frames(5)
+	_check("FM27 the view drops sharply: over half way in 0.12 s (%.2f m)" % (eye_was - p.camera.global_position.y), eye_was - p.camera.global_position.y >= (p._standing_height - p.crouch_height) * 0.5)
+	await _frames(14)
+	_check("FM26 it holds its speed for the first 40%% (%.1f of %.1f)" % [_flat(), start], _flat() >= start * 0.95)
+	await _time_until(func(): return not p.is_sliding(), 2.0)
+	_check("FM28 scraping as it goes, with dust (%d)" % scrapes[0], scrapes[0] >= 4)
+	p.slide_scraped.disconnect(on_scrape)
+	await _frames(20)
+	_check("FM26b the view comes back", p.juice.slide_amount() < 0.05)
+
+	await _sprint_for(40)
+	Input.action_press("crouch")
+	Input.action_press("move_right")
+	await _frames(12)
+	var right: float = p.juice.slide_roll()
+	await _sprint_for(40)
+	Input.action_press("crouch")
+	Input.action_press("move_left")
+	await _frames(12)
+	var left: float = p.juice.slide_roll()
+	_check("FM29 it leans the way you steer (%.2f, %.2f)" % [right, left], right * left < 0.0)
+
+	await _sprint_for(40)
+	Input.action_press("crouch")
+	await _frames(20)
+	var low: float = p.camera.global_position.y
+	Input.action_release("crouch")
+	await _frames(10)
+	_check("FM30 up quick out of it: most of the way in 0.17 s (%.2f m)" % (p.camera.global_position.y - low), p.camera.global_position.y - low >= (p._standing_height - p.crouch_height) * 0.6)
 
 
 func _settle(at := HOME, yaw := 0.0) -> void:

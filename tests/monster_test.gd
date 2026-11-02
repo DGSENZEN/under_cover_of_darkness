@@ -49,7 +49,7 @@ func _hits() -> void:
 
 	var m := _monster()
 	await _ball(m)
-	_check("M1 a lead ball does 0.4 of its damage (%.1f)" % m.health, is_equal_approx(m.health, 60.0 - 55.0 * 0.4))
+	_check("M1 a lead ball does 0.3 of its damage (%.1f)" % m.health, is_equal_approx(m.health, 120.0 - 55.0 * 0.3))
 	_check("M2 a lead hit confirms resisted", confirmed == &"resisted" and last == &"resisted")
 
 	m.health = 500.0
@@ -64,7 +64,7 @@ func _hits() -> void:
 	var was: float = m.health
 	g.cylinder_round = &"lead"
 	await _ball(m)
-	_check("M6 a hit while exposed is doubled (%.1f)" % (was - m.health), is_equal_approx(was - m.health, 55.0 * 0.4 * 2.0))
+	_check("M6 a hit while exposed is doubled (%.1f)" % (was - m.health), is_equal_approx(was - m.health, 55.0 * 0.3 * 2.0))
 	_free(m)
 
 	m = _monster()

@@ -9,9 +9,9 @@ const Rounds := preload("res://scripts/Combat/Rounds.gd")
 
 const TABLE := {
 	&"floating_eye": {
-		"health": 60.0,
+		"health": 120.0,
 		"weak": {&"shot": 1.0, &"copal": 1.2, &"obsidian": 1.5, &"blast": 1.5},
-		"resist": {&"lead": 0.4},
+		"resist": {&"lead": 0.3},
 	},
 }
 

@@ -10,6 +10,8 @@ extends CharacterBody3D
 const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
 const Rounds := preload("res://scripts/Combat/Rounds.gd")
 const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
+const CopalCloud := preload("res://scripts/Monsters/CopalCloud.gd")
+const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const SaveFields := preload("res://scripts/Save/SaveFields.gd")
 
 signal died(by: Node)
@@ -20,6 +22,8 @@ signal struck(result: StringName, source: StringName)
 ## A weak hit leaves it open this long; any hit in that time is doubled.
 const EXPOSED_TIME := 0.8
 const EXPOSED_SCALE := 2.0
+## A hit while it has opened itself (_is_opening): whatever the round.
+const OPENING_SCALE := 3.0
 ## Power back for a weak hit, and how soon it can pay again, so a whole shell
 ## pays once.
 const REFUND := 8.0
@@ -31,6 +35,9 @@ const PUSH := {&"bullet": 3.0, &"shot": 1.0, &"blast": 9.0, &"shard": 3.0}
 const PUSH_DEFAULT := 2.0
 const PUSH_FADE := 12.0
 const KICK_DAMAGE := 20.0
+## A kill's hold (real seconds) and its jolt to the view.
+const KILL_HOLD := 0.11
+const KILL_TRAUMA := 0.3
 const SAVED := ["health", "dead", "asleep", "global_position"]
 
 @export var kind: StringName
@@ -119,16 +126,21 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, _point: Vec
 		return &"none"
 
 	var source := Bestiary.source_of(hit_kind, round_hint)
-	var weak := Bestiary.is_weak(kind, source)
+	var opening := _is_opening()
+	var weak := Bestiary.is_weak(kind, source) or opening
 	var was_exposed := is_exposed()
-	health -= damage * Bestiary.scale_for(kind, source) * (EXPOSED_SCALE if was_exposed else 1.0)
+	health -= damage * Bestiary.scale_for(kind, source) * (EXPOSED_SCALE if was_exposed else 1.0) * (OPENING_SCALE if opening else 1.0)
 	_push += direction.normalized() * float(PUSH.get(hit_kind, PUSH_DEFAULT))
 
 	if hit_kind == &"bullet":
-		var status: StringName = Rounds.info(round_hint).get("status", &"")
+		var round_is: Dictionary = Rounds.info(round_hint)
+		var status: StringName = round_is.get("status", &"")
 
 		if status != &"":
 			statuses.apply(status, STATUS_TIME)
+
+		if round_is.get("cloud", false):
+			CopalCloud.burst(get_parent(), global_position)
 
 	if weak:
 		_pay_back(attacker)
@@ -158,6 +170,12 @@ func kick(push: Vector3, by: Node3D) -> void:
 	_push += push
 
 
+## Whether it has opened itself right now: any hit counts as a weak one, and
+## more. A kind says when (a floating eye's tell).
+func _is_opening() -> bool:
+	return false
+
+
 func is_exposed() -> bool:
 	return statuses.has(&"exposed")
 
@@ -175,6 +193,12 @@ func _pay_back(attacker: Node3D) -> void:
 
 func _die(by: Node3D) -> void:
 	_lay_down()
+	TimeFx.hitstop(get_tree(), KILL_HOLD)
+	var view: Variant = by.get("juice") if is_instance_valid(by) else null
+
+	if view != null:
+		view.add_trauma(KILL_TRAUMA)
+
 	died.emit(by)
 
 

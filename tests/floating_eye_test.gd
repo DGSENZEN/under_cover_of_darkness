@@ -5,6 +5,10 @@ extends Node3D
 const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const EyeScript := preload("res://scripts/Monsters/FloatingEye.gd")
+const WardScript := preload("res://scripts/Magic/Ward.gd")
+const ShardScript := preload("res://scripts/Magic/Shard.gd")
+const CopalCloud := preload("res://scripts/Monsters/CopalCloud.gd")
+const Fx := preload("res://scripts/Visual/Fx.gd")
 const HOME := Vector3(0, 1.05, 0)
 const STATE := EyeScript.State
 
@@ -31,6 +35,8 @@ func _ready() -> void:
 	await _gaze()
 	await _smoke()
 	await _stagger()
+	await _answers()
+	await _deaths()
 	await _killing()
 	await _long_run()
 	await _dead_player()
@@ -211,10 +217,201 @@ func _stagger() -> void:
 	_free(e)
 
 
+func _answers() -> void:
+	# The tell: any hit.
+	await _place_player(HOME)
+	var e := _eye(Vector3(0, 2, -7), 22)
+	e.next_swoop_in = 0.05
+	p.power.pay(40.0)
+	await _until(func(): return e.state == STATE.TELL, 2.0)
+	var power_was: float = p.power.power
+	var result: StringName = e.take_hit(55.0, p, &"bullet", e.global_position, Vector3.FORWARD)
+	_check("A1 a hit in the tell is weak, whatever the round", result == &"weak")
+	_check("A1b it does three times the damage (%.1f)" % (120.0 - e.health), is_equal_approx(120.0 - e.health, 55.0 * 0.3 * 3.0))
+	_check("A1c it interrupts the swoop and exposes it", e.state == STATE.BOUNCE and e.is_exposed())
+	_check("A1d and pays back power", p.power.power > power_was)
+	_free(e)
+
+	# The swoop: the whip, on the real key.
+	await _place_player(HOME)
+	p.health = p.max_health
+	p.invulnerable = false
+	p.revolver.reset_for_practice()
+	e = _eye(Vector3(0, 2, -7), 23)
+	e.next_swoop_in = 0.05
+	await _until(func(): return e.state == STATE.SWOOP, 2.0)
+	await _until(func(): return e.global_position.distance_to(p.global_position) < 3.0, 1.0)
+	await _face(e)
+	await _press("kick")
+	await _until(func(): return e.state == STATE.BATTED, 0.5)
+	_check("A3 a swoop can be whipped at 3 m, and is batted", e.state == STATE.BATTED)
+	_check("A3b it never bit you", p.health == p.max_health)
+	await _frames(6)
+	_check("A3c it goes back the way you hit it", e.velocity.dot(-p.global_basis.z) > 8.0)
+	p.invulnerable = true
+	_free(e)
+
+	# Batted into another.
+	await _place_player(HOME)
+	var bat := _eye(Vector3(0, 2, -6), 24)
+	var other := _eye(Vector3(0, 2, -9), 25)
+	other.next_swoop_in = 100.0
+	bat.state = STATE.SWOOP
+	var other_was: float = other.health
+	bat.kick(Vector3(0, 0, -6), p)
+	await _until(func(): return other.health < other_was, 1.0)
+	_check("A4 a batted eye hurts and exposes what it hits", other.health < other_was and other.is_exposed())
+	_check("A4b and stops there", bat.state == STATE.BOUNCE)
+	_free(bat)
+	_free(other)
+
+	# Batted into a wall.
+	await _place_player(Vector3(55, 1.05, 0))
+	bat = _eye(Vector3(57.5, 2, 0), 26)
+	var was_full: float = bat.health
+	bat.state = STATE.SWOOP
+	bat.kick(Vector3(6, 0, 0), p)
+	await _until(func(): return bat.state == STATE.BOUNCE, 1.0)
+	_check("A5 a wall hurts it more than the blow did", was_full - bat.health > 20.0 and bat.state == STATE.BOUNCE)
+	_free(bat)
+
+	# The Ward: it cannot see you.
+	await _place_player(HOME)
+	p.statuses.clear(&"evil_eye")
+	p.set_meta(&"gaze", 0.0)
+	e = _eye(Vector3(0, 2, -7), 27)
+	e.state = STATE.CIRCLE
+	e.next_swoop_in = 0.1
+	var ward: Node3D = WardScript.cast_on(p)
+	var swooped := false
+
+	for i in 180:
+		await get_tree().physics_frame
+		swooped = swooped or e.state == STATE.TELL or e.state == STATE.SWOOP
+
+	_check("A6 behind the Ward, no gaze and no swoop", not p.statuses.has(&"evil_eye") and not swooped)
+	ward.queue_free()
+	await _frames(2)
+	_free(e)
+
+	await _place_player(HOME)
+	e = _eye(Vector3(0, 2, -7), 28)
+	e.next_swoop_in = 0.05
+	await _until(func(): return e.state == STATE.SWOOP, 2.0)
+	ward = WardScript.cast_on(p)
+	await _until(func(): return e.state == STATE.BOUNCE, 1.0)
+	_check("A7 swooping into the Ward, it is smoked and bounces", e.state == STATE.BOUNCE and e.statuses.has(&"smoked"))
+	ward.queue_free()
+	await _frames(2)
+	_free(e)
+
+	# The copal round's cloud.
+	await _place_player(HOME)
+	var hit_one := _eye(Vector3(0, 8, -30), 29)
+	var near := _eye(Vector3(2, 8, -30), 30)
+	var far := _eye(Vector3(9, 8, -30), 31)
+
+	hit_one.round_hint = &"copal"
+	hit_one.take_hit(55.0, p, &"bullet", hit_one.global_position, Vector3.FORWARD)
+	await _frames(3)
+	_check("A8 a copal hit leaves a cloud that smokes what is near", near.statuses.has(&"smoked"))
+	_check("A8b not what is far", not far.statuses.has(&"smoked"))
+	var clouds := get_tree().get_nodes_in_group(&"copal_clouds")
+	_check("A8c there is a cloud to see", clouds.size() == 1)
+	await _frames(int(CopalCloud.LASTS * 60.0) + 10)
+	_check("A8d and it goes", get_tree().get_nodes_in_group(&"copal_clouds").is_empty())
+
+	for one in [hit_one, near, far]:
+		_free(one)
+
+	# The Shard, through a line.
+	await _place_player(HOME)
+	p.neck.rotation = Vector3.ZERO
+	p.rotation = Vector3.ZERO
+	await _frames(2)
+	var from: Vector3 = p.revolver.aim().origin
+	var line: Array = []
+
+	for i in 4:
+		var in_line := _eye(from + Vector3(0, 0, -4.0 - i * 2.0), 40 + i)
+		in_line.health = 500.0
+		in_line.disable_mode = CollisionObject3D.DISABLE_MODE_KEEP_ACTIVE
+		in_line.process_mode = Node.PROCESS_MODE_DISABLED
+		line.append(in_line)
+
+	await _frames(2)
+	var shard: Node3D = ShardScript.new()
+	add_child(shard)
+	shard.launch(from, Vector3(0, 0, -70.0), 40.0, p)
+	await _frames(20)
+	_check("A9 a Shard goes through two monsters into a third", line[0].health < 500.0 and line[1].health < 500.0 and line[2].health < 500.0)
+	_check("A9b and no further", is_equal_approx(line[3].health, 500.0))
+
+	for one in line:
+		_free(one)
+
+
+func _deaths() -> void:
+	await _place_player(HOME)
+	var e := _eye(Vector3(0, 3, -10), 50)
+	var near := _eye(Vector3(5, 3, -10), 51)
+	var far := _eye(Vector3(0, 3, -40), 52)
+	near.next_swoop_in = 5.0
+	far.next_swoop_in = 5.0
+	await _frames(12)
+	var wait_was: float = near.next_swoop_in
+	var far_wait: float = far.next_swoop_in
+	var trauma_was: float = p.juice._trauma
+	var stains_was: int = Fx.stains_in_use()
+	var radius_was: float = near.circle_radius()
+	e.take_hit(5000.0, p, &"blast", e.global_position, Vector3.FORWARD)
+	_check("D5 a kill jolts the view", p.juice._trauma > trauma_was)
+	var remains := get_tree().get_nodes_in_group(&"remains")
+	_check("D1 it leaves a body", remains.size() == 1)
+	_check("D4 the pack within reach flinches, and waits longer", near.next_swoop_in >= wait_was + 1.4 and near.flinching())
+	_check("D4b those far off don't", not far.flinching() and far.next_swoop_in <= far_wait)
+	_check("D8 flinching, it pulls further out", near.circle_radius() >= radius_was + 1.9)
+	var body: Node3D = remains[0]
+	var height: float = body.global_position.y
+	await _frames(70)
+	_check("D2 the body falls", is_instance_valid(body) and body.global_position.y < height - 1.0)
+	_check("D3 and leaves a stain where it lands (%d, %d)" % [stains_was, Fx.stains_in_use()], Fx.stains_in_use() > stains_was)
+	await _frames(140)
+	_check("D8b the flinch passes", not near.flinching() and is_equal_approx(near.circle_radius(), radius_was))
+	await _frames(300)
+	_check("D7 the body goes in time", get_tree().get_nodes_in_group(&"remains").is_empty())
+	_free(e)
+	_free(near)
+	_free(far)
+
+	# A flinch breaks a tell.
+	await _place_player(HOME)
+	var tell := _eye(Vector3(0, 2, -7), 53)
+	tell.next_swoop_in = 0.05
+	await _until(func(): return tell.state == STATE.TELL, 2.0)
+	tell.flinch()
+	_check("D9 a flinch breaks off a tell", tell.state != STATE.TELL)
+	_free(tell)
+
+	# Power back shows.
+	var cross: Control = p.hud.get("_crosshair")
+	p.power.pay(30.0)
+	p.power.refund(8.0)
+	await _frames(2)
+	_check("D6 power coming back flashes the arc", cross.power_gain_flash > 0.0)
+
+
+func _face(target: Node3D) -> void:
+	var way: Vector3 = (target.global_position - p.camera.global_position).normalized()
+	p.rotation.y = atan2(-way.x, -way.z)
+	p.neck.rotation = Vector3(asin(way.y), 0.0, 0.0)
+	await get_tree().physics_frame
+
+
 func _killing() -> void:
 	var lead := _hits_to_kill(&"lead")
 	var copal := _hits_to_kill(&"copal")
-	_check("E12 3 lead balls or 1 copal ball kill (%d, %d)" % [lead, copal], lead == 3 and copal == 1)
+	_check("E12 8 lead balls or 2 copal balls kill, unexposed (%d, %d)" % [lead, copal], lead == 8 and copal == 2)
 
 	await _place_player(HOME)
 	p.neck.rotation = Vector3.ZERO

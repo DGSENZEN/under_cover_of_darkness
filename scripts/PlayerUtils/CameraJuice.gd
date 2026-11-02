@@ -124,6 +124,13 @@ var trauma_decay := 1.7
 var _trauma := 0.0
 var _shake_time := 0.0
 const UNSTEADY_DEGREES := 0.8
+const SLIDE_FOV := 7.0
+const SLIDE_ROLL_DEGREES := 3.5
+const SLIDE_OPEN := 0.07
+const SLIDE_CLOSE := 0.28
+var _slide := 0.0
+var _slide_wanted := 0.0
+var _slide_steer := 0.0
 var _unsteady := 0.0
 var _unsteady_time := 0.0
 var _last_real := -1.0
@@ -238,6 +245,21 @@ func on_throw(strength := 1.0) -> void:
 
 
 ## Adds view-shake trauma, clamped to 0..1.
+## A slide under way (0 ending it), and which way it is being steered (-1..1).
+func set_slide(amount: float, steer: float) -> void:
+	_slide_wanted = amount
+	_slide_steer = steer
+
+
+func slide_amount() -> float:
+	return _slide
+
+
+## The roll the slide adds now (radians).
+func slide_roll() -> float:
+	return -_slide_steer * _slide * deg_to_rad(SLIDE_ROLL_DEGREES)
+
+
 ## The evil eye: the view drifts, slowly, by up to UNSTEADY_DEGREES. 0 ends it.
 func set_unsteady(amount: float) -> void:
 	_unsteady = amount
@@ -449,6 +471,11 @@ func update(
 		bob_y = 0.0
 		target_roll = 0.0
 		target_fov = 0.0
+
+	# A slide: the lens opens at once and closes slower, leaning into the steer.
+	_slide = move_toward(_slide, _slide_wanted, real_delta / (SLIDE_OPEN if _slide_wanted > _slide else SLIDE_CLOSE))
+	target_fov += _slide * SLIDE_FOV
+	target_roll += slide_roll()
 
 	# --- choreographed moves: one smooth arc over the whole move -----------
 	var arc := sin(clampf(move_s, 0.0, 1.0) * PI)

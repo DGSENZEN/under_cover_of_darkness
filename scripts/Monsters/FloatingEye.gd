@@ -6,12 +6,18 @@ extends "res://scripts/Monsters/Monster.gd"
 ## you, and looked at long enough you carry the evil eye (Statuses, what it does:
 ## PlayerController._feel_statuses). A single ball hardly marks one; shot, a
 ## shard or copal do (Bestiary). Copal smoke blinds it: slow, no gaze, no swoop.
-## A stand-in body until its model is made.
+## A hit in its tell breaks it off and opens it up, whatever the round (the
+## Monster's opening). A swoop can be batted back with the whip or the boot, into
+## a wall or another eye. The Ward hides you from it, and smokes it if it flies
+## in. A stand-in body until its model is made.
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 
-enum State { DRIFT, CIRCLE, TELL, SWOOP, BOUNCE }
+const WardScript := preload("res://scripts/Magic/Ward.gd")
+const Remains := preload("res://scripts/Monsters/Remains.gd")
+
+enum State { DRIFT, CIRCLE, TELL, SWOOP, BOUNCE, BATTED }
 
 ## Sees you this far, with a clear line (m).
 const NOTICE := 18.0
@@ -41,6 +47,21 @@ const EVIL_EYE_TIME := 8.0
 ## At once, across the pack, in a tell or a swoop.
 const MOST_SWOOPING := 2
 const SMOKED_SPEED := 0.6
+## Batted out of a swoop (the whip, the boot): how fast, how long, what it does
+## to itself on a wall and to another eye it meets.
+const BAT_SPEED := 14.0
+const BAT_TIME := 0.6
+const BAT_HURT := 40.0
+const BAT_MEET := 0.95
+## How far off the whip can meet a swooping one (m), and one that isn't.
+const WHIP_SWOOPING := 3.2
+const WHIP_CLOSE := 1.3
+## A packmate burst this near (m): it pulls out this much further for this long,
+## and waits this much longer to swoop.
+const FLINCH_WITHIN := 14.0
+const FLINCH_OUT := 2.0
+const FLINCH_TIME := 3.0
+const FLINCH_WAIT := 1.5
 const LINE_EVERY := 6
 const HIT_RADIUS := 0.42
 const BODY_RADIUS := 0.36
@@ -64,6 +85,8 @@ var _home := Vector3.ZERO
 var _swoop_from := Vector3.ZERO
 var _swoop_at := Vector3.ZERO
 var _swoop_way := Vector3.FORWARD
+var _bat_way := Vector3.FORWARD
+var _flinch_left := 0.0
 var _bitten := false
 var _body_mesh: Node3D
 
@@ -90,6 +113,52 @@ func _ready() -> void:
 	next_swoop_in = _rng.randf_range(SWOOP_WAIT.x, SWOOP_WAIT.y)
 	exposed_now.connect(_stagger)
 	_build_body()
+
+
+func _is_opening() -> bool:
+	return state == State.TELL
+
+
+## How far off the whip can meet it (Revolver.try_whip).
+var whip_reach: float:
+	get:
+		return WHIP_SWOOPING if state == State.SWOOP else WHIP_CLOSE
+
+
+## Struck by the whip or the boot in a swoop: batted back along the blow.
+func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vector3, direction: Vector3) -> StringName:
+	if not dead and state == State.SWOOP and (hit_kind == &"power" or hit_kind == &"kick"):
+		_bat_way = direction.normalized()
+		_enter(State.BATTED)
+		var result := super.take_hit(damage, attacker, hit_kind, point, direction)
+		_pay_back(attacker)
+		return result if result == &"killed" else &"weak"
+
+	return super.take_hit(damage, attacker, hit_kind, point, direction)
+
+
+func _batted(you: Node3D) -> Vector3:
+	var hit_something := get_slide_collision_count() > 0
+
+	for other in get_tree().get_nodes_in_group(&"monsters"):
+		if other != self and not other.dead and not other.asleep and other.global_position.distance_to(global_position) <= BAT_MEET:
+			other.round_hint = &"lead"
+			other.take_hit(BAT_HURT, you, &"kick", other.global_position, _bat_way)
+			other.statuses.apply(&"exposed", EXPOSED_TIME)
+			other.exposed_now.emit()
+			hit_something = true
+
+	if hit_something:
+		_swoop_way = -_bat_way
+		_enter(State.BOUNCE)
+		take_hit(BAT_HURT, you, &"kick", global_position, -_bat_way)
+		return Vector3.ZERO
+
+	if _state_t >= BAT_TIME:
+		_enter(State.BOUNCE)
+		return Vector3.ZERO
+
+	return _bat_way * BAT_SPEED
 
 
 ## A weak hit throws it back, away from you, off whatever it was doing.
@@ -131,6 +200,7 @@ func _build_body() -> void:
 func _brain(delta: float) -> Vector3:
 	_ticks += 1
 	_state_t += delta
+	_flinch_left = maxf(_flinch_left - delta, 0.0)
 	var you: Node3D = target()
 
 	if you == null or you.get("is_dead") == true:
@@ -161,7 +231,7 @@ func _brain(delta: float) -> Vector3:
 
 			return _circle(you) * (SMOKED_SPEED if smoked else 1.0)
 		State.TELL:
-			if smoked:
+			if smoked or not _clear_line:
 				_enter(State.CIRCLE)
 				return Vector3.ZERO
 
@@ -172,7 +242,9 @@ func _brain(delta: float) -> Vector3:
 
 			return Vector3.ZERO
 		State.SWOOP:
-			return _swoop(you)
+			return _swoop(you, delta)
+		State.BATTED:
+			return _batted(you)
 		State.BOUNCE:
 			if _state_t >= BOUNCE_TIME:
 				next_swoop_in = _rng.randf_range(SWOOP_WAIT.x, SWOOP_WAIT.y)
@@ -197,7 +269,7 @@ func _circle(you: Node3D) -> Vector3:
 	var from_you := global_position - you.global_position
 	# A little way on round you, so it keeps its pace.
 	_orbit = atan2(from_you.x, from_you.z) + _orbit_way * ORBIT_AHEAD
-	var wanted := you.global_position + Vector3(sin(_orbit), 0.0, cos(_orbit)) * _radius
+	var wanted := you.global_position + Vector3(sin(_orbit), 0.0, cos(_orbit)) * circle_radius()
 	# Its height is above your feet.
 	wanted.y = you.global_position.y - 1.0 + _height
 	return _steer((wanted - global_position).normalized() * CIRCLE_SPEED)
@@ -220,7 +292,13 @@ func _steer(way: Vector3) -> Vector3:
 
 
 func _line_to(you: Node3D) -> bool:
-	var query := PhysicsRayQueryParameters3D.create(global_position, you.global_position + Vector3(0.0, 0.6, 0.0), 1, [get_rid(), you.get_rid()])
+	var at := you.global_position + Vector3(0.0, 0.6, 0.0)
+
+	# The Ward's smoke hides what is in it.
+	if not WardScript.stopped_by(global_position, at, self).is_empty():
+		return false
+
+	var query := PhysicsRayQueryParameters3D.create(global_position, at, 1, [get_rid(), you.get_rid()])
 	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 
@@ -265,7 +343,13 @@ func _launch() -> void:
 	_enter(State.SWOOP)
 
 
-func _swoop(you: Node3D) -> Vector3:
+func _swoop(you: Node3D, delta: float) -> Vector3:
+	# Into the Ward: its smoke, and off.
+	if WardScript.covers(global_position) or not WardScript.stopped_by(global_position, global_position + _swoop_way * SWOOP_SPEED * delta * 2.0, self).is_empty():
+		statuses.apply(&"smoked", STATUS_TIME)
+		_stagger()
+		return Vector3.ZERO
+
 	if not _bitten and _touching(you):
 		_bitten = true
 		Sfx.play(self, &"thud", global_position, -4.0, 1.3)
@@ -281,11 +365,39 @@ func _swoop(you: Node3D) -> Vector3:
 	return _swoop_way * SWOOP_SPEED
 
 
-## It bursts.
+## It bursts, and what is left of it drops. The rest of the pack starts back.
 func _die(by: Node3D) -> void:
-	Fx.blood(self, global_position, Vector3.UP, 1.2)
-	Sfx.play(self, &"arrow_flesh", global_position, 0.0, 0.8)
+	Fx.blood(self, global_position, Vector3.UP, 2.4)
+	Fx.flash(self, global_position, Color(1.0, 0.55, 0.35), 2.0, 5.0, 0.08)
+	Sfx.play(self, &"flesh_heavy", global_position, 2.0, 1.1)
+	Sfx.play(self, &"coal_pop", global_position, 0.0, 0.7)
+	Remains.drop(get_parent(), _body_mesh, global_position, _push * 0.7 + Vector3.UP * 2.0, BODY_RADIUS * 0.8)
+	_body_mesh = null
+
+	for other in get_tree().get_nodes_in_group(&"monsters"):
+		if other != self and other.has_method("flinch") and not other.dead and not other.asleep and other.global_position.distance_to(global_position) <= FLINCH_WITHIN:
+			other.flinch()
+
 	super._die(by)
+
+
+## One of the pack has burst near it: it breaks off, draws back and holds off a
+## moment. Your breath.
+func flinch() -> void:
+	next_swoop_in += FLINCH_WAIT
+	_flinch_left = FLINCH_TIME
+
+	if state == State.TELL:
+		_enter(State.CIRCLE)
+
+
+func flinching() -> bool:
+	return _flinch_left > 0.0
+
+
+## How far out it circles you now.
+func circle_radius() -> float:
+	return _radius + (FLINCH_OUT if flinching() else 0.0)
 
 
 ## Within reach of the line down your middle.
