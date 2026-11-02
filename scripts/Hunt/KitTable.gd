@@ -15,11 +15,13 @@ const TOP := 0.9
 const SIZE := Vector3(1.8, 0.1, 0.9)
 const PIECE := Vector3(0.22, 0.12, 0.16)
 
+var laid_out: Array = LAID_OUT
 var _pieces := {}
 
 
-static func build(parent: Node, at: Transform3D) -> Node3D:
+static func build(parent: Node, at: Transform3D, laid_out := LAID_OUT) -> Node3D:
 	var table: Node3D = (load("res://scripts/Hunt/KitTable.gd") as GDScript).new()
+	table.laid_out = laid_out
 	parent.add_child(table)
 	table.global_transform = at
 	return table
@@ -38,12 +40,12 @@ func _ready() -> void:
 	body.add_child(Props.mesh_box(legs, Color(0.2, 0.14, 0.1)))
 	add_child(body)
 
-	for i in LAID_OUT.size():
-		var entry: Array = LAID_OUT[i]
+	for i in laid_out.size():
+		var entry: Array = laid_out[i]
 		var kit_piece: StaticBody3D = KitPieceScript.new()
 		kit_piece.piece = entry[0]
 		kit_piece.piece_type = entry[1]
-		kit_piece.position = Vector3((i - (LAID_OUT.size() - 1) * 0.5) * 0.5, TOP + PIECE.y * 0.5, -0.1)
+		kit_piece.position = Vector3((i - (laid_out.size() - 1) * 0.5) * 0.5, TOP + PIECE.y * 0.5, -0.1)
 		kit_piece.add_child(Props.shape_box(PIECE))
 		kit_piece.add_child(Props.mesh_box(PIECE, entry[2]))
 		add_child(kit_piece)

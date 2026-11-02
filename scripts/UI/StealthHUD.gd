@@ -1171,7 +1171,7 @@ func _process(delta: float) -> void:
 	# The evil eye on you, and an egg in your pocket: say so.
 	if player.loadout != null and player.loadout.can_offer():
 		actions = actions.duplicate()
-		actions.append([&"use_item", "Egg"])
+		actions.append([&"use_item", player.loadout.offer_prompt()])
 
 	_update_prompts(actions, delta)
 	_crosshair.warm = lerpf(_crosshair.warm, 1.0 if not actions.is_empty() else 0.0, 1.0 - exp(-14.0 * delta))

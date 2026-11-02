@@ -5,6 +5,7 @@ extends Node
 ## the inventory's. Runs as the player's "Loadout" child. Off a hunt it stays
 ## lead only and unlocked and touches nothing.
 
+const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
 const PrepItems := preload("res://scripts/Hunt/PrepItems.gd")
 const Rounds := preload("res://scripts/Combat/Rounds.gd")
 const SaveFields := preload("res://scripts/Save/SaveFields.gd")
@@ -31,6 +32,8 @@ const PASS_THROUGH := Vector3(-0.23, -0.27, -0.5)
 const PASS_TO := Vector3(-0.19, -0.26, -0.47)
 ## The hand through it: palm up and tipped toward you, fingers ahead and to the
 ## right, the egg standing in it; rolled in as it takes the curse.
+## Laying a line: reaching down and out ahead of you.
+const LAY_HAND := Transform3D(Basis(Vector3(0, -0.5, -0.866), Vector3(0, 0.866, -0.5), Vector3(1, 0, 0)), Vector3(-0.12, -0.36, -0.46))
 const PALM_UP := Basis(Vector3(0.1, 0.849, 0.519), Vector3(0.488, 0.412, -0.77), Vector3(-0.868, 0.33, -0.373))
 const PASS_ROLL := -0.3
 ## The ribbons reach the egg on the shader's clock (evil_eye_view.gdshader): when the
@@ -54,7 +57,7 @@ var rounds: Array[StringName] = [&"lead"]
 var items: Array[StringName] = []
 var item_counts := {}
 var locked := false
-var owned := {&"rounds": 96, &"copal_rounds": 24, &"shells": 18, &"egg": 6}
+var owned := {&"rounds": 96, &"copal_rounds": 24, &"shells": 18, &"egg": 6, &"copal_line": 6}
 
 var player: CharacterBody3D
 var _using: StringName = &""
@@ -74,6 +77,12 @@ func _ready() -> void:
 		var key := InputEventKey.new()
 		key.physical_keycode = KEY_V
 		InputMap.action_add_event(&"use_item", key)
+
+	if not InputMap.has_action(&"use_item_2"):
+		InputMap.add_action(&"use_item_2")
+		var second := InputEventKey.new()
+		second.physical_keycode = KEY_B
+		InputMap.action_add_event(&"use_item_2", second)
 
 
 func pack_round(id: StringName) -> bool:
@@ -176,23 +185,32 @@ func use_item(index := 0) -> bool:
 	var id := items[index]
 	var info := PrepItems.info(id)
 
-	if int(item_counts.get(id, 0)) <= 0 or not (player.statuses.has(info.get("cures", &"")) or _watching_you(id) > 0):
+	if int(item_counts.get(id, 0)) <= 0 or not (info.get("lays", false) or player.statuses.has(info.get("cures", &"")) or _watching_you(id) > 0):
 		return false
 
 	_using = id
 	_using_left = float(info["use_time"])
 	_landed = 0
 	_jolt = 0.0
-	_ribbons = int(player.curse.depth()) if player.curse != null else 0
+	_ribbons = int(player.curse.depth()) if player.curse != null and info.has("cures") else 0
 	Sfx.play_flat(self, &"cloth", -6.0, 1.2)
 	# It draws: a low rush, rising to the release.
 	Sfx.play_flat(self, &"whoosh_heavy", -15.0, 0.55)
 	return true
 
 
-## Where the left hand is as it passes the item across your sight, in camera
-## space at full size. (A stand-in pose: poses_needed.md.)
+## How the left hand holds what is being taken up (HandSlot's left modes).
+func left_hold() -> StringName:
+	return PrepItems.info(_using).get("hold", &"egg")
+
+
+## Where the left hand is as it passes the item across your sight, or, laying one,
+## down at the floor ahead, in camera space at full size. (Stand-in poses:
+## poses_needed.md.)
 func left_frame() -> Transform3D:
+	if is_using() and left_hold() != &"egg":
+		return LAY_HAND
+
 	var u := 1.0 if just_spent() else smoothstep(0.0, 1.0, use_progress())
 	var at := PASS_FROM.lerp(PASS_THROUGH, u).lerp(PASS_THROUGH.lerp(PASS_TO, u), u)
 	return Transform3D(Basis(Vector3.BACK, PASS_ROLL * u) * PALM_UP, at + JOLT * _jolt)
@@ -217,9 +235,18 @@ func use_progress() -> float:
 
 
 ## There is something packed that would help you now (the HUD offers it).
+## What the HUD calls what it is offering.
+func offer_prompt() -> String:
+	return PrepItems.info(items[0]).get("prompt", "") if not items.is_empty() else ""
+
+
 func can_offer() -> bool:
 	if is_using() or items.is_empty() or int(item_counts.get(items[0], 0)) <= 0:
 		return false
+
+	# Something to lay, when it would get one off you.
+	if PrepItems.info(items[0]).get("lays", false):
+		return player.leech != null and player.leech.count() > 0
 
 	if player.statuses.has(PrepItems.info(items[0]).get("cures", &"")):
 		return true
@@ -257,6 +284,10 @@ func _physics_process(delta: float) -> void:
 		Sfx.play_flat(self, &"gear", -12.0, 1.8)
 		refused_use.emit()
 
+	if Input.is_action_just_pressed("use_item_2") and not use_item(1):
+		Sfx.play_flat(self, &"gear", -12.0, 1.8)
+		refused_use.emit()
+
 	_jolt = maxf(_jolt - _jolt * JOLT_FADE * delta, 0.0)
 	_spent_left = maxf(_spent_left - delta, 0.0)
 
@@ -273,6 +304,26 @@ func _physics_process(delta: float) -> void:
 	_using = &""
 	item_counts[id] = int(item_counts[id]) - 1
 	var info := PrepItems.info(id)
+
+	if info.get("lays", false):
+		_lay(id)
+	else:
+		_take_curse(id, info)
+
+	item_used.emit(id)
+	changed.emit()
+
+
+## An item that is drawn on the floor: what is on you is thrown off.
+func _lay(_id: StringName) -> void:
+	CopalLine.lay(player)
+	player.leech.free_all()
+	Sfx.play_flat(self, &"cloth", -6.0, 0.8)
+	Sfx.play_flat(self, &"whoosh_light", -7.0, 0.7)
+
+
+## An item that takes a curse: it bursts, and sends it back on what is watching.
+func _take_curse(id: StringName, info: Dictionary) -> void:
 	player.statuses.clear(info["cures"])
 
 	if info.has("leaves"):
@@ -282,13 +333,10 @@ func _physics_process(delta: float) -> void:
 		monster.limpia(player)
 
 	_release()
-	item_used.emit(id)
 	var hud: Node = player.get("hud")
 
 	if hud != null and hud.has_method("egg_broke"):
 		hud.egg_broke()
-
-	changed.emit()
 
 
 ## Each ribbon reaching the item: a wet thud and a jolt, felt in the hand.

@@ -6,7 +6,9 @@ extends RefCounted
 ## cast it: they squeeze shut, and you are clean of it for a while.
 
 const TABLE := {
-	&"egg": {"cures": &"evil_eye", "use_time": 1.0, "carry": 2, "colour": Color(0.9, 0.86, 0.76), "returns": 14.0, "leaves": &"cleansed", "leaves_for": 12.0},
+	&"egg": {"cures": &"evil_eye", "use_time": 1.0, "carry": 2, "colour": Color(0.9, 0.86, 0.76), "returns": 14.0, "leaves": &"cleansed", "leaves_for": 12.0, "hold": &"egg", "prompt": "Egg"},
+	# A stand-in name (words_needed.md).
+	&"copal_line": {"use_time": 0.6, "carry": 2, "colour": Color(1.0, 0.58, 0.12), "lays": true, "hold": &"cast", "prompt": "Line"},
 }
 
 

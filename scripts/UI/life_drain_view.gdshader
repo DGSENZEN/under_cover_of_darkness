@@ -59,12 +59,12 @@ void fragment() {
 					float brush = textureLod(stroke_sheet, vec2(t * 1.2 + seed * 0.3 - TIME * 0.09, seed * 0.17), 0.0).r;
 					float wander = (brush - 0.5) * 0.14 * arc + sin(t * 7.0 - TIME * 1.6 + seed) * 0.022 * arc;
 					float off = across - bow - wander;
-					float wide = (0.006 + brush * 0.03) * smoothstep(0.0, 0.25, t) * mix(1.0, 0.25, t);
+					float wide = (0.004 + brush * 0.016) * smoothstep(0.0, 0.25, t) * mix(1.0, 0.25, t);
 					float wisp = 1.0 - smoothstep(wide * 0.35, wide, abs(off));
 					float pulse = smoothstep(0.0, 0.6, sin(t * 7.0 - TIME * 2.4 + seed * 2.0) * 0.5 + 0.5);
-					float fades = smoothstep(0.0, 0.1, t) * smoothstep(1.0, 0.72, t);
+					float fades = smoothstep(0.0, 0.1, t) * smoothstep(0.75, 0.3, t);
 					vec3 warmth = mix(WARM, WARM * vec3(0.55, 0.22, 0.2), t);
-					col = mix(col, warmth, wisp * mix(0.18, 0.62, pulse) * fades * threads[i].z);
+					col = mix(col, warmth, wisp * mix(0.08, 0.42, pulse) * fades * threads[i].z);
 				}
 			}
 		}

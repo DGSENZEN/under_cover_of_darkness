@@ -8,6 +8,7 @@ extends "res://scripts/Monsters/Monster.gd"
 
 const AnimaBody := preload("res://scripts/Monsters/AnimaBody.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
+const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
 
 enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN }
 
@@ -33,6 +34,8 @@ const CIRCLE_SPEED := 2.5
 ## Smoked: how much slower it goes, and how much less it drinks.
 const SMOKED_SPEED := 0.5
 const SMOKED_DRAIN := 0.5
+## How far ahead it looks for a line of copal (m).
+const LINE_LOOKS := 0.5
 ## How much it has to drink to be fully fed (shown on it).
 const FULL := 60.0
 
@@ -182,6 +185,23 @@ func _brain(delta: float) -> Vector3:
 		wish.x = 0.0
 		wish.z = 0.0
 
+	# Nor over a line of copal: along it, to get round if it can.
+	if state != State.ON:
+		var ahead := Vector3(wish.x, 0.0, wish.z)
+
+		if ahead.length() > 0.01:
+			var line: Node3D = CopalLine.crossing(get_tree(), global_position, global_position + ahead.normalized() * LINE_LOOKS)
+
+			if line != null:
+				if state == State.LEAP:
+					_enter(State.MISSED)
+					ahead = Vector3.ZERO
+				else:
+					ahead = line.way_round(global_position, ahead) * ahead.length()
+
+				wish.x = ahead.x
+				wish.z = ahead.z
+
 	return wish
 
 
@@ -197,7 +217,7 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 
 			if leech != null and not leech.has_room() and global_position.distance_to(you.global_position) <= CIRCLE_AT:
 				_enter(State.CIRCLE)
-			elif _chest_distance(you) <= reach and (leech == null or leech.has_room()):
+			elif _chest_distance(you) <= reach and (leech == null or leech.has_room()) and CopalLine.crossing(get_tree(), global_position, _chest(you)) == null:
 				_enter(State.TELL)
 			else:
 				return _hold_height(_toward(you) * float(_form["speed"]) * _slowed(), delta)

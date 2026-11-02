@@ -13,3 +13,4 @@ Every word here is a stand-in. Replace the text, keep the ids.
 ## Ravenous ánimas
 
 - The new spell, stand-in id `burst`: its name.
+- The copal line, stand-in id `copal_line`: its name, and the HUD's "Line".
