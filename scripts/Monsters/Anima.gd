@@ -12,15 +12,18 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
 
-enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN, REST, WAKE, WIND_UP, SWIPE, BACK_OFF }
+enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN, REST, WAKE, WIND_UP, SWIPE, BACK_OFF, LEAVE }
 
 const DOING := {
 	State.RISE: &"rise", State.RUSH: &"rush", State.CIRCLE: &"circle", State.TELL: &"tell",
 	State.LEAP: &"leap", State.MISSED: &"missed", State.ON: &"on", State.THROWN: &"thrown",
 	State.REST: &"rest", State.WAKE: &"wake",
-	State.WIND_UP: &"wind_up", State.SWIPE: &"swipe", State.BACK_OFF: &"back_off",
+	State.WIND_UP: &"wind_up", State.SWIPE: &"swipe", State.BACK_OFF: &"back_off", State.LEAVE: &"leave",
 }
 const RISE_TIME := 0.5
+## Finished with you: how fast it crawls off, and how long before it rests.
+const LEAVE_SPEED := 1.4
+const LEAVE_TIME := 6.0
 ## A swipe (its damage, reach and wind-up by form, in Bestiary): how long the swing, how hard it
 ## lunges into it; how long it backs off, how fast; how long till the next.
 const SWIPE_TIME := 0.16
@@ -258,6 +261,9 @@ func _brain(delta: float) -> Vector3:
 	if you == null:
 		return _hold_height(Vector3.ZERO, delta)
 
+	if you.get("is_dead") == true:
+		return _after_you(you, delta)
+
 	var wish := _wish(you, delta)
 
 	# Nothing of theirs goes into a ward's smoke.
@@ -286,6 +292,37 @@ func _brain(delta: float) -> Vector3:
 				wish.z = ahead.z
 
 	return wish
+
+
+## You are dead. What has you finishes; the rest have no more use for you, and crawl off, and rest.
+func _after_you(you: Node3D, delta: float) -> Vector3:
+	if state == State.ON:
+		var leech: Node = _leech()
+
+		if leech != null and leech.slot_of(self) >= 0:
+			global_position = leech.slot_position(leech.slot_of(self))
+			_push = Vector3.ZERO
+			return Vector3.ZERO
+
+		_enter(State.LEAVE)
+	elif state != State.LEAVE and state != State.REST:
+		_enter(State.LEAVE)
+
+	if state == State.LEAVE:
+		if _state_t >= LEAVE_TIME:
+			_enter(State.REST)
+		else:
+			var away := global_position - you.global_position
+			away.y = 0.0
+			return _hold_height(away.normalized() * LEAVE_SPEED, delta)
+
+	return _hold_height(Vector3.ZERO, delta)
+
+
+## It has no more use for you.
+func lose_interest() -> void:
+	_leave_you()
+	_enter(State.LEAVE)
 
 
 ## The velocity it wants, as it is now.

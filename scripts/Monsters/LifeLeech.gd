@@ -48,6 +48,7 @@ var _gulp := 0.0
 var _gulp_span := GULP_FAST
 var _sag := 0.0
 var _was_held := false
+var _last_gulp_begun := false
 var _slots: Array = [null, null, null]
 var _sides: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
 
@@ -115,6 +116,35 @@ func _gulp_now() -> void:
 		juice.punch(0.0, 0.0, way.x * 1.2 * felt)
 
 	gulped.emit()
+
+
+## You are dead and it goes on, each gulp slower than the last, to one last long one. Then it has
+## no more use for you.
+func _finish(delta: float) -> void:
+	var death: Node = player.death
+
+	if not death.holding():
+		for who in on_me():
+			who.lose_interest()
+
+		return
+
+	if death.last_gulp() > 0.0:
+		if not _last_gulp_begun:
+			_last_gulp_begun = true
+			_gulp_now()
+
+		return
+
+	_gulp_in -= delta / death.gulps_slow()
+
+	if _gulp_in <= 0.0:
+		_gulp_now()
+
+
+## The last long gulp as you die, 0 until it starts, then up to 1, and held.
+func last_gulp() -> float:
+	return float(player.death.last_gulp()) if player != null and player.is_dead else 0.0
 
 
 ## Free: you get your breath, and your head comes up.
@@ -249,14 +279,17 @@ func _physics_process(delta: float) -> void:
 
 	_was_held = true
 	Sfx.drain_muffle = MUFFLE
+
+	# It has you, and finishes (PlayerDeath.gd): no more to take, but it isn't done.
+	if player.is_dead:
+		_finish(delta)
+		return
+
 	_gulp_in -= delta
 
 	if _gulp_in <= 0.0:
 		_gulp_now()
 
-	if player.is_dead:
-		free_all()
-		return
 
 	var life := 0.0
 	# It comes in lurches: a gulp's share over its fading, the same amount in the end.

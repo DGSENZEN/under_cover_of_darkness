@@ -67,6 +67,7 @@ const POSES := {
 	&"wind_up": {"nod": 0.12, "lift": 0.05, "back": 0.13, "jaw": 0.85, "hand": Vector3(0.44, 0.14, -0.1), "pitch": 0.65, "shut": 0.02, "fan": 1.7, "snap": 10.0},
 	&"swipe": {"nod": -0.32, "lift": -0.02, "back": -0.24, "jaw": 0.12, "hand": Vector3(-0.1, -0.02, -0.62), "pitch": -0.1, "shut": 0.95, "fan": 0.7, "snap": 15.0},
 	&"back_off": {"nod": -0.08, "lift": 0.02, "back": 0.1, "jaw": 0.3, "hand": Vector3(0.34, -0.2, -0.2), "pitch": -0.3, "shut": 0.5, "fan": 1.0, "snap": 5.0},
+	&"leave": {"nod": -0.5, "lift": -0.16, "back": 0.04, "jaw": 0.22, "hand": Vector3(0.34, -0.2, -0.2), "pitch": -0.35, "shut": 0.35, "fan": 0.8, "snap": 2.5},
 	&"dead": {"nod": -0.42, "lift": 0.0, "back": 0.0, "jaw": 0.72, "hand": Vector3(0.36, -0.02, -0.26), "pitch": -0.04, "shut": 0.1, "fan": 1.25, "snap": 2.1},
 	&"on": {"nod": 0.0, "lift": 0.0, "back": 0.0, "jaw": 0.6, "hand": Vector3(0.3, 0.0, -0.3), "pitch": 0.0, "shut": 0.5, "fan": 1.0, "snap": 5.0},
 }

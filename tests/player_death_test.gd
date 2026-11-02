@@ -22,6 +22,7 @@ func _ready() -> void:
 	await _skipping()
 	await _paused()
 	await _freed()
+	await _staying()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -210,6 +211,68 @@ func _freed() -> void:
 	await _fresh()
 	await _frames(10)
 	_check("P11 freed mid-death, the next starts clean", Sfx.drain_muffle == 0.0 and p.death.kind == &"")
+
+
+func _on_you_now() -> CharacterBody3D:
+	return p.leech.on_me()[0] if p.leech.count() > 0 else null
+
+
+func _staying() -> void:
+	const STATE: Dictionary = AnimaScript.State
+	await _dying_by(false, true, &"guard")
+	var taker: CharacterBody3D = _on_you_now()
+	var power_was: float = p.power.power
+	var gulps := [0]
+	p.leech.gulped.connect(func(): gulps[0] += 1)
+	await _frames(60)
+	_check("L1 dead with one on you, it stays on you", p.leech.count() == 1 and taker.state == STATE.ON)
+	await _frames(30)
+	var slowing: float = p.death.gulps_slow()
+	var rose: bool = await _until(func(): return p.leech.last_gulp() > 0.5, 2.0)
+	_check("L2 it goes on gulping, slower as it goes (%d gulps, %.2f)" % [gulps[0], slowing], gulps[0] >= 2 and slowing > 1.5)
+	_check("L3 a last long gulp before it lets go", rose and p.leech.count() == 1)
+	await _until(func(): return p.leech.count() == 0, 2.0)
+	_check("L4 at its moment it lets go and crawls off (%.2f s)" % p.death.at(), absf(p.death.at() - p.death.LETS_GO[&"animas"]) < 0.1 and taker.state == STATE.LEAVE)
+	var from_you: float = taker.global_position.distance_to(p.global_position)
+	await _frames(40)
+	_check("L4b away from you, and not fast (%.2f)" % taker.velocity.length(), taker.global_position.distance_to(p.global_position) > from_you + 0.3 and taker.velocity.length() <= taker.LEAVE_SPEED + 0.01)
+	_check("L6 it takes no power once you are dead", p.power.power == power_was)
+	await _until(func(): return taker.state == STATE.REST, taker.LEAVE_TIME + 1.0)
+	await _frames(int(taker.REST_LONGEST * 60.0) + 30)
+	_check("L5 after a while it rests, and stays", taker.state == STATE.REST)
+	# Awake and not on you.
+	await _fresh()
+	var circling: Array = []
+	var swung := [0]
+
+	for i in 2:
+		var one: CharacterBody3D = AnimaScript.new()
+		one.form = &"hands"
+		one.position = HOME + Vector3(i * 2.0 - 1.0, 0.0, -1.0)
+		one.swiped.connect(func(_hit): swung[0] += 1)
+		add_child(one)
+		circling.append(one)
+
+	await _frames(2)
+	circling[0].state = STATE.WIND_UP
+	p.health = 0.01
+	var man := Node3D.new()
+	add_child(man)
+	p.take_damage(50.0, man)
+	man.queue_free()
+	await _frames(3)
+	_check("L7b the fall too: they crawl off", p.death.kind == &"fall" and circling.all(func(m): return m.state == STATE.LEAVE))
+	await _frames(60)
+	_check("L7 and no swing lands after", swung[0] == 0)
+	# The last one killed while it finishes you.
+	await _dying_by(false, true, &"guard")
+	taker = _on_you_now()
+	await _frames(30)
+	taker.take_hit(9999.0, p, &"power", taker.global_position, Vector3.FORWARD)
+	await _frames(10)
+	_check("L8 the last feeder killed mid-death: it goes on without it", p.leech.count() == 0 and p.death.playing())
+	await _until(func(): return not p.death.playing(), 4.0)
+	_check("L8b and ends", not p.death.playing() and Sfx.drain_muffle == 0.0)
 
 
 func _press(action: String) -> void:

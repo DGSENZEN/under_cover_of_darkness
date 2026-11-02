@@ -1328,8 +1328,9 @@ func _dying() -> void:
 	await _until(func(): return p.is_dead, 4.0)
 	await _frames(5)
 	var after: float = p.power.power
-	await _frames(30)
-	_check("A16 dead, all let go and it stops", p.is_dead and p.leech.count() == 0 and taker.state != STATE.ON and is_equal_approx(p.power.power, after))
+	_check("A16 dead, it doesn't let go yet", p.leech.count() == 1 and taker.state == STATE.ON)
+	await _frames(int(p.death.LETS_GO[p.death.kind] * 60.0))
+	_check("A16b then it lets go and crawls off, and has taken no more", p.is_dead and p.leech.count() == 0 and taker.state == STATE.LEAVE and is_equal_approx(p.power.power, after))
 
 
 func _clear_all() -> void:
