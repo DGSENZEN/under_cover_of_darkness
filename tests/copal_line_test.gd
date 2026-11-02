@@ -36,6 +36,7 @@ func _ready() -> void:
 	await _open_ground()
 	await _doorway()
 	await _keys()
+	await _choosing()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -119,15 +120,71 @@ func _keys() -> void:
 	await _place_player(HOME)
 	p.loadout.item_counts[&"copal_line"] = 2
 	p.statuses.apply(&"evil_eye", 8.0)
-	await _press("use_item_2")
-	_check("L9 packed second, B uses it", p.loadout.using() == &"copal_line")
+	var lo: Node = p.loadout
+	lo.selected = 0
+	await _press("next_item")
+	_check("L9 B moves on to what is packed second, and uses nothing", lo.selected_item() == &"copal_line" and lo.using() == &"")
+	await _press("use_item")
+	_check("L9a V uses what is chosen", lo.using() == &"copal_line")
 	await _frames(45)
 	_clear_lines()
+	await _press("next_item")
+	_check("L9c B comes round again", lo.selected_item() == &"egg")
 	await _press("use_item")
-	_check("L9b V still the first", p.loadout.using() == &"egg")
+	_check("L9b V uses that now", lo.using() == &"egg")
+	await _press("next_item")
+	_check("L9d not while it is in your hand", lo.selected_item() == &"egg")
 	await _frames(80)
 	_check("L10b the egg still works as it did", not p.statuses.has(&"evil_eye") and p.hud.curse_state()["relief"] >= 0.0)
 	p.statuses.clear(&"cleansed")
+
+
+## Choosing between what you packed, as Halo's grenades.
+func _choosing() -> void:
+	await _place_player(HOME)
+	_clear_lines()
+	var lo: Node = p.loadout
+	var was_clicks := [0]
+	lo.selected_changed.connect(func(): was_clicks[0] += 1)
+	lo.selected = 0
+	lo.item_counts[&"egg"] = 0
+	lo.item_counts[&"copal_line"] = 2
+	await _press("next_item")
+	_check("N1 what you have none of is passed over", lo.selected_item() == &"copal_line")
+	await _press("next_item")
+	_check("N2 nothing else left: it stays", lo.selected_item() == &"copal_line" and was_clicks[0] == 1)
+	# The last of it spent: on to what is left.
+	lo.item_counts[&"egg"] = 1
+	lo.item_counts[&"copal_line"] = 1
+	await _press("use_item")
+	await _frames(45)
+	_clear_lines()
+	_check("N3 the last one spent, on to what is left", lo.selected_item() == &"egg" and lo.item_counts[&"copal_line"] == 0)
+	# Kept through a save.
+	lo.item_counts[&"copal_line"] = 1
+	lo.selected = 1
+	var saved: Dictionary = lo.save_state()
+	lo.selected = 0
+	lo.load_state(saved)
+	_check("N4 kept through a save", lo.selected == 1)
+	var old_save: Dictionary = saved.duplicate()
+	old_save.erase("selected")
+	lo.load_state(old_save)
+	_check("N4b a save from before it: the first", lo.selected_item() != &"")
+	# The readout shows which.
+	lo.selected = 0
+	lo.item_counts[&"egg"] = 2
+	var readout: Dictionary = p.hud._ammo.snapshot()
+	_check("N5 the readout knows which is chosen", readout["selected"] == &"egg")
+	# Asked for what the chosen one doesn't answer, it says what would.
+	lo.selected = 1
+	p.statuses.apply(&"evil_eye", 8.0)
+	_check("N6 cursed with the line chosen: it offers to change to the egg", not lo.can_offer() and lo.next_answers() == &"egg")
+	lo.selected = 0
+	_check("N6b with the egg chosen, it offers the egg", lo.can_offer() and lo.next_answers() == &"")
+	p.statuses.clear(&"evil_eye")
+	# Dead, nothing changes.
+	await _frames(2)
 
 
 func _clear_lines() -> void:

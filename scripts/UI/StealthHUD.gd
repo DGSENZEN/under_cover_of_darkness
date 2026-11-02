@@ -1474,6 +1474,10 @@ func _process(delta: float) -> void:
 	if player.loadout != null and player.loadout.can_offer():
 		actions = actions.duplicate()
 		actions.append([&"use_item", player.loadout.offer_prompt()])
+	elif player.loadout != null and player.loadout.next_answers() != &"":
+		# It's the other one you want: say which, on the key that gets to it.
+		actions = actions.duplicate()
+		actions.append([&"next_item", player.loadout.offer_prompt(player.loadout.next_answers())])
 
 	_update_prompts(actions, delta)
 	_crosshair.warm = lerpf(_crosshair.warm, 1.0 if not actions.is_empty() else 0.0, 1.0 - exp(-14.0 * delta))

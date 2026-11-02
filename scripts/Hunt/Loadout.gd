@@ -18,6 +18,8 @@ signal item_used(id: StringName)
 signal changed
 ## The key was pressed and there was nothing to do.
 signal refused_use
+## You chose another of what you packed.
+signal selected_changed
 
 ## Round types beside the shells, which always come; kinds of item.
 const MAX_ROUND_TYPES := 2
@@ -26,6 +28,8 @@ const MAX_ITEM_KINDS := 2
 const CARRY := {&"rounds": 24, &"copal_rounds": 12, &"shells": 6}
 ## This many watching you and the HUD offers what would answer them, uncursed.
 const OFFER_WATCHED_BY := 2
+## The hand as you change what you have chosen: a small flick.
+const NEXT_ITEM_JOLT := 0.35
 ## The hand's pass, in the left of your sight: up from low, in toward the middle.
 const PASS_FROM := Vector3(-0.3, -0.36, -0.52)
 const PASS_THROUGH := Vector3(-0.23, -0.27, -0.5)
@@ -51,10 +55,12 @@ const RELEASE_STOP := 0.04
 const RELEASE_SLOW := 0.75
 const RELEASE_SLOW_FOR := 0.18
 const RELEASE_TRAUMA := 0.16
-const SAVED := ["rounds", "items", "item_counts", "locked", "owned"]
+const SAVED := ["rounds", "items", "item_counts", "locked", "owned", "selected"]
 
 var rounds: Array[StringName] = [&"lead"]
 var items: Array[StringName] = []
+## Which of them V uses (B moves it on).
+var selected := 0
 var item_counts := {}
 var locked := false
 var owned := {&"rounds": 96, &"copal_rounds": 24, &"shells": 18, &"egg": 6, &"copal_line": 6}
@@ -78,11 +84,11 @@ func _ready() -> void:
 		key.physical_keycode = KEY_V
 		InputMap.action_add_event(&"use_item", key)
 
-	if not InputMap.has_action(&"use_item_2"):
-		InputMap.add_action(&"use_item_2")
-		var second := InputEventKey.new()
-		second.physical_keycode = KEY_B
-		InputMap.action_add_event(&"use_item_2", second)
+	if not InputMap.has_action(&"next_item"):
+		InputMap.add_action(&"next_item")
+		var next := InputEventKey.new()
+		next.physical_keycode = KEY_B
+		InputMap.action_add_event(&"next_item", next)
 
 
 func pack_round(id: StringName) -> bool:
@@ -118,6 +124,7 @@ func unpack_item(id: StringName) -> bool:
 		return false
 
 	items.erase(id)
+	selected = mini(selected, maxi(items.size() - 1, 0))
 	changed.emit()
 	return true
 
@@ -178,8 +185,47 @@ func unlock() -> void:
 ## something: you have what it cures on you, or something is watching you to send
 ## it back at (so one is never wasted). The hand is busy for its time, then it is
 ## spent and done. False if not.
-func use_item(index := 0) -> bool:
-	if is_using() or index >= items.size() or player.is_dead or not player.combat.is_able():
+## What you have chosen to use next, or nothing.
+func selected_item() -> StringName:
+	return items[selected] if selected >= 0 and selected < items.size() else &""
+
+
+## On to the next of what you packed that you have any of. Not with one in your hand.
+func next_item() -> bool:
+	if is_using() or player.is_dead:
+		return false
+
+	for step in range(1, items.size()):
+		var at := (selected + step) % items.size()
+
+		if int(item_counts.get(items[at], 0)) > 0:
+			selected = at
+			_jolt = NEXT_ITEM_JOLT
+			Sfx.play_flat(self, &"gear", -14.0, 1.35)
+			selected_changed.emit()
+			changed.emit()
+			return true
+
+	return false
+
+
+## The last of it spent: on to what is left, if there is anything.
+func _on_if_spent() -> void:
+	if int(item_counts.get(selected_item(), 0)) <= 0:
+		for step in range(1, items.size()):
+			var at := (selected + step) % items.size()
+
+			if int(item_counts.get(items[at], 0)) > 0:
+				selected = at
+				selected_changed.emit()
+				return
+
+
+## What you have chosen, or the item at `index`.
+func use_item(index := -1) -> bool:
+	index = selected if index < 0 else index
+
+	if is_using() or index < 0 or index >= items.size() or player.is_dead or not player.combat.is_able():
 		return false
 
 	var id := items[index]
@@ -236,23 +282,40 @@ func use_progress() -> float:
 
 ## There is something packed that would help you now (the HUD offers it).
 ## What the HUD calls what it is offering.
-func offer_prompt() -> String:
-	return PrepItems.info(items[0]).get("prompt", "") if not items.is_empty() else ""
+func offer_prompt(id := selected_item()) -> String:
+	return PrepItems.info(id).get("prompt", "")
 
 
+## What you have chosen answers what is happening: say so.
 func can_offer() -> bool:
-	if is_using() or items.is_empty() or int(item_counts.get(items[0], 0)) <= 0:
+	return selected_item() != &"" and _answers(selected_item())
+
+
+## What you could cycle to that would answer this, when what you have chosen doesn't; or nothing.
+func next_answers() -> StringName:
+	if can_offer():
+		return &""
+
+	for id in items:
+		if id != selected_item() and _answers(id):
+			return id
+
+	return &""
+
+
+func _answers(id: StringName) -> bool:
+	if is_using() or int(item_counts.get(id, 0)) <= 0:
 		return false
 
 	# Something to lay, when it would get one off you.
-	if PrepItems.info(items[0]).get("lays", false):
+	if PrepItems.info(id).get("lays", false):
 		return player.leech != null and player.leech.count() > 0
 
-	if player.statuses.has(PrepItems.info(items[0]).get("cures", &"")):
+	if player.statuses.has(PrepItems.info(id).get("cures", &"")):
 		return true
 
 	# Not while what it leaves still lies on you: no nagging.
-	return not player.statuses.has(PrepItems.info(items[0]).get("leaves", &"")) and _watching_you(items[0]) >= OFFER_WATCHED_BY
+	return not player.statuses.has(PrepItems.info(id).get("leaves", &"")) and _watching_you(id) >= OFFER_WATCHED_BY
 
 
 ## How many monsters this item would be sent back at, here and now.
@@ -289,9 +352,8 @@ func _physics_process(delta: float) -> void:
 		Sfx.play_flat(self, &"gear", -12.0, 1.8)
 		refused_use.emit()
 
-	if Input.is_action_just_pressed("use_item_2") and not use_item(1):
+	if Input.is_action_just_pressed("next_item") and not next_item():
 		Sfx.play_flat(self, &"gear", -12.0, 1.8)
-		refused_use.emit()
 
 	_jolt = maxf(_jolt - _jolt * JOLT_FADE * delta, 0.0)
 	_spent_left = maxf(_spent_left - delta, 0.0)
@@ -315,6 +377,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		_take_curse(id, info)
 
+	_on_if_spent()
 	item_used.emit(id)
 	changed.emit()
 

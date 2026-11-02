@@ -113,3 +113,7 @@ Each round reads at a glance, from `Rounds.TABLE`: its colour on the readout's c
 - **Stronger, the ánimas' own:** `PlayerDeath._hauled` drags you down a lurch on each gulp; awake ánimas near come and stand over you (`State.CROWD`); at the last gulp `life_drain_view`'s `pouring` runs your life into what has you, a face gapes and comes down over your eyes (`LeechFace.LAST_COMES`) and comes off after, or hands close over them (`LeechHands._covering`).
 - **The words:** `DeathQuotes.gd` holds the user's quotes and which each death draws (`FOR`); `DeathQuote.gd` lights a candle on the gentle ground (`death_veil.gdshader`), then brushes them in with `painted_words.gdshader`. The page waits for them (`PlayerDeath.page_due`), or for a press. The archetypes' transitions are not used here: they are the archetypes' own.
 
+## Choosing between what you packed
+
+`Loadout.selected` is the one V uses, `next_item` (B) moves on to the next you have any of, skipping what is spent; not with one in your hand. The last of one spent, it moves on by itself. `HuntReadout` lights the chosen and dims the rest, with a brass line under it. If what you chose doesn't answer what is on you and another does, the HUD offers that one on B (`next_answers`). Saved with the pack. `MAX_ITEM_KINDS` is still 2; the cycle takes any number.
+

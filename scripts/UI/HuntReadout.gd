@@ -54,7 +54,7 @@ func snapshot() -> Dictionary:
 	return {"barrel": gun.barrel, "round": gun.cylinder_round, "loaded": loaded_now, "chambers": chambers,
 		"shell": int(gun.loaded[&"shot"]), "reserve": int(player.inventory.ammo.get(&"shells" if gun.barrel == &"shot" else gun.stock_id(), 0)),
 		"capacity": 1 if gun.barrel == &"shot" else int(gun.weapon().rounds), "reloading": gun.is_reloading(), "items": items,
-		"evil_eye": player.statuses.has(&"evil_eye"), "using": player.loadout.using(), "switched": _switched}
+		"evil_eye": player.statuses.has(&"evil_eye"), "using": player.loadout.using(), "selected": player.loadout.selected_item(), "switched": _switched}
 
 
 func _process(delta: float) -> void:
@@ -128,15 +128,22 @@ func _draw() -> void:
 	if state["reloading"]:
 		draw_arc(WHEEL, WHEEL_REACH + CHAMBER + 4.0, -PI * 0.5, PI * 0.9, 24, BRASS, 1.5, true)
 
-	_items(state["items"], state["using"])
+	_items(state["items"], state["using"], state["selected"])
 
 
 ## What you packed: a small painted mark for each one left, along the blot's top.
-func _items(items: Dictionary, using: StringName) -> void:
+func _items(items: Dictionary, using: StringName, selected: StringName) -> void:
 	var x := WHEEL.x + 42.0
 
 	for id in items:
 		var colour: Color = PrepItems.info(id).get("colour", INK)
+
+		# What V will use is lit, the rest dim; a brass line under it, even when you have none left.
+		if id != selected:
+			colour = Color(colour.r * 0.42, colour.g * 0.42, colour.b * 0.42, 0.75)
+		else:
+			var wide: float = maxf(float(items[id]), 1.0) * 15.0 - 3.0
+			draw_line(Vector2(x - 6.0, 36.0), Vector2(x - 6.0 + wide, 36.0), BRASS, 2.0, true)
 
 		for i in int(items[id]):
 			_blot(Vector2(x, 26.0), 6.5, 70.0 + i, Color(0.0, 0.0, 0.0, 0.8))

@@ -116,7 +116,8 @@ func _die_and_return() -> void:
 	p.inventory.take_ammo(&"copal_rounds", 7)
 	p.loadout.item_counts[&"egg"] = 0
 	p.take_damage(100000.0, null)
-	await _seconds(2.5)
+	# (Its fall, then the words, then the page.)
+	await _seconds(p.death.FALL_TAKES + p.death.QUOTE_TAKES + 0.5)
 	_check("LP3b dead, the page asks", p.is_dead and p.hud.death_page.visible)
 	var old: Node = gym
 	p.hud.death_page.load_latest()
