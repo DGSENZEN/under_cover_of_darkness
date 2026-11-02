@@ -4,11 +4,11 @@ render_mode unshaded, blend_mix, depth_draw_never, cull_back, shadows_disabled;
 // as you see it and bitten away at its edge by slow climbing noise, with a
 // warm stain low down where the resin burns. `fade` thins it in and out.
 
-uniform vec3 pale = vec3(0.46, 0.44, 0.38);
-uniform vec3 warm = vec3(0.5, 0.31, 0.13);
+uniform vec3 pale = vec3(0.42, 0.34, 0.22);
+uniform vec3 warm = vec3(0.56, 0.3, 0.09);
 uniform float seed = 0.0;
 uniform float fade = 1.0;
-uniform float opacity = 0.3;
+uniform float opacity = 0.13;
 
 varying vec3 local_at;
 
@@ -34,5 +34,6 @@ void fragment() {
 	float facing = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
 	float body = smoothstep(0.05, 0.95, facing * 0.8 + (bite - 0.5) * 1.1);
 	ALBEDO = mix(pale, warm, smoothstep(0.1, -0.7, local_at.y) * 0.55) * mix(0.72, 1.0, bite);
-	ALPHA = body * opacity * fade;
+	// Thinning as you come near: it never fills your view.
+	ALPHA = body * opacity * fade * smoothstep(1.0, 4.5, length(VERTEX));
 }

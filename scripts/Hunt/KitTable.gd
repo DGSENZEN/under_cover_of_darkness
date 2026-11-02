@@ -7,8 +7,8 @@ const KitPieceScript := preload("res://scripts/Hunt/KitPiece.gd")
 
 ## What lies on it, left to right: [piece, type, stand-in colour].
 const LAID_OUT := [
-	[&"lead", &"round", Color(0.55, 0.48, 0.3)],
-	[&"copal", &"round", Color(0.72, 0.55, 0.22)],
+	[&"lead", &"round", Color(0.62, 0.66, 0.72)],
+	[&"copal", &"round", Color(1.0, 0.58, 0.12)],
 	[&"egg", &"item", Color(0.9, 0.86, 0.76)],
 ]
 const TOP := 0.9

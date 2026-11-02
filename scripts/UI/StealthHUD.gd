@@ -111,6 +111,7 @@ const MOST_GAZERS := 4
 const GAZER_MARGIN := 0.07
 const GAZER_CLEAR := 0.22
 ## How long the egg's dispel takes; how long it takes to fade when it runs out.
+const ROUNDS := preload("res://scripts/Combat/Rounds.gd")
 const DISPEL_TIME := 0.35
 ## The order the six in the flesh open in (evil_eye_view.gdshader has the same):
 ## those at the corners first, where the flesh first comes in.
@@ -207,6 +208,8 @@ class Crosshair:
 	## (stray_px) is drawn round the aim.
 	var cursed := 0.0
 	var stray_px := 11.0
+	## The loaded round's colour, worn by the dot; white with no gun up.
+	var round_ink := Color.WHITE
 	var short := false
 	var contact_kind: StringName = &""
 	## Real seconds a mark is held full before it fades (a kill's).
@@ -253,7 +256,9 @@ class Crosshair:
 			var ring := lerpf(22.0, 4.0, draw_amount)
 			draw_arc(c, ring, 0.0, TAU, 32, Color(1.0, 0.85, 0.55, 0.35 + 0.5 * draw_amount), 1.4, true)
 		var radius := lerpf(1.6, 3.2, warm)
-		var colour := Color(1, 1, 1, 0.35).lerp(Color(1.0, 0.8, 0.4, 0.95), warm)
+		# The dot wears the loaded round's colour.
+		var dot_ink := Color(round_ink.r, round_ink.g, round_ink.b, 0.35 if round_ink == Color.WHITE else 0.9)
+		var colour := dot_ink.lerp(Color(1.0, 0.8, 0.4, 0.95), warm)
 		draw_circle(c, radius + 1.0, Color(0, 0, 0, 0.35 + 0.3 * warm))
 		draw_circle(c, radius, colour)
 
@@ -915,6 +920,7 @@ func _show_curse(delta: float) -> void:
 	_stared_shown = move_toward(_stared_shown, float(watch.stared()) if alive else 0.0, delta * 3.0)
 	_cleansed_shown = float(watch.fraction(&"cleansed")) if alive and watch.has(&"cleansed") else 0.0
 	_crosshair.cursed = _curse_shown
+	_crosshair.round_ink = ROUNDS.info(player.revolver.cylinder_round).get("colour", Color.WHITE) if player.revolver != null and player.combat.gun_drawn() else Color.WHITE
 	_crosshair.stray_px = _stray_pixels()
 
 	for i in _ring_open.size():

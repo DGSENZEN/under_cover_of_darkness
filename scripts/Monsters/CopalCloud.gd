@@ -11,6 +11,8 @@ const REACH := 3.5
 ## Smoked for this long after each tick in it, so it wears off just past the edge.
 const CLINGS := 0.6
 const PUFFS := 7
+## How thick each puff is: thin, so what it blinds can be seen, and shot, inside it.
+const OPACITY := 0.13
 ## Seconds to swell, and to thin away.
 const SWELL := 0.35
 const THIN := 0.8
@@ -43,6 +45,7 @@ func _ready() -> void:
 		var look := ShaderMaterial.new()
 		look.shader = PuffShader
 		look.set_shader_parameter(&"seed", rng.randf() * 10.0)
+		look.set_shader_parameter(&"opacity", OPACITY)
 		ball.material = look
 		puff.mesh = ball
 		puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

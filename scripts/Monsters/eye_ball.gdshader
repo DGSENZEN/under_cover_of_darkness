@@ -42,5 +42,5 @@ void fragment() {
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 	vec3 world_normal = (INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz;
-	EMISSION = painted_fill(c, world_normal, NORMAL, VIEW) + burn;
+	EMISSION = painted_fill(c, world_normal, NORMAL, VIEW) + burn + eye_smoulder(paint_at, NORMAL, VIEW, TIME);
 }

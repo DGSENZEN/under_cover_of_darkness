@@ -2,11 +2,15 @@ extends RefCounted
 ## The cylinder's round types, as data: which pouch each comes from, what its
 ## hit counts as to a monster (Bestiary), what it leaves on one, and its
 ## casing's colour. To a man, every round is a bullet. Copal: the curanderas'
-## resin packed behind the ball, so a spirit or an eye takes it as smoke.
+## resin packed behind the ball, so a spirit or an eye takes it as smoke. Each is
+## told apart at a glance: cold grey lead, hot amber copal, on the readout, on your
+## aim, in the air and on what it hits.
 
 const TABLE := {
-	&"lead": {"stock": &"rounds", "source": &"lead", "colour": Color(0.55, 0.48, 0.3)},
-	&"copal": {"stock": &"copal_rounds", "source": &"copal", "colour": Color(0.72, 0.55, 0.22), "status": &"smoked", "cloud": true},
+	&"lead": {"stock": &"rounds", "source": &"lead", "colour": Color(0.62, 0.66, 0.72),
+		"tracer_core": Color("#F2F5F8"), "tracer_edge": Color("#7C8794"), "tracer_width": 0.016, "tracer_life": 0.07},
+	&"copal": {"stock": &"copal_rounds", "source": &"copal", "colour": Color(1.0, 0.58, 0.12), "status": &"smoked", "cloud": true,
+		"tracer_core": Color("#FFB04A"), "tracer_edge": Color("#D8600F"), "tracer_energy": 1.3, "tracer_width": 0.055, "tracer_life": 0.16, "trail": true},
 }
 
 

@@ -35,5 +35,5 @@ void fragment() {
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 	vec3 world_normal = (INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz;
-	EMISSION = painted_fill(meat, world_normal, NORMAL, VIEW) + artery * vein * rage * 0.3 + vec3(0.5, 0.01, 0.01) * hurt * 0.3;
+	EMISSION = painted_fill(meat, world_normal, NORMAL, VIEW) + artery * vein * rage * 0.3 + vec3(0.5, 0.01, 0.01) * hurt * 0.3 + eye_smoulder(paint_at, NORMAL, VIEW, TIME);
 }

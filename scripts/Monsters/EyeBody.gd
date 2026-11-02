@@ -57,6 +57,10 @@ var tears := 0
 
 var _rng := RandomNumberGenerator.new()
 var _parts := {}
+## Resin burning on it while it is smoked, 0..1, and how fast that takes and dies.
+var smoulder := 0.0
+const SMOULDER_TAKES := 6.0
+const SMOULDER_DIES := 3.0
 var _living: Array[GeometryInstance3D] = []
 var _nerves: Array[GeometryInstance3D] = []
 var _saccade := Vector3.ZERO
@@ -158,6 +162,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, exposed
 	_clock += delta
 	wounds = clampf(1.0 - whole, 0.0, 1.0)
 	hurt = move_toward(hurt, 0.0, delta / HURT_FADE)
+	smoulder = move_toward(smoulder, 1.0 if smoked else 0.0, delta * (SMOULDER_TAKES if smoked else SMOULDER_DIES))
 	_wince_left = maxf(_wince_left - delta, 0.0)
 	var wants := _wanted(doing, exposed, smoked)
 	var ease_rate := 70.0 if _blink_left > 0.0 else (26.0 if wants["lids"] > lids and doing != &"circle" else 12.0)
@@ -301,6 +306,7 @@ func _shader_state() -> void:
 		mesh.set_instance_shader_parameter(&"rage", rage)
 		mesh.set_instance_shader_parameter(&"hurt", hurt)
 		mesh.set_instance_shader_parameter(&"wounds", wounds)
+		mesh.set_instance_shader_parameter(&"smoulder", smoulder)
 
 	for mesh in _nerves:
 		mesh.set_instance_shader_parameter(&"sway", sway)

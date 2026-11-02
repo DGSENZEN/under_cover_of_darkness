@@ -837,7 +837,11 @@ func _show_shot(at: Transform3D, which: StringName, shell: bool, struck: Vector3
 	GunFx.smoke_ring(player, muzzle, -at.basis.z, shell)
 
 	if not shell:
-		GunFx.tracer(player, muzzle, struck, at.origin)
+		var spec: Dictionary = Rounds.info(cylinder_round)
+		GunFx.tracer(player, muzzle, struck, at.origin, cylinder_round, spec)
+
+		if spec.get("trail", false):
+			GunFx.trail(player, muzzle, struck, at.origin)
 
 
 ## Once the gun has not fired for WISP_AFTER, a trail of smoke rises from
@@ -899,8 +903,19 @@ func _deal(target: Node3D, record: Dictionary, direction: Vector3, damage: float
 	# A pellet's mark is the shell's, once (_shell).
 	if kind != &"shot":
 		_confirm(result, headshot)
+		_show_hit(target, result, point, direction)
 
 	return result
+
+
+## What the round did to a monster, on the monster: it glanced, or it burst.
+func _show_hit(target: Node3D, result: StringName, point: Vector3, direction: Vector3) -> void:
+	if result == &"none" or target.get("round_hint") == null:
+		return
+
+	var read := &"glance" if result == &"resisted" else &"burst"
+	var size := 1.0 if result == &"weak" or result == &"killed" else 0.6
+	GunFx.impact(player, read, Rounds.info(cylinder_round), point, player.camera.global_position, _shots, size, direction)
 
 
 ## A hit felt: the crosshair's mark, a tick, a hold (a kill's the longer).

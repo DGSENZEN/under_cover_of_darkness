@@ -77,3 +77,7 @@ A variant is a row with changed numbers and one trick.
 `fight_move_test`, `bestiary_test`, `monster_test`, `loadout_test`, `safe_place_test`, `hunt_gym_test`, `floating_eye_test`, `hunt_loop_test`, `ammo_ui_test`.
 
 `tests/diag_fight_moves.tscn` measures every fight move. `tests/diag_hunt_stills.tscn` takes stills of the marks from the real game, windowed.
+
+## Telling the rounds apart
+
+Each round reads at a glance, from `Rounds.TABLE`: its colour on the readout's chambers and the aim's dot, its own tracer (`GunFx.tracer`), and copal's thread of resin (`GunFx.trail`). On a monster, `Revolver._show_hit` draws what it did (`GunFx.impact`): a resisted hit glances, a small cold star and a spark skipping off; anything else bursts in the round's colours. A smoked eye smoulders (`EyeBody.smoulder`). Stills: `tests/diag_round_stills.tscn`; a scripted run to record: `tests/diag_hunt_video.tscn`.

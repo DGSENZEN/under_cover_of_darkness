@@ -43,7 +43,7 @@ const SPARKS := 6
 const SHELL_SPARKS := 12
 const SPARK_LIFE := 0.12
 const RING_DRIFT := 0.45
-const RING_GROW := 3.2
+const RING_GROW := 2.4
 ## Each shot's flash turned to one of these (radians), by the shot count.
 const ROLLS := [0.0, 0.7, 1.9, 2.6, 3.8, 4.9]
 
@@ -67,8 +67,24 @@ const TRACER_EDGE := Color("#D08A3A")
 const TRACER_WIDTH := 0.012
 const TRACER_LIFE := 0.06
 
+## Copal's thread of resin in the air: amber, a little wavering, how wide, how long.
+const TRAIL_CORE := Color("#E8B070")
+const TRAIL_BODY := Color("#B07A3C")
+const TRAIL_EDGE := Color("#6E4C2A")
+const TRAIL_WIDTH := 0.06
+const TRAIL_WAVER := 0.03
+const TRAIL_POINTS := 10
+const TRAIL_LIFE := 0.8
+## A ball's mark on a monster: how far its star reaches (m) and how long it shows
+## (s), glancing and bursting; how far a glancing ball's spark skips off (m).
+const GLANCE_SIZE := 0.6
+const GLANCE_LIFE := 0.1
+const BURST_SIZE := 1.1
+const BURST_LIFE := 0.2
+const RICOCHET := 1.5
+
 ## The smoke ring's life (s).
-const RING_LIFE := 0.7
+const RING_LIFE := 0.55
 
 static var _live: Array = []
 
@@ -204,7 +220,7 @@ static func smoke_ring(context: Node, at: Vector3, ahead: Vector3, shell: bool) 
 	look.set_shader_parameter(&"tail_eat", 0.0)
 	look.set_shader_parameter(&"tiling", Vector2(2.0, 0.8))
 	look.set_shader_parameter(&"hardness", 0.1)
-	look.set_shader_parameter(&"opacity", 0.8)
+	look.set_shader_parameter(&"opacity", 0.35)
 	look.set_shader_parameter(&"rim", 1.4)
 	ring.material_override = look
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -285,22 +301,108 @@ static func smoke(context: Node, at: Vector3, ahead: Vector3, shell: bool) -> Ar
 	return made
 
 
-## The ball's tracer, from the muzzle to where it struck, for a moment.
-static func tracer(context: Node, from: Vector3, to: Vector3, eye: Vector3) -> Node3D:
+## The ball's tracer, from the muzzle to where it struck, for a moment; in the look
+## of its round (`spec`, Rounds.info), if it is given one.
+static func tracer(context: Node, from: Vector3, to: Vector3, eye: Vector3, round_id := &"", spec := {}) -> Node3D:
 	if context == null or not context.is_inside_tree() or from.distance_to(to) < 0.2:
 		return null
 
 	var line := MeshInstance3D.new()
 	line.name = "GunTracer"
-	line.mesh = MeshVfx.ribbon(PackedVector3Array([from, from.lerp(to, 0.5), to]), TRACER_WIDTH, eye)
-	var look := MeshVfx.look(TRACER_CORE, TRACER_CORE.lerp(TRACER_EDGE, 0.5), TRACER_EDGE, 2.2, 0.05, 0.0)
+	var width: float = spec.get("tracer_width", TRACER_WIDTH)
+	var life: float = spec.get("tracer_life", TRACER_LIFE)
+	var core: Color = spec.get("tracer_core", TRACER_CORE)
+	var edge: Color = spec.get("tracer_edge", TRACER_EDGE)
+	line.mesh = MeshVfx.ribbon(PackedVector3Array([from, from.lerp(to, 0.5), to]), width, eye)
+	line.set_meta(&"round", round_id)
+	line.set_meta(&"width", width)
+	line.set_meta(&"life", life)
+	var look := MeshVfx.look(core, core.lerp(edge, 0.5), edge, spec.get("tracer_energy", 2.2), 0.05, 0.0)
 	look.set_shader_parameter(&"tail_eat", 0.5)
 	line.mesh.surface_set_material(0, look)
 	line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	line.add_to_group(&"gunfx_tracer")
 	_world_of(context).add_child(line)
-	_keep(line, TRACER_LIFE)
+	_keep(line, life)
 	return line
+
+
+## The resin a copal ball leaves on its way: a thread of amber smoke, hanging where
+## it went a moment after the tracer has gone.
+static func trail(context: Node, from: Vector3, to: Vector3, eye: Vector3) -> Node3D:
+	if context == null or not context.is_inside_tree() or from.distance_to(to) < 0.2:
+		return null
+
+	var line := MeshInstance3D.new()
+	line.name = "RoundTrail"
+	var points := PackedVector3Array()
+
+	for i in TRAIL_POINTS + 1:
+		var u := float(i) / float(TRAIL_POINTS)
+		points.append(from.lerp(to, u) + Vector3(0.0, sin(u * 11.0) * TRAIL_WAVER * u, 0.0))
+
+	line.mesh = MeshVfx.ribbon(points, TRAIL_WIDTH, eye)
+	var look := MeshVfx.look(TRAIL_CORE, TRAIL_BODY, TRAIL_EDGE, 1.0, 0.15, 0.3, 4.2)
+	look.shader = SMOKE_SHADER
+	look.set_shader_parameter(&"tail_eat", 0.0)
+	look.set_shader_parameter(&"hardness", 0.1)
+	look.set_shader_parameter(&"opacity", 0.75)
+	line.mesh.surface_set_material(0, look)
+	line.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	line.add_to_group(&"round_fx_trail")
+	_world_of(context).add_child(line)
+	var thin := line.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS)
+	thin.tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), 0.15, 1.0, TRAIL_LIFE).set_ease(Tween.EASE_IN)
+	_keep(line, TRAIL_LIFE)
+	return line
+
+
+## What a ball did to a monster, big enough to read at range: `read` &"glance", a
+## small cold star and a spark skipping off, it told for little; &"burst", a star in
+## its round's colours, `size` 1 for its full measure.
+static func impact(context: Node, read: StringName, spec: Dictionary, at: Vector3, eye: Vector3, shot: int, size := 1.0, coming := Vector3.FORWARD) -> Node3D:
+	if context == null or not context.is_inside_tree():
+		return null
+
+	var core: Color = spec.get("tracer_core", FLASH_CORE)
+	var edge: Color = spec.get("tracer_edge", FLASH_EDGE)
+	var body: Color = spec.get("colour", FLASH_BODY)
+	var glance := read == &"glance"
+	var mark := MeshInstance3D.new()
+	mark.name = "RoundImpact"
+	mark.set_meta(&"read", read)
+	mark.add_to_group(&"round_fx_impact")
+	var roll := float(ROLLS[shot % ROLLS.size()])
+	mark.mesh = _spikes(SPIKES, (GLANCE_SIZE if glance else BURST_SIZE) * size, roll)
+	var look := _flash_look(shot)
+	look.set_shader_parameter(&"core", core)
+	look.set_shader_parameter(&"body", body)
+	look.set_shader_parameter(&"edge", edge)
+	look.set_shader_parameter(&"energy", 2.0 if glance else FLASH_ENERGY)
+	look.set_shader_parameter(&"core_reach", SPIKE_CREAM)
+	look.set_shader_parameter(&"tail_eat", 0.3)
+	look.set_shader_parameter(&"z_clip", 1.0)
+	look.set_shader_parameter(&"fov_override", 0.0)
+	mark.material_override = look
+	mark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mark.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	_world_of(context).add_child(mark)
+	# Its spikes lean toward you, so you see all of the star.
+	mark.global_transform = Transform3D(Basis.IDENTITY, at).looking_at(eye, Vector3.UP if absf((eye - at).normalized().y) < 0.99 else Vector3.RIGHT)
+	var life := GLANCE_LIFE if glance else BURST_LIFE
+	var fade := mark.create_tween().set_process_mode(Tween.TWEEN_PROCESS_PHYSICS).set_parallel(true)
+	mark.scale = Vector3.ONE * 0.6
+	fade.tween_property(mark, "scale", Vector3.ONE * 1.15, life).set_ease(Tween.EASE_OUT)
+	fade.tween_method(func(e: float): look.set_shader_parameter(&"erosion", e), 0.1, 0.85, life)
+	_keep(mark, life)
+
+	if glance:
+		# Off it goes, back the way it came and aside.
+		var turn := roll * 2.0
+		var off := (-coming.normalized() + Vector3(cos(turn), 0.6, sin(turn)) * 0.9).normalized()
+		tracer(context, at, at + off * RICOCHET, eye, &"", spec)
+
+	return mark
 
 
 ## Every gun effect still showing.

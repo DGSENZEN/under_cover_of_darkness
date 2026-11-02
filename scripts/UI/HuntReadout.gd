@@ -21,10 +21,14 @@ const WHEEL_REACH := 26.0
 const CHAMBER := 10.0
 ## The turn after a shot: seconds.
 const TURN_TIME := 0.12
+## A round switched: the ring called out round the cylinder, in its colour, this long.
+const SWITCH_SHOWN := 0.6
 
 var player: CharacterBody3D
 var font: Font
 var _turn_shown := 0.0
+var _switched := 0.0
+var _round_was := &""
 var _turn_wanted := 0.0
 var _loaded_was := -1
 
@@ -50,11 +54,18 @@ func snapshot() -> Dictionary:
 	return {"barrel": gun.barrel, "round": gun.cylinder_round, "loaded": loaded_now, "chambers": chambers,
 		"shell": int(gun.loaded[&"shot"]), "reserve": int(player.inventory.ammo.get(&"shells" if gun.barrel == &"shot" else gun.stock_id(), 0)),
 		"capacity": 1 if gun.barrel == &"shot" else int(gun.weapon().rounds), "reloading": gun.is_reloading(), "items": items,
-		"evil_eye": player.statuses.has(&"evil_eye"), "using": player.loadout.using()}
+		"evil_eye": player.statuses.has(&"evil_eye"), "using": player.loadout.using(), "switched": _switched}
 
 
 func _process(delta: float) -> void:
 	_turn_shown = move_toward(_turn_shown, _turn_wanted, delta * (TAU / CHAMBERS) / TURN_TIME)
+	_switched = move_toward(_switched, 0.0, delta / SWITCH_SHOWN)
+
+	if is_instance_valid(player) and player.revolver != null:
+		if _round_was != &"" and player.revolver.cylinder_round != _round_was:
+			_switched = 1.0
+
+		_round_was = player.revolver.cylinder_round
 
 
 func _draw() -> void:
@@ -90,6 +101,15 @@ func _draw() -> void:
 			draw_circle(at + Vector2(-2.0, -2.5), 1.8, Color(1.0, 0.95, 0.8, 0.5 * wheel_seen))
 
 	_blot(WHEEL, 5.5, 60.0, Color(0.0, 0.0, 0.0, 0.9))
+
+	# The middle wears the loaded round's colour, and calls out a switch.
+	var round_ink: Color = Rounds.info(state["round"]).get("colour", INK)
+	_blot(WHEEL, 3.6, 61.0, round_ink)
+
+	if _switched > 0.0:
+		var ring := round_ink
+		ring.a = _switched
+		draw_arc(WHEEL, WHEEL_REACH + CHAMBER + 3.0 + (1.0 - _switched) * 9.0, 0.0, TAU, 40, ring, 1.5 + _switched * 2.5, true)
 
 	# The shell's stub below the cylinder, the hammer's nose picking it out.
 	var stub := Rect2(WHEEL.x + 40.0, WHEEL.y + 22.0, 28.0, 12.0)
