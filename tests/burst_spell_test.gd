@@ -26,11 +26,30 @@ func _ready() -> void:
 	Props.give_revolver(p, 200, 40)
 	p.inventory.select_by_id(&"revolver")
 	await _frames(60)
+	_glass()
 	await _reach()
 	await _on_you()
 	await _refused()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
+
+
+## The glass it is made of: real shapes, wearing the Shard's look.
+func _glass() -> void:
+	var scene: PackedScene = load("res://assets/magic/burst_glass.glb")
+	_check("G0 the glass is there", scene != null)
+
+	if scene == null:
+		return
+
+	var glass: Node3D = scene.instantiate()
+	var meshes := glass.find_children("*", "MeshInstance3D", true, false)
+	_check("G1 five spikes, six chunks", meshes.filter(func(m): return m.name.begins_with("Spike")).size() == 5 and meshes.filter(func(m): return m.name.begins_with("Chunk")).size() == 6)
+	var colours: PackedColorArray = meshes[0].mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	_check("G1b corners in its colours, for the glass's edges", colours.size() > 0)
+	var tall: AABB = glass.find_child("Spike_1", true, false).get_aabb()
+	_check("G1c a spike grows from its root, up, about a metre (%.2f)" % tall.end.y, absf(tall.end.y - 1.0) < 0.1 and tall.position.y < 0.0)
+	glass.free()
 
 
 func _reach() -> void:

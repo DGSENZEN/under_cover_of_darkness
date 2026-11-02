@@ -4,6 +4,7 @@ extends Node3D
 
 const GYM := preload("res://maps/hunt_gym.tscn")
 const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
+const MagicFxScript := preload("res://scripts/Visual/MagicFx.gd")
 
 var out := "user://"
 var only := ""
@@ -41,6 +42,9 @@ func _ready() -> void:
 
 	if only == "" or only == "death":
 		await _death()
+
+	if only == "" or only == "glass":
+		await _glass()
 
 	if only == "" or only == "burst":
 		await _burst()
@@ -342,6 +346,56 @@ func _dies(form: StringName, kind: int, at: Vector3, stand: Vector3) -> void:
 	if is_instance_valid(body):
 		body.queue_free()
 
+	await _frames(3)
+
+
+## The Burst's glass, in the game's light and its own look: laid out to judge, and in the
+## room as it will stand, tall to short.
+func _glass() -> void:
+	var scene: PackedScene = load("res://assets/magic/burst_glass.glb")
+	var made: Node3D = scene.instantiate()
+	var meshes := made.find_children("*", "MeshInstance3D", true, false)
+	var spikes: Array = meshes.filter(func(m): return m.name.begins_with("Spike"))
+	var chunks: Array = meshes.filter(func(m): return m.name.begins_with("Chunk"))
+	var heights := [1.5, 1.25, 1.1, 0.8, 0.5]
+	var shown: Array[Node3D] = []
+
+	for i in spikes.size():
+		var piece := MeshInstance3D.new()
+		piece.mesh = spikes[i].mesh
+		piece.material_override = MagicFxScript.big_glass_look()
+		piece.scale = Vector3.ONE * heights[i]
+		piece.position = Vector3(float(i) * 0.72 - 1.45, 0.0, 1.0)
+		piece.rotation.y = float(i) * 1.3
+		add_child(piece)
+		shown.append(piece)
+
+	for i in chunks.size():
+		var piece := MeshInstance3D.new()
+		piece.mesh = chunks[i].mesh
+		piece.material_override = MagicFxScript.big_glass_look()
+		piece.position = Vector3(float(i) * 0.42 - 1.05, 0.12, 0.0)
+		piece.rotation = Vector3(float(i) * 0.9, float(i) * 2.1, float(i) * 0.5)
+		add_child(piece)
+		shown.append(piece)
+
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(-0.2, 1.05, -2.8)))
+	p.neck.rotation.x = -0.32
+	await _frames(25)
+	await _shot("glass_room")
+	# In the dark yard too.
+	for i in shown.size():
+		shown[i].position += Vector3(-2.0, 0.0, -20.0)
+
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(-2.2, 1.05, -22.8)))
+	await _frames(25)
+	await _shot("glass_yard")
+	p.neck.rotation.x = 0.0
+
+	for piece in shown:
+		piece.queue_free()
+
+	made.free()
 	await _frames(3)
 
 

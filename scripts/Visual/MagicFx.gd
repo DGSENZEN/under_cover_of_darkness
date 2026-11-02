@@ -456,6 +456,19 @@ static func spearhead_mesh(width: float, length: float, depth: float, from_heel 
 	return st.commit()
 
 
+## Obsidian for what stands metres tall (the Burst's spikes): the same glass, its facets' flash
+## and edges drawn in, or at this size the glint swallows the black.
+static func big_glass_look() -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = OBSIDIAN_SHADER
+	m.set_shader_parameter(&"glass", GLASS)
+	m.set_shader_parameter(&"glint", GLINT)
+	m.set_shader_parameter(&"glint_energy", 0.5)
+	m.set_shader_parameter(&"edge_energy", 0.32)
+	m.set_shader_parameter(&"edge_width", 0.03)
+	return m
+
+
 ## Obsidian (vfx_obsidian): in the world, or drawn in your view as the arms
 ## are (`view_fov` the arms' field of view, 0 the camera's).
 static func obsidian_look(in_view := false, view_fov := 0.0) -> ShaderMaterial:
