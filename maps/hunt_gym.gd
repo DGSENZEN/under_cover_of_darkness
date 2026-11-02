@@ -47,7 +47,7 @@ func _ready() -> void:
 	reset_physics_interpolation.call_deferred()
 	# A new run, unless this is a save being loaded into its own.
 	if SaveGame.pending.is_empty():
-		SaveGame.begin_run(&"hunt_gym")
+		SaveGame.begin_run(_map_id())
 
 	_environment()
 	_room()
@@ -58,7 +58,7 @@ func _ready() -> void:
 	Props.give_revolver(player, 0, 0)
 	player.inventory.select_by_id(&"revolver")
 	safe_place = SafePlace.build(self, Vector3(0, ROOM.y * 0.5, 0), Vector3(ROOM.x * 2.0, ROOM.y, ROOM.z * 2.0))
-	kit_table = KitTable.build(self, Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 2.8)))
+	kit_table = KitTable.build(self, Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 2.8)), _kit())
 	kit_table.show_for(player.loadout)
 	player.loadout.changed.connect(kit_table.show_for.bind(player.loadout))
 	var baker := NavigationRegion3D.new()
@@ -66,6 +66,21 @@ func _ready() -> void:
 	add_child(baker)
 	_lay_out_waves()
 	SaveGame.register(self)
+
+
+## Which job and save this gym is.
+func _map_id() -> StringName:
+	return &"hunt_gym"
+
+
+## What its table offers.
+func _kit() -> Array:
+	return KitTable.LAID_OUT
+
+
+## The clue pinned in its room.
+func _clue() -> String:
+	return "eye_clue"
 
 
 ## A monster of `kind` at `at`.
@@ -104,14 +119,22 @@ func wave(number: int) -> void:
 
 	wave_now = number
 
-	for eye in _waves[number - 1]:
-		eye.wake()
-		eye.state = eye.State.CIRCLE
+	for member in _waves[number - 1]:
+		_wake_member(member)
 
-	if WAVES[number - 1].get("guard", false) and is_inside_tree():
+	if _guard_in_wave(number) and is_inside_tree():
 		var man: CharacterBody3D = GUARD.instantiate()
 		add_child(man)
 		man.global_position = Vector3(-10, 0.1, -32)
+
+
+func _wake_member(eye: Node3D) -> void:
+	eye.wake()
+	eye.state = eye.State.CIRCLE
+
+
+func _guard_in_wave(number: int) -> bool:
+	return WAVES[number - 1].get("guard", false)
 
 
 func _wave_cleared() -> bool:
@@ -165,7 +188,7 @@ func _room() -> void:
 	lamp.shadow_enabled = true
 	add_child(lamp)
 	lamp.global_position = Vector3(0, 3.0, 1.0)
-	Props.readable(self, Transform3D(Basis.IDENTITY, Vector3(2.6, 1.6, -ROOM.z)), &"notice", "eye_clue")
+	Props.readable(self, Transform3D(Basis.IDENTITY, Vector3(2.6, 1.6, -ROOM.z)), &"notice", _clue())
 
 
 func _yard() -> void:

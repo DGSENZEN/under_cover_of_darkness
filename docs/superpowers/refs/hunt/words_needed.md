@@ -14,3 +14,4 @@ Every word here is a stand-in. Replace the text, keep the ids.
 
 - The new spell, stand-in id `burst`: its name.
 - The copal line, stand-in id `copal_line`: its name, and the HUD's "Line".
+- `data/jobs/anima_gym.job`: the curandera's note on the hungry ones, and the pencil note.

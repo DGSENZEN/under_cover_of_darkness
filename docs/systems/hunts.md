@@ -81,3 +81,12 @@ A variant is a row with changed numbers and one trick.
 ## Telling the rounds apart
 
 Each round reads at a glance, from `Rounds.TABLE`: its colour on the readout's chambers and the aim's dot, its own tracer (`GunFx.tracer`), and copal's thread of resin (`GunFx.trail`). On a monster, `Revolver._show_hit` draws what it did (`GunFx.impact`): a resisted hit glances, a small cold star and a spark skipping off; anything else bursts in the round's colours. A smoked eye smoulders (`EyeBody.smoulder`). Stills: `tests/diag_round_stills.tscn`; a scripted run to record: `tests/diag_hunt_video.tscn`.
+
+## Ravenous ánimas
+
+`scripts/Monsters/Anima.gd`, a kind of `Monster.gd` with three forms as data in `Bestiary` (hands, face, torso). Souls no one lit a candle for: they rush you, tell, and leap. A leap that lands puts one on you, up to three (`scripts/Monsters/LifeLeech.gd`, the player's `leech`): they drink your power and your life, slow you, and stop your refills, and with no power left your life goes twice as fast. Killing one gives back half of what it drank.
+
+- **Getting them off:** a whip (one; a torso takes two), a copal round (the one it hits; its cloud only halves the drain and stops new latches), the Ward (all, and they can't enter), the obsidian burst (`scripts/Magic/ObsidianBurst.gd`, key 4; all, and hurts everything near), the copal line (`scripts/Hunt/CopalLine.gd`, all, and they can't cross), a blink (all, unhurt, and they come straight after you). Thrown off, one is stunned and exposed for 1.5 s. A dodge only makes a leap miss.
+- **On screen:** `scripts/UI/life_drain_view.gdshader` (`StealthHUD._show_drain`) and `scripts/Monsters/LeechHands.gd`. Its own shader, under the curse's, with a `BackBufferCopy` between them.
+- **Play:** `maps/anima_gym.tscn`. The bodies are stand-ins until the models are made. Tests: `anima_test`, `burst_spell_test`, `copal_line_test`, `anima_gym_test`; stills `diag_anima_stills`.
+

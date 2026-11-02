@@ -118,6 +118,11 @@ func drain_life() -> float:
 	return float(_form["life_drain"]) * (SMOKED_DRAIN if statuses.has(&"smoked") else 1.0)
 
 
+## Comes up out of where it was laid (a wave's coming).
+func rise() -> void:
+	_enter(State.RISE)
+
+
 ## On you, at once (a leap that lands).
 func put_on_you() -> bool:
 	var leech: Node = _leech()
