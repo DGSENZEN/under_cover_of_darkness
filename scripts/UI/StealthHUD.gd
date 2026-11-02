@@ -112,6 +112,10 @@ const GAZER_MARGIN := 0.07
 const GAZER_CLEAR := 0.22
 ## How long the egg's dispel takes; how long it takes to fade when it runs out.
 const DISPEL_TIME := 0.35
+## The order the six in the flesh open in (evil_eye_view.gdshader has the same):
+## those at the corners first, where the flesh first comes in.
+const RING_ORDER := [2, 4, 0, 1, 5, 3]
+const CURSE_LEAST := 0.62
 const RELIEF_TIME := 1.2
 const LEAVE_TIME := 0.8
 var _crosshair: Crosshair
@@ -887,7 +891,9 @@ func _show_curse(delta: float) -> void:
 
 	var alive: bool = not player.is_dead
 	var cursed: bool = alive and watch.has(&"evil_eye")
-	var left: float = watch.fraction(&"evil_eye") if cursed else 0.0
+	var depth: int = player.curse.depth() if cursed else 0
+	# One eye is flesh at the corners of your view; six, all that the old curse was.
+	var closed_in: float = lerpf(CURSE_LEAST, 1.0, float(depth - 1) / 5.0) if cursed else 0.0
 	_dispel = _dispel + delta / DISPEL_TIME if _dispel > 0.0 else 0.0
 
 	# The egg: all of it stays until it has dissolved, then it is simply gone.
@@ -896,7 +902,7 @@ func _show_curse(delta: float) -> void:
 		_curse_shown = 0.0
 		_relief = 1.0
 	elif _dispel <= 0.0:
-		_curse_shown = move_toward(_curse_shown, 1.0 if cursed else 0.0, delta / (1.1 if cursed else LEAVE_TIME))
+		_curse_shown = move_toward(_curse_shown, closed_in, delta / (1.1 if cursed else LEAVE_TIME))
 
 	_relief = move_toward(_relief, 0.0, delta / RELIEF_TIME)
 	_gather = float(player.loadout.use_progress()) if player.loadout != null else 0.0
@@ -912,8 +918,8 @@ func _show_curse(delta: float) -> void:
 	_crosshair.stray_px = _stray_pixels()
 
 	for i in _ring_open.size():
-		# They close last to first: the last with the curse itself.
-		var stays: bool = (cursed and left > float(i) / float(_ring_open.size())) or (_dispel > 0.0 and _ring_open[i] > 0.5)
+		# They open as it deepens, close as it ebbs: the last with the curse itself.
+		var stays: bool = (cursed and RING_ORDER[i] < depth) or (_dispel > 0.0 and _ring_open[i] > 0.5)
 		_ring_open[i] = move_toward(_ring_open[i], 1.0 if stays else 0.0, delta / 0.35)
 
 	_update_gazers(delta)
@@ -993,7 +999,7 @@ func _edge_mark(camera: Camera3D, at: Vector3, view: Vector2) -> Vector2:
 ## How wide the evil eye's stray is at the crosshair, in pixels.
 func _stray_pixels() -> float:
 	var view_height: float = get_viewport().get_visible_rect().size.y
-	return view_height * 0.5 * tan(deg_to_rad(player.revolver.EVIL_EYE_STRAY)) / tan(deg_to_rad(player.camera.fov) * 0.5)
+	return view_height * 0.5 * tan(deg_to_rad(player.curse.stray())) / tan(deg_to_rad(player.camera.fov) * 0.5)
 
 
 ## The egg has gone: whatever of the evil eye was on you is dispelled.

@@ -22,6 +22,7 @@ const RevolverScript := preload("res://scripts/Combat/Revolver.gd")
 const PowerPoolScript := preload("res://scripts/Magic/PowerPool.gd")
 const CasterScript := preload("res://scripts/Magic/Caster.gd")
 const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
+const EvilEyeCurseScript := preload("res://scripts/Monsters/EvilEyeCurse.gd")
 const LoadoutScript := preload("res://scripts/Hunt/Loadout.gd")
 const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -411,6 +412,8 @@ var power: Node = null
 var caster: Node = null
 ## What lies on you (Statuses.gd): the evil eye.
 var statuses: Node = null
+## The evil eye's depth and what it costs you (EvilEyeCurse.gd).
+var curse: Node = null
 ## What you took on the hunt (Loadout.gd).
 var loadout: Node = null
 var _hazard_cooldown := 0.0
@@ -633,6 +636,10 @@ func _ready() -> void:
 	add_child(caster)
 	statuses = StatusesScript.new()
 	statuses.name = "Statuses"
+	curse = EvilEyeCurseScript.new()
+	curse.name = "Curse"
+	curse.statuses = statuses
+	add_child(curse)
 	add_child(statuses)
 	loadout = LoadoutScript.new()
 	loadout.name = "Loadout"
@@ -1231,13 +1238,17 @@ func _feel_statuses() -> void:
 	if juice != null:
 		juice.set_slide(1.0 if is_sliding() else 0.0, _slide_steer)
 
-	var cursed: bool = statuses != null and statuses.has(&"evil_eye")
+	if curse == null:
+		return
 
 	if power != null:
-		power.refill_scale = 0.5 if cursed else 1.0
+		power.refill_scale = curse.magic_regen()
+
+	if combat != null:
+		combat.stamina_regen_scale = curse.stamina_regen()
 
 	if juice != null:
-		juice.set_unsteady(1.0 if cursed else 0.0)
+		juice.set_unsteady(curse.unsteady())
 
 
 func _update_timers(delta: float) -> void:
@@ -1311,6 +1322,9 @@ func _apply_horizontal_movement(
 
 	# A raised guard, a charged blow or a drawn bow: slower, and no sprinting.
 	target_speed *= fighting_scale
+
+	if curse != null:
+		target_speed *= curse.speed()
 
 	# Wading: the deeper, the slower.
 	target_speed *= wade_scale()

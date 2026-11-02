@@ -43,6 +43,8 @@ const vec3 WARD = vec3(0.72, 0.8, 0.82);
 // after it each next one does, how long one takes to reach the egg, and how long its
 // tail lags its head. (Loadout.gd lands them on the same clock.)
 const float PULL_FROM = 0.14;
+// The order the six open in as it deepens, and go in (StealthHUD.RING_ORDER).
+const int RING_ORDER[6] = {2, 4, 0, 1, 5, 3};
 const float PULL_STAGGER = 0.06;
 const float PULL_TAKES = 0.55;
 const float TAIL_LAG = 0.14;
@@ -358,7 +360,7 @@ void fragment() {
 			float rest = mix(1.42, 0.84, curse) * (1.0 - across * across * 0.5);
 			float seed = float(i) * 0.37 + 0.11;
 			vec2 at = vec2((across + (side > 0.0 ? 0.12 : -0.12)) * aspect, side * min(rest + 0.11, 0.84));
-			float set_off = PULL_FROM + float((i * 5 + 2) % 6) * PULL_STAGGER;
+			float set_off = PULL_FROM + float(RING_ORDER[i]) * PULL_STAGGER;
 			float head = pow(clamp((pull - set_off) / PULL_TAKES, 0.0, 1.0), 2.2);
 			float tail = pow(clamp((pull - set_off - TAIL_LAG) / PULL_TAKES, 0.0, 1.0), 2.4);
 			// From out past the edge of your sight, through where the eye sat, to the egg.

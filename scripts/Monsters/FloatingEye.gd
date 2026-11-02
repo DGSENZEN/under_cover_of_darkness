@@ -43,6 +43,7 @@ const BITE_REACH := 0.8
 const GAZE_RANGE := 12.0
 ## Seconds of being looked at, across the pack.
 const GAZE_TO_CURSE := 2.0
+const GAZE_TO_DEEPEN := 5.0
 const EVIL_EYE_TIME := 8.0
 ## At once, across the pack, in a tell or a swoop.
 const MOST_SWOOPING := 2
@@ -354,12 +355,18 @@ func _gaze(you: Node3D, delta: float, smoked: bool) -> void:
 
 	var bearer: Node = you.get("statuses")
 
-	if bearer == null or bearer.has(&"cleansed") or bearer.has(&"evil_eye"):
+	if bearer == null or bearer.has(&"cleansed"):
 		return
 
 	gazing = true
 
-	if bearer.stare(delta, GAZE_TO_CURSE):
+	# Already on you, a stare drives it deeper.
+	var curse: Node = you.get("curse")
+
+	if bearer.has(&"evil_eye"):
+		if bearer.stare(delta, GAZE_TO_DEEPEN) and curse != null:
+			curse.deepen()
+	elif bearer.stare(delta, GAZE_TO_CURSE):
 		bearer.apply(&"evil_eye", EVIL_EYE_TIME)
 
 

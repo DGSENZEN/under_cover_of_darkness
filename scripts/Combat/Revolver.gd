@@ -58,7 +58,6 @@ const BALL_GENEROUS := 0.18
 const BALL_GENEROUS_PER_METRE := 0.012
 const PELLET_GENEROUS := 0.04
 ## Under the evil eye, every shot strays this far, even at the sights.
-const EVIL_EYE_STRAY := 1.5
 ## Where a stray shot goes, in turn: a fixed ring, so a run is repeatable.
 const ROSETTE := [Vector2(0.0, 1.0), Vector2(0.87, -0.5), Vector2(-0.87, -0.5), Vector2(0.5, 0.87), Vector2(-1.0, 0.0), Vector2(0.5, -0.87)]
 ## The camera's kick for a shot from the cylinder, in one hand.
@@ -747,8 +746,7 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 func _stray(aim_basis: Basis) -> Vector3:
 	var forward := -aim_basis.z
 
-	var cursed: bool = player.statuses != null and player.statuses.has(&"evil_eye")
-	var spread := (0.0 if aimed else SPREAD_ONE_HAND * _heat) + (EVIL_EYE_STRAY if cursed else 0.0)
+	var spread := (0.0 if aimed else SPREAD_ONE_HAND * _heat) + (float(player.curse.stray()) if player.curse != null else 0.0)
 
 	if spread <= 0.001:
 		return forward

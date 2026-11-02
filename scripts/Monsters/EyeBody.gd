@@ -87,6 +87,7 @@ func _ready() -> void:
 	# Over to this node, flat, keeping where each is (a child stays with its parent).
 	for child in made.get_children():
 		made.remove_child(child)
+		child.owner = null
 		add_child(child)
 
 	made.free()

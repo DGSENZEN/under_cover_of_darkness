@@ -33,6 +33,7 @@ func _ready() -> void:
 	await _noticing()
 	await _attacks()
 	await _gaze()
+	await _deepening()
 	await _smoke()
 	await _stagger()
 	await _answers()
@@ -142,11 +143,11 @@ func _gaze() -> void:
 	await _until(func(): return p.statuses.has(&"evil_eye"), 2.0)
 	_check("E7 2 s of gaze puts the evil eye on you", p.statuses.has(&"evil_eye"))
 	await _frames(2)
-	_check("E9 evil eye: refill halved", is_equal_approx(p.power.refill_scale, 0.5))
+	_check("E9 evil eye: magic refills slower", p.power.refill_scale < 1.0)
 	_check("E9b view unsteady", p.juice.unsteady() > 0.0)
 	p.revolver.aimed = true
 	var straight: Basis = Basis.IDENTITY
-	_check("E9c even aimed, the aim strays", p.revolver._stray(straight).dot(-straight.z) < 0.9999)
+	_check("E9c even aimed, the aim strays", p.revolver._stray(straight).dot(-straight.z) < 0.99999)
 	p.revolver.aimed = false
 	p.loadout.pack_item(&"egg")
 	p.loadout.item_counts[&"egg"] = 1
@@ -164,6 +165,74 @@ func _gaze() -> void:
 	await _frames(150)
 	_check("E8 out of its line, no gaze", not p.statuses.has(&"evil_eye"))
 	_free(e)
+
+
+func _deepening() -> void:
+	var c: Node = p.curse
+	p.statuses.clear(&"evil_eye")
+	p.statuses.clear(&"cleansed")
+	await _frames(2)
+	_check("D0 nothing on you: nothing costs you", c.depth() == 0 and is_equal_approx(p.power.refill_scale, 1.0) and is_equal_approx(p.combat.stamina_regen_scale, 1.0) and is_equal_approx(c.speed(), 1.0))
+	p.statuses.apply(&"evil_eye", 8.0)
+	await _frames(2)
+	_check("D1 it starts with one eye (%d)" % c.depth(), c.depth() == 1)
+	var first := {"magic": p.power.refill_scale, "stamina": p.combat.stamina_regen_scale, "speed": c.speed(), "stray": c.stray()}
+	_check("D2 and one eye already costs you magic, stamina and pace", first["magic"] < 1.0 and first["stamina"] < 1.0 and first["speed"] < 1.0)
+
+	# Still hunted: it deepens with time alone.
+	var waited := 0
+	while c.depth() < 2 and waited < 600:
+		p.statuses.stare(0.0001, 100.0)
+		await _frames(1)
+		waited += 1
+	_check("D3 hunted, a second eye opens in time (%.1f s)" % (waited / 60.0), c.depth() == 2 and waited > 360)
+	await _frames(25)
+	_check("D3b it opens in your view (%d)" % p.hud.curse_state()["ring_open"], p.hud.curse_state()["ring_open"] == 2)
+
+	while c.depth() < 6:
+		c.deepen()
+	await _frames(2)
+	_check("D4 six eyes: all of it far worse", p.power.refill_scale < first["magic"] * 0.5 and p.combat.stamina_regen_scale < first["stamina"] * 0.5 and c.speed() < first["speed"] - 0.1 and c.stray() > first["stray"] * 2.0)
+	_check("D4b worst of all, you can still sprint fast enough to slide", p.sprint_speed * c.speed() >= p.SLIDE_MIN_SPEED)
+	c.deepen()
+	_check("D4c six is the most", c.depth() == 6)
+	await _frames(40)
+	_check("D4d and all six are open (%d)" % p.hud.curse_state()["ring_open"], p.hud.curse_state()["ring_open"] == 6)
+
+	# Out of every eye's sight: they close, one at a time, and then it is gone.
+	p.statuses._stare_ago = 100.0
+	var deep_was: int = c.depth()
+	await _frames(int(c.EBB_EVERY * 60.0) + 12)
+	_check("D5 nobody looking, an eye closes (%d)" % c.depth(), c.depth() == deep_was - 1)
+	_check("D5b and what it cost eases with it", p.power.refill_scale > 0.2 and p.statuses.has(&"evil_eye"))
+	p.statuses._left[&"evil_eye"] = 0.1
+	await _frames(12)
+	_check("D6 the last closed, it is off you and costs nothing", not p.statuses.has(&"evil_eye") and c.depth() == 0 and is_equal_approx(p.combat.stamina_regen_scale, 1.0))
+
+	# It is not forgotten that an eye is watching: a stare drives it deeper.
+	await _place_player(HOME)
+	p.statuses.apply(&"evil_eye", 8.0)
+	p.statuses.forget_stare()
+	p.statuses._stare_ago = 100.0
+	var one := _eye(Vector3(0, 2, -7), 5)
+	one.next_swoop_in = 100.0
+	await _until(func(): return one.gazing, 3.0)
+	var deepened := await _until(func(): return c.depth() >= 2, 6.5)
+	_check("D7 an eye watching you drives the curse deeper, sooner than time alone", deepened)
+	_free(one)
+	p.statuses.clear(&"evil_eye")
+	await _frames(2)
+
+	# Saved and loaded, it is as deep as it was.
+	p.statuses.apply(&"evil_eye", 20.0)
+	c.deepen()
+	c.deepen()
+	var saved: Dictionary = p.statuses.save_state()
+	p.statuses.clear(&"evil_eye")
+	p.statuses.load_state(saved)
+	_check("D8 a save keeps how deep it is (%d)" % c.depth(), c.depth() == 3)
+	p.statuses.clear(&"evil_eye")
+	await _frames(2)
 
 
 func _smoke() -> void:
@@ -585,23 +654,27 @@ func _curse_view() -> void:
 	_check("C6 left alone, the warning fades (%.2f)" % hud.curse_state()["stared"], hud.curse_state()["stared"] < 0.05 and hud.curse_state()["gazers"].filter(func(g): return g.z > 0.1).is_empty())
 
 	p.statuses.apply(&"evil_eye", 8.0)
+	while p.curse.depth() < 6:
+		p.curse.deepen()
 	await _frames(70)
 	state = hud.curse_state()
-	_check("C3 cursed, a ring of six stares at you (%d)" % state["ring_open"], state["ring_open"] == 6)
+	_check("C3 at its deepest, a ring of six stares at you (%d)" % state["ring_open"], state["ring_open"] == 6)
 	_check("C4 the power arc goes bruised, and the stray is drawn", cross.cursed > 0.5)
-	await _frames(int(3.7 * 60.0))
+	p.statuses._left[&"evil_eye"] = 11.0
+	await _frames(30)
 	state = hud.curse_state()
-	_check("C3b half gone, half of them have closed (%d)" % state["ring_open"], state["ring_open"] == 3 or state["ring_open"] == 4)
+	_check("C3b ebbing, half of them have closed (%d)" % state["ring_open"], state["ring_open"] == 3)
 	p.statuses.clear(&"evil_eye")
 	await _frames(70)
 	_check("C4b it lifts", cross.cursed < 0.1 and hud.curse_state()["ring_open"] == 0)
 
 	# Running out by itself: nothing but a quiet fade.
 	p.statuses.apply(&"evil_eye", 8.0)
+	p.statuses._stare_ago = 100.0
 	await _frames(70)
 	p.statuses._left[&"evil_eye"] = 0.1
 	await _frames(12)
-	_check("C7 run out, it is easing away, not cut off (%.2f)" % hud.curse_state()["curse"], not p.statuses.has(&"evil_eye") and hud.curse_state()["curse"] > 0.5)
+	_check("C7 run out, it is easing away, not cut off (%.2f)" % hud.curse_state()["curse"], not p.statuses.has(&"evil_eye") and hud.curse_state()["curse"] > 0.3)
 	_check("C7a it is fading as it goes", hud.curse_state()["leaving"] > 0.5)
 	await _frames(70)
 	_check("C7c and then it is gone", hud.curse_state()["curse"] < 0.01 and not hud.curse_view_shown())
@@ -609,6 +682,8 @@ func _curse_view() -> void:
 	p.loadout.pack_item(&"egg")
 	p.loadout.item_counts[&"egg"] = 1
 	p.statuses.apply(&"evil_eye", 8.0)
+	while p.curse.depth() < 6:
+		p.curse.deepen()
 	await _frames(60)
 	await _press("use_item")
 	await _frames(30)

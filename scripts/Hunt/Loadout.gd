@@ -37,7 +37,6 @@ const PASS_ROLL := -0.3
 ## first lands, and each next. Each lands with a jolt of the hand, down and away.
 const RIBBON_LANDS_AT := 0.69
 const RIBBON_LANDS_EVERY := 0.06
-const RIBBONS := 6
 const JOLT := Vector3(-0.012, -0.03, 0.012)
 const JOLT_FADE := 7.0
 const JOLT_TRAUMA := 0.035
@@ -62,6 +61,7 @@ var _using: StringName = &""
 var _using_left := 0.0
 ## How many ribbons have reached the item in this use, and the last one's jolt, 1..0.
 var _landed := 0
+var _ribbons := 0
 var _jolt := 0.0
 var _spent_left := 0.0
 
@@ -183,6 +183,7 @@ func use_item(index := 0) -> bool:
 	_using_left = float(info["use_time"])
 	_landed = 0
 	_jolt = 0.0
+	_ribbons = int(player.curse.depth()) if player.curse != null else 0
 	Sfx.play_flat(self, &"cloth", -6.0, 1.2)
 	# It draws: a low rush, rising to the release.
 	Sfx.play_flat(self, &"whoosh_heavy", -15.0, 0.55)
@@ -292,7 +293,7 @@ func _physics_process(delta: float) -> void:
 
 ## Each ribbon reaching the item: a wet thud and a jolt, felt in the hand.
 func _land_ribbons() -> void:
-	if _landed >= RIBBONS or use_progress() < RIBBON_LANDS_AT + RIBBON_LANDS_EVERY * float(_landed):
+	if _landed >= _ribbons or use_progress() < RIBBON_LANDS_AT + RIBBON_LANDS_EVERY * float(_landed):
 		return
 
 	_landed += 1

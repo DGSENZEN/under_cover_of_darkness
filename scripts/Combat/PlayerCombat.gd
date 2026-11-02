@@ -224,6 +224,8 @@ var stowed := false
 var draw := 0.0
 var adrenaline := 0.0
 var stamina := 100.0
+## How fast it comes back: slower under the evil eye (EvilEyeCurse.gd).
+var stamina_regen_scale := 1.0
 ## Blows landed in a row, each following the last.
 var combo := 0
 ## When you last dodged: a dodge just before his blow lands leaves him
@@ -768,7 +770,7 @@ func _regain_stamina(delta: float) -> void:
 		return
 
 	# Slower behind a raised guard.
-	stamina = minf(stamina + stamina_regen * delta * (0.5 if blocking else 1.0), stamina_max)
+	stamina = minf(stamina + stamina_regen * stamina_regen_scale * delta * (0.5 if blocking else 1.0), stamina_max)
 
 
 # What a guard can read off you
