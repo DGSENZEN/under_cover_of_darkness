@@ -24,6 +24,8 @@ const CHEST := 0.15
 const GULP_FAST := 0.72
 const GULP_SLOW := 1.25
 const GULP_FADES := 0.5
+## What is drunk between gulps, of the steady rate: the rest goes with the gulp.
+const BETWEEN_GULPS := 0.15
 const GULP_TRAUMA := 0.05
 const GULP_HAUL := 0.9
 const MUFFLE := 0.65
@@ -39,6 +41,7 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 var player: CharacterBody3D
 var _gulp_in := 0.25
 var _gulp := 0.0
+var _gulp_span := GULP_FAST
 var _sag := 0.0
 var _was_held := false
 var _slots: Array = [null, null, null]
@@ -91,6 +94,7 @@ func slot_of(who: Node3D) -> int:
 func _gulp_now() -> void:
 	var will: float = player.power.power / player.power.MAX
 	_gulp_in = lerpf(GULP_SLOW, GULP_FAST, will)
+	_gulp_span = _gulp_in
 	_gulp = 1.0
 	var drinker: Node3D = on_me()[randi() % count()]
 	var felt := 0.7 + 0.15 * float(count())
@@ -225,12 +229,14 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var life := 0.0
+	# It comes in lurches: a gulp's share over its fading, the same amount in the end.
+	var lurch := BETWEEN_GULPS + _gulp * (1.0 - BETWEEN_GULPS) * _gulp_span / (GULP_FADES * 0.5)
 
 	for who in on_me():
-		var taken := minf(float(who.drain_power()) * delta, player.power.power)
+		var taken := minf(float(who.drain_power()) * delta * lurch, player.power.power)
 		player.power.power -= taken
 		who.fed += taken
-		life += float(who.drain_life()) * delta
+		life += float(who.drain_life()) * delta * lurch
 
 	# With nothing left to take, it takes twice as much of the rest.
 	player.drain_life(life * (2.0 if player.power.power <= 0.0 else 1.0))

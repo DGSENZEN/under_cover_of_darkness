@@ -153,9 +153,9 @@ func _leeching() -> void:
 	p.invulnerable = false
 	var power_from: float = p.power.power
 	var life_from: float = p.health
-	await _frames(60)
-	var power_rate: float = power_from - p.power.power
-	var life_rate: float = life_from - p.health
+	await _frames(480)
+	var power_rate: float = (power_from - p.power.power) / 8.0
+	var life_rate: float = (life_from - p.health) / 8.0
 	_check("A11 it drains power (%.1f /s) and life (%.1f /s)" % [power_rate, life_rate], absf(power_rate - 8.0) < 0.5 and absf(life_rate - 2.5) < 0.3)
 	var stood: float = p.health
 	_check("A11b your power doesn't refill", p.power.refill_scale == 0.0)
@@ -163,9 +163,11 @@ func _leeching() -> void:
 	_check("A13 one on you: pace 0.8", is_equal_approx(p.leech.speed(), 0.8))
 	_check("A13b with the curse too, the costs multiply", _both_multiply())
 	p.power.power = 0.0
+	p.health = p.max_health
 	life_from = p.health
-	await _frames(60)
-	_check("A12 no power left, life goes twice as fast (%.1f)" % (life_from - p.health), absf(life_from - p.health - 5.0) < 0.4)
+	await _frames(300)
+	var empty_rate: float = (life_from - p.health) / 5.0
+	_check("A12 no power left, life goes twice as fast (%.1f)" % empty_rate, absf(empty_rate - 5.0) < 0.5)
 	_check("A11d your shield doesn't refill while it is on you", p.health < stood)
 	p.power.power = 100.0
 
@@ -422,6 +424,27 @@ func _drained_view() -> void:
 		trauma_seen = maxf(trauma_seen, p.juice._trauma)
 
 	p.leech.gulped.disconnect(gulped_watch)
+	# What a gulp takes, against what is taken between them.
+	p.power.power = 100.0
+	var worst := 0.0
+	var least := 99.0
+	var power_was: float = p.power.power
+
+	for i in 130:
+		await get_tree().physics_frame
+		var lost: float = power_was - p.power.power
+		power_was = p.power.power
+		worst = maxf(worst, lost)
+		least = minf(least, lost)
+
+	_check("S9 your magic goes in lurches, with each gulp (%.3f to %.3f a tick)" % [least, worst], worst > least * 3.0)
+	_check("S9b your magic and your shields are up where you can see them go", hud.get("_crosshair").power_alpha > 0.9 and hud.get("_shields").modulate.a > 0.5)
+	_check("S9c its ribbons go into the hands that hold you", hud.drain_state()["into_hands"])
+	p.power.power = 0.0
+	await _frames(30)
+	_check("S9d no magic left, its ribbon is gone: only your life still runs (%.2f)" % hud.drain_state()["magic"], hud.drain_state()["magic"] < 0.05)
+	p.power.power = 100.0
+	await _frames(30)
 	_check("S7 it drinks in gulps, not a steady bleed (%d in 2.2 s)" % gulps[0], gulps[0] >= 2 and gulps[0] <= 4)
 	_check("S7b each one shows on your sight (%.2f)" % gulp_seen, gulp_seen > 0.5)
 	_check("S7c its hands squeeze with each (%.2f to %.2f)" % [squeeze_low, squeeze_high], squeeze_high > squeeze_low + 0.2)

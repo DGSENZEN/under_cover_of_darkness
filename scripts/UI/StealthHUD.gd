@@ -101,6 +101,7 @@ var _drain_view: ColorRect
 var _drain_shown := 0.0
 var _drain_release := 0.0
 var _drain_threads := 0
+var _drain_magic := 1.0
 var _drain_held_was := 0
 ## Between the two, or the curse's own look at the screen wouldn't have the drain in it.
 var _drain_copy: BackBufferCopy
@@ -131,6 +132,8 @@ const DRAIN_DEPTH := [0.0, 0.45, 0.72, 1.0]
 const DRAIN_COMES := 1.2
 const DRAIN_GOES := 5.0
 const DRAIN_RELEASE_TIME := 0.5
+## From the wrist of a hand in your view to its palm, on the screen.
+const DRAIN_INTO_PALM := Vector2(0.0, 0.05)
 const RELIEF_TIME := 1.2
 const LEAVE_TIME := 0.8
 var _crosshair: Crosshair
@@ -215,6 +218,8 @@ class Crosshair:
 	## spell could not be paid for.
 	var power := 1.0
 	var power_alpha := 0.0
+	## A gulp just took some of it: the arc swells and goes white.
+	var power_drunk := 0.0
 	var power_short_flash := 0.0
 	## A flash of brass when power comes back for fighting well.
 	var power_gain_flash := 0.0
@@ -261,10 +266,10 @@ class Crosshair:
 			var start := PI * 1.18
 			var end := PI * 1.82
 			draw_arc(c, 17.0, start, end, 24, Color(0, 0, 0, 0.4 * seen), 3.0, true)
-			var ink := Color(0.62, 0.78, 0.9).lerp(Color(0.42, 0.1, 0.16), cursed).lerp(Color(1.0, 0.78, 0.36), power_gain_flash).lerp(Color(0.95, 0.3, 0.2), power_short_flash)
+			var ink := Color(0.62, 0.78, 0.9).lerp(Color(0.42, 0.1, 0.16), cursed).lerp(Color(1.0, 0.78, 0.36), power_gain_flash).lerp(Color(0.95, 0.3, 0.2), power_short_flash).lerp(Color(0.86, 0.96, 1.0), power_drunk)
 
 			if power > 0.001:
-				draw_arc(c, 17.0, start, start + (end - start) * power, 24, Color(ink.r, ink.g, ink.b, 0.8 * seen), 2.0, true)
+				draw_arc(c, 17.0, start, start + (end - start) * power, 24, Color(ink.r, ink.g, ink.b, 0.8 * seen), 2.0 + power_drunk * 2.5, true)
 
 		if draw_amount > 0.0:
 			var ring := lerpf(22.0, 4.0, draw_amount)
@@ -1069,30 +1074,19 @@ func _show_drain(delta: float) -> void:
 	look.set_shader_parameter(&"drain", _drain_shown)
 	look.set_shader_parameter(&"release", _drain_release)
 	look.set_shader_parameter(&"gulp", leech.gulp())
+	_drain_magic = float(player.power.power) / float(player.power.MAX)
+	look.set_shader_parameter(&"magic", clampf(_drain_magic * 5.0, 0.0, 1.0))
 	var threads := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
 	_drain_threads = 0
 
 	if held > 0:
 		for who in leech.on_me():
-			var on: Vector2 = _on_screen_or_off(who.global_position)
+			# Into the hand that has hold of you, as you see it.
+			var on: Vector2 = player.leech_hands.on_screen(leech.slot_of(who)) + DRAIN_INTO_PALM
 			threads[_drain_threads] = Vector3(on.x, on.y, 1.0)
 			_drain_threads += 1
 
 	look.set_shader_parameter(&"threads", threads)
-
-
-## Where a point is on the screen, 0..1; out of sight, off the edge on its side.
-func _on_screen_or_off(at: Vector3) -> Vector2:
-	var camera: Camera3D = player.camera
-	var size: Vector2 = get_viewport().get_visible_rect().size
-
-	if not camera.is_position_behind(at):
-		return camera.unproject_position(at) / size
-
-	var local: Vector3 = camera.to_local(at)
-	var way := Vector2(local.x, -local.y)
-	way = way.normalized() if way.length() > 0.001 else Vector2.DOWN
-	return Vector2(0.5, 0.5) + way * 0.9
 
 
 func drain_view_shown() -> bool:
@@ -1100,7 +1094,7 @@ func drain_view_shown() -> bool:
 
 
 func drain_state() -> Dictionary:
-	return {"drain": _drain_shown, "release": _drain_release, "threads": _drain_threads, "gulp": player.leech.gulp() if player != null and player.leech != null else 0.0}
+	return {"drain": _drain_shown, "release": _drain_release, "threads": _drain_threads, "gulp": player.leech.gulp() if player != null and player.leech != null else 0.0, "magic": clampf(_drain_magic * 5.0, 0.0, 1.0), "into_hands": true}
 
 
 ## The evil eye's marks are on screen.
@@ -1229,7 +1223,12 @@ func _process(delta: float) -> void:
 	var fraction := clampf(float(player.health) / maxf(float(player.max_health), 1.0), 0.0, 1.0)
 	_shield_timer = maxf(_shield_timer - delta, 0.0)
 	_shields.fraction = fraction
-	var show_shields := fraction < 0.999 or _shield_timer > 0.0
+	var drunk_from: bool = player.leech != null and player.leech.count() > 0
+	var show_shields := fraction < 0.999 or _shield_timer > 0.0 or drunk_from
+	# With each gulp, your shields flush and swell: it is them going.
+	var gulp_now: float = player.leech.gulp() if drunk_from else 0.0
+	_shields.modulate = Color(1.0 + gulp_now * 0.9, 1.0 - gulp_now * 0.6, 1.0 - gulp_now * 0.6, _shields.modulate.a)
+	_shields.scale = Vector2.ONE * (1.0 + gulp_now * 0.14)
 	_shields.modulate.a = move_toward(_shields.modulate.a, 1.0 if show_shields else 0.0, delta * 2.0)
 	_shields.position = Vector2(30, view.y - 50)
 	_shields.size = Vector2(120, 20)
@@ -1270,7 +1269,9 @@ func _process(delta: float) -> void:
 	if pool != null:
 		var p: float = pool.power / pool.MAX
 		_crosshair.power = p
-		_crosshair.power_alpha = move_toward(_crosshair.power_alpha, 1.0 if p < 0.995 else 0.0, delta * (3.0 if p < 0.995 else 1.0))
+		var drunk: bool = player.leech != null and player.leech.count() > 0
+		_crosshair.power_alpha = move_toward(_crosshair.power_alpha, 1.0 if p < 0.995 or drunk else 0.0, delta * (3.0 if p < 0.995 or drunk else 1.0))
+		_crosshair.power_drunk = player.leech.gulp() if drunk else 0.0
 		_crosshair.power_short_flash = move_toward(_crosshair.power_short_flash, 0.0, delta / 0.5)
 		_crosshair.power_gain_flash = move_toward(_crosshair.power_gain_flash, 0.0, delta / 0.6)
 
