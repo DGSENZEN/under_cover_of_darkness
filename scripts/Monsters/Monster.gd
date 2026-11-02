@@ -35,6 +35,7 @@ const PUSH := {&"bullet": 3.0, &"shot": 1.0, &"blast": 9.0, &"shard": 3.0}
 const PUSH_DEFAULT := 2.0
 const PUSH_FADE := 12.0
 const KICK_DAMAGE := 20.0
+const DEFAULT_RADIUS := 0.3
 ## A kill's hold (real seconds) and its jolt to the view.
 const KILL_HOLD := 0.11
 const KILL_TRAUMA := 0.3
@@ -55,6 +56,43 @@ var _push := Vector3.ZERO
 var _game_time := 0.0
 var _refund_at := -100.0
 var _player: Node3D
+
+
+## The awake monster a line comes nearest, if it comes within `generous` metres
+## of its edge (more, `per_metre`, the farther off): a shot need not be exact, and
+## a thing that flies won't wait to be aimed at. `skip` is passed over. Nearest
+## along the line wins. {} if none, else {monster, point, along}.
+static func on_line(tree: SceneTree, from: Vector3, to: Vector3, generous: float, per_metre: float, skip: Array = []) -> Dictionary:
+	var way := to - from
+	var length := way.length()
+
+	if length <= 0.001:
+		return {}
+
+	var dir := way / length
+	var found := {}
+
+	for monster in tree.get_nodes_in_group(&"monsters"):
+		if monster.dead or monster.asleep or skip.has(monster):
+			continue
+
+		var along: float = (monster.global_position - from).dot(dir)
+
+		if along < 0.0 or along > length:
+			continue
+
+		var on: Vector3 = from + dir * along
+		var off: float = on.distance_to(monster.global_position)
+
+		if off <= monster.hit_radius() + generous + per_metre * along and (found.is_empty() or along < found["along"]):
+			found = {"monster": monster, "point": on, "along": along}
+
+	return found
+
+
+## How far from its middle it is struck.
+func hit_radius() -> float:
+	return DEFAULT_RADIUS
 
 
 func _ready() -> void:
@@ -84,7 +122,7 @@ func _ready() -> void:
 ## What it is hit by, and stands in.
 func _body_shape() -> Shape3D:
 	var sphere := SphereShape3D.new()
-	sphere.radius = 0.3
+	sphere.radius = hit_radius()
 	return sphere
 
 

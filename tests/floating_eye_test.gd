@@ -444,8 +444,9 @@ func _limpia() -> void:
 		bit = bit or also.state == STATE.TELL or also.state == STATE.SWOOP
 
 	_check("EG3 shut, it sinks and doesn't attack", not bit and also.global_position.y < height)
-	await _frames(70)
-	_check("EG3b after 2.5 s it opens again", also.state == STATE.CIRCLE)
+	_check("EG3c at 2.5 s it is still shut: it lasts", also.state == STATE.DAZED and EyeScript.DAZED_TIME >= 4.0)
+	await _frames(int((EyeScript.DAZED_TIME - 1.6) * 60.0) + 10)
+	_check("EG3b in its own time it opens again", also.state == STATE.CIRCLE)
 	await _frames(100)
 	_check("EG6b cleansed, no gaze sticks", not p.statuses.has(&"evil_eye"))
 	p.statuses.clear(&"cleansed")

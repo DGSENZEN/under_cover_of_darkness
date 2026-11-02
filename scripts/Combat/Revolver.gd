@@ -17,6 +17,7 @@ const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const Rounds := preload("res://scripts/Combat/Rounds.gd")
+const MonsterScript := preload("res://scripts/Monsters/Monster.gd")
 
 ## A shot: `barrel` is "cylinder" or "shot"; `hits` what each ball or pellet
 ## struck ({target, point, damage, headshot}; target null for the world).
@@ -51,6 +52,11 @@ const SOUNDS := {
 const RANGE := 120.0
 ## One-handed, at the top of the kick, a shot strays this far (degrees).
 const SPREAD_ONE_HAND := 2.5
+## How far past a monster's edge a ball still finds it (m), and how much more
+## per metre off; a pellet, one of a spread, is forgiven less.
+const BALL_GENEROUS := 0.18
+const BALL_GENEROUS_PER_METRE := 0.012
+const PELLET_GENEROUS := 0.04
 ## Under the evil eye, every shot strays this far, even at the sights.
 const EVIL_EYE_STRAY := 1.5
 ## Where a stray shot goes, in turn: a fixed ring, so a run is repeatable.
@@ -669,7 +675,7 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 	var into := {}
 
 	for direction in dirs:
-		var record := _trace(at.origin, direction)
+		var record := _trace(at.origin, direction, true)
 		record["direction"] = direction
 		var reach: float = at.origin.distance_to(record["point"])
 		var falloff: float = 1.0 - clampf((reach - gun.falloff_start) / maxf(gun.falloff_end - gun.falloff_start, 0.01), 0.0, 1.0)
@@ -754,11 +760,21 @@ func _stray(aim_basis: Basis) -> Vector3:
 ## What a ball (or pellet) along `direction` from `from` strikes, as a hit
 ## record: {target (a man, or null), point, damage, headshot, collider,
 ## normal}. Nothing is dealt yet.
-func _trace(from: Vector3, direction: Vector3) -> Dictionary:
+func _trace(from: Vector3, direction: Vector3, pellet := false) -> Dictionary:
 	var query := PhysicsRayQueryParameters3D.create(from, from + direction * RANGE, 1 | 2 | 4, [player.get_rid()])
 	query.hit_from_inside = true
 	var hit := player.get_world_3d().direct_space_state.intersect_ray(query)
 	var record := {"target": null, "point": from + direction * RANGE, "damage": 0.0, "headshot": false, "collider": null, "normal": -direction}
+
+	# Near enough to a monster counts, if nothing is on the line before it.
+	var ends: Vector3 = hit["position"] if not hit.is_empty() else record["point"]
+	var near := MonsterScript.on_line(get_tree(), from, ends, PELLET_GENEROUS if pellet else BALL_GENEROUS, 0.0 if pellet else BALL_GENEROUS_PER_METRE)
+
+	if not near.is_empty() and hit.get("collider") != near["monster"] and WardScript.stopped_by(from, near["point"], player).is_empty():
+		record["target"] = near["monster"]
+		record["collider"] = near["monster"]
+		record["point"] = near["point"]
+		return record
 
 	if hit.is_empty():
 		return record

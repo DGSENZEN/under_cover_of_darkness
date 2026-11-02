@@ -13,6 +13,7 @@ const RagdollScript := preload("res://scripts/Visual/Ragdoll.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
+const MonsterScript := preload("res://scripts/Monsters/Monster.gd")
 const MagicFx := preload("res://scripts/Visual/MagicFx.gd")
 const ShardTrail := preload("res://scripts/Visual/ShardTrail.gd")
 
@@ -20,6 +21,7 @@ signal struck(target: Object, damage: float)
 
 var _pierced := 0
 var _passed: Array[RID] = []
+var _passed_monsters: Array = []
 
 const SPEED := 70.0
 const DAMAGE := 40.0
@@ -33,6 +35,8 @@ const CONVERGE := 0.06
 const LENGTH := 0.32
 ## It goes on through this many monsters. A man stops it.
 const PIERCES := 2
+## How far past a monster's edge it still finds it (m).
+const GENEROUS := 0.3
 const WIDTH := 0.05
 const DEPTH := 0.022
 ## How fast it spins about its length (radians a second).
@@ -126,6 +130,12 @@ func _physics_process(delta: float) -> void:
 	query.hit_from_inside = true
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 
+	var ends: Vector3 = hit["position"] if not hit.is_empty() else to
+	var near := MonsterScript.on_line(get_tree(), from, ends, GENEROUS, 0.0, _passed_monsters)
+
+	if not near.is_empty():
+		hit = {"collider": near["monster"], "position": near["point"]}
+
 	if not hit.is_empty():
 		_hit(hit, velocity.normalized())
 		return
@@ -159,6 +169,7 @@ func _hit(hit: Dictionary, direction: Vector3) -> void:
 		if target.is_in_group(&"monsters") and _pierced < PIERCES:
 			_pierced += 1
 			_passed.append((target as CollisionObject3D).get_rid())
+			_passed_monsters.append(target)
 			global_position = point
 			collider.take_hit(damage, shooter, &"shard", point, direction)
 			struck.emit(collider, damage)

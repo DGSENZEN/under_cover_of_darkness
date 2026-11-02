@@ -6,7 +6,7 @@ extends RefCounted
 ## cast it: they squeeze shut, and you are clean of it for a while.
 
 const TABLE := {
-	&"egg": {"cures": &"evil_eye", "use_time": 0.8, "carry": 2, "colour": Color(0.9, 0.86, 0.76), "returns": 14.0, "leaves": &"cleansed", "leaves_for": 8.0},
+	&"egg": {"cures": &"evil_eye", "use_time": 0.8, "carry": 2, "colour": Color(0.9, 0.86, 0.76), "returns": 14.0, "leaves": &"cleansed", "leaves_for": 12.0},
 }
 
 

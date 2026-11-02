@@ -36,6 +36,8 @@ Everything that hurts calls `take_hit(damage, attacker, kind, point, direction)`
 - **Resisted:** scaled by the table, no hold, a dull sound.
 - **Opening:** a kind can open itself (`_is_opening`; an eye's tell). Any hit then counts as weak, at three times the damage.
 
+A shot need not be exact. `Monster.on_line` finds the monster a line passes near: a ball within 0.18 m of its edge plus 0.012 m per metre off, a pellet within 0.04 m, a Shard within 0.3 m, and nothing on the line before it. It only applies to monsters: a man takes exact hits.
+
 ## Answers to an eye
 
 | Moment | Answer | Result |
@@ -46,7 +48,7 @@ Everything that hurts calls `take_hit(damage, attacker, kind, point, direction)`
 | Bunched | Copal round | `CopalCloud.gd`: 3.5 m of smoke for 4 s |
 | Lined up | Shard | Goes through two monsters (`Shard.PIERCES`) |
 
-The egg sends the curse back (`Loadout`, `PrepItems` `returns`, `FloatingEye.limpia`): eyes within 14 m that can see you shut for 2.5 s, opening them to any hit, and you are `cleansed` of gaze for 8 s.
+The egg sends the curse back (`Loadout`, `PrepItems` `returns`, `FloatingEye.limpia`): eyes within 14 m that can see you shut for 4 s, opening them to any hit, and you are `cleansed` of gaze for 12 s.
 
 A kill holds 0.11 s and jolts the view (`Monster._die`). An eye leaves `Remains.gd` and makes others within 14 m flinch (`flinch`): 2 m further out for 3 s, and 1.5 s longer before swooping.
 

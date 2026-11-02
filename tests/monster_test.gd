@@ -31,6 +31,7 @@ func _ready() -> void:
 	await _hits()
 	await _rounds()
 	await _blows()
+	await _forgiving()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -148,6 +149,78 @@ func _hits() -> void:
 	p.load_state(saved)
 	_check("M14 the player's statuses are saved with them", p.statuses.has(&"evil_eye"))
 	p.statuses.clear(&"evil_eye")
+
+
+## A shot need not be exact: near enough to a monster counts.
+func _forgiving() -> void:
+	g.cylinder_round = &"lead"
+	_face()
+	await _frames(40)
+	var at: Transform3D = g.aim()
+	var ahead: Vector3 = at.origin - at.basis.z * 5.0
+	var side: Vector3 = at.basis.x
+	var m := _monster(ahead + side * 0.5)
+	m.health = 500.0
+	await _frames(2)
+	await _shot_straight()
+	_check("G1 a ball 0.2 m past its edge at 5 m still hits (%.0f)" % m.health, m.health < 500.0)
+	_free(m)
+
+	m = _monster(ahead + side * 0.75)
+	m.health = 500.0
+	await _frames(2)
+	await _shot_straight()
+	_check("G2 a ball well wide misses", is_equal_approx(m.health, 500.0))
+	_free(m)
+
+	# A wall between: it doesn't reach round it.
+	var wall := Props.block(self, at.origin - at.basis.z * 3.0 + side * 0.5, Vector3(0.6, 3, 0.2))
+	m = _monster(ahead + side * 0.5)
+	m.health = 500.0
+	await _frames(2)
+	var through: Dictionary = g._trace(g.aim().origin, -g.aim().basis.z)
+	_check("G3 near enough doesn't reach through a wall that is on the line", through["target"] == null or m.global_position.distance_to(through["point"]) > 1.0 or is_equal_approx(m.health, 500.0))
+	wall.free()
+	_free(m)
+
+	m = _monster(ahead + side * 0.5)
+	m.health = 500.0
+	await _frames(2)
+	var pellet: Dictionary = g._trace(g.aim().origin, -g.aim().basis.z, true)
+	_check("G4 a pellet is forgiven less than a ball", pellet["target"] == null)
+	m.sleep()
+	await _frames(2)
+	var asleep: Dictionary = g._trace(g.aim().origin, -g.aim().basis.z)
+	_check("G6 nothing asleep is found", asleep["target"] == null)
+	_free(m)
+
+	var dummy: StaticBody3D = DummyScript.new()
+	add_child(dummy)
+	dummy.global_position = ahead + side * 0.55 - Vector3(0, 1.1, 0)
+	await _frames(2)
+	var man: Dictionary = g._trace(g.aim().origin, -g.aim().basis.z)
+	_check("G5 what is no monster takes only an exact hit", man["target"] == null)
+	dummy.queue_free()
+	await _frames(1)
+
+	# The Shard, near enough.
+	m = _monster(ahead + side * 0.55)
+	m.health = 500.0
+	await _frames(2)
+	var shard: Node3D = ShardScript.new()
+	add_child(shard)
+	shard.launch(at.origin, -at.basis.z * 70.0, 40.0, p)
+	await _frames(12)
+	_check("G7 a Shard near enough finds it (%.0f)" % m.health, m.health < 500.0)
+	_free(m)
+
+
+func _shot_straight() -> void:
+	_face()
+	await _frames(1)
+	g.reset_for_practice()
+	g._pull(g.weapon())
+	await _frames(2)
 
 
 func _blows() -> void:

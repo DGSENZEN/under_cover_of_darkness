@@ -64,7 +64,7 @@ const FLINCH_TIME := 3.0
 const FLINCH_WAIT := 1.5
 ## The limpia sent back on it (the egg): how long it stays shut, how narrow it
 ## squeezes, how fast it sinks and how low.
-const DAZED_TIME := 2.5
+const DAZED_TIME := 4.0
 const DAZED_SHUT := 0.28
 const DAZED_SINK := 0.7
 const DAZED_LOWEST := 0.9
@@ -102,10 +102,8 @@ func _init() -> void:
 
 
 ## Big enough for a shell's ring to find within 6 m.
-func _body_shape() -> Shape3D:
-	var sphere := SphereShape3D.new()
-	sphere.radius = HIT_RADIUS
-	return sphere
+func hit_radius() -> float:
+	return HIT_RADIUS
 
 
 func _ready() -> void:
