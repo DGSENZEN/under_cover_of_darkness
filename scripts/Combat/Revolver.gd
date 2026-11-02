@@ -443,7 +443,7 @@ func try_whip() -> bool:
 	var best: Node3D = _whip_at_on_you(at)
 	var nearest := INF
 
-	for guard in [] if best != null else get_tree().get_nodes_in_group(&"guards") + get_tree().get_nodes_in_group(&"monsters"):
+	for guard in [] if best != null else get_tree().get_nodes_in_group(&"guards") + get_tree().get_nodes_in_group(&"monsters") + get_tree().get_nodes_in_group(&"eye_gobs"):
 		if not (guard is Node3D) or not guard.has_method("take_hit") or float(guard.get("health")) <= 0.0 or guard.get("asleep") == true:
 			continue
 

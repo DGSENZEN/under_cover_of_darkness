@@ -9,17 +9,26 @@ extends "res://scripts/Monsters/Monster.gd"
 ## A hit in its tell breaks it off and opens it up, whatever the round (the
 ## Monster's opening). A swoop can be batted back with the whip or the boot, into
 ## a wall or another eye. The Ward hides you from it, and smokes it if it flies
-## in. A stand-in body until its model is made.
+## in. Badly hurt, it turns, once: torn open, worse to look at, and it spits its curse at you too
+## (EyeGob).
 
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
-
+const EyeGob := preload("res://scripts/Monsters/EyeGob.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const EyeBody := preload("res://scripts/Monsters/EyeBody.gd")
 
-enum State { DRIFT, CIRCLE, TELL, SWOOP, BOUNCE, BATTED, DAZED }
-const DOING: Array[StringName] = [&"drift", &"circle", &"tell", &"swoop", &"bounce", &"batted", &"dazed"]
+enum State { DRIFT, CIRCLE, TELL, SWOOP, BOUNCE, BATTED, DAZED, SPIT_UP }
+const DOING: Array[StringName] = [&"drift", &"circle", &"tell", &"swoop", &"bounce", &"batted", &"dazed", &"spit_up"]
 
+## It has turned worse.
+signal turned_worse
+
+## It turns at this share of its health or under. Then, circling, it spits this often, and takes
+## this long gathering it.
+const TURNS_AT := 0.5
+const SPIT_EVERY := Vector2(2.5, 4.0)
+const SPIT_WIND := 0.55
 ## Sees you this far, with a clear line (m).
 const NOTICE := 18.0
 const CIRCLE_RADIUS := Vector2(6.0, 9.0)
@@ -78,6 +87,10 @@ var state := State.DRIFT
 @export var seed_value := 1
 ## Seconds left circling before it wants to swoop.
 var next_swoop_in := 2.0
+## Whether it has turned, whether it starts so (a check's or a still's), and when it next spits.
+var turned := false
+var start_turned := false
+var spit_in := 2.0
 ## Whether it is staring at you right now (the HUD marks where from).
 var gazing := false
 
@@ -119,11 +132,32 @@ func _ready() -> void:
 	_orbit_way = 1.0 if _rng.randf() < 0.5 else -1.0
 	next_swoop_in = _rng.randf_range(SWOOP_WAIT.x, SWOOP_WAIT.y)
 	exposed_now.connect(_stagger)
+	turned = start_turned
+	spit_in = _rng.randf_range(SPIT_EVERY.x, SPIT_EVERY.y)
 	_build_body()
 
 
 func _is_opening() -> bool:
-	return state == State.TELL or state == State.DAZED
+	return state == State.TELL or state == State.DAZED or state == State.SPIT_UP
+
+
+func _max_health() -> float:
+	return float(Bestiary.info(kind)["health"])
+
+
+## Torn open, from inside. Once.
+func turn() -> void:
+	if turned or dead:
+		return
+
+	turned = true
+	spit_in = _rng.randf_range(SPIT_EVERY.x, SPIT_EVERY.y)
+	Fx.blood(self, global_position, Vector3.UP, 3.0)
+	Fx.flash(self, global_position, Color(0.9, 0.12, 0.08), 1.2, 4.0, 0.14)
+	Sfx.play(self, &"flesh_heavy", global_position, 1.0, 0.75)
+	Sfx.play(self, &"bone_crack", global_position, -4.0, 0.7)
+	_swap_body()
+	turned_worse.emit()
 
 
 ## Whether it has you in its line, right now.
@@ -160,6 +194,7 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 		_enter(State.BATTED)
 		var result := super.take_hit(damage, attacker, hit_kind, point, direction)
 		_pay_back(attacker)
+		_turn_if_hurt()
 		_show_struck(point, direction, &"weak")
 		return result if result == &"killed" else &"weak"
 
@@ -167,9 +202,29 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 	var outcome := super.take_hit(damage, attacker, hit_kind, point, direction)
 
 	if not was_dead:
+		_turn_if_hurt()
 		_show_struck(point, direction, outcome)
 
 	return outcome
+
+
+func _swap_body() -> void:
+	body.queue_free()
+	_build_body()
+
+
+## Off a save, a hurt one has already turned: nothing bursts.
+func load_state(state: Dictionary) -> void:
+	super.load_state(state)
+
+	if not turned and not dead and health <= _max_health() * TURNS_AT:
+		turned = true
+		_swap_body()
+
+
+func _turn_if_hurt() -> void:
+	if not turned and not dead and health <= _max_health() * TURNS_AT:
+		turn()
 
 
 func _show_struck(point: Vector3, direction: Vector3, result: StringName) -> void:
@@ -217,8 +272,12 @@ func _stagger() -> void:
 
 func _build_body() -> void:
 	body = EyeBody.new()
-	body.name = "Body"
+	body.name = "BodyTurned" if turned else "Body"
 	body.seed_value = seed_value
+
+	if turned:
+		body.model = EyeBody.TURNED_MODEL
+
 	add_child(body)
 
 
@@ -262,6 +321,13 @@ func _brain(delta: float) -> Vector3:
 		State.CIRCLE:
 			next_swoop_in -= delta
 
+			if turned and not smoked and _clear_line:
+				spit_in -= delta
+
+				if spit_in <= 0.0:
+					_enter(State.SPIT_UP)
+					return Vector3.ZERO
+
 			if not smoked and next_swoop_in <= 0.0 and _clear_line and _room_to_swoop():
 				_enter(State.TELL)
 				return Vector3.ZERO
@@ -276,6 +342,16 @@ func _brain(delta: float) -> Vector3:
 				_swoop_at = you.global_position + Vector3(0.0, 0.3, 0.0)
 			elif _state_t >= TELL_TIME:
 				_launch()
+
+			return Vector3.ZERO
+		State.SPIT_UP:
+			if smoked or not _clear_line:
+				spit_in = _rng.randf_range(SPIT_EVERY.x, SPIT_EVERY.y)
+				_enter(State.CIRCLE)
+			elif _state_t >= SPIT_WIND:
+				EyeGob.spat_at(get_parent(), global_position - global_basis.z * 0.3, you.global_position + Vector3.UP * 0.15, self)
+				spit_in = _rng.randf_range(SPIT_EVERY.x, SPIT_EVERY.y)
+				_enter(State.CIRCLE)
 
 			return Vector3.ZERO
 		State.SWOOP:

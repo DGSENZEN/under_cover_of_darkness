@@ -5,6 +5,7 @@ extends Node3D
 const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const EyeScript := preload("res://scripts/Monsters/FloatingEye.gd")
+const EyeGobScript := preload("res://scripts/Monsters/EyeGob.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const ShardScript := preload("res://scripts/Magic/Shard.gd")
 const CopalCloud := preload("res://scripts/Monsters/CopalCloud.gd")
@@ -31,6 +32,8 @@ func _ready() -> void:
 	p.inventory.select_by_id(&"revolver")
 	await _frames(60)
 	await _alive()
+	await _turning()
+	await _spitting()
 	await _noticing()
 	await _attacks()
 	await _gaze()
@@ -875,6 +878,172 @@ func _alive() -> void:
 
 	_check("E3 hurt, it recoils (%.2f)" % recoil, recoil > 0.04)
 	_free(e)
+	await _frames(2)
+
+
+## Badly hurt, it turns: once, and worse.
+func _turning() -> void:
+	var e := _eye(HOME + Vector3(0, 1.5, -40), 5)
+	e.next_swoop_in = 100.0
+	await _frames(3)
+	var turns := [0]
+	e.turned_worse.connect(func(): turns[0] += 1)
+	e.take_hit(50.0, p, &"shot", e.global_position, Vector3.FORWARD)
+	_check("U1b not above half", not e.turned)
+	var left: float = e.health
+	e.take_hit(10.0, p, &"shot", e.global_position, Vector3.FORWARD)
+	await _frames(2)
+	_check("U1 at half health or less it turns", e.turned and turns[0] == 1)
+	_check("U3 it wears the turned model", e.body.part(&"Pupil_2") != null and e.body.part(&"Meat") != null)
+	var stray_was: Basis = e.body.part(&"Pupil_2").transform.basis
+	var strayed := 0.0
+
+	for i in 90:
+		await get_tree().physics_frame
+		strayed = maxf(strayed, e.body.part(&"Pupil_2").transform.basis.get_rotation_quaternion().angle_to(stray_was.get_rotation_quaternion()))
+
+	_check("U3b its new pupils look about on their own (%.3f)" % strayed, strayed > 0.03)
+	var before: float = e.health
+	# (Shot is its weakness: while that shows, a hit is doubled, as on any eye.)
+	var doubled: float = e.EXPOSED_SCALE if e.is_exposed() else 1.0
+	e.take_hit(10.0, p, &"shot", e.global_position, Vector3.FORWARD)
+	_check("U4 its health and weaknesses are as they were (%.1f, %.1f)" % [left, before - e.health], is_equal_approx(before - e.health, 10.0 * doubled))
+	await _frames(2)
+	_check("U1c and only once", turns[0] == 1)
+	_free(e)
+	await _frames(2)
+	var killed := _eye(HOME + Vector3(0, 1.5, -40), 6)
+	await _frames(3)
+	var killed_turns := [0]
+	killed.turned_worse.connect(func(): killed_turns[0] += 1)
+	killed.take_hit(500.0, p, &"shot", killed.global_position, Vector3.FORWARD)
+	await _frames(2)
+	_check("U2 killed outright through half: no turn", killed.dead and not killed.turned and killed_turns[0] == 0)
+	_free(killed)
+	await _frames(2)
+
+
+## A turned eye spits gobs of its curse.
+func _gobs() -> Array:
+	return get_tree().get_nodes_in_group(&"eye_gobs")
+
+
+func _spitter(at: Vector3) -> CharacterBody3D:
+	var e: CharacterBody3D = EyeScript.new()
+	e.seed_value = 7
+	e.position = at
+	e.start_turned = true
+	add_child(e)
+	e.next_swoop_in = 100.0
+	return e
+
+
+## Whether a node has gone, without holding on to it.
+func _is_gone(node: Node) -> Callable:
+	var held: WeakRef = weakref(node)
+	return func(): return held.get_ref() == null
+
+
+func _spitting() -> void:
+	await _place_player(HOME)
+	p.invulnerable = false
+	p.health = 500.0
+	await _frames(2)
+	var e := _spitter(HOME + Vector3(0, 1.0, -7))
+	await _frames(3)
+	e.state = STATE.CIRCLE
+	e._clear_line = true
+	e.spit_in = 0.0
+	var saw_wind := await _until(func(): return e.state == STATE.SPIT_UP, 2.0)
+	var gob_came := await _until(func(): return not _gobs().is_empty(), 2.0)
+	_check("U5 a turned eye spits, with a wind-up to read", saw_wind and gob_came)
+	e.spit_in = 100.0
+	var was: float = p.health
+	var depth_was: int = p.curse.depth()
+	await _until(func(): return _gobs().is_empty(), 3.0)
+	_check("U6 it hurts (%.1f) and starts the curse on you" % (was - p.health), is_equal_approx(was - p.health, 8.0) and p.curse.depth() == depth_was + 1)
+	# Again, it opens another eye.
+	var gob_two: Node3D = EyeGobScript.spat_at(self, HOME + Vector3(0, 0.3, -4), HOME + Vector3(0, 0.15, 0), e)
+	depth_was = p.curse.depth()
+	await _until(_is_gone(gob_two), 3.0)
+	_check("U6b on the curse, it opens another eye (%d)" % p.curse.depth(), p.curse.depth() == depth_was + 1)
+	# You can step out of its way.
+	was = p.health
+	var missed: Node3D = EyeGobScript.spat_at(self, HOME + Vector3(0, 0.3, -6), HOME + Vector3(0, 0.15, 0), e)
+	await _frames(5)
+	p.teleport(Transform3D(Basis.IDENTITY, HOME + Vector3(5, 0, 0)))
+	await _until(_is_gone(missed), 3.0)
+	_check("U7 you can step out of its way", p.health == was)
+	await _place_player(HOME)
+	# A wall stops it, and so does the Ward.
+	var wall: Node = Props.block(self, HOME + Vector3(0, 0, -2.5), Vector3(4, 4, 0.3))
+	was = p.health
+	var walled: Node3D = EyeGobScript.spat_at(self, HOME + Vector3(0, 0.3, -5), HOME + Vector3(0, 0.15, 0), e)
+	await _until(_is_gone(walled), 2.0)
+	_check("U8 a wall stops it", p.health == was)
+	wall.free()
+	await _frames(2)
+	var ward: Node3D = WardScript.cast_on(p)
+	await _frames(30)
+	var warded: Node3D = EyeGobScript.spat_at(self, HOME + Vector3(0, 0.3, -7), HOME + Vector3(0, 0.15, 0), e)
+	await _until(_is_gone(warded), 2.0)
+	_check("U8b so does the Ward", p.health == was)
+	ward.queue_free()
+	await _frames(2)
+	# Brought back from a save: already turned, with no burst to show for it.
+	var saved := _eye(HOME + Vector3(0, 1.5, -40), 8)
+	await _frames(2)
+	saved.health = 30.0
+	var state: Dictionary = saved.save_state()
+	var loaded := _eye(HOME + Vector3(0, 1.5, -40), 8)
+	await _frames(2)
+	var loaded_turns := [0]
+	loaded.turned_worse.connect(func(): loaded_turns[0] += 1)
+	loaded.load_state(state)
+	await _frames(2)
+	_check("U11 a hurt eye off a save has turned, quietly", loaded.turned and loaded_turns[0] == 0 and loaded.body.part(&"Meat") != null)
+	_free(saved)
+	_free(loaded)
+	# Whipped back, it hurts what it meets, and not you.
+	var other := _eye(HOME + Vector3(5, 1.0, 2.4), 9)
+	other.next_swoop_in = 100.0
+	other.health = 500.0
+	await _frames(2)
+	var other_at: Vector3 = other.global_position
+	var batted: Node3D = EyeGobScript.spat_at(self, HOME + Vector3(0, 0.3, 2.4), HOME + Vector3(0, 0.15, 3.5), e)
+	batted.take_hit(20.0, p, &"power", batted.global_position, (other_at - batted.global_position).normalized())
+	_check("U9 whipped: it goes back", batted.is_batted())
+	was = p.health
+	var other_was: float = other.health
+
+	for i in 60:
+		await get_tree().physics_frame
+
+		if is_instance_valid(other):
+			other.global_position = other_at
+
+	_check("U9b it hurts what it meets (%.0f), and not you" % (other_was - other.health), other.health < other_was and p.health == was)
+	_free(other)
+	# Its eye dead, it flies on.
+	var orphan: Node3D = EyeGobScript.spat_at(self, HOME + Vector3(0, 1, 6), HOME + Vector3(0, 1, 20), e)
+	_free(e)
+	await _frames(6)
+	_check("U10 its eye gone, it flies on", is_instance_valid(orphan))
+	await _until(_is_gone(orphan), 5.0)
+	# The whip finds one in reach.
+	await _place_player(HOME)
+	p.rotation.y = 0.0
+	p.neck.rotation.x = 0.0
+	var near: Node3D = EyeGobScript.spat_at(self, HOME + Vector3(0, 0.6, -2.8), HOME + Vector3(0, 0.15, -2.2), null)
+	near.velocity = Vector3.ZERO
+	await _frames(1)
+	var whipped: bool = p.revolver.try_whip()
+	await _frames(12)
+	_check("U9c the whip finds one in reach", whipped and is_instance_valid(near) and near.is_batted())
+	_check("U12 a gob is its own wet meat, with an eye in it", near.find_child("Meat", true, false) != null and near.find_child("Eye", true, false) != null)
+	_free(near)
+	p.statuses.clear(&"evil_eye")
+	p.invulnerable = true
 	await _frames(2)
 
 

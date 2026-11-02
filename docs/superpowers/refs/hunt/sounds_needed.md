@@ -26,3 +26,11 @@ Stand-ins from the existing library until the user chooses real ones.
 | The Burst's spikes falling to pieces | `BurstWave._break` | `ting`, low |
 | An ánima's swing and cut (`anima_swipe`, `anima_rake_hit`) | `Anima._cut` | `whoosh_light` + `flesh` |
 | An ánima's wind-up (`anima_swipe_windup`) | `Anima._wish` | `anima_voice`, high and quiet |
+
+## The turned eye
+
+| Sound | Where | Stand-in |
+|---|---|---|
+| Tearing open (`eye_turn_tear`) | `FloatingEye.turn` | `flesh_heavy` + `bone_crack`, low |
+| The spit (`eye_spit`) | `EyeGob._launch` | `flesh`, low |
+| A gob on you, and on a wall (`eye_gob_hit`, `eye_gob_wall`) | `EyeGob._burst` | `flesh_heavy` |

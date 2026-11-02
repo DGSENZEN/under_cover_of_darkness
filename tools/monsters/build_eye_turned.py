@@ -47,7 +47,12 @@ MEAT_TRIS = 3200
 LID_TEARS = 13
 LID_TEAR_SIZE = (0.035, 0.085)
 ## The new pupils: their turn from the first on the ball (up, across; radians), how big against it.
-PUPILS = (("Pupil_2", 0.42, 0.56, 1.3), ("Pupil_3", -0.34, -0.62, 1.05))
+PUPILS = (("Pupil_2", 0.12, 0.74, 1.15), ("Pupil_3", -0.16, -0.6, 1.0))
+## How far each stands proud of the ball, so it sits up out of its torn flesh.
+PUPIL_PROUD = 1.035
+## The torn flesh round each, against the pupil.
+PUPIL_RIM = 1.7
+RIM_TORN = 0.9
 ## Paint.
 MEAT_DEEP = (0.09, 0.008, 0.012)
 MEAT_RED = (0.42, 0.03, 0.035)
@@ -163,6 +168,32 @@ def tear_lids(rng):
             bpy.data.objects.remove(cutter)
 
         closed(obj)
+        paint_raw(obj)
+
+
+def paint_raw(obj):
+    """Stripped to the meat, the faces the tears left as well."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.normal_update()
+
+    for old in list(bm.loops.layers.color.values()):
+        bm.loops.layers.color.remove(old)
+
+    layer = bm.loops.layers.color.new("Color")
+
+    for f in bm.faces:
+        for loop in f.loops:
+            c = loop.vert.co
+            streak = noise.noise(Vector((c.x * 24.0, c.y * 24.0, c.z * 24.0))) * 0.5 + 0.5
+            tone = mix(MEAT_DEEP, MEAT_RED, smooth(0.25, 0.6, streak))
+            tone = mix(tone, MEAT_RAW, smooth(0.6, 0.76, streak) * 0.75)
+            loop[layer] = paint_value(tone)
+
+    bm.to_mesh(obj.data)
+    bm.free()
+    obj.data.color_attributes.active_color_index = 0
+    obj.data.color_attributes.render_color_index = 0
 
 
 def build_meat(rng):
@@ -283,11 +314,40 @@ def more_pupils():
         mesh.name = name
         # About the ball's middle, which is where the pupil's mesh is held from; smaller, on the ball.
         turn = Matrix.Rotation(across, 4, "Z") @ Matrix.Rotation(up, 4, "X")
-        mesh.transform(turn @ Matrix.Diagonal((size, 1.0, size, 1.0)))
+        mesh.transform(turn @ Matrix.Diagonal((size, PUPIL_PROUD, size, 1.0)))
         obj = bpy.data.objects.new(name, mesh)
         bpy.context.collection.objects.link(obj)
         obj.parent = bpy.data.objects["Ball"]
         closed(obj)
+        # The flesh it pushed through, torn round it; a child, so it goes where the pupil looks.
+        rim_mesh = plain.data.copy()
+        rim_mesh.name = name + "_rim"
+        rim_mesh.transform(turn @ Matrix.Diagonal((size * PUPIL_RIM, 0.995, size * PUPIL_RIM, 1.0)))
+        bm = bmesh.new()
+        bm.from_mesh(rim_mesh)
+        heart = sum((v.co for v in bm.verts), Vector()) / len(bm.verts)
+        # Ragged: not a washer.
+        for v in bm.verts:
+            off = v.co - heart
+            flat = off - heart.normalized() * off.dot(heart.normalized())
+            v.co += flat * RIM_TORN * noise.noise(off.normalized() * 2.6 + heart * 9.0)
+
+        layer = bm.loops.layers.color.new("Color")
+
+        for f in bm.faces:
+            for loop in f.loops:
+                loop[layer] = paint_value(mix(MEAT_RED, MEAT_RAW, noise.noise(loop.vert.co * 60.0) * 0.5 + 0.5))
+
+        bm.to_mesh(rim_mesh)
+        bm.free()
+        rim_mesh.color_attributes.active_color_index = 0
+        rim_mesh.color_attributes.render_color_index = 0
+        rim_mesh.materials.clear()
+        rim_mesh.materials.append(bpy.data.materials["wet_meat"])
+        rim = bpy.data.objects.new(name + "_rim", rim_mesh)
+        bpy.context.collection.objects.link(rim)
+        rim.parent = obj
+        closed(rim)
 
 
 def previews():

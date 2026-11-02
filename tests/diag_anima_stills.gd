@@ -58,6 +58,11 @@ func _ready() -> void:
 	if only == "eye_turned":
 		await _eye_turned()
 
+	if only == "spit":
+		await _spit()
+		get_tree().quit()
+		return
+
 	if only == "both":
 		await _both()
 
@@ -488,6 +493,45 @@ func _shard() -> void:
 
 
 ## The eye and the eye turned, side by side, in the game's looks: lit room and dark yard.
+## A turned eye, real, gathering its spit and the gob on its way to you.
+func _spit() -> void:
+	var EyeScript: GDScript = load("res://scripts/Monsters/FloatingEye.gd")
+
+	for place in [[Vector3(0.0, 1.05, -2.7), Vector3(0.5, 1.8, 1.3), "room"], [Vector3(-2.0, 1.05, 8.0), Vector3(-1.5, 1.9, 12.0), "yard"]]:
+		p.teleport(Transform3D(Basis(Vector3.UP, PI), place[0]))
+		await _frames(4)
+		var e: CharacterBody3D = EyeScript.new()
+		e.seed_value = 11
+		e.start_turned = true
+		e.position = place[1]
+		add_child(e)
+		e.next_swoop_in = 100.0
+		e.spit_in = 100.0
+		await _frames(6)
+		e.state = e.State.SPIT_UP
+		e._state_t = 0.0
+		e._clear_line = true
+		await _frames(26)
+		await _shot("spit_windup_%s" % place[2])
+		e.spit_in = 100.0
+		await _until_gob()
+		await _frames(14)
+		await _shot("spit_gob_%s" % place[2])
+		await _frames(30)
+		e.free()
+
+		for gob in get_tree().get_nodes_in_group(&"eye_gobs"):
+			gob.free()
+
+
+func _until_gob() -> void:
+	for i in 60:
+		if not get_tree().get_nodes_in_group(&"eye_gobs").is_empty():
+			return
+
+		await get_tree().physics_frame
+
+
 func _eye_turned() -> void:
 	var EyeBodyScript: GDScript = load("res://scripts/Monsters/EyeBody.gd")
 	var plain: Node3D = EyeBodyScript.new()

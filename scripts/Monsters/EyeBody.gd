@@ -7,6 +7,12 @@ extends Node3D
 
 const MODEL := "res://assets/monsters/floating_eye.glb"
 const TURNED_MODEL := "res://assets/monsters/floating_eye_turned.glb"
+## A turned eye's stray pupils: how often they jump, how far (rad), how quick, how much of the
+## first's blowing they share.
+const STRAY_EVERY := Vector2(0.25, 0.8)
+const STRAY_MOST := 0.2
+const STRAY_RATE := 16.0
+const STRAY_BLOWS := 0.5
 const FleshShader := preload("res://scripts/Monsters/eye_flesh.gdshader")
 const BallShader := preload("res://scripts/Monsters/eye_ball.gdshader")
 const NerveShader := preload("res://scripts/Monsters/eye_nerve.gdshader")
@@ -101,6 +107,9 @@ var _wince_left := 0.0
 var _weep_in := 0.0
 var _clock := 0.0
 var _rest_scale := Vector3.ONE
+var _stray := Vector4.ZERO
+var _stray_to := Vector4.ZERO
+var _stray_in := 0.0
 
 static var _flesh_look: ShaderMaterial
 static var _nerve_look: ShaderMaterial
@@ -153,7 +162,7 @@ func _dress() -> void:
 		if part(id) != null:
 			part(id).set_surface_override_material(0, black)
 
-	for id in [&"Flesh", &"LidTop", &"LidBottom", &"Meat"]:
+	for id in [&"Flesh", &"LidTop", &"LidBottom", &"Meat", &"Pupil_2_rim", &"Pupil_3_rim"]:
 		if part(id) != null:
 			part(id).set_surface_override_material(0, _flesh_look)
 			_living.append(part(id))
@@ -211,6 +220,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, exposed
 	_turn_ball(delta, doing, you)
 	_show_lids()
 	part(&"Pupil").scale = Vector3(pupil, pupil, 1.0)
+	_stray_pupils(delta)
 	_pose(doing, delta)
 	_shader_state()
 	_weep(delta, doing, smoked)
@@ -223,7 +233,7 @@ func _wanted(doing: StringName, exposed: bool, smoked: bool) -> Dictionary:
 	var blood := 0.14
 
 	match doing:
-		&"tell":
+		&"tell", &"spit_up":
 			lid = -1.0
 			size = 2.0
 			blood = 1.0
@@ -261,7 +271,7 @@ func _blinking(delta: float, doing: StringName, wanted_lids: float) -> float:
 		_blink_left -= delta
 		return 1.0
 
-	if doing == &"tell" or doing == &"swoop" or doing == &"dazed":
+	if doing == &"tell" or doing == &"spit_up" or doing == &"swoop" or doing == &"dazed":
 		return wanted_lids
 
 	_blink_in -= delta
@@ -314,6 +324,24 @@ func _turn_ball(delta: float, doing: StringName, you: Node3D) -> void:
 	part(&"Pupil").transform.basis = now.scaled(Vector3(pupil, pupil, 1.0))
 
 
+## The pupils that pushed through (a turned eye's), each looking about on its own, and blown when
+## the first is.
+func _stray_pupils(delta: float) -> void:
+	if part(&"Pupil_2") == null:
+		return
+
+	_stray_in -= delta
+
+	if _stray_in <= 0.0:
+		_stray_in = _rng.randf_range(STRAY_EVERY.x, STRAY_EVERY.y)
+		_stray_to = Vector4(_rng.randf_range(-STRAY_MOST, STRAY_MOST), _rng.randf_range(-STRAY_MOST, STRAY_MOST), _rng.randf_range(-STRAY_MOST, STRAY_MOST), _rng.randf_range(-STRAY_MOST, STRAY_MOST))
+
+	_stray = _stray.lerp(_stray_to, 1.0 - exp(-STRAY_RATE * delta))
+	var blown := lerpf(1.0, pupil, STRAY_BLOWS)
+	part(&"Pupil_2").transform.basis = Basis.from_euler(Vector3(_stray.x, _stray.y, 0.0)).scaled(Vector3(blown, blown, 1.0))
+	part(&"Pupil_3").transform.basis = Basis.from_euler(Vector3(_stray.z, _stray.w, 0.0)).scaled(Vector3(blown, blown, 1.0))
+
+
 func _aim_at(you: Node3D) -> Vector3:
 	return you.get("camera").global_position if you.get("camera") != null else you.global_position
 
@@ -341,7 +369,7 @@ func _pose(doing: StringName, delta: float) -> void:
 	var up_to := 0.0
 
 	match doing:
-		&"tell":
+		&"tell", &"spit_up":
 			back_to = DRAWS_BACK
 			up_to = REARS
 		&"swoop":
@@ -357,13 +385,13 @@ func _pose(doing: StringName, delta: float) -> void:
 				_back_speed += TWITCH_KICK * (-1.0 if _rng.randf() < 0.5 else 1.0)
 				_up_speed += TWITCH_KICK * (-1.0 if _rng.randf() < 0.5 else 1.0)
 
-	var w := minf(TAU * (9.0 if doing == &"tell" or doing == &"swoop" else 4.0), 0.8 / delta)
+	var w := minf(TAU * (9.0 if doing == &"tell" or doing == &"spit_up" or doing == &"swoop" else 4.0), 0.8 / delta)
 	_back_speed += (w * w * (back_to - _back) - 2.0 * 0.5 * w * _back_speed) * delta
 	_back += _back_speed * delta
 	_up_speed += (w * w * (up_to - _up) - 2.0 * 0.5 * w * _up_speed) * delta
 	_up += _up_speed * delta
 	# It shudders as it gathers, harder the nearer it is to going.
-	shake_now = lerpf(SHAKE_LEAST, SHAKE_MOST, minf(_doing_for / GATHERS, 1.0)) if doing == &"tell" else (0.006 if _wince_left > 0.0 else 0.0)
+	shake_now = lerpf(SHAKE_LEAST, SHAKE_MOST, minf(_doing_for / GATHERS, 1.0)) if doing == &"tell" or doing == &"spit_up" else (0.006 if _wince_left > 0.0 else 0.0)
 	var bob := sin(_clock * 1.7) * BOB * (0.0 if doing == &"swoop" else 1.0)
 	position = Vector3(sin(_clock * 61.0) * shake_now, cos(_clock * 53.0) * shake_now + _up + bob, _back)
 
