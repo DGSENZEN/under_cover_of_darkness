@@ -90,6 +90,29 @@ func _ready() -> void:
 	_check("L10 no eggs: V does nothing", not lo.is_using())
 	p.statuses.clear(&"evil_eye")
 
+	# It always answers: the key is never just dead.
+	var refusals := [0]
+	lo.refused_use.connect(func(): refusals[0] += 1)
+	lo.item_counts[&"egg"] = 2
+	await _press("use_item")
+	_check("L15 with nothing on you, V answers with a refusal", refusals[0] == 1 and not lo.is_using())
+	lo.item_counts[&"egg"] = 0
+	p.statuses.apply(&"evil_eye", 30.0)
+	await _press("use_item")
+	_check("L16 with none left, V answers with a refusal", refusals[0] == 2)
+	await _frames(2)
+	_check("L17a no egg, nothing offered", not lo.can_offer())
+	lo.item_counts[&"egg"] = 1
+	await _frames(2)
+	_check("L17 the evil eye on you and an egg in hand, it is offered on the HUD", lo.can_offer() and Array(p.hud.prompt_texts()).any(func(t): return String(t).contains("Egg")))
+	await _press("use_item")
+	_check("L18 taking it up shows on the readout", p.hud.get("_ammo").snapshot()["using"] == &"egg")
+	await _frames(55)
+	_check("L18b and stops when it is done", p.hud.get("_ammo").snapshot()["using"] == &"")
+	p.statuses.clear(&"evil_eye")
+	await _frames(2)
+	_check("L17b nothing on you, nothing offered", not Array(p.hud.prompt_texts()).any(func(t): return String(t).contains("Egg")))
+
 	lo.item_counts[&"egg"] = 1
 	lo.lock()
 	var state: Dictionary = lo.save_state()
@@ -103,6 +126,12 @@ func _ready() -> void:
 
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
+
+
+func _press(action: String) -> void:
+	Input.action_press(action)
+	await _frames(2)
+	Input.action_release(action)
 
 
 func _frames(count: int) -> void:

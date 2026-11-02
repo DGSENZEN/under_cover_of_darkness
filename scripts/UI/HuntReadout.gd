@@ -50,7 +50,7 @@ func snapshot() -> Dictionary:
 	return {"barrel": gun.barrel, "round": gun.cylinder_round, "loaded": loaded_now, "chambers": chambers,
 		"shell": int(gun.loaded[&"shot"]), "reserve": int(player.inventory.ammo.get(&"shells" if gun.barrel == &"shot" else gun.stock_id(), 0)),
 		"capacity": 1 if gun.barrel == &"shot" else int(gun.weapon().rounds), "reloading": gun.is_reloading(), "items": items,
-		"evil_eye": player.statuses.has(&"evil_eye")}
+		"evil_eye": player.statuses.has(&"evil_eye"), "using": player.loadout.using()}
 
 
 func _process(delta: float) -> void:
@@ -108,11 +108,11 @@ func _draw() -> void:
 	if state["reloading"]:
 		draw_arc(WHEEL, WHEEL_REACH + CHAMBER + 4.0, -PI * 0.5, PI * 0.9, 24, BRASS, 1.5, true)
 
-	_items(state["items"])
+	_items(state["items"], state["using"])
 
 
 ## What you packed: a small painted mark for each one left, along the blot's top.
-func _items(items: Dictionary) -> void:
+func _items(items: Dictionary, using: StringName) -> void:
 	var x := WHEEL.x + 42.0
 
 	for id in items:
@@ -121,6 +121,11 @@ func _items(items: Dictionary) -> void:
 		for i in int(items[id]):
 			_blot(Vector2(x, 26.0), 6.5, 70.0 + i, Color(0.0, 0.0, 0.0, 0.8))
 			_blot(Vector2(x, 25.5), 5.0, 80.0 + i, colour)
+
+			# In the hand: picked out in brass.
+			if id == using and i == int(items[id]) - 1:
+				draw_arc(Vector2(x, 25.5), 8.0, 0.0, TAU, 16, BRASS, 2.0, true)
+
 			x += 15.0
 
 		x += 6.0

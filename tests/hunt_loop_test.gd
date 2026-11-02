@@ -124,6 +124,7 @@ func _die_and_return() -> void:
 	await _frames(60)
 	gym = get_tree().current_scene
 	p = gym.player
+	_check("LP3e a load makes no new run", SaveFiles.last_run() == runs[-1] and CityState.run_id == runs[-1])
 	_check("LP3 dying brings you back to the door with the pack and all of it", p.loadout.rounds.has(&"copal") and p.inventory.ammo[&"copal_rounds"] == 12 and p.loadout.item_counts.get(&"egg", 0) == 2 and not p.is_dead)
 	_check("LP3c just past the door, the wave not yet begun", absf(p.global_position.z - (-gym.ROOM.z)) < 2.5 and gym.wave_now == 0)
 	p.look_at_from_position(p.global_position, Vector3(0, p.global_position.y, 2.0), Vector3.UP)

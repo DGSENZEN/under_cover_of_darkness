@@ -9,7 +9,6 @@ const SLIDE := Vector3(0.0, 0.0, 0.25)
 @export var piece: StringName
 ## &"round" or &"item".
 @export var piece_type: StringName = &"round"
-## What the frob prompt says.
 var verb := "Pack"
 
 var _home := Vector3.ZERO
@@ -17,6 +16,11 @@ var _home := Vector3.ZERO
 
 func _ready() -> void:
 	_home = position
+
+
+## What the frob prompt says.
+func get_prompt(_player: Node) -> String:
+	return verb
 
 
 func frob(player: Node) -> void:

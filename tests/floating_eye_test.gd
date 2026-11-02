@@ -30,6 +30,7 @@ func _ready() -> void:
 	await _attacks()
 	await _gaze()
 	await _smoke()
+	await _stagger()
 	await _killing()
 	await _long_run()
 	await _dead_player()
@@ -173,6 +174,40 @@ func _smoke() -> void:
 	_check("E11 smoked: no swoop", not swooped[0])
 	_check("E11b smoked: no gaze", not p.statuses.has(&"evil_eye"))
 	_check("E11c smoked: slower (%.1f m/s)" % fastest, fastest <= EyeScript.CIRCLE_SPEED * 0.61 and fastest > 0.5)
+	_free(e)
+
+
+func _stagger() -> void:
+	await _place_player(HOME)
+	var e := _eye(Vector3(0, 2, -7), 21)
+	e.next_swoop_in = 100.0
+	e.health = 500.0
+	await _frames(30)
+	var starts := [0]
+	var was: int = e.state
+	var fastest_after := 0.0
+	var nearest: float = e.global_position.distance_to(p.global_position)
+	var then: float = nearest
+	e.round_hint = &"copal"
+	e.take_hit(55.0, p, &"bullet", e.global_position, Vector3.FORWARD)
+
+	for i in 100:
+		await get_tree().physics_frame
+
+		if e.state == STATE.BOUNCE and was != STATE.BOUNCE:
+			starts[0] += 1
+
+		if i < 18:
+			nearest = minf(nearest, e.global_position.distance_to(p.global_position))
+
+		if was == STATE.BOUNCE and e.state == STATE.CIRCLE:
+			fastest_after = e.velocity.length()
+
+		was = e.state
+
+	_check("E17 a weak hit staggers it once (%d)" % starts[0], starts[0] <= 1 and e.state == STATE.CIRCLE)
+	_check("E18 staggered, it goes away from you, not at you", nearest >= then - 0.05)
+	_check("E19 no jerk as the stagger ends (%.1f m/s)" % fastest_after, fastest_after <= EyeScript.CIRCLE_SPEED + 0.5)
 	_free(e)
 
 

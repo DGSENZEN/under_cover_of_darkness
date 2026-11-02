@@ -30,6 +30,7 @@ const STATUS_TIME := 4.0
 const PUSH := {&"bullet": 3.0, &"shot": 1.0, &"blast": 9.0, &"shard": 3.0}
 const PUSH_DEFAULT := 2.0
 const PUSH_FADE := 12.0
+const KICK_DAMAGE := 20.0
 const SAVED := ["health", "dead", "asleep", "global_position"]
 
 @export var kind: StringName
@@ -146,6 +147,15 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, _point: Vec
 
 	struck.emit(result, source)
 	return result
+
+
+## A boot: it hurts, and throws it along `push`.
+func kick(push: Vector3, by: Node3D) -> void:
+	if dead:
+		return
+
+	take_hit(KICK_DAMAGE, by, &"kick", global_position, push)
+	_push += push
 
 
 func is_exposed() -> bool:

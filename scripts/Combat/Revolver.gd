@@ -418,8 +418,8 @@ func try_whip() -> bool:
 	var best: Node3D = null
 	var nearest := WHIP_REACH
 
-	for guard in get_tree().get_nodes_in_group(&"guards"):
-		if not (guard is Node3D) or not guard.has_method("take_hit") or float(guard.get("health")) <= 0.0:
+	for guard in get_tree().get_nodes_in_group(&"guards") + get_tree().get_nodes_in_group(&"monsters"):
+		if not (guard is Node3D) or not guard.has_method("take_hit") or float(guard.get("health")) <= 0.0 or guard.get("asleep") == true:
 			continue
 
 		var to: Vector3 = (guard as Node3D).global_position - player.global_position

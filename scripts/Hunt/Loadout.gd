@@ -8,10 +8,13 @@ extends Node
 const PrepItems := preload("res://scripts/Hunt/PrepItems.gd")
 const Rounds := preload("res://scripts/Combat/Rounds.gd")
 const SaveFields := preload("res://scripts/Save/SaveFields.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 ## An item was spent; the pack or a count changed.
 signal item_used(id: StringName)
 signal changed
+## The key was pressed and there was nothing to do.
+signal refused_use
 
 ## Round types beside the shells, which always come; kinds of item.
 const MAX_ROUND_TYPES := 2
@@ -145,7 +148,21 @@ func use_item(index := 0) -> bool:
 
 	_using = id
 	_using_left = float(info["use_time"])
+	Sfx.play_flat(self, &"cloth", -6.0, 1.2)
 	return true
+
+
+## There is something packed that would help you now (the HUD offers it).
+func can_offer() -> bool:
+	if is_using() or items.is_empty() or int(item_counts.get(items[0], 0)) <= 0:
+		return false
+
+	return player.statuses.has(PrepItems.info(items[0]).get("cures", &""))
+
+
+## The item being taken up, or &"".
+func using() -> StringName:
+	return _using
 
 
 func is_using() -> bool:
@@ -153,8 +170,9 @@ func is_using() -> bool:
 
 
 func _physics_process(delta: float) -> void:
-	if Input.is_action_just_pressed("use_item"):
-		use_item()
+	if Input.is_action_just_pressed("use_item") and not use_item():
+		Sfx.play_flat(self, &"gear", -12.0, 1.8)
+		refused_use.emit()
 
 	if not is_using():
 		return
@@ -168,6 +186,7 @@ func _physics_process(delta: float) -> void:
 	_using = &""
 	item_counts[id] = int(item_counts[id]) - 1
 	player.statuses.clear(PrepItems.info(id)["cures"])
+	Sfx.play_flat(self, &"ting", -10.0, 0.8)
 	item_used.emit(id)
 	changed.emit()
 

@@ -88,7 +88,18 @@ func _ready() -> void:
 	_height = _rng.randf_range(CIRCLE_HEIGHT.x, CIRCLE_HEIGHT.y)
 	_orbit_way = 1.0 if _rng.randf() < 0.5 else -1.0
 	next_swoop_in = _rng.randf_range(SWOOP_WAIT.x, SWOOP_WAIT.y)
+	exposed_now.connect(_stagger)
 	_build_body()
+
+
+## A weak hit throws it back, away from you, off whatever it was doing.
+func _stagger() -> void:
+	var you: Node3D = target()
+
+	if you != null:
+		_swoop_way = (you.global_position - global_position).normalized()
+
+	_enter(State.BOUNCE)
 
 
 func _build_body() -> void:
@@ -135,9 +146,6 @@ func _brain(delta: float) -> Vector3:
 	_gaze(you, delta, smoked)
 	_turn_to(you)
 
-	if is_exposed() and state != State.BOUNCE:
-		_enter(State.BOUNCE)
-
 	match state:
 		State.DRIFT:
 			if _clear_line and global_position.distance_to(you.global_position) <= NOTICE:
@@ -169,6 +177,7 @@ func _brain(delta: float) -> Vector3:
 			if _state_t >= BOUNCE_TIME:
 				next_swoop_in = _rng.randf_range(SWOOP_WAIT.x, SWOOP_WAIT.y)
 				_enter(State.CIRCLE)
+				return Vector3.ZERO
 
 			return (Vector3.UP * 3.0 - _swoop_way * 2.5) * (1.0 - _state_t / BOUNCE_TIME)
 

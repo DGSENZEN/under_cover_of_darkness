@@ -912,6 +912,11 @@ func _process(delta: float) -> void:
 	if fighting != null and fighting.has_method("drop_target") and fighting.drop_target() != null and not player.is_on_floor():
 		actions = [[&"throw", "Drop attack"]]
 
+	# The evil eye on you, and an egg in your pocket: say so.
+	if player.loadout != null and player.loadout.can_offer():
+		actions = actions.duplicate()
+		actions.append([&"use_item", "Egg"])
+
 	_update_prompts(actions, delta)
 	_crosshair.warm = lerpf(_crosshair.warm, 1.0 if not actions.is_empty() else 0.0, 1.0 - exp(-14.0 * delta))
 	_crosshair.size = Vector2(52, 52)

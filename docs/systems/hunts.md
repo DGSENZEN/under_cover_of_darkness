@@ -9,7 +9,7 @@ Play it: `maps/hunt_gym.tscn`. Past the kit room's door the first wave comes. F5
 | Alt | Dodge with the revolver drawn (Q stays Blink) |
 | Ctrl at a sprint | Slide (at a ledge, sprint + crouch still climbs down) |
 | T | Switch round type: a reload |
-| V | Use a prep item, if you have what it cures on you |
+| V | Use a prep item. The HUD offers it when it would help, and the key answers with a dry click when it can't |
 
 ## Where things live
 
@@ -23,7 +23,7 @@ Play it: `maps/hunt_gym.tscn`. Past the kit room's door the first wave comes. F5
 | `scripts/Hunt/PrepItems.gd` | Prep items: what each cures, its use time, how many you carry |
 | `scripts/Hunt/Loadout.gd` | The player's pack, what they own, restocking, using items |
 | `scripts/Hunt/KitTable.gd`, `KitPiece.gd` | The table you pack at |
-| `scripts/Hunt/SafePlace.gd` | Leaving locks the pack and saves; coming back restores shields and restocks |
+| `scripts/Hunt/SafePlace.gd` | Leaving locks the pack and saves; coming back, after 3 s away with nothing awake within 12 m, restores shields and restocks |
 | `scripts/UI/HuntReadout.gd`, `evil_eye_view.gdshader` | The painted cylinder and the evil eye's lids |
 
 ## How a hit works
@@ -48,6 +48,7 @@ A variant is a row with changed numbers and one trick.
 ## Things to know
 
 - **Spawn exception:** `Monster._ready` adds the collision exception with the player at once. A body that begins under the player and is then moved launches them, as a moving platform would (check M0).
+- **The safe place looks for itself each tick** rather than using an `Area3D`: an area's word comes a tick late, and it reports you walking out when the map is freed.
 - **A monster never frees itself.** Dead or asleep it hides and stays, so a save can keep it. Place them from the start and `wake()` them.
 - **Off a hunt nothing changes.** The default pack is lead only, unlocked, and restocks nothing. PowerPool's refill runs as it always did.
 - **Words are the user's.** Stand-ins are listed in `docs/superpowers/refs/hunt/words_needed.md`, poses in `poses_needed.md`, sounds in `sounds_needed.md`.

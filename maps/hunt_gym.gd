@@ -34,7 +34,7 @@ const WAVES := [{"eyes": 3}, {"eyes": 5}, {"eyes": 6, "guard": true}]
 ## How long after one is cleared the next comes.
 const WAVE_GAP := 5.0
 
-var safe_place: Area3D
+var safe_place: Node3D
 var kit_table: Node3D
 var player: CharacterBody3D
 ## The wave under way (0: none yet), and what is in each.
@@ -45,7 +45,10 @@ var _next_wave_in := -1.0
 
 func _ready() -> void:
 	reset_physics_interpolation.call_deferred()
-	SaveGame.begin_run(&"hunt_gym")
+	# A new run, unless this is a save being loaded into its own.
+	if SaveGame.pending.is_empty():
+		SaveGame.begin_run(&"hunt_gym")
+
 	_environment()
 	_room()
 	_yard()
@@ -56,6 +59,8 @@ func _ready() -> void:
 	player.inventory.select_by_id(&"revolver")
 	safe_place = SafePlace.build(self, Vector3(0, ROOM.y * 0.5, 0), Vector3(ROOM.x * 2.0, ROOM.y, ROOM.z * 2.0))
 	kit_table = KitTable.build(self, Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0, 2.8)))
+	kit_table.show_for(player.loadout)
+	player.loadout.changed.connect(kit_table.show_for.bind(player.loadout))
 	var baker := NavigationRegion3D.new()
 	baker.set_script(NavBakerScript)
 	add_child(baker)
@@ -210,8 +215,13 @@ func _environment() -> void:
 	add_child(world)
 
 
-func _unhandled_key_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F5:
+## Ahead of Retro, which steps the pixel grid on F6 elsewhere.
+func _input(event: InputEvent) -> void:
+	if not event is InputEventKey or not event.pressed or event.echo:
+		return
+
+	if event.keycode == KEY_F5:
 		get_tree().reload_current_scene()
-	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F6:
+	elif event.keycode == KEY_F6:
 		wave(wave_now + 1)
+		get_viewport().set_input_as_handled()

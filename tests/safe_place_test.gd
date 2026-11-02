@@ -24,7 +24,7 @@ func _ready() -> void:
 	p.position = IN
 	Props.give_revolver(p, 24, 4)
 	p.inventory.select_by_id(&"revolver")
-	var place: Area3D = SafePlace.build(self, Vector3(0, 2, 0), Vector3(12, 6, 12))
+	var place: Node3D = SafePlace.build(self, Vector3(0, 2, 0), Vector3(12, 6, 12))
 	var left := [0]
 	var returned := [0]
 	place.left.connect(func(): left[0] += 1)
@@ -73,16 +73,44 @@ func _ready() -> void:
 	SaveGame.apply(run_body)
 	await _frames(2)
 
+	# A step in and straight out again, at the door, is not the walk.
 	p.health = 40.0
-	var owned_before: int = lo.owned[&"copal_rounds"]
 	p.teleport(Transform3D(Basis.IDENTITY, IN))
 	await _frames(4)
+	_check("S9 back within moments, no shields and no pouch", p.health == 40.0 and lo.locked and returned[0] == 0)
+	var saves_now: int = SaveFiles.saves(run_id).size()
+	p.teleport(Transform3D(Basis.IDENTITY, OUT))
+	await _frames(4)
+	await get_tree().process_frame
+	_check("S9b and leaving again writes no save", left[0] == 1 and SaveFiles.saves(run_id).size() == saves_now)
+
+	# Something awake close by: no rest until it is dealt with.
+	await _frames(int(place.MIN_OUT * 60.0) + 2)
+	var hunter: CharacterBody3D = MonsterScript.new()
+	hunter.kind = &"floating_eye"
+	hunter.name = "Hunter"
+	add_child(hunter)
+	hunter.global_position = IN + Vector3(3, 1, 0)
+	p.teleport(Transform3D(Basis.IDENTITY, IN))
+	await _frames(4)
+	_check("S10 hunted, the room gives nothing", p.health == 40.0 and lo.locked and returned[0] == 0)
+	var owned_before: int = lo.owned[&"copal_rounds"]
+	hunter.take_hit(500.0, p, &"blast", hunter.global_position, Vector3.FORWARD)
+	await _frames(4)
+
 	_check("S5 back inside: lost shields return and it unlocks", returned[0] == 1 and p.health == p.max_health and not lo.locked)
 	_check("S6 walking back restocks from what's left owned", inv.ammo[&"copal_rounds"] == 12 and lo.owned[&"copal_rounds"] == owned_before - 5)
 	_check("S7 a monster killed stays dead after walking back", get_node("Eye").dead)
 	p.teleport(Transform3D(Basis.IDENTITY, OUT))
 	await _frames(4)
 	_check("S1b leaving again locks again", left[0] == 2 and lo.locked)
+	p.is_dead = true
+	await _frames(int(place.MIN_OUT * 60.0) + 2)
+	p.health = 1.0
+	p.teleport(Transform3D(Basis.IDENTITY, IN))
+	await _frames(4)
+	_check("S11 the dead get nothing crossing the line", p.health == 1.0 and lo.locked)
+	p.is_dead = false
 	SaveFiles.delete_run(run_id)
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)

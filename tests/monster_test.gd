@@ -30,6 +30,7 @@ func _ready() -> void:
 	g.hit_confirmed.connect(func(kind): confirmed = kind)
 	await _hits()
 	await _rounds()
+	await _blows()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -147,6 +148,32 @@ func _hits() -> void:
 	p.load_state(saved)
 	_check("M14 the player's statuses are saved with them", p.statuses.has(&"evil_eye"))
 	p.statuses.clear(&"evil_eye")
+
+
+func _blows() -> void:
+	# At arm's length, with the gun: the butt.
+	_face()
+	await _frames(30)
+	g.reset_for_practice()
+	var m := _monster(Vector3.INF, 1.0)
+	m.health = 500.0
+	await _frames(2)
+	Input.action_press("kick")
+	await _frames(1)
+	Input.action_release("kick")
+	await _frames(25)
+	_check("M15 the pistol-whip finds a monster at arm's length (%.0f)" % m.health, m.health < 500.0)
+	_free(m)
+	await _frames(40)
+
+	m = _monster()
+	m.health = 500.0
+	var from: Vector3 = m.global_position
+	m.kick(Vector3(0, 0, -6), p)
+	await _frames(15)
+	_check("M16 a boot hurts it and sends it off", m.health < 500.0 and m.global_position.distance_to(from) > 0.3)
+	_check("M16b a boot counts as a blow", last == &"hit")
+	_free(m)
 
 
 ## Task 7 adds to this.
