@@ -25,6 +25,7 @@ func _ready() -> void:
 	await _staying()
 	await _going_down()
 	await _the_eyes()
+	await _the_rest()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -343,6 +344,76 @@ func _the_eyes() -> void:
 	_check("E6 the egg going as you die: it stops", hud.curse_state()["dispel"] == 0.0 and hud.curse_state()["gather"] == 0.0)
 	await _until(func(): return not p.death.playing(), 4.0)
 	_check("E6b and the death finishes", not p.death.playing())
+
+
+func _the_rest() -> void:
+	# The ánimas'.
+	await _dying_by(false, true, &"guard")
+	var hud: Node = p.hud
+	await _frames(6)
+	var start: float = hud.drain_state()["no_colour"]
+	var least_rise := 1.0
+	var was: float = start
+
+	for i in 90:
+		await get_tree().physics_frame
+		var now: float = hud.drain_state()["no_colour"]
+		least_rise = minf(least_rise, now - was)
+		was = now
+
+	await _until(func(): return p.leech.last_gulp() > 0.95, 3.0)
+	await _frames(15)
+	_check("A1 the ánimas' death: colour goes with the gulps (%.2f to %.2f)" % [start, hud.drain_state()["no_colour"]], start < 0.5 and least_rise >= 0.0 and hud.drain_state()["no_colour"] > 0.95)
+	_check("A0 the drain stays on your sight as you go", hud.drain_view_shown() and hud.drain_state()["drain"] > 0.2)
+	await _until(func(): return p.leech.count() == 0, 2.0)
+	await _frames(4)
+	_check("A2 you still see them leave, grey (%.2f)" % hud.drain_state()["sight_fails"], hud.drain_state()["sight_fails"] < 0.5)
+	await _until(func(): return not p.death.playing(), 2.0)
+	_check("A3 then your sight fails (%.2f)" % hud.drain_state()["sight_fails"], hud.drain_state()["sight_fails"] > 0.95)
+	await _frames(30)
+	_check("A4 no colour floods back: you aren't free", hud.drain_state()["release"] == 0.0 and hud.drain_view_shown())
+	# Both.
+	await _dying_by(true, true, &"")
+	hud = p.hud
+	var look: ShaderMaterial = hud._curse_view.material
+	await _frames(60)
+	var watching: bool = look.get_shader_parameter(&"feeders")[0].z > 0.5
+	var open_yet: float = hud.curse_state()["shut"]
+	var shut_at := -1.0
+	var slack_at := -1.0
+
+	while p.death.playing():
+		await get_tree().physics_frame
+
+		if shut_at < 0.0 and hud.curse_state()["shut"] > 0.9:
+			shut_at = p.death.at()
+
+		if slack_at < 0.0 and hud.curse_state()["slack"] > 0.9:
+			slack_at = p.death.at()
+
+	var both: Dictionary = hud.curse_state()
+	_check("B1 both: the eyes watch them, open", watching and open_yet == 0.0)
+	_check("B2 on the last gulp all shut and the flesh goes slack, together (%.2f, %.2f)" % [shut_at, slack_at], shut_at > 0.0 and absf(shut_at - slack_at) < 0.05 and shut_at <= p.death.LETS_GO[&"both"] + 0.05)
+	_check("B3 no eye in the middle", both["last_eye"] == 0.0 and both["extra_eyes"] == 0.0)
+	_check("B3b a gap left to see them through (%.2f)" % both["dying"], both["dying"] > 0.3 and both["dying"] < 0.8)
+	_check("B4 the heart stops", both["failing"] == 1.0)
+	# The swipe.
+	await _dying_by(false, false, &"anima")
+	hud = p.hud
+	hud.claw_at(1.0)
+	await _frames(90)
+	var clawed: float = hud.drain_state()["claws"]
+	_check("S1 the swipe: its marks stay open (%.2f)" % clawed, clawed > 0.5 and hud.drain_view_shown())
+	await _until(func(): return not p.death.playing(), 2.0)
+	_check("S1b and your sight fails", hud.drain_state()["sight_fails"] > 0.95)
+	await _dying_by(true, false, &"anima")
+	hud = p.hud
+	await _frames(70)
+	var swipe_cursed: Dictionary = hud.curse_state()
+	_check("S2 cursed, its flesh falls slack, with no ending of its own (%.2f)" % swipe_cursed["slack"], swipe_cursed["slack"] > 0.9 and swipe_cursed["last_eye"] == 0.0 and swipe_cursed["dying"] == 0.0)
+	await _fresh()
+	await _frames(10)
+	_check("R1 the next life starts clean: nothing stuck", p.hud.curse_state()["slack"] == 0.0 and p.hud.drain_state()["no_colour"] == 0.0 and not p.hud.drain_view_shown())
 
 
 func _on_you_now() -> CharacterBody3D:

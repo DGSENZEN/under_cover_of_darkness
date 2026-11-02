@@ -119,6 +119,10 @@ var _extra_eyes := 0.0
 var _last_eye := 0.0
 var _failing := 0.0
 var _beat_clock := 0.0
+var _going_slack := 0.0
+var _no_colour := 0.0
+var _no_colour_to := 0.0
+var _sight_fails := 0.0
 var _feeders := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
 var _claws_now := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
 var _claw_age_now := 1.0
@@ -162,7 +166,18 @@ const EYES_LAST_AT := 0.6
 const EYES_FAIL_FROM := 0.7
 const HEART_RACES := 3.4
 const MOST_RING := 6
+## Both: how far the flesh closes (a gap left to see them through), and when on the last gulp it
+## all shuts. A swipe that kills, when its flesh goes slack (s). When the sight starts to fail: by
+## its share of what is left after they let go; a swipe's, from (s). How fast colour goes.
+const BOTH_CLOSES := 0.62
+const SHUTS_ON_LAST_GULP := Vector2(0.6, 0.85)
+const SWIPE_SLACK_FROM := 0.2
+const SIGHT_FAILS_FROM := 0.25
+const SWIPE_SIGHT_FAILS_FROM := 0.9
+const COLOUR_GOES := 1.6
 const CLAWS_CLEAR_FROM := 0.48
+## A swipe that kills: how old its marks stay (of the fade's).
+const SWIPE_MARKS_HELD := 0.25
 const DRAIN_COMES := 1.2
 const DRAIN_GOES := 5.0
 const DRAIN_RELEASE_TIME := 0.5
@@ -1019,7 +1034,7 @@ func _show_curse(delta: float) -> void:
 	if not alive and player.death.holds_screen():
 		_dispel = 0.0
 
-	_feel_the_eyes_end(delta, eyes_took_you)
+	_feel_the_end(delta)
 
 	if _gather > 0.0 and player.hand != null and player.hand.has_method("egg_on_screen"):
 		_egg_at = player.hand.egg_on_screen()
@@ -1055,6 +1070,8 @@ func _show_curse(delta: float) -> void:
 		look.set_shader_parameter(&"extra_eyes", _extra_eyes)
 		look.set_shader_parameter(&"last_eye", _last_eye)
 		look.set_shader_parameter(&"failing", _failing)
+		look.set_shader_parameter(&"slack", _going_slack)
+		look.set_shader_parameter(&"eyes_shut", _going_slack if player.death.kind == &"both" else 0.0)
 		look.set_shader_parameter(&"beat_clock", _beat_clock)
 		look.set_shader_parameter(&"ring", _ring_open)
 		var marks := PackedVector3Array()
@@ -1066,14 +1083,27 @@ func _show_curse(delta: float) -> void:
 		look.set_shader_parameter(&"gazers", marks)
 
 
-## The eyes' own death: the flesh all the way in, eyes opening on you, the last in the very middle,
-## the heart racing and then failing.
-func _feel_the_eyes_end(delta: float, eyes_took_you: bool) -> void:
-	var at: float = player.death.share() if eyes_took_you else 0.0
-	_dying_shown = smoothstep(EYES_CLOSE_FROM, EYES_LAST_AT, at)
-	_extra_eyes = smoothstep(EYES_CLOSE_FROM + 0.1, EYES_LAST_AT, at)
-	_last_eye = smoothstep(EYES_LAST_AT, EYES_LAST_AT + 0.14, at)
-	_failing = smoothstep(EYES_FAIL_FROM, 1.0, at)
+## How the flesh ends. The eyes' own death: all the way in, eyes opening on you, the last in the
+## very middle, the heart racing and then failing. Both: most of the way, and on the last gulp the
+## eyes all shut, the heart stops and it hangs slack. A swipe that kills: it just hangs slack.
+func _feel_the_end(delta: float) -> void:
+	var death: Node = player.death
+	var at: float = death.share()
+
+	match death.kind:
+		&"eyes":
+			_dying_shown = smoothstep(EYES_CLOSE_FROM, EYES_LAST_AT, at)
+			_extra_eyes = smoothstep(EYES_CLOSE_FROM + 0.1, EYES_LAST_AT, at)
+			_last_eye = smoothstep(EYES_LAST_AT, EYES_LAST_AT + 0.14, at)
+			_failing = smoothstep(EYES_FAIL_FROM, 1.0, at)
+		&"both":
+			_dying_shown = BOTH_CLOSES * smoothstep(0.0, float(death.LETS_GO[&"both"]) / float(death.LENGTHS[&"both"]), at)
+			_going_slack = smoothstep(SHUTS_ON_LAST_GULP.x, SHUTS_ON_LAST_GULP.y, death.last_gulp())
+			_failing = _going_slack
+		&"swipe":
+			_going_slack = smoothstep(SWIPE_SLACK_FROM, SWIPE_SLACK_FROM + 0.4, death.at()) if death.flesh_stays() else 0.0
+			_failing = _going_slack
+
 	_beat_clock += delta * lerpf(1.7, HEART_RACES, _dying_shown) * (1.0 - _failing)
 
 
@@ -1153,17 +1183,26 @@ func _show_drain(delta: float) -> void:
 	if leech == null or _drain_view == null:
 		return
 
-	var held: int = leech.count() if not player.is_dead else 0
+	var taken: bool = player.death.holds_screen()
+	var held: int = leech.count() if not player.is_dead or taken else 0
 
-	if held == 0 and _drain_held_was > 0:
+	if held == 0 and _drain_held_was > 0 and not taken:
 		_drain_release = 1.0
 
 	_drain_held_was = held
 	_drain_release = move_toward(_drain_release, 0.0, delta / DRAIN_RELEASE_TIME)
-	var wanted: float = DRAIN_DEPTH[held]
+	# (Taken, it has done what it has done: it doesn't ebb.)
+	var wanted: float = maxf(DRAIN_DEPTH[held], _drain_shown) if taken else DRAIN_DEPTH[held]
 	_drain_shown = move_toward(_drain_shown, wanted, delta * (DRAIN_COMES if wanted > _drain_shown else DRAIN_GOES))
 	_cut_age = minf(_cut_age + delta / DRAIN_CLAW_TIME, 1.0)
+
+	# The blow that took you stays open.
+	if player.death.kind == &"swipe":
+		_cut_age = minf(_cut_age, SWIPE_MARKS_HELD)
+		_drain_claw_age = minf(_drain_claw_age, SWIPE_MARKS_HELD)
+
 	var cut_open := _cut_age < 1.0
+	_feel_sight_go(delta, leech)
 	var shown := _drain_shown > 0.01 or _drain_release > 0.01 or cut_open
 	_drain_view.visible = shown
 	_drain_copy.visible = shown and _curse_view.visible
@@ -1175,6 +1214,8 @@ func _show_drain(delta: float) -> void:
 	var look := _drain_view.material as ShaderMaterial
 	look.set_shader_parameter(&"drain", _drain_shown)
 	look.set_shader_parameter(&"release", _drain_release)
+	look.set_shader_parameter(&"no_colour", _no_colour)
+	look.set_shader_parameter(&"sight_fails", _sight_fails)
 	look.set_shader_parameter(&"gulp", leech.gulp())
 	# Claw marks: each gulp's rake, opened and then fading.
 	if leech.gulp() > _drain_gulp_was:
@@ -1213,6 +1254,27 @@ func _show_drain(delta: float) -> void:
 	_claws_now = claws
 
 
+## As what is on you finishes: the colour going with each gulp, and your sight failing after it
+## lets go.
+func _feel_sight_go(delta: float, leech: Node) -> void:
+	var death: Node = player.death
+
+	if death.kind == &"animas" or death.kind == &"both":
+		var lets_go: float = death.LETS_GO[death.kind]
+
+		if leech.gulp() > _drain_gulp_was:
+			_no_colour_to = maxf(_no_colour_to, death.at() / lets_go)
+
+		if death.last_gulp() > 0.0:
+			_no_colour_to = 1.0
+
+		_no_colour = move_toward(_no_colour, _no_colour_to, delta * COLOUR_GOES)
+		var left: float = float(death.LENGTHS[death.kind]) - lets_go
+		_sight_fails = smoothstep(lets_go + left * SIGHT_FAILS_FROM, float(death.LENGTHS[death.kind]), death.at())
+	elif death.kind == &"swipe":
+		_sight_fails = smoothstep(SWIPE_SIGHT_FAILS_FROM, float(death.LENGTHS[&"swipe"]), death.at())
+
+
 ## The curse and the drain are one body under attack: the flesh loses its blood as you do, beats
 ## with the gulps, its eyes turn to what is feeding, and the claws tear it as they tear your sight.
 func _tell_each_other(delta: float) -> void:
@@ -1221,8 +1283,8 @@ func _tell_each_other(delta: float) -> void:
 	if leech == null or _drain_view == null:
 		return
 
-	var held: int = leech.count() if not player.is_dead else 0
-	var wanted: float = maxf(_drain_shown, 1.0 - _drain_magic) if held > 0 else 0.0
+	var held: int = leech.count() if not player.is_dead or player.death.holds_screen() else 0
+	var wanted: float = maxf(_drain_shown, 1.0 - _drain_magic) if held > 0 or player.death.holds_screen() else 0.0
 	_drained_shown = move_toward(_drained_shown, wanted, delta * (DRAINED_COMES if wanted > _drained_shown else DRAINED_GOES))
 
 	for i in _feeders.size():
@@ -1331,7 +1393,7 @@ func drain_target(thread: int) -> Vector2:
 
 func drain_state() -> Dictionary:
 	return {"drain": _drain_shown, "release": _drain_release, "threads": _drain_threads, "gulp": player.leech.gulp() if player != null and player.leech != null else 0.0, "magic": _drain_magic, "life": _drain_life, "pull": _drain_shown,
-		"claws": smoothstep(0.0, 0.16, _drain_claw_age) * (1.0 - smoothstep(0.4, 1.0, _drain_claw_age))}
+		"claws": smoothstep(0.0, 0.16, _drain_claw_age) * (1.0 - smoothstep(0.4, 1.0, _drain_claw_age)), "no_colour": _no_colour, "sight_fails": _sight_fails}
 
 
 ## The evil eye's marks are on screen.
@@ -1342,7 +1404,7 @@ func curse_view_shown() -> bool:
 ## What the screen is saying about the evil eye, for whoever asks.
 func curse_state() -> Dictionary:
 	return {"stared": _stared_shown, "curse": _curse_shown, "gazers": _gazers.values(), "ring_open": Array(_ring_open).filter(func(o): return o > 0.5).size(),
-		"dispel": _dispel, "gather": _gather, "relief": _relief, "egg_at": _egg_at, "leaving": _leaving_shown, "cleansed": _cleansed_shown, "drained": _drained_shown, "squeeze": _squeeze(), "eyes_to": _eyes_to(), "dying": _dying_shown, "extra_eyes": _extra_eyes, "last_eye": _last_eye, "failing": _failing}
+		"dispel": _dispel, "gather": _gather, "relief": _relief, "egg_at": _egg_at, "leaving": _leaving_shown, "cleansed": _cleansed_shown, "drained": _drained_shown, "squeeze": _squeeze(), "eyes_to": _eyes_to(), "dying": _dying_shown, "extra_eyes": _extra_eyes, "last_eye": _last_eye, "failing": _failing, "slack": _going_slack, "shut": _going_slack if player != null and player.death.kind == &"both" else 0.0}
 
 
 func show_death_page() -> void:

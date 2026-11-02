@@ -39,6 +39,10 @@ uniform float extra_eyes = 0.0;
 uniform float last_eye = 0.0;
 uniform float failing = 0.0;
 uniform float beat_clock = 0.0;
+// With what feeds on you finishing (or a blow that kills): the flesh hangs slack, sagged and
+// dull, and eyes_shut: every eye shut together.
+uniform float slack = 0.0;
+uniform float eyes_shut = 0.0;
 uniform float drained = 0.0;
 uniform float gulp = 0.0;
 uniform float claw_age = 1.0;
@@ -431,7 +435,7 @@ void fragment() {
 		float torn_back = smoothstep(0.45, 1.0, pull) * 0.7;
 		float past = flesh_past(p, closing, time, heart, bristle) - torn_back;
 		// As it kills you it comes in from all round, to nothing, torn at its edge by the brush.
-		float dying_hole = mix(1.9, -0.3, dying) + (bristle - 0.5) * 0.22 + (noise(a * 4.0) - 0.5) * 0.16;
+		float dying_hole = mix(1.9, -0.3, dying) + slack * 0.2 + (bristle - 0.5) * 0.22 + (noise(a * 4.0) - 0.5) * 0.16;
 		past = dying > 0.0 ? max(past, length(p * vec2(0.72, 1.45)) - dying_hole) : past;
 
 		// Its shadow on your sight, cast down and in: it lies on top of the view.
@@ -450,6 +454,7 @@ void fragment() {
 			col = mix(col, INK, line * remains);
 			col = mix(col, flesh, body * remains);
 			flesh_here = body * remains;
+			col = mix(col, col * 0.55, slack * body * remains);
 		}
 	}
 
@@ -514,7 +519,7 @@ void fragment() {
 			// Set deep: the meat dark around it.
 			float pit = 1.0 - smoothstep(0.9, 1.5, length((eye_here - eye_at) / vec2(size * 1.35, size * 0.95)));
 			col *= 1.0 - pit * 0.55 * presence;
-			vec4 eye = sunk_eye(eye_here, eye_at, size, ring[i] * blink * shut * (1.0 - gulp * 0.55), look, seed, time);
+			vec4 eye = sunk_eye(eye_here, eye_at, size, ring[i] * blink * shut * (1.0 - gulp * 0.55) * (1.0 - eyes_shut), look, seed, time);
 			col = mix(col, eye.rgb, eye.a * presence);
 		}
 	}

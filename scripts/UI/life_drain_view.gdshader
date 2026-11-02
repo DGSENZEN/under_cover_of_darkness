@@ -22,6 +22,10 @@ uniform vec3 threads[3];
 uniform vec3 claws_from[3];
 // How much of the curse's flesh is on your sight too: the marks then keep further out, with its.
 uniform float with_flesh = 0.0;
+// As it finishes you: all the colour gone, the middle too; then your sight failing from the edges,
+// to all of it. Neither spares the middle.
+uniform float no_colour = 0.0;
+uniform float sight_fails = 0.0;
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform sampler2D stroke_sheet : repeat_enable, filter_linear_mipmap;
 
@@ -149,6 +153,14 @@ void fragment() {
 	float closing = (1.0 - life) * held;
 	float dark = smoothstep(mix(1.7, 0.62, closing) - gulp * 0.1, mix(1.9, 1.05, closing), out_from_middle + (grain - 0.5) * 0.2);
 	col = mix(col, ROT * 0.5, dark * clamp(closing * 1.6, 0.0, 0.94));
+
+	// Going.
+	col = mix(col, vec3(dot(col, vec3(0.3, 0.55, 0.15))), no_colour);
+
+	if (sight_fails > 0.001) {
+		float edge = mix(2.0, -0.3, sight_fails);
+		col = mix(col, ROT * 0.3, smoothstep(edge - 0.2, edge + 0.12, out_from_middle + (grain - 0.5) * 0.2));
+	}
 
 	// Free: it comes back, and more than it was, for a moment.
 	col = mix(col, col * 1.4 + WARM * 0.05 * (0.5 + 0.5 * out_from_middle), release);
