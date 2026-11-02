@@ -39,8 +39,9 @@ void fragment() {
 	SPECULAR = 0.0;
 	vec3 world_normal = (INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz;
 	float beat = eye_beat(TIME + eye_hash(NODE_POSITION_WORLD) * 3.0, fed);
-	float under = eye_veins(paint_at * 11.0);
+	// Its fire under the skin, in the brush's shapes.
+	float under = smoothstep(0.6, 0.68, stroke);
 	EMISSION = painted_fill(skin, world_normal, NORMAL, VIEW) * 0.8
-		+ SICK * (0.02 + under * fed * (0.35 + beat * 0.5))
+		+ SICK * (0.012 + under * fed * (0.1 + beat * 0.16))
 		+ eye_smoulder(paint_at * 2.0, NORMAL, VIEW, TIME);
 }

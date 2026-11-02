@@ -76,6 +76,13 @@ func _hands_model() -> void:
 	e.fed = 60.0
 	await _frames(3)
 	_check("V3 it shows what it drank", body.fed_shown > 0.5)
+	e.state = STATE.THROWN
+	await _frames(14)
+	_check("V5 thrown, it goes over on its back (%.2f)" % body.flipped(), body.flipped() > 0.6)
+	await _frames(100)
+	e.state = STATE.RUSH
+	await _frames(40)
+	_check("V5b and rights itself (%.2f)" % body.flipped(), body.flipped() < 0.05)
 	e.queue_free()
 	await _frames(2)
 
@@ -468,6 +475,31 @@ func _drained_view() -> void:
 	_check("S7 it drinks in gulps, not a steady bleed (%d in 2.2 s)" % gulps[0], gulps[0] >= 2 and gulps[0] <= 4)
 	_check("S7b each one shows on your sight (%.2f)" % gulp_seen, gulp_seen > 0.5)
 	_check("S7c its hands squeeze with each (%.2f to %.2f)" % [squeeze_low, squeeze_high], squeeze_high > squeeze_low + 0.2)
+	# They come at you, and are flung off: they don't just appear.
+	var late := _anima(&"hands", p.global_position + Vector3(-0.2, 0.5, 0.9))
+	await _frames(40)
+	late.queue_free()
+	await _frames(3)
+	var newcomer := _anima(&"hands", p.global_position + Vector3(0.0, 0.5, -0.9))
+	await _frames(1)
+	var taken_before: Array = p.leech.on_me()
+
+	if newcomer.put_on_you():
+		var slot_new: int = p.leech.slot_of(newcomer)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var arriving: float = hands.arrival(slot_new)
+		await _frames(30)
+		_check("S11 a hand lunges into your view (%.2f, then %.2f)" % [arriving, hands.arrival(slot_new)], arriving < 0.6 and hands.arrival(slot_new) > 0.99)
+		newcomer.throw_off(p.global_position)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_check("S11b thrown, it is flung out of your view, not gone at once", hands.shown(slot_new) and hands.flung(slot_new) > 0.0)
+		await _frames(20)
+		_check("S11c and then gone", not hands.shown(slot_new))
+
+	newcomer.queue_free()
+	await _frames(2)
 	# It claws: rears back open, then rakes down and closes.
 	var open_most := 9.0
 	var closed_most := -9.0
@@ -488,6 +520,7 @@ func _drained_view() -> void:
 	_check("S10 it opens and closes its claw (%.2f to %.2f)" % [open_most, closed_most], closed_most > open_most + 0.6)
 	_check("S10b it rakes down your view, a long way (%.3f)" % (high - low), high - low > 0.05)
 	_check("S10c its fingers scrabble, not all as one (%.2f)" % fingers_apart, fingers_apart > 0.15)
+	_check("S10e they spread on the wind-up and come together on the rake (%.2f)" % hands.splay_range(slot_a), hands.splay_range(slot_a) > 0.1)
 	_check("S10d it leaves claw marks across your sight (%.2f)" % marks_most, marks_most > 0.5)
 	_check("S7d and it jolts your view (%.3f)" % trauma_seen, trauma_seen > 0.02)
 	p.power.power = 5.0

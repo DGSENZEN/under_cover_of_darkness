@@ -71,10 +71,13 @@ void fragment() {
 	bled *= mix(0.45, 1.0, smoothstep(0.3, 0.65, streak));
 	// No blood in it: corpse-green and thin, its darks lifted into the grave's colour.
 	vec3 thin = value * CORPSE * 0.95 + GRAVE * (0.1 + 0.26 * streak + gulp * 0.16);
-	col = mix(col, thin, bled * clamp(drain * 1.3, 0.0, 0.9));
+	// In flat painted bands, not a gradient: the edge of each a stroke of the brush.
+	float wash = bled * clamp(drain * 1.3, 0.0, 0.9) + (streak - 0.5) * 0.08;
+	float bands = smoothstep(0.12, 0.16, wash) * 0.42 + smoothstep(0.38, 0.42, wash) * 0.3 + smoothstep(0.66, 0.7, wash) * 0.2;
+	col = mix(col, thin, bands);
 	// Rot blotching through it, dark, in the brush's shapes.
 	float blotch = textureLod(stroke_sheet, a * 0.13 + vec2(0.31, TIME * 0.004), 0.0).r;
-	float rot = smoothstep(0.5, 0.64, blotch * 0.65 + streak * 0.35) * smoothstep(CLEAR + 0.1, CLEAR + 0.5, out_from_middle);
+	float rot = smoothstep(0.54, 0.58, blotch * 0.65 + streak * 0.35) * smoothstep(CLEAR + 0.1, CLEAR + 0.5, out_from_middle);
 	col = mix(col, ROT, rot * bled * drain * 0.72);
 	// Its front: low sick fire licking in, torn by the brush, up with each gulp.
 	float lick = textureLod(stroke_sheet, a * 0.3 + vec2(0.13, TIME * -0.05), 0.0).r;
@@ -114,14 +117,24 @@ void fragment() {
 					vec2 down = vec2(-side * 0.16 + across * 0.25, 0.64 + hash(vec2(seed, 2.0)) * 0.12) * claw_show;
 					float along = clamp(dot(a - top, down) / max(dot(down, down), 0.0001), 0.0, 1.0);
 					vec2 near = top + down * along;
-					float off = length(a - near);
+					vec2 runs = normalize(down + vec2(0.0001));
+					vec2 cross_it = vec2(-runs.y, runs.x);
+					float off = dot(a - near, cross_it);
 					float broken = textureLod(stroke_sheet, vec2(along * 1.4 + seed * 0.31, seed * 0.13), 0.0).r;
-					float wide = (0.004 + 0.015 * sin(along * 3.1416)) * (0.55 + broken * 0.9);
-					float mark = 1.0 - smoothstep(wide * 0.55, wide, off);
-					float lip = (1.0 - smoothstep(wide, wide * 1.8, off)) * (1.0 - mark);
+					// Thick and thin as a nail drags, thinning as it ages to a scar.
+					float wide = (0.004 + 0.016 * pow(sin(along * 3.1416), 0.7)) * (0.5 + broken) * mix(1.0, 0.5, claw_age);
+					float past_ends = step(0.002, along) * step(along, 0.998);
+					float mark = (1.0 - smoothstep(wide * 0.6, wide, abs(off))) * past_ends;
 					float keep = claw_fade * smoothstep(CLEAR * 0.5, CLEAR * 0.95, out_from_middle);
-					col = mix(col, ROT * 0.4, mark * keep * 0.95);
-					col = mix(col, value * CORPSE * 0.5 + SICK * 0.2, lip * keep * 0.6);
+					// Your sight, split across it.
+					float split = (1.0 - smoothstep(wide, wide * 3.5, abs(off))) * past_ends * keep;
+					vec2 shift = cross_it * sign(off + 0.00001) * vec2(1.0 / aspect, 1.0) * 0.5 * 0.014 * split;
+					vec3 torn = textureLod(screen_tex, SCREEN_UV + shift, 0.0).rgb;
+					col = mix(col, mix(col, torn, 0.8), split);
+					// The dark of it, and a raw lip down one side only.
+					col = mix(col, ROT * 0.4, mark * keep * 0.96);
+					float lip = smoothstep(wide * 0.55, wide, off) * (1.0 - smoothstep(wide, wide * 1.7, off)) * past_ends;
+					col = mix(col, value * CORPSE * 0.45 + vec3(0.42, 0.46, 0.2), lip * keep * 0.7);
 				}
 			}
 		}

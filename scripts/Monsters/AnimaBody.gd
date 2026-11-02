@@ -48,6 +48,8 @@ var _clock := 0.0
 var _walk := 0.0
 var _rear := 0.0
 var _floor_y := -0.25
+## How far over on its back it is, thrown off, 0..1.
+var _flip := 0.0
 var _bones := {}
 var _tips: Array[Vector3] = []
 var _look: StandardMaterial3D
@@ -172,6 +174,11 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 	_look.emission = Color(1.0, 0.5, 0.1) if smoked else Color(0.38, 0.5, 0.08)
 
 
+## How far over on its back it is, 0..1.
+func flipped() -> float:
+	return _flip
+
+
 func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, exposed: bool) -> void:
 	var part_hand := part(&"Hand")
 	part_hand.set_instance_shader_parameter(&"fed", fed)
@@ -185,7 +192,13 @@ func _walk_hand(delta: float, doing: StringName, speed: float, fed: float, expos
 	var hand_at := Vector3(0.0, PALM_HIGH - 0.25 + _rear * REAR + sin(_walk * TAU * 2.0) * 0.016, 0.22 - _rear * 0.1)
 	# It never holds still: a palsy all the time, worse when it rears. Hungry.
 	var shake := sin(_clock * 46.0) * 0.012 * rear_wanted + sin(_clock * 23.0) * 0.012 + sin(_clock * 37.0) * 0.008
-	var tilt := Basis(Vector3.RIGHT, -TIP - _rear * 0.5 + (0.4 if doing == &"thrown" else 0.0)) * Basis(Vector3.BACK, shake)
+	# Thrown, it goes over on its back, scrabbling at the air, and rights itself.
+	_flip = move_toward(_flip, 1.0 if doing == &"thrown" else 0.0, delta * (6.0 if doing == &"thrown" else 3.2))
+	hand_at.y -= smoothstep(0.0, 1.0, _flip) * 0.1
+	# It rolls with each step, and drops its head into a surge.
+	var surging := smoothstep(2.4, 4.5, speed)
+	var roll := sin(_walk * TAU) * 0.1 + shake + smoothstep(0.0, 1.0, _flip) * PI
+	var tilt := Basis(Vector3.RIGHT, -TIP - _rear * 0.5 - surging * 0.16) * Basis(Vector3.BACK, roll)
 	var hand_bone := _skeleton.find_bone("hand")
 	var rest: Transform3D = _skeleton.get_bone_rest(hand_bone)
 	_skeleton.set_bone_pose_position(hand_bone, hand_at)
@@ -222,7 +235,11 @@ func _foot_for(i: int, knuckle_rest: Transform3D, hand_pose: Transform3D, doing:
 	if doing == &"thrown":
 		return Vector3(knuckle.x * 1.3, knuckle.y - 0.08 + sin(_clock * 22.0 + float(i) * 1.7) * 0.05, knuckle.z - REACH[i] * 0.8)
 
-	var phase := fposmod(_walk + PHASES[i], 1.0)
+	var phase: float = fposmod(_walk + float(PHASES[i]), 1.0)
+	# No two steps alike: each sets down a little off from the last.
+	var step_number: float = floor(_walk + float(PHASES[i])) + float(i) * 7.0
+	home.x += sin(step_number * 12.9898) * 0.022
+	home.z += sin(step_number * 78.233) * 0.03
 
 	if phase < SWING:
 		var u := phase / SWING
