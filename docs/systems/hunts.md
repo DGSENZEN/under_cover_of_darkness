@@ -74,7 +74,7 @@ A variant is a row with changed numbers and one trick.
 
 ## Suites
 
-`fight_move_test`, `bestiary_test`, `monster_test`, `loadout_test`, `safe_place_test`, `hunt_gym_test`, `floating_eye_test`, `hunt_loop_test`, `ammo_ui_test`.
+`fight_move_test`, `bestiary_test`, `monster_test`, `loadout_test`, `safe_place_test`, `hunt_gym_test`, `floating_eye_test`, `hunt_loop_test`, `ammo_ui_test`, `mixed_gym_test`.
 
 `tests/diag_fight_moves.tscn` measures every fight move. `tests/diag_hunt_stills.tscn` takes stills of the marks from the real game, windowed.
 
@@ -94,3 +94,10 @@ Each round reads at a glance, from `Rounds.TABLE`: its colour on the readout's c
 - **Their deaths (`AnimaDeaths.gd`, `AnimaBody.burn_away`, `AnimaBurn.gd`):** the monster goes out of play and gives up its body to the world, which acts one of its form's three last moments, written as beats in `AnimaDeaths.gd`. Faces: `scream` (head back, hands clawing its skull, fire from its mouth), `reach` (drags itself at you, one hand left stretched out), `strings` (hands drop first, it looks down at them). Hands: `spider` (over on its back, fingers going, then drawn in), `crawl` (keeps coming, falls, tries again), `asking` (rears up open, closes on nothing, goes over). Then it is limp, and only the heat moves it. Its fire is the game's simulated fire (`assets/vfx/fire.png`) through `anima_fire.gdshader`, additive, in hard green bands: drawn solid, this green reads as leaves. The flesh burns black from where the fire caught (`charred`, `burn_from`), goes pale and falls apart (`crumbled`), and a heap lies a few seconds with a last flame and a thread of smoke. The torso is a stand-in and just disappears until its model is made.
 - **Play:** `maps/anima_gym.tscn`. The hands and the face are real models; the torso is still a stand-in. Tests: `anima_test`, `burst_spell_test`, `copal_line_test`, `anima_gym_test`; stills `diag_anima_stills`.
 
+## Eyes and ánimas together
+
+- **Swipes (`Anima.gd`, `Bestiary` forms' `swipe_damage`, `swipe_reach`, `swipe_wind`):** up close they mostly cut, then back off; the leap is the rarer, mid-range move. A swipe's wind-up is an opening, a dodge avoids it, the Ward does not stop it. It hurts your life only and opens the claw marks (`StealthHUD.claw_at`).
+- **The turned eye (`FloatingEye.turn`, `EyeBody.TURNED_MODEL`, `tools/monsters/build_eye_turned.py`):** at half health or under it tears open, once, and spits as well as swoops. Off a save a hurt eye has already turned, with no burst. Its stray pupils wander (`EyeBody._stray_pupils`).
+- **The gob (`EyeGob.gd`, `assets/monsters/eye_gob.glb`, `tools/monsters/build_eye_gob.py`):** hurts, and starts or deepens the curse. A wall or the Ward stops it. The whip finds it (`Revolver.try_whip`, group `eye_gobs`), and batted it hurts what it meets and never you. It outlives its eye.
+- **One body under attack (`StealthHUD._tell_each_other`):** both screen effects stay, each told about the other. The flesh pales with `drained`, squeezes in on `gulp`, its eyes turn to `feeders`, and `claws_through` tears it along the drain's own marks. One crosshair mark says both (`Crosshair._draw_both`). `middle_kept_clear` reports the middle third free at the worst.
+- **Play:** `maps/mixed_gym.tscn`, three waves mixed, F5 and F6 as the other gyms. Stills: `diag_anima_stills --only=spit`, `--only=eye_turned`, `--only=both`. Frame cost: `tests/diag_mixed_perf.tscn`, windowed, with `--disable-vsync`.
