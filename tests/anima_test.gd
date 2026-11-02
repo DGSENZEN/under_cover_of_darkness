@@ -29,11 +29,14 @@ func _ready() -> void:
 	await _frames(60)
 	await _hands_model()
 	await _face_model()
+	await _face_life()
+	await _hands_life()
 	await _forms()
 	await _rush()
 	await _leeching()
 	await _getting_off()
 	await _drained_view()
+	await _mouth_drain()
 	await _dying()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
@@ -114,7 +117,8 @@ func _face_model() -> void:
 
 	_check("V7c it is painted: black pits, pale bone (%d dark, %d pale, of %d)" % [dark, pale, colours.size()], dark > colours.size() / 20 and pale > colours.size() / 40 and colours.size() > 0)
 	var tris: int = (skull.mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size() + body.part(&"Jaw").mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size()) / 3
-	_check("V7d small on screen: few tris (%d)" % tris, tris <= 5000)
+	_check("V7d few enough tris, seen this close (%d)" % tris, tris <= 12000)
+	_check("V7e a gullet and a tongue in its mouth", body.part(&"Gullet") != null and body.part(&"Tongue") != null)
 	var left_wrist: Vector3 = body.hand_on(-1.0).global_position
 	var right_wrist: Vector3 = body.hand_on(1.0).global_position
 	var ahead: Vector3 = -e.global_basis.z
@@ -337,7 +341,7 @@ func _getting_off() -> void:
 	p.power.power = 100.0
 	_clear_all()
 	await _frames(3)
-	var two: Array = await _on_you([&"face", &"face"])
+	var two: Array = await _on_you([&"hands", &"hands"])
 	_check("W0 what is on you can be aimed at: it stays where it came from", _stays_put(two[0]))
 	_face(two[0])
 	await _frames(2)
@@ -347,6 +351,12 @@ func _getting_off() -> void:
 	await _frames(25)
 	_check("W1b thrown clear, stunned and exposed (%.1f m)" % two[0].global_position.distance_to(p.global_position), two[0].global_position.distance_to(p.global_position) > 1.5 and two[0].is_exposed() and two[0].state == STATE.THROWN)
 	_free(two)
+	await _frames(3)
+	var faces: Array = await _on_you([&"face", &"face"])
+	await _frames(2)
+	var whipped_face: bool = await _whip()
+	_check("W1c a whip gets a face off your face, only one of them", whipped_face and p.leech.count() == 1)
+	_free(faces)
 	await _frames(3)
 
 	var torso: Array = await _on_you([&"torso"])
@@ -627,6 +637,224 @@ func _face(target: Node3D) -> void:
 	var way: Vector3 = (target.global_position - p.camera.global_position).normalized()
 	p.rotation.y = atan2(-way.x, -way.z)
 	p.neck.rotation = Vector3(asin(way.y), 0.0, 0.0)
+
+
+## The face alive: resting, woken, in its attack, missing.
+func _face_life() -> void:
+	await _place_player(HOME)
+	var e := _anima(&"face", Vector3(0, 1.3, -40))
+	e.rests = true
+	await _frames(4)
+	e.state = STATE.REST
+	await _frames(45)
+	var body: Node3D = e.body
+	_check("F1 at rest: it stays where it is, doing nothing (%.2f)" % e.velocity.length(), e.state == STATE.REST and Vector2(e.velocity.x, e.velocity.z).length() < 0.05)
+	_check("F1b its head hangs (%.2f)" % body.head_nod(), body.head_nod() < -0.3)
+	var hanging: float = body.hands_up()
+	_check("F1c its hands hang under it (%.2f)" % hanging, hanging < -0.15)
+	_check("F1d its jaw slack, not gaping (%.2f)" % body.jaw_open(), body.jaw_open() > 0.1 and body.jaw_open() < 0.6)
+	var nod_was: float = body.head_nod()
+	var tilt_was: Vector3 = body.part(&"Skull").rotation
+	var bone: int = body.hand_on(1.0).find_bone("middle_02")
+	var finger_was: Quaternion = body.hand_on(1.0).get_bone_pose_rotation(bone)
+	await _frames(20)
+	_check("F1e it never holds quite still", body.part(&"Skull").rotation.distance_to(tilt_was) > 0.005 and body.hand_on(1.0).get_bone_pose_rotation(bone).angle_to(finger_was) > 0.003)
+	# It knows you when you come near.
+	e.global_position = p.global_position + Vector3(0, 0.25, -5.0)
+	var woke := await _until(func(): return e.state == STATE.WAKE, 1.0)
+	_check("F2 it wakes when you come near", woke)
+	await _frames(14)
+	_check("F2b its head comes up (%.2f from %.2f)" % [body.head_nod(), nod_was], body.head_nod() > nod_was + 0.4)
+	await _until(func(): return e.state != STATE.WAKE, 2.0)
+	_check("F2c and then it comes", e.state == STATE.RUSH or e.state == STATE.TELL)
+	# A shot wakes it, and those near it.
+	var far := _anima(&"face", p.global_position + Vector3(20, 0.25, -30))
+	var neighbour := _anima(&"hands", p.global_position + Vector3(24, -0.7, -30))
+	far.rests = true
+	neighbour.rests = true
+	await _frames(3)
+	far.state = STATE.REST
+	neighbour.state = STATE.REST
+	_hit(far, &"bullet", &"copal")
+	await _frames(2)
+	_check("F3 struck, it wakes", far.state != STATE.REST)
+	_check("F3b so does what lies near it", neighbour.state == STATE.WAKE)
+	_free([far, neighbour])
+	await _frames(2)
+	# The attack: drawn back and wide, then thrown at you, hands first.
+	e.global_position = Vector3(0, 1.3, -40)
+	e.state = STATE.RUSH
+	await _frames(30)
+	var rush_back: float = body.head_back()
+	var rush_up: float = body.hands_up()
+	e.state = STATE.TELL
+	e._state_t = -9.0
+	await _frames(30)
+	_check("F4 its tell: it draws back (%.2f, %.2f)" % [rush_back, body.head_back()], body.head_back() > rush_back + 0.06)
+	_check("F4b its hands up and wide, above its head (%.2f, %.2f)" % [rush_up, body.hands_up()], body.hands_up() > rush_up + 0.12 and body.hands_up() > 0.0)
+	_check("F4c its jaw as wide as it goes (%.2f)" % body.jaw_open(), body.jaw_open() > 0.85)
+	var tell_ahead: float = body.hands_ahead()
+	e.state = STATE.LEAP
+	e._state_t = -9.0
+	e._leap_way = Vector3.ZERO
+	await _frames(12)
+	_check("F5 its leap: hands thrown ahead (%.2f from %.2f)" % [body.hands_ahead(), tell_ahead], body.hands_ahead() > tell_ahead + 0.15)
+	_check("F5b the head after them (%.2f)" % body.head_back(), body.head_back() < -0.05)
+	# Missing: it bites on nothing, its head down, and looks about.
+	var missed_jaw := 9.0
+	e.state = STATE.MISSED
+	e._state_t = 0.0
+
+	for i in 24:
+		await get_tree().physics_frame
+		missed_jaw = minf(missed_jaw, body.jaw_open())
+
+	_check("F6 it misses: its jaw snaps shut on nothing (%.2f)" % missed_jaw, missed_jaw < 0.2)
+	_check("F6b and its head goes down (%.2f)" % body.head_nod(), body.head_nod() < -0.15)
+	# Its arms grow from the base of its skull, whatever it is doing.
+	var worst_arm := 0.0
+
+	for doing in [STATE.REST, STATE.RUSH, STATE.TELL, STATE.LEAP, STATE.MISSED]:
+		e.state = doing
+		e._state_t = -9.0
+		await _frames(30)
+		worst_arm = maxf(worst_arm, maxf(body.arm_gap(1.0), body.arm_gap(-1.0)))
+
+	_check("F8 its arms end at the base of its skull, in every pose (%.3f off)" % worst_arm, worst_arm < 0.03)
+	# Its sinews stretch as it gapes.
+	var rig: Node3D = body.skull_rig()
+	e.state = STATE.REST
+	await _frames(40)
+	var slack: float = rig.sinew_length()
+	var slack_wide: float = rig.sinew_width()
+	e.state = STATE.TELL
+	e._state_t = -9.0
+	await _frames(30)
+	_check("F7 sinews from cheek to jaw, stretched as it gapes (%.3f, %.3f)" % [slack, rig.sinew_length()], rig.sinew_count() >= 6 and rig.sinew_length() > slack + 0.02)
+	_check("F7b and thinner for it", rig.sinew_width() < slack_wide)
+	_free([e])
+	await _frames(2)
+
+
+## The hands alive: curled up at rest, slammed down by a miss.
+func _hands_life() -> void:
+	var e := _anima(&"hands", Vector3(0, 0.3, -40))
+	e.rests = true
+	await _frames(4)
+	e.state = STATE.RUSH
+	await _frames(30)
+	var walking: float = e.body.palm_height()
+	e.state = STATE.REST
+	await _frames(45)
+	var body: Node3D = e.body
+	_check("H1 at rest: down on its palm (%.2f from %.2f)" % [body.palm_height(), walking], body.palm_height() < walking - 0.08)
+	_check("H1b still on the floor (%.3f)" % body.lowest_tip(), absf(body.lowest_tip()) < 0.05)
+	var skeleton: Skeleton3D = body.skeleton()
+	var bone := skeleton.find_bone("index_02")
+	var seen: Array[Quaternion] = []
+
+	for i in 60:
+		await get_tree().physics_frame
+		seen.append(skeleton.get_bone_pose_rotation(bone))
+
+	var most := 0.0
+
+	for pose in seen:
+		most = maxf(most, pose.angle_to(seen[0]))
+
+	_check("H1c its fingers flexing, slowly (%.3f)" % most, most > 0.02)
+	e.state = STATE.TELL
+	e._state_t = -9.0
+	await _frames(25)
+	var reared: float = body.palm_height()
+	_check("H2 its tell: up off the floor (%.2f)" % reared, reared > walking + 0.08)
+	e.state = STATE.MISSED
+	e._state_t = 0.0
+	var lowest := 9.0
+
+	for i in 24:
+		await get_tree().physics_frame
+		lowest = minf(lowest, body.palm_height())
+
+	_check("H3 it misses: slammed down flat (%.2f)" % lowest, lowest < walking - 0.08)
+	_free([e])
+	await _frames(2)
+
+
+## The face on you: it is on your face, its mouth at yours, and that is where you go.
+func _mouth_drain() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(40)
+	var hands: Node = p.leech_hands
+	var hud: Node = p.hud
+	var e := _anima(&"face", p.global_position + Vector3(0.9, 0.5, -0.2))
+	await _frames(1)
+	e.put_on_you()
+	await _frames(30)
+	var slot: int = p.leech.slot_of(e)
+	_check("M1 its face is in your view", hands.face_shown(slot))
+	_check("M1b the one in the world is not (you would see two)", not e.body.visible)
+	var mouth: Vector2 = hands.mouth_on_screen(slot)
+	_check("M2 its mouth at you, in the middle of your view (%.2f, %.2f)" % [mouth.x, mouth.y], mouth.distance_to(Vector2(0.5, 0.5)) < 0.22)
+	_check("M2b its two hands have hold of you", hands.other_hand_shown() and hands.shown(slot))
+	_check("M3 what you lose goes into its mouth", hud.drain_state()["threads"] == 1 and hud.drain_target(0).distance_to(mouth) < 0.04)
+	# Its mouth drinks, in time with the gulps.
+	var jaw_low := 9.0
+	var jaw_high := -9.0
+	var near_low := 9.0
+	var near_high := -9.0
+	var jaw_at_gulp := -1.0
+	var jaw_at_wind := -1.0
+	var tongue_low := 9.0
+	var tongue_high := -9.0
+	var flare_high := 0.0
+	p.power.power = 100.0
+
+	for i in 200:
+		await get_tree().physics_frame
+		var jaw: float = hands.face_jaw(slot)
+		jaw_low = minf(jaw_low, jaw)
+		jaw_high = maxf(jaw_high, jaw)
+		near_low = minf(near_low, hands.face_near(slot))
+		near_high = maxf(near_high, hands.face_near(slot))
+		tongue_low = minf(tongue_low, hands.face_tongue(slot))
+		tongue_high = maxf(tongue_high, hands.face_tongue(slot))
+		flare_high = maxf(flare_high, hands.face_throat(slot))
+
+		if p.leech.gulp() > 0.72 and p.leech.gulp() < 0.8:
+			jaw_at_gulp = jaw
+
+		if p.leech.gulp() <= 0.0 and p.leech.coming() > 0.93:
+			jaw_at_wind = jaw
+
+	_check("M4 its jaw works as it drinks (%.2f..%.2f)" % [jaw_low, jaw_high], jaw_high - jaw_low > 0.3)
+	_check("M4b wide winding up, clamped on the gulp (%.2f, %.2f)" % [jaw_at_wind, jaw_at_gulp], jaw_at_wind > jaw_at_gulp + 0.2)
+	_check("M5 it lunges at you with each, and draws back (%.2f..%.2f)" % [near_low, near_high], near_high - near_low > 0.1)
+	_check("M5b its tongue works (%.2f..%.2f)" % [tongue_low, tongue_high], tongue_high - tongue_low > 0.15)
+	_check("M5c its throat comes up as it swallows (%.2f)" % flare_high, flare_high > 0.5)
+	# You hit it where you see it, whichever way you turn.
+	p.rotation.y += 1.4
+	await _frames(3)
+	var ahead: Vector3 = -p.camera.global_basis.z
+	var to_it: Vector3 = (e.global_position - p.camera.global_position).normalized()
+	_check("M6 it is where you see it, as you turn (%.2f)" % ahead.dot(to_it), ahead.dot(to_it) > 0.95)
+	_check("M7 a copal shot in the mouth gets it off", _hit(e, &"bullet", &"copal") == &"weak" and e.state == STATE.THROWN)
+	await _frames(1)
+	_check("M8 thrown, its face goes from your view at once, and the one in the world is there", not hands.face_shown(slot) and e.body.visible)
+	_free([e])
+	await _frames(3)
+	# Two: side by side, each its own.
+	var a := _anima(&"face", p.global_position + Vector3(-0.9, 0.5, -0.2))
+	var b := _anima(&"face", p.global_position + Vector3(0.9, 0.5, -0.2))
+	await _frames(1)
+	a.put_on_you()
+	b.put_on_you()
+	await _frames(20)
+	_check("M9 two faces are apart (%.2f)" % a.global_position.distance_to(b.global_position), a.global_position.distance_to(b.global_position) > 0.4)
+	_check("M9b both in view, apart", hands.face_shown(p.leech.slot_of(a)) and hands.face_shown(p.leech.slot_of(b)) and hands.mouth_on_screen(p.leech.slot_of(a)).distance_to(hands.mouth_on_screen(p.leech.slot_of(b))) > 0.2)
+	_free([a, b])
+	await _frames(3)
 
 
 ## One shot, and the mark it left.

@@ -68,6 +68,7 @@ func _lay_out_waves() -> void:
 			for i in int(ANIMA_WAVES[number][form]):
 				var anima: Node3D = AnimaScript.new()
 				anima.form = form
+				anima.rests = true
 				anima.name = "Anima%d" % seed_value
 				seed_value += 1
 				var spot: Vector3 = spawns[next % spawns.size()]

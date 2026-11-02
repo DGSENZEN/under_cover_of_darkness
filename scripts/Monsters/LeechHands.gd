@@ -3,7 +3,8 @@ extends Node3D
 ## in the world on the side each is on, palm to you, nails hooked at your face. Before a
 ## gulp they rear back, open; on it they rake down your view and close, a finger at a time,
 ## and between gulps the fingers go on scrabbling at you. Worse as they feed. Never over the
-## crosshair. Drawn as the viewmodel is (HandSlot.gd). A camera
+## crosshair. A face brings its head too, its mouth at yours (LeechFace.gd), and takes a
+## second hand if there is room. Drawn as the viewmodel is (HandSlot.gd). A camera
 ## child of the player; LifeLeech says who is on.
 
 const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
@@ -11,6 +12,7 @@ const FleshShader := preload("res://scripts/Monsters/anima_flesh.gdshader")
 const BRUSH := preload("res://textures/painted/eclipse/brush.png")
 const HANDS_MODEL := "res://assets/monsters/anima_hands.glb"
 const AnimaFire := preload("res://scripts/Monsters/AnimaFire.gd")
+const LeechFaceScript := preload("res://scripts/Monsters/LeechFace.gd")
 
 const VIEWMODEL_LAYER := 1 << 18
 const FINGER_NAMES := ["index", "middle", "ring", "pinky", "thumb"]
@@ -47,23 +49,29 @@ const FLUNG_FOR := 0.14
 const COMES_FROM := 0.42
 const FLUNG_TO := 0.6
 const FULL := 60.0
+## Where the face's second hand is kept, after the three slots.
+const OTHER_HAND := 3
 
 var player: CharacterBody3D
 var _hands: Array[Node3D] = []
 var _skeletons: Array[Skeleton3D] = []
 var _meshes: Array[MeshInstance3D] = []
 var _embers: Array[MeshInstance3D] = []
-var _anchor_of: Array[int] = [0, 1, 2]
-var _squeeze: Array[float] = [0.0, 0.0, 0.0]
-var _curl: Array[float] = [0.0, 0.0, 0.0]
-var _spread: Array[float] = [0.0, 0.0, 0.0]
-var _arrive: Array[float] = [0.0, 0.0, 0.0]
-var _flung: Array[float] = [0.0, 0.0, 0.0]
-var _held: Array[bool] = [false, false, false]
-var _fed: Array[float] = [0.0, 0.0, 0.0]
-var _splay_low: Array[float] = [9.0, 9.0, 9.0]
-var _splay_high: Array[float] = [-9.0, -9.0, -9.0]
+## (Three slots, and the face's second hand after them.)
+var _anchor_of: Array[int] = [0, 1, 2, 1]
+var _squeeze: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _curl: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _spread: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _arrive: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _flung: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _held: Array[bool] = [false, false, false, false]
+var _fed: Array[float] = [0.0, 0.0, 0.0, 0.0]
+var _splay_low: Array[float] = [9.0, 9.0, 9.0, 9.0]
+var _splay_high: Array[float] = [-9.0, -9.0, -9.0, -9.0]
 var _clock := 0.0
+var _faces: Array = [null, null, null]
+## The side of your view a face took, when it got hold.
+var _face_anchor: Array[int] = [-1, -1, -1]
 
 
 func _ready() -> void:
@@ -78,7 +86,7 @@ func _ready() -> void:
 	look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV)
 	var scene := load(HANDS_MODEL) as PackedScene
 
-	for slot in 3:
+	for slot in OTHER_HAND + 1:
 		var hand: Node3D = scene.instantiate()
 		hand.visible = false
 		hand.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
@@ -131,6 +139,42 @@ func reach_y(slot: int) -> float:
 	return _hands[slot].position.y
 
 
+## Whether the face in `slot` is in your view.
+func face_shown(slot: int) -> bool:
+	return _faces[slot] != null and _faces[slot].visible
+
+
+## Whether a face has its second hand on you.
+func other_hand_shown() -> bool:
+	return _hands[OTHER_HAND].visible
+
+
+## Where the mouth of the face in `slot` is on the screen, 0..1.
+func mouth_on_screen(slot: int) -> Vector2:
+	if _faces[slot] == null:
+		return Vector2(0.5, 0.5)
+
+	var size := get_viewport().get_visible_rect().size
+	return _faces[slot].mouth_on_screen(size.x / maxf(size.y, 1.0))
+
+
+## The face in `slot`: how far its jaw is open, how near it has come, its tongue, its throat.
+func face_jaw(slot: int) -> float:
+	return _faces[slot].jaw()
+
+
+func face_near(slot: int) -> float:
+	return _faces[slot].near()
+
+
+func face_tongue(slot: int) -> float:
+	return _faces[slot].tongue()
+
+
+func face_throat(slot: int) -> float:
+	return _faces[slot].throat()
+
+
 ## How far apart its fingers are, curling.
 func finger_spread(slot: int) -> float:
 	return _spread[slot]
@@ -163,6 +207,11 @@ func _process(delta: float) -> void:
 			_held[slot] = false
 			_flung[slot] = maxf(_flung[slot] - delta, 0.0)
 			_hands[slot].visible = _flung[slot] > 0.0
+			_face_anchor[slot] = -1
+
+			# Its face goes at once: the one in the world is there, thrown.
+			if _faces[slot] != null:
+				_faces[slot].visible = false
 
 			if _flung[slot] > 0.0:
 				_pose(slot, _anchor_of[slot], _fed[slot], 0.0, 0.0)
@@ -176,26 +225,88 @@ func _process(delta: float) -> void:
 		_flung[slot] = 0.0
 		_arrive[slot] = minf(_arrive[slot] + delta / ARRIVES, 1.0)
 		_hands[slot].visible = true
-		var anchor := _anchor_for(who, taken)
+		var anchor := _anchor_for(slot, taken)
 		taken.append(anchor)
 		_anchor_of[slot] = anchor
 		_fed[slot] = float(who.fed)
 		_pose(slot, anchor, float(who.fed), player.leech.gulp(), player.leech.coming())
 
+		if player.leech.holds_face(slot):
+			_face_for(slot).drink(delta, player.leech.gulp(), player.leech.coming(), _arrive[slot], clampf(float(who.fed) / FULL, 0.0, 1.0), player.leech.face_offset(slot), float(slot) * 0.09)
 
-## The side of your view it is on; low, if that side is taken.
-func _anchor_for(who: Node3D, taken: Array[int]) -> int:
+	_second_hand(taken, delta)
+
+
+## A face has two hands. The second goes where there is room.
+func _second_hand(taken: Array[int], delta: float) -> void:
+	var face := -1
+
+	for slot in 3:
+		if not player.is_dead and player.leech.holds_face(slot):
+			face = slot
+			break
+
+	var free := -1
+
+	for anchor in [0, 1]:
+		if not taken.has(anchor):
+			free = anchor
+			break
+
+	if face < 0 or free < 0:
+		if _held[OTHER_HAND] and not player.is_dead:
+			_flung[OTHER_HAND] = FLUNG_FOR
+
+		_held[OTHER_HAND] = false
+		_flung[OTHER_HAND] = maxf(_flung[OTHER_HAND] - delta, 0.0)
+		_hands[OTHER_HAND].visible = _flung[OTHER_HAND] > 0.0
+
+		if _flung[OTHER_HAND] > 0.0:
+			_pose(OTHER_HAND, _anchor_of[OTHER_HAND], _fed[OTHER_HAND], 0.0, 0.0)
+
+		return
+
+	if not _held[OTHER_HAND]:
+		_arrive[OTHER_HAND] = 0.0
+		_held[OTHER_HAND] = true
+
+	_flung[OTHER_HAND] = 0.0
+	_arrive[OTHER_HAND] = minf(_arrive[OTHER_HAND] + delta / ARRIVES, 1.0)
+	_hands[OTHER_HAND].visible = true
+	_anchor_of[OTHER_HAND] = free
+	_fed[OTHER_HAND] = _fed[face]
+	_pose(OTHER_HAND, free, _fed[face], player.leech.gulp(), player.leech.coming())
+
+
+func _face_for(slot: int) -> Node3D:
+	if _faces[slot] == null:
+		_faces[slot] = LeechFaceScript.new(VIEWMODEL_LAYER, ViewArmsScript.Z_CLIP, ViewArmsScript.VIEW_FOV)
+		add_child(_faces[slot])
+
+	_faces[slot].visible = true
+	return _faces[slot]
+
+
+## The side of your view it is on; low, if that side is taken. A face keeps the side it took
+## when it got hold: it isn't anywhere on you but your face.
+func _anchor_for(slot: int, taken: Array[int]) -> int:
+	if _face_anchor[slot] >= 0 and not taken.has(_face_anchor[slot]) and player.leech.holds_face(slot):
+		return _face_anchor[slot]
+
 	var camera := get_parent() as Node3D
-	var side: float = camera.to_local(who.global_position).x if camera != null else 0.0
+	var side: float = (camera.global_basis.inverse() * player.leech.slot_side(slot)).x if camera != null else 0.0
 	var wanted := 0 if side < 0.0 else 1
+	var anchor := 1 - wanted
 
 	if not taken.has(wanted):
-		return wanted
+		anchor = wanted
+	elif not taken.has(2):
+		anchor = 2
 
-	if not taken.has(2):
-		return 2
+	if player.leech.holds_face(slot):
+		_face_anchor[slot] = anchor
 
-	return 1 - wanted
+	return anchor
 
 
 func _pose(slot: int, anchor: int, fed: float, gulp: float, coming: float) -> void:

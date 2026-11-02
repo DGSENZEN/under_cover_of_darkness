@@ -1,7 +1,7 @@
 extends "res://scripts/Monsters/Monster.gd"
 ## A ravenous ánima: a soul no one lit a candle for, past begging. It comes up out
-## of a drain, rushes you, tells, and leaps to get on you and drink your willpower
-## and your life. Its forms are data (Bestiary): withered hands, hands and a face, a
+## of a drain and may lie there a while (`rests`) until something stirs it; then it rushes
+## you, tells, and leaps to get on you and drink your willpower and your life. Its forms are data (Bestiary): withered hands, hands and a face, a
 ## torso dragged by its arms. Lead passes through it. A hit in its tell from anything
 ## else breaks the leap and opens it up. The Metro's beggars (Animas.gd) are another
 ## thing altogether.
@@ -11,13 +11,20 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
 
-enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN }
+enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN, REST, WAKE }
 
 const DOING := {
 	State.RISE: &"rise", State.RUSH: &"rush", State.CIRCLE: &"circle", State.TELL: &"tell",
 	State.LEAP: &"leap", State.MISSED: &"missed", State.ON: &"on", State.THROWN: &"thrown",
+	State.REST: &"rest", State.WAKE: &"wake",
 }
 const RISE_TIME := 0.5
+## At rest: how near you can come (m), how long it can lie there at most (hunger gets it up
+## in the end), how long it takes to come to, and how far off that stirs the others.
+const NOTICE := 9.0
+const REST_LONGEST := 9.0
+const WAKE_TIME := 0.5
+const STIRS := 7.0
 const MISSED_TIME := 0.8
 ## Thrown off: how long it is stunned and exposed, how hard it is thrown.
 const THROWN_TIME := 1.5
@@ -46,6 +53,10 @@ const LINE_LOOKS := 0.5
 const FULL := 60.0
 
 @export var form: StringName = &"hands"
+## Lies where it came up until something stirs it.
+@export var rests := false
+## How near you can come before it stirs (m).
+var notice := NOTICE
 var state: int = State.RISE
 var body: Node3D
 var whip_reach := 1.6
@@ -129,6 +140,19 @@ func drain_life() -> float:
 ## Comes up out of where it was laid (a wave's coming).
 func rise() -> void:
 	_enter(State.RISE)
+
+
+## Something has stirred it: it comes to, and so do those lying near it.
+func rouse() -> void:
+	if state != State.REST:
+		return
+
+	_enter(State.WAKE)
+	Sfx.play(self, &"anima_voice", global_position, -9.0, randf_range(0.8, 1.0))
+
+	for other in get_tree().get_nodes_in_group(&"monsters"):
+		if other != self and other.get("kind") == &"anima" and other.state == State.REST and other.global_position.distance_to(global_position) <= STIRS:
+			other.rouse()
 
 
 ## On you, at once (a leap that lands).
@@ -223,6 +247,12 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 	match state:
 		State.RISE:
 			if _state_t >= RISE_TIME:
+				_enter(State.REST if rests else State.RUSH)
+		State.REST:
+			if _state_t >= REST_LONGEST or _chest_distance(you) <= notice:
+				rouse()
+		State.WAKE:
+			if _state_t >= WAKE_TIME:
 				_enter(State.RUSH)
 		State.RUSH:
 			var reach: float = float(_form["leap_reach"])
@@ -369,6 +399,8 @@ func _on_struck(result: StringName, source: StringName) -> void:
 
 	if body != null:
 		body.struck(global_position, Vector3.FORWARD, result)
+
+	rouse()
 
 	# A hit from anything but lead breaks its leap.
 	if state == State.TELL and source != &"lead":

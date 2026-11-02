@@ -33,6 +33,12 @@ func _ready() -> void:
 	if only == "" or only == "face":
 		await _face()
 
+	if only == "" or only == "life":
+		await _life()
+
+	if only == "" or only == "mouth":
+		await _mouth()
+
 	if only == "" or only == "burst":
 		await _burst()
 
@@ -170,6 +176,124 @@ func _face() -> void:
 	await _shot("face_yard")
 	pinned = null
 	e.queue_free()
+	await _frames(3)
+
+
+## The face and the hands alive, close, in the room's light: resting, woken, its attack, a miss.
+func _life() -> void:
+	var face: CharacterBody3D = AnimaScript.new()
+	face.form = &"face"
+	face.rests = true
+	face.position = Vector3(0, 1.3, -30)
+	add_child(face)
+	await _frames(2)
+	pinned = face
+	# Kept as it is shown, with the camera this close: it would wake, and it would leap.
+	face.notice = 0.0
+	face._form = face._form.duplicate()
+	face._form["leap_reach"] = 0.0
+	face.state = face.State.REST
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0.4, 1.05, -3.2)))
+	pin_at = Vector3(0, 1.3, -1.2)
+	await _hold_rest(face, 50)
+	await _shot("life_face_rest")
+	p.teleport(Transform3D(Basis(Vector3.UP, PI * 0.75), Vector3(1.3, 1.05, -2.7)))
+	await _hold_rest(face, 20)
+	await _shot("life_face_rest_side")
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0.0, 1.05, -3.4)))
+	face.state = face.State.RUSH
+	await _frames(26)
+	await _shot("life_face_rush")
+	await _frames(14)
+	await _shot("life_face_rush_2")
+	face.state = face.State.TELL
+	face._state_t = -9.0
+	await _frames(34)
+	await _shot("life_face_tell")
+	p.teleport(Transform3D(Basis(Vector3.UP, PI * 0.75), Vector3(1.3, 1.05, -2.7)))
+	await _frames(12)
+	await _shot("life_face_tell_side")
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0.0, 1.05, -3.4)))
+	face.state = face.State.LEAP
+	face._state_t = -9.0
+	face._leap_way = Vector3.ZERO
+	await _frames(9)
+	await _shot("life_face_leap")
+	face.state = face.State.MISSED
+	face._state_t = -9.0
+	await _frames(14)
+	await _shot("life_face_missed")
+	await _frames(14)
+	await _shot("life_face_looks_about")
+	pinned = null
+	face.queue_free()
+	await _frames(3)
+	var hand: CharacterBody3D = AnimaScript.new()
+	hand.form = &"hands"
+	hand.rests = true
+	hand.position = Vector3(0, 0.3, -30)
+	add_child(hand)
+	await _frames(2)
+	pinned = hand
+	hand.notice = 0.0
+	pin_at = Vector3(0, 0.25, -0.2)
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0.4, 1.05, -3.0)))
+	hand.state = hand.State.REST
+	hand._state_t = -99.0
+	await _hold_rest(hand, 45)
+	await _shot("life_hand_rest")
+	hand.state = hand.State.MISSED
+	hand._state_t = -9.0
+	await _frames(8)
+	await _shot("life_hand_slam")
+	pinned = null
+	hand.queue_free()
+	await _frames(3)
+
+
+func _hold_rest(e: CharacterBody3D, frames: int) -> void:
+	e.state = e.State.REST
+	e._state_t = -99.0
+	await _frames(frames)
+
+
+## A face on your face, through its gulps; and with its hands, and a second one.
+func _mouth() -> void:
+	p.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(0, 1.05, -3.0)))
+	await _frames(10)
+	var e: CharacterBody3D = AnimaScript.new()
+	e.form = &"face"
+	e.position = p.global_position + Vector3(0.6, 0.3, 0.6)
+	add_child(e)
+	await _frames(1)
+	e.put_on_you()
+	await _frames(5)
+	await _shot("mouth_arriving")
+	await _until_gulp()
+	await _frames(3)
+	await _shot("mouth_1_lunge")
+	await _frames(8)
+	await _shot("mouth_2_clamped")
+	await _frames(18)
+	await _shot("mouth_3_after")
+	await _until_wind_up()
+	await _shot("mouth_4_wind_up")
+	await _until_gulp()
+	await _frames(40)
+	await _shot("mouth_5_sucking")
+	var b: CharacterBody3D = AnimaScript.new()
+	b.form = &"face"
+	b.position = p.global_position + Vector3(-0.6, 0.3, 0.6)
+	add_child(b)
+	await _frames(1)
+	b.put_on_you()
+	await _frames(30)
+	await _shot("mouth_two")
+	p.leech.free_all()
+	await _frames(3)
+	await _shot("mouth_thrown")
+	e.queue_free()
+	b.queue_free()
 	await _frames(3)
 
 

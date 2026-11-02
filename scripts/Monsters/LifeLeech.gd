@@ -18,6 +18,10 @@ const HOLD_OUT := 0.85
 const APART := 1.1
 ## Your chest, from the middle of you.
 const CHEST := 0.15
+## A face is on your face: this far ahead of your eyes, wherever you look, and this far apart
+## from another. You hit it where you see it (LeechFace.gd).
+const FACE_OUT := 0.8
+const FACE_APART := 0.34
 
 ## The gulps: slower as your will goes, as your heart does, sharper the more are on
 ## you. How long each is felt, what it does to your view, how hard it hauls at you.
@@ -142,8 +146,29 @@ func _feel_arm(delta: float) -> void:
 		hand.rotation.x = -SAG_TURN * _sag
 
 
+## Whether the one in `slot` is a face, on your face.
+func holds_face(slot: int) -> bool:
+	var who := who_in(slot)
+	return who != null and who.get("form") == &"face"
+
+
+## How far to the side of your view the face in `slot` is, in metres, if there are others.
+func face_offset(slot: int) -> float:
+	var faces: Array[int] = []
+
+	for i in _slots.size():
+		if holds_face(i):
+			faces.append(i)
+
+	return (float(faces.find(slot)) - float(faces.size() - 1) * 0.5) * FACE_APART * 2.0 if faces.size() > 1 else 0.0
+
+
 ## Where the one in `slot` is held, in the world.
 func slot_position(slot: int) -> Vector3:
+	if holds_face(slot):
+		var eyes: Transform3D = player.camera.global_transform
+		return eyes.origin - eyes.basis.z * FACE_OUT + eyes.basis.x * face_offset(slot)
+
 	return player.global_position + Vector3.UP * CHEST + _sides[slot] * HOLD_OUT
 
 

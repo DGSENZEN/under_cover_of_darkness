@@ -101,6 +101,7 @@ var _drain_view: ColorRect
 var _drain_shown := 0.0
 var _drain_release := 0.0
 var _drain_threads := 0
+var _drain_into: Array[Vector2] = [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO]
 var _drain_magic := 1.0
 var _drain_life := 1.0
 var _drain_gulp_was := 0.0
@@ -1090,20 +1091,33 @@ func _show_drain(delta: float) -> void:
 	_drain_life = float(player.health) / maxf(float(player.max_health), 1.0)
 	look.set_shader_parameter(&"life", _drain_life)
 	var threads := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
+	var claws := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
 	_drain_threads = 0
 
 	if held > 0:
 		for who in leech.on_me():
 			# Into the hand that has hold of you, as you see it.
-			var on: Vector2 = player.leech_hands.on_screen(leech.slot_of(who)) + DRAIN_INTO_PALM
+			var slot: int = leech.slot_of(who)
+			var hands: Node3D = player.leech_hands
+			# Into its mouth, if it is a face; into the palm of what has hold of you.
+			var palm: Vector2 = hands.on_screen(slot) + DRAIN_INTO_PALM
+			var on: Vector2 = hands.mouth_on_screen(slot) if hands.face_shown(slot) else palm
 			threads[_drain_threads] = Vector3(on.x, on.y, 1.0)
+			claws[_drain_threads] = Vector3(palm.x, palm.y, 1.0)
+			_drain_into[_drain_threads] = on
 			_drain_threads += 1
 
 	look.set_shader_parameter(&"threads", threads)
+	look.set_shader_parameter(&"claws_from", claws)
 
 
 func drain_view_shown() -> bool:
 	return _drain_view.visible
+
+
+## Where on the screen the sap goes to, for that thread.
+func drain_target(thread: int) -> Vector2:
+	return _drain_into[thread]
 
 
 func drain_state() -> Dictionary:

@@ -18,6 +18,8 @@ uniform float life = 1.0;
 uniform float claw_age = 1.0;
 // Each hand that has you: where it is on the screen, 0..1, and how much to show.
 uniform vec3 threads[3];
+// Where each is clawing at you from: its hand, wherever its mouth is.
+uniform vec3 claws_from[3];
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform sampler2D stroke_sheet : repeat_enable, filter_linear_mipmap;
 
@@ -106,8 +108,8 @@ void fragment() {
 
 	if (claw_show * claw_fade > 0.001) {
 		for (int i = 0; i < 3; i++) {
-			if (threads[i].z > 0.01) {
-				vec2 hand_at = vec2((threads[i].x * 2.0 - 1.0) * aspect, threads[i].y * 2.0 - 1.0);
+			if (claws_from[i].z > 0.01) {
+				vec2 hand_at = vec2((claws_from[i].x * 2.0 - 1.0) * aspect, claws_from[i].y * 2.0 - 1.0);
 				float side = sign(hand_at.x + 0.0001);
 
 				for (int k = 0; k < 4; k++) {
