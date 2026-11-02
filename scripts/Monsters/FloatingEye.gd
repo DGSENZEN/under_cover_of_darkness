@@ -15,9 +15,10 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
 
 const WardScript := preload("res://scripts/Magic/Ward.gd")
-const Remains := preload("res://scripts/Monsters/Remains.gd")
+const EyeBody := preload("res://scripts/Monsters/EyeBody.gd")
 
 enum State { DRIFT, CIRCLE, TELL, SWOOP, BOUNCE, BATTED, DAZED }
+const DOING: Array[StringName] = [&"drift", &"circle", &"tell", &"swoop", &"bounce", &"batted", &"dazed"]
 
 ## Sees you this far, with a clear line (m).
 const NOTICE := 18.0
@@ -62,15 +63,13 @@ const FLINCH_WITHIN := 14.0
 const FLINCH_OUT := 2.0
 const FLINCH_TIME := 3.0
 const FLINCH_WAIT := 1.5
-## The limpia sent back on it (the egg): how long it stays shut, how narrow it
-## squeezes, how fast it sinks and how low.
+## The limpia sent back on it (the egg): how long it stays shut, how fast it sinks
+## and how low.
 const DAZED_TIME := 4.0
-const DAZED_SHUT := 0.28
 const DAZED_SINK := 0.7
 const DAZED_LOWEST := 0.9
 const LINE_EVERY := 6
 const HIT_RADIUS := 0.42
-const BODY_RADIUS := 0.36
 const FEELER := 1.4
 
 var state := State.DRIFT
@@ -94,7 +93,8 @@ var _swoop_way := Vector3.FORWARD
 var _bat_way := Vector3.FORWARD
 var _flinch_left := 0.0
 var _bitten := false
-var _body_mesh: Node3D
+## How it looks and moves (EyeBody).
+var body: Node3D
 
 
 func _init() -> void:
@@ -132,14 +132,10 @@ func sees(you: Node3D) -> bool:
 ## while, and whatever hits it counts as weak.
 func limpia(_by: Node3D) -> void:
 	_enter(State.DAZED)
-	_set_shut(true)
 	statuses.apply(&"exposed", DAZED_TIME)
 	Fx.blood(self, global_position, Vector3.DOWN, 0.4)
 
 
-func _set_shut(shut: bool) -> void:
-	if _body_mesh != null:
-		_body_mesh.scale = Vector3(1.0, DAZED_SHUT if shut else 1.0, 1.0)
 
 
 ## How far off the whip can meet it (Revolver.try_whip).
@@ -155,9 +151,21 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 		_enter(State.BATTED)
 		var result := super.take_hit(damage, attacker, hit_kind, point, direction)
 		_pay_back(attacker)
+		_show_struck(point, direction, &"weak")
 		return result if result == &"killed" else &"weak"
 
-	return super.take_hit(damage, attacker, hit_kind, point, direction)
+	var was_dead := dead
+	var outcome := super.take_hit(damage, attacker, hit_kind, point, direction)
+
+	if not was_dead:
+		_show_struck(point, direction, outcome)
+
+	return outcome
+
+
+func _show_struck(point: Vector3, direction: Vector3, result: StringName) -> void:
+	if body != null and not dead:
+		body.struck(point if point != Vector3.ZERO else global_position, direction, result)
 
 
 func _batted(you: Node3D) -> Vector3:
@@ -199,29 +207,22 @@ func _stagger() -> void:
 
 
 func _build_body() -> void:
-	_body_mesh = Node3D.new()
-	add_child(_body_mesh)
-	var ball := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = BODY_RADIUS
-	sphere.height = BODY_RADIUS * 2.0
-	var white := StandardMaterial3D.new()
-	white.albedo_color = Color(0.78, 0.72, 0.62)
-	sphere.material = white
-	ball.mesh = sphere
-	_body_mesh.add_child(ball)
-	var pupil := MeshInstance3D.new()
-	var disc := CylinderMesh.new()
-	disc.top_radius = 0.14
-	disc.bottom_radius = 0.14
-	disc.height = 0.02
-	var dark := StandardMaterial3D.new()
-	dark.albedo_color = Color(0.05, 0.03, 0.03)
-	disc.material = dark
-	pupil.mesh = disc
-	pupil.rotation.x = PI * 0.5
-	pupil.position.z = -BODY_RADIUS + 0.005
-	_body_mesh.add_child(pupil)
+	body = EyeBody.new()
+	body.name = "Body"
+	body.seed_value = seed_value
+	add_child(body)
+
+
+func _physics_process(delta: float) -> void:
+	super._physics_process(delta)
+
+	if dead or asleep or body == null:
+		return
+
+	var you: Node3D = target()
+
+	if you != null:
+		body.tick(delta, DOING[state], you, velocity, is_exposed(), statuses.has(&"smoked"), health / float(Bestiary.info(kind).get("health", 1.0)))
 
 
 func _brain(delta: float) -> Vector3:
@@ -241,9 +242,6 @@ func _brain(delta: float) -> Vector3:
 
 	var smoked: bool = statuses.has(&"smoked")
 	_gaze(you, delta, smoked)
-	if state != State.DAZED:
-		_turn_to(you)
-
 	match state:
 		State.DRIFT:
 			if _clear_line and global_position.distance_to(you.global_position) <= NOTICE:
@@ -276,7 +274,6 @@ func _brain(delta: float) -> Vector3:
 		State.DAZED:
 			if _state_t >= DAZED_TIME:
 				next_swoop_in = _rng.randf_range(SWOOP_WAIT.x, SWOOP_WAIT.y)
-				_set_shut(false)
 				_enter(State.CIRCLE)
 				return Vector3.ZERO
 
@@ -403,12 +400,10 @@ func _swoop(you: Node3D, delta: float) -> Vector3:
 
 ## It bursts, and what is left of it drops. The rest of the pack starts back.
 func _die(by: Node3D) -> void:
-	Fx.blood(self, global_position, Vector3.UP, 2.4)
-	Fx.flash(self, global_position, Color(1.0, 0.55, 0.35), 2.0, 5.0, 0.08)
+	Fx.flash(self, global_position, Color(1.0, 0.45, 0.3), 2.0, 5.0, 0.08)
 	Sfx.play(self, &"flesh_heavy", global_position, 2.0, 1.1)
 	Sfx.play(self, &"coal_pop", global_position, 0.0, 0.7)
-	Remains.drop(get_parent(), _body_mesh, global_position, _push * 0.7 + Vector3.UP * 2.0, BODY_RADIUS * 0.8)
-	_body_mesh = null
+	body.burst(get_parent(), global_position, _push * 0.7 + Vector3.UP * 2.0)
 
 	for other in get_tree().get_nodes_in_group(&"monsters"):
 		if other != self and other.has_method("flinch") and not other.dead and not other.asleep and other.global_position.distance_to(global_position) <= FLINCH_WITHIN:
@@ -443,6 +438,3 @@ func _touching(you: Node3D) -> bool:
 	return global_position.distance_to(nearest) <= BITE_REACH
 
 
-func _turn_to(you: Node3D) -> void:
-	if _body_mesh != null and global_position.distance_to(you.global_position) > 0.2:
-		_body_mesh.look_at(you.global_position + Vector3(0.0, 0.6, 0.0), Vector3.UP)

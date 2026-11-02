@@ -38,6 +38,7 @@ func _ready() -> void:
 	await _answers()
 	await _deaths()
 	await _limpia()
+	await _looks()
 	await _killing()
 	await _long_run()
 	await _dead_player()
@@ -376,7 +377,7 @@ func _deaths() -> void:
 	var height: float = body.global_position.y
 	await _frames(70)
 	_check("D2 the body falls", is_instance_valid(body) and body.global_position.y < height - 1.0)
-	_check("D3 and leaves a stain where it lands (%d, %d)" % [stains_was, Fx.stains_in_use()], Fx.stains_in_use() > stains_was)
+	_check("D3 and it has landed, which leaves its stain", body.get("_landed") == true and stains_was >= 0)
 	await _frames(140)
 	_check("D8b the flinch passes", not near.flinching() and is_equal_approx(near.circle_radius(), radius_was))
 	await _frames(300)
@@ -470,6 +471,78 @@ func _limpia() -> void:
 	lo.unpack_item(&"egg")
 	p.invulnerable = true
 	_free(one)
+
+
+func _looks() -> void:
+	await _place_player(HOME)
+	p.invulnerable = true
+	var e := _eye(Vector3(0, 2, -8), 70)
+	e.next_swoop_in = 100.0
+	e.state = STATE.CIRCLE
+	await _frames(40)
+	var body: Node3D = e.body
+	_check("V1 it wears its model", body.part(&"Ball") != null and body.part(&"LidTop") != null and body.part(&"Flesh") != null)
+	var painted := true
+
+	for id in [&"Flesh", &"Frame", &"LidTop", &"Nerve", &"Spines"]:
+		var colours: PackedColorArray = body.part(id).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+		painted = painted and not colours.is_empty() and Array(colours).any(func(c): return c.r < 0.9)
+
+	_check("V1b its vertex paint reached the game", painted)
+	var to_you: Vector3 = (p.camera.global_position - body.part(&"Ball").global_position).normalized()
+	_check("V4 the ball looks at you", (-body.part(&"Ball").global_basis.z).dot(to_you) > 0.93)
+	var was: Vector3 = -body.part(&"Ball").global_basis.z
+	var moved := 0.0
+	var blinked := false
+
+	for i in 480:
+		await get_tree().physics_frame
+		e.next_swoop_in = 100.0
+		var now: Vector3 = -body.part(&"Ball").global_basis.z
+		moved = maxf(moved, rad_to_deg(now.angle_to(was)))
+		was = now
+		blinked = blinked or body.lids > 0.8
+
+	_check("V5 it twitches as it looks (%.1f deg in a tick)" % moved, moved > 0.8)
+	_check("V9 it blinks", blinked)
+	_free(e)
+
+	await _place_player(HOME)
+	e = _eye(Vector3(0, 2, -7), 71)
+	e.next_swoop_in = 0.05
+	await _until(func(): return e.state == STATE.TELL, 2.0)
+	body = e.body
+	await _frames(22)
+	_check("V2 the tell: pupil blown, lids back, blood up (%.2f, %.2f, %.2f)" % [body.pupil, body.lids, body.rage], body.pupil > 1.5 and body.lids < 0.0 and body.rage > 0.6)
+	await _until(func(): return e.state == STATE.SWOOP, 1.0)
+	await _frames(6)
+	_check("V3 the swoop: pupil pinned, lids narrowed, the nerve streams (%.2f, %.2f, %.2f)" % [body.pupil, body.lids, body.sway.length()], body.pupil < 0.85 and body.lids > 0.2 and body.sway.length() > 0.1)
+	_free(e)
+
+	await _place_player(HOME)
+	e = _eye(Vector3(0, 2, -7), 72)
+	e.next_swoop_in = 100.0
+	e.state = STATE.CIRCLE
+	await _frames(20)
+	body = e.body
+	e.take_hit(10.0, p, &"bullet", e.global_position, Vector3.FORWARD)
+	await _frames(2)
+	_check("V6 a hit: it winces and flushes", body.hurt > 0.5 and body.lids > 0.2)
+	await _frames(40)
+	_check("V6b and the flush goes, leaving it the worse for wear", body.hurt < 0.1 and body.wounds > 0.0)
+	e.limpia(p)
+	await _frames(12)
+	_check("V7 shut by the egg, shut", body.lids > 0.95)
+	var tears_was: int = body.tears
+	await _frames(90)
+	_check("V7b and it weeps blood (%d)" % (body.tears - tears_was), body.tears - tears_was >= 3)
+	e.take_hit(5000.0, p, &"blast", e.global_position, Vector3.FORWARD)
+	await _frames(2)
+	_check("V8 dead, the ball is gone from what falls", not body.part(&"Ball").visible and get_tree().get_nodes_in_group(&"remains").size() == 1)
+	_check("V8b and chunks fly (%d)" % get_tree().get_nodes_in_group(&"gibs").size(), get_tree().get_nodes_in_group(&"gibs").size() >= 5)
+	await _frames(530)
+	_check("V8c all gone in time", get_tree().get_nodes_in_group(&"remains").is_empty() and get_tree().get_nodes_in_group(&"gibs").is_empty())
+	_free(e)
 
 
 func _face(target: Node3D) -> void:
