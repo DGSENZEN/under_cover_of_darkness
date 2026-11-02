@@ -24,11 +24,23 @@ const SPREAD := 1.6
 const GRAVITY := 18.0
 ## How quickly a face holds its height.
 const FLOAT_RATE := 4.0
+## A leap lands this close to your chest.
+const LATCH_REACH := 1.0
+## Waiting its turn at this far off (m), with no room on you.
+const CIRCLE_AT := 4.5
+const CIRCLE_SPEED := 2.5
+## Smoked: how much slower it goes, and how much less it drinks.
+const SMOKED_SPEED := 0.5
+const SMOKED_DRAIN := 0.5
+## How much it has to drink to be fully fed (shown on it).
+const FULL := 60.0
 
 @export var form: StringName = &"hands"
 var state: int = State.RISE
 var body: Node3D
 var whip_reach := 1.6
+## What it has drunk of your power. Half of it comes back when it dies.
+var fed := 0.0
 
 var _form := {}
 var _state_t := 0.0
@@ -84,7 +96,57 @@ func _physics_process(delta: float) -> void:
 	if dead or asleep or body == null:
 		return
 
-	body.tick(delta, DOING[state], target(), velocity, 0.0, is_exposed(), statuses.has(&"smoked"))
+	body.tick(delta, DOING[state], target(), velocity, clampf(fed / FULL, 0.0, 1.0), is_exposed(), statuses.has(&"smoked"))
+
+
+func _exit_tree() -> void:
+	_leave_you()
+
+
+func drain_power() -> float:
+	return float(_form["power_drain"]) * (SMOKED_DRAIN if statuses.has(&"smoked") else 1.0)
+
+
+func drain_life() -> float:
+	return float(_form["life_drain"]) * (SMOKED_DRAIN if statuses.has(&"smoked") else 1.0)
+
+
+## Knocked off you: thrown clear of `from`, stunned, and exposed.
+func throw_off(from: Vector3) -> void:
+	_leave_you()
+	var away := global_position - from
+	away.y = 0.0
+	_push += away.normalized() * THROW_SPEED if away.length() > 0.01 else Vector3.BACK * THROW_SPEED
+	statuses.apply(&"exposed", THROWN_TIME)
+	_enter(State.THROWN)
+
+
+## Torn off you, as a blink does: it comes straight after you.
+func let_go() -> void:
+	_leave_you()
+	_enter(State.RUSH)
+
+
+func _leave_you() -> void:
+	var you: Node3D = target()
+
+	if is_instance_valid(you) and you.get("leech") != null:
+		you.leech.release(self)
+
+
+func _leech() -> Node:
+	var you: Node3D = target()
+	return you.get("leech") if is_instance_valid(you) else null
+
+
+func _die(by: Node3D) -> void:
+	_leave_you()
+	var you: Node3D = target()
+
+	if is_instance_valid(you) and you.get("power") != null and fed > 0.0:
+		you.power.refund(fed * 0.5)
+
+	super._die(by)
 
 
 func _brain(delta: float) -> Vector3:
@@ -100,23 +162,49 @@ func _brain(delta: float) -> Vector3:
 				_enter(State.RUSH)
 		State.RUSH:
 			var reach: float = float(_form["leap_reach"])
+			var leech: Node = _leech()
 
-			if global_position.distance_to(you.global_position) <= reach:
-				_leap_way = (you.global_position - global_position).normalized()
+			if leech != null and not leech.has_room() and global_position.distance_to(you.global_position) <= CIRCLE_AT:
+				_enter(State.CIRCLE)
+			elif _chest_distance(you) <= reach and (leech == null or leech.has_room()):
 				_enter(State.TELL)
 			else:
-				return _hold_height(_toward(you) * float(_form["speed"]), delta)
+				return _hold_height(_toward(you) * float(_form["speed"]) * _slowed(), delta)
+		State.CIRCLE:
+			var leech: Node = _leech()
+
+			if leech == null or leech.has_room():
+				_enter(State.RUSH)
+			else:
+				var round_you := (global_position - you.global_position)
+				round_you.y = 0.0
+				var side := Vector3(-round_you.z, 0.0, round_you.x).normalized()
+				var in_out := round_you.normalized() * (CIRCLE_AT - round_you.length())
+				return _hold_height(side * CIRCLE_SPEED + in_out, delta)
 		State.TELL:
 			if _state_t >= float(_form["tell"]):
-				_leap_way = (you.global_position - global_position).normalized()
+				_leap_way = (_chest(you) - global_position).normalized()
 				_enter(State.LEAP)
 		State.LEAP:
 			var takes: float = float(_form["leap_reach"]) / float(_form["leap_speed"])
+
+			if _chest_distance(you) <= LATCH_REACH and _lands_on(you):
+				_enter(State.ON)
+				return Vector3.ZERO
 
 			if _state_t >= takes:
 				_enter(State.MISSED)
 			else:
 				return _leap_way * float(_form["leap_speed"])
+		State.ON:
+			var leech: Node = _leech()
+
+			if leech == null or leech.slot_of(self) < 0:
+				_enter(State.RUSH)
+			else:
+				global_position = leech.slot_position(leech.slot_of(self))
+				_push = Vector3.ZERO
+				return Vector3.ZERO
 		State.MISSED:
 			if _state_t >= MISSED_TIME:
 				_enter(State.RUSH)
@@ -125,6 +213,31 @@ func _brain(delta: float) -> Vector3:
 				_enter(State.RUSH)
 
 	return _hold_height(Vector3.ZERO, delta)
+
+
+func _chest(you: Node3D) -> Vector3:
+	return you.global_position + Vector3.UP * 0.5
+
+
+func _chest_distance(you: Node3D) -> float:
+	return global_position.distance_to(_chest(you))
+
+
+func _slowed() -> float:
+	return SMOKED_SPEED if statuses.has(&"smoked") else 1.0
+
+
+## Whether a leap this close gets its hands on you.
+func _lands_on(you: Node3D) -> bool:
+	var leech: Node = _leech()
+
+	if leech == null or statuses.has(&"smoked"):
+		return false
+
+	if you.get("combat") != null and you.combat.is_dodging():
+		return false
+
+	return leech.latch(self)
 
 
 func _enter(next: int) -> void:
@@ -177,4 +290,4 @@ func _on_struck(result: StringName, source: StringName) -> void:
 
 	# A hit from anything but lead breaks its leap.
 	if state == State.TELL and source != &"lead":
-		_enter(State.THROWN)
+		throw_off(target().global_position if target() != null else global_position + Vector3.FORWARD)

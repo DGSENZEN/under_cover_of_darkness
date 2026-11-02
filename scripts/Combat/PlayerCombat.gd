@@ -1540,6 +1540,10 @@ func _casting_tome() -> bool:
 
 
 ## Whether a dodge under way leaves the gun free to fire.
+func is_dodging() -> bool:
+	return phase == Phase.DODGE
+
+
 func dodge_lets_fire() -> bool:
 	return phase != Phase.DODGE or _t >= _dodge_length * GUN_DODGE_FIRE_AT
 

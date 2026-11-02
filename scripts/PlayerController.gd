@@ -23,6 +23,7 @@ const PowerPoolScript := preload("res://scripts/Magic/PowerPool.gd")
 const CasterScript := preload("res://scripts/Magic/Caster.gd")
 const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
 const EvilEyeCurseScript := preload("res://scripts/Monsters/EvilEyeCurse.gd")
+const LifeLeechScript := preload("res://scripts/Monsters/LifeLeech.gd")
 const LoadoutScript := preload("res://scripts/Hunt/Loadout.gd")
 const GemEnvironment := preload("res://scripts/Visual/GemEnvironment.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -414,6 +415,8 @@ var caster: Node = null
 var statuses: Node = null
 ## The evil eye's depth and what it costs you (EvilEyeCurse.gd).
 var curse: Node = null
+## What is on you and drinking (LifeLeech.gd).
+var leech: Node = null
 ## What you took on the hunt (Loadout.gd).
 var loadout: Node = null
 var _hazard_cooldown := 0.0
@@ -640,6 +643,10 @@ func _ready() -> void:
 	curse.name = "Curse"
 	curse.statuses = statuses
 	add_child(curse)
+	leech = LifeLeechScript.new()
+	leech.name = "Leech"
+	leech.player = self
+	add_child(leech)
 	add_child(statuses)
 	loadout = LoadoutScript.new()
 	loadout.name = "Loadout"
@@ -1242,7 +1249,8 @@ func _feel_statuses() -> void:
 		return
 
 	if power != null:
-		power.refill_scale = curse.magic_regen()
+		# Nothing comes back while something is on you.
+		power.refill_scale = curse.magic_regen() * (0.0 if leech != null and leech.count() > 0 else 1.0)
 
 	if combat != null:
 		combat.stamina_regen_scale = curse.stamina_regen()
@@ -1323,8 +1331,7 @@ func _apply_horizontal_movement(
 	# A raised guard, a charged blow or a drawn bow: slower, and no sprinting.
 	target_speed *= fighting_scale
 
-	if curse != null:
-		target_speed *= curse.speed()
+	target_speed *= fight_pace()
 
 	# Wading: the deeper, the slower.
 	target_speed *= wade_scale()
@@ -1692,6 +1699,24 @@ func take_damage(amount: float, from: Node) -> void:
 		juice.on_hit()
 
 	damaged.emit(amount)
+
+	if health <= 0.0:
+		_die()
+
+
+## Your pace under what is on you: the evil eye, and what is drinking from you.
+func fight_pace() -> float:
+	return (curse.speed() if curse != null else 1.0) * (leech.speed() if leech != null else 1.0)
+
+
+## Your life drunk away, a little at a time: it hurts no more than that, with no
+## flinch and no spray, and your shield doesn't refill.
+func drain_life(amount: float) -> void:
+	if is_dead or invulnerable or amount <= 0.0:
+		return
+
+	health = maxf(health - amount, 0.0)
+	_hurt_at = _game_time
 
 	if health <= 0.0:
 		_die()
