@@ -25,7 +25,7 @@ signal selected_changed
 const MAX_ROUND_TYPES := 2
 const MAX_ITEM_KINDS := 2
 ## What a pouch holds, carried.
-const CARRY := {&"rounds": 24, &"copal_rounds": 12, &"shells": 6}
+const CARRY := {&"rounds": 24, &"copal_rounds": 12, &"shells": 6, &"fire_shells": 4}
 ## This many watching you and the HUD offers what would answer them, uncursed.
 const OFFER_WATCHED_BY := 2
 ## The hand as you change what you have chosen: a small flick.
@@ -63,7 +63,7 @@ var items: Array[StringName] = []
 var selected := 0
 var item_counts := {}
 var locked := false
-var owned := {&"rounds": 96, &"copal_rounds": 24, &"shells": 18, &"egg": 6, &"copal_line": 6}
+var owned := {&"rounds": 96, &"copal_rounds": 24, &"shells": 18, &"fire_shells": 12, &"egg": 6, &"copal_line": 6}
 
 var player: CharacterBody3D
 var _using: StringName = &""
@@ -139,10 +139,7 @@ func restock() -> void:
 	for id in rounds:
 		stocks.append(Rounds.info(id)["stock"])
 
-	for stock in CARRY:
-		if not stocks.has(stock) and int(inv.ammo.get(stock, 0)) > 0:
-			owned[stock] = int(owned.get(stock, 0)) + int(inv.ammo[stock])
-			inv.ammo[stock] = 0
+	_back_to_owned(stocks)
 
 	for id in item_counts.keys():
 		if not items.has(id):
@@ -151,6 +148,8 @@ func restock() -> void:
 
 	_top_up(stocks)
 	player.revolver.take_up(rounds)
+	# (What it had in the barrel may be a load no longer packed.)
+	_back_to_owned(stocks)
 	_top_up(stocks)
 
 	for id in items:
@@ -161,6 +160,15 @@ func restock() -> void:
 
 	inv.changed.emit()
 	changed.emit()
+
+
+func _back_to_owned(stocks: Array[StringName]) -> void:
+	var inv: Node = player.inventory
+
+	for stock in CARRY:
+		if not stocks.has(stock) and int(inv.ammo.get(stock, 0)) > 0:
+			owned[stock] = int(owned.get(stock, 0)) + int(inv.ammo[stock])
+			inv.ammo[stock] = 0
 
 
 func _top_up(stocks: Array[StringName]) -> void:

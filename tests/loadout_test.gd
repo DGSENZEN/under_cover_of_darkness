@@ -25,6 +25,21 @@ func _ready() -> void:
 	var inv: Node = p.inventory
 	var g: Node = p.revolver
 
+	# Fire takes the place copal does; it goes in the shot barrel, never the cylinder.
+	lo.pack_round(&"copal")
+	_check("F7 fire takes copal's place: packing both is refused", not lo.pack_round(&"fire"))
+	lo.unpack_round(&"copal")
+	_check("F7b fire packs in its place", lo.pack_round(&"fire"))
+	var plain_had: int = int(inv.ammo.get(&"shells", 0))
+	lo.restock()
+	_check("F7c it carries 4 at most (%d)" % int(inv.ammo.get(&"fire_shells", 0)), int(inv.ammo.get(&"fire_shells", 0)) <= 4 and g.shot_round == &"fire")
+	_check("F7d T never puts fire in the cylinder", not g.packed_rounds.has(&"fire") and not g.switch_round() and g.cylinder_round == &"lead")
+	inv.ammo[&"fire_shells"] = 0
+	g.loaded[&"shot"] = 0
+	lo.restock()
+	lo.unpack_round(&"fire")
+	lo.restock()
+	_check("F7e with fire left off, the barrel holds a plain shell, and the pouch goes back (%s)" % g.shot_round, g.shot_round == &"shell" and int(inv.ammo.get(&"fire_shells", 0)) == 0 and plain_had >= 0)
 	_check("L13 the default is lead, unlocked, and no pouch changes unless restocked",
 		lo.rounds == [&"lead"] and not lo.locked and inv.ammo[&"rounds"] == 24 and g.packed_rounds == [&"lead"])
 

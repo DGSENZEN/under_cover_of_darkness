@@ -143,6 +143,11 @@ var barrel: StringName = &"cylinder"
 var cylinder_round: StringName = &"lead"
 ## The round types you have with you (Loadout.gd); T goes through them.
 var packed_rounds: Array[StringName] = [&"lead"]
+## What the shot barrel holds, or would be loaded with: a plain shell, or fire.
+var shot_round: StringName = &"shell"
+## Fire is packed: the barrel takes it first, while there is any.
+var fire_packed := false
+var _firing_fire := false
 ## Up at the eye, both hands on the gun (right mouse held, fully raised).
 var aimed := false
 
@@ -212,13 +217,15 @@ func _ready() -> void:
 
 ## Its load and which barrel is up (the player's save_state).
 func save_state() -> Dictionary:
-	return {"loaded": loaded.duplicate(), "barrel": barrel, "cylinder_round": cylinder_round}
+	return {"loaded": loaded.duplicate(), "barrel": barrel, "cylinder_round": cylinder_round, "shot_round": shot_round, "fire_packed": fire_packed}
 
 
 func load_state(state: Dictionary) -> void:
 	loaded = (state.get("loaded", loaded) as Dictionary).duplicate()
 	barrel = StringName(state.get("barrel", barrel))
 	cylinder_round = StringName(state.get("cylinder_round", &"lead"))
+	shot_round = StringName(state.get("shot_round", &"shell"))
+	fire_packed = bool(state.get("fire_packed", false))
 	loading = Load.NONE
 
 
@@ -564,9 +571,21 @@ func switch_round() -> bool:
 ## in its pouch and the first packed takes its place, and the barrels are
 ## loaded, for nothing, from the pouches. At a table, with time.
 func take_up(packed: Array[StringName]) -> void:
-	packed_rounds = packed.duplicate()
+	packed_rounds.clear()
+	fire_packed = false
+
+	for id in packed:
+		if Rounds.info(id).get("shell", false):
+			fire_packed = true
+		else:
+			packed_rounds.append(id)
+
 	_stop_loading()
 	var inv: Node = player.inventory
+	# (What's in the shot barrel goes back: it may not be what's wanted now.)
+	inv.add_ammo(_stock_of_shell(shot_round), int(loaded[&"shot"]))
+	loaded[&"shot"] = 0
+	shot_round = next_shell()
 
 	if not packed_rounds.has(cylinder_round):
 		inv.add_ammo(stock_id(), int(loaded[&"cylinder"]))
@@ -575,7 +594,21 @@ func take_up(packed: Array[StringName]) -> void:
 
 	var gun: Resource = WeaponScript.find(&"revolver")
 	loaded[&"cylinder"] = int(loaded[&"cylinder"]) + inv.take_ammo(stock_id(), int(gun.rounds) - int(loaded[&"cylinder"]))
-	loaded[&"shot"] = int(loaded[&"shot"]) + inv.take_ammo(&"shells", int(gun.shells) - int(loaded[&"shot"]))
+	loaded[&"shot"] = int(loaded[&"shot"]) + inv.take_ammo(_stock_of_shell(shot_round), int(gun.shells) - int(loaded[&"shot"]))
+
+
+## What the shot barrel takes next: fire while there is any and it's packed, else a plain shell.
+func next_shell() -> StringName:
+	return &"fire" if fire_packed and int(player.inventory.ammo.get(&"fire_shells", 0)) > 0 else &"shell"
+
+
+func _stock_of_shell(id: StringName) -> StringName:
+	return Rounds.info(id).get("stock", &"shells")
+
+
+## The pouch the shot barrel is loaded from.
+func shell_stock_id() -> StringName:
+	return _stock_of_shell(next_shell())
 
 
 ## `spent`: how much brass falls as the gate opens, if not all that is missing.
@@ -597,7 +630,7 @@ func _start_loading(gun: Resource, spent := -1) -> void:
 		if hand != null and hand.has_method("gate_world_position"):
 			Casings.drop(player, hand.gate_world_position(), player.global_basis.x, spent)
 	else:
-		if int(loaded[&"shot"]) >= int(gun.shells) or int(player.inventory.ammo.get(&"shells", 0)) <= 0:
+		if int(loaded[&"shot"]) >= int(gun.shells) or int(player.inventory.ammo.get(shell_stock_id(), 0)) <= 0:
 			return
 
 		loading = Load.SHELL
@@ -640,7 +673,10 @@ func _update_loading(delta: float, gun: Resource) -> void:
 			if _load_t < gun.shell_load:
 				return
 
-			if player.inventory.take_ammo(&"shells", 1) == 1:
+			var into_barrel := next_shell()
+
+			if player.inventory.take_ammo(_stock_of_shell(into_barrel), 1) == 1:
+				shot_round = into_barrel
 				loaded[&"shot"] = int(loaded[&"shot"]) + 1
 				_sound(&"round_in")
 
@@ -694,6 +730,8 @@ func _pull(gun: Resource) -> void:
 ## The shell: its pellets traced first, then dealt. Most of them into one man
 ## close by are one blast, not pellets.
 func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
+	_firing_fire = shot_round == &"fire"
+	var pellet: float = float(Rounds.info(&"fire")["pellet_damage"]) if _firing_fire else float(gun.pellet_damage)
 	var records: Array = []
 	var dirs := pellet_dirs(at.basis)
 	var into := {}
@@ -703,7 +741,7 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 		record["direction"] = direction
 		var reach: float = at.origin.distance_to(record["point"])
 		var falloff: float = 1.0 - clampf((reach - gun.falloff_start) / maxf(gun.falloff_end - gun.falloff_start, 0.01), 0.0, 1.0)
-		record["damage"] = gun.pellet_damage * falloff
+		record["damage"] = pellet * falloff
 		records.append(record)
 
 		if record["target"] != null:
@@ -725,7 +763,8 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 			# Point-blank, or empowered: it bursts him if it kills him.
 			_hint_gib(target, true)
 			_hint_round(target)
-			_confirm(target.take_hit(total, player, &"blast", middle["point"], -at.basis.z), false)
+			# (Fire is fire, however hard it comes.)
+			_confirm(target.take_hit(total, player, &"fire" if _firing_fire else &"blast", middle["point"], -at.basis.z), false)
 			_hint_gib(target, false)
 			continue
 
@@ -736,7 +775,7 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 
 		for record in group:
 			if is_instance_valid(target) and float(record["damage"]) > 0.0:
-				var result := _deal(target, record, record["direction"], record["damage"], &"shot", gun)
+				var result := _deal(target, record, record["direction"], record["damage"], &"fire" if _firing_fire else &"shot", gun)
 				felt = true
 				any_weak = any_weak or result == &"weak"
 				all_resisted = all_resisted and result == &"resisted"
@@ -762,7 +801,16 @@ func _shell(at: Transform3D, gun: Resource, empowered := false) -> void:
 	SoundBus.emit_sound(muzzle, gun.shell_db, player, &"gunshot")
 	_sound(&"shellshot")
 	_tail(&"shellshot_tail")
-	Fx.flash(player, muzzle, Color(1.0, 0.68, 0.38), 4.0, 7.0, 0.07)
+	Fx.flash(player, muzzle, Color(1.0, 0.42, 0.14) if _firing_fire else Color(1.0, 0.68, 0.38), 4.0, 7.0, 0.07)
+
+	# Fire you can see going: a line of it down each pellet that struck anything.
+	if _firing_fire:
+		for record in records:
+			GunFx.tracer(player, muzzle, record["point"], at.origin, &"fire", Rounds.info(&"fire"))
+
+		shot_round = next_shell()
+
+	_firing_fire = false
 	fired.emit(&"shot", records)
 
 
@@ -918,7 +966,7 @@ func _near_misses(from: Vector3, record: Dictionary) -> void:
 func _deal(target: Node3D, record: Dictionary, direction: Vector3, damage: float, kind: StringName, gun: Resource) -> StringName:
 	var point: Vector3 = record["point"]
 	var eye: float = target.get("eye_height") if target.get("eye_height") != null else 1.65
-	var headshot := kind != &"shot" and point.y - target.global_position.y >= eye - 0.25
+	var headshot := kind != &"shot" and kind != &"fire" and point.y - target.global_position.y >= eye - 0.25
 	var dealt: float = damage * (gun.headshot_multiplier if headshot else 1.0)
 	record["damage"] = dealt
 	record["headshot"] = headshot
@@ -926,7 +974,7 @@ func _deal(target: Node3D, record: Dictionary, direction: Vector3, damage: float
 	var result: StringName = target.take_hit(dealt, player, kind, point, direction)
 
 	# A pellet's mark is the shell's, once (_shell).
-	if kind != &"shot":
+	if kind != &"shot" and kind != &"fire":
 		_confirm(result, headshot)
 		_show_hit(target, result, point, direction)
 
@@ -941,7 +989,7 @@ func _show_hit(target: Node3D, result: StringName, point: Vector3, direction: Ve
 	var lead_read: StringName = Bestiary.info(target.get("kind")).get("lead_read", &"glance")
 	var read := lead_read if result == &"resisted" else &"burst"
 	var size := 1.0 if result == &"weak" or result == &"killed" else 0.6
-	GunFx.impact(player, read, Rounds.info(cylinder_round), point, player.camera.global_position, _shots, size, direction)
+	GunFx.impact(player, read, Rounds.info(&"fire" if _firing_fire else cylinder_round), point, player.camera.global_position, _shots, size, direction)
 
 
 ## A hit felt: the crosshair's mark, a tick, a hold (a kill's the longer).

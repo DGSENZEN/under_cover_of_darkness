@@ -32,6 +32,8 @@ var _surge_in := 5.0
 var _attack_in := 0.0
 var _fall_speed := 0.0
 var _rng := RandomNumberGenerator.new()
+var _dying_left := 0.0
+var _burner: Node3D = null
 var _shape: CollisionShape3D
 var body: Node3D
 
@@ -76,29 +78,59 @@ func is_down() -> bool:
 func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 
-	if dead or asleep or body == null:
+	if asleep or body == null:
 		return
 
 	var you: Node3D = target()
 
+	if dead:
+		if _dying_left > 0.0:
+			_dying_left -= delta
+			body.tick(delta, DOING[state], Vector3.ZERO, _face_of(you), 1.0, 0.0, 0.0)
+
+			if _dying_left <= 0.0:
+				_put_out()
+
+		return
+
 	if is_on_floor():
 		body.lie_at(global_position.y)
 
-	body.tick(delta, DOING[state], velocity, _face_of(you), 0.0, 0.0, 0.0)
+	body.tick(delta, DOING[state], velocity, _face_of(you), 0.6 if statuses.has(&"burning") else 0.0, 0.0, 0.0)
 
 
 func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vector3, direction: Vector3) -> StringName:
 	if dead:
 		return &"none"
 
+	var source := Bestiary.source_of(hit_kind, round_hint)
+
 	if is_down():
 		last_hit_at = point
 		last_hit_way = direction
-		struck.emit(&"resisted", Bestiary.source_of(hit_kind, round_hint))
+
+		# Fire is the one thing that reaches it, lying there.
+		if source == &"fire":
+			_finish(attacker)
+			struck.emit(&"killed", source)
+			return &"killed"
+
+		struck.emit(&"resisted", source)
 		return &"resisted"
 
 	var was_holding := state == State.HOLD
+	var was_gathering := state == State.GRASP_WIND
+	_burner = attacker if source == &"fire" else _burner
 	var result: StringName = super.take_hit(damage, attacker, hit_kind, point, direction)
+
+	if dead or is_down():
+		return result
+
+	if source == &"fire":
+		statuses.apply(&"burning", float(_row["burn_time"]))
+
+		if was_gathering:
+			_enter(State.STAGGER)
 
 	# A whip or a boot or a blast: you get free of it. The touch stays.
 	if was_holding and state == State.HOLD and FREES.has(hit_kind) and is_instance_valid(target()):
@@ -120,10 +152,47 @@ func _hit_pushes(hit_kind: StringName) -> float:
 	return float(_row["thrown_takes"]) if hit_kind == &"burst" or hit_kind == &"blast" else float(_row["push_takes"])
 
 
-func _goes_down(_by: Node3D, _source: StringName) -> bool:
+func _goes_down(_by: Node3D, source: StringName) -> bool:
+	# On fire, it has no getting up.
+	if source == &"fire" or statuses.has(&"burning"):
+		return false
+
 	health = 0.0
 	_enter(State.FALL)
 	return true
+
+
+func _is_opening_to(source: StringName) -> bool:
+	return state == State.GRASP_WIND and source == &"fire"
+
+
+## Dead for good, in fire.
+func _finish(by: Node3D) -> void:
+	health = 0.0
+	_pay_back(by)
+	_die(by)
+
+
+func _die(by: Node3D) -> void:
+	_dying_left = float(_row["dies_in"])
+	_enter(State.DYING)
+	var you: Node3D = target()
+
+	if is_instance_valid(you) and you.get("touch") != null:
+		you.touch.clear_if(self)
+
+	super._die(by)
+
+
+func _lay_down() -> void:
+	dead = true
+
+	# Burning out, it stays to be seen; laid down from a save, or done burning, it hides.
+	if _dying_left > 0.0:
+		velocity = Vector3.ZERO
+		get_child(0).set_deferred(&"disabled", true)
+	else:
+		_put_out()
 
 
 func _enter(next: State) -> void:
@@ -142,6 +211,15 @@ func _brain(delta: float) -> Vector3:
 	_attack_in = maxf(_attack_in - delta, 0.0)
 	_fall_speed = 0.0 if is_on_floor() else _fall_speed + GRAVITY * delta
 	var drops := Vector3.DOWN * _fall_speed
+
+	# It burns as it comes.
+	if statuses.has(&"burning") and not is_down():
+		health -= float(_row["burn_rate"]) * delta
+
+		if health <= 0.0:
+			_finish(_burner)
+			return drops
+
 	var you: Node3D = target()
 
 	if you == null:

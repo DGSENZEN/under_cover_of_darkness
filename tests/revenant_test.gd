@@ -44,6 +44,9 @@ func _ready() -> void:
 	if only == "" or only == "touch":
 		await _its_touch()
 
+	if only == "" or only == "fire":
+		await _fire()
+
 	print("revenant_test: %s" % ("FAILED %d" % failed if failed > 0 else "passed"))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -244,6 +247,132 @@ func _its_brain() -> void:
 	await _frames(70)
 	_check("M5 a surge stops at a wall (%.2f)" % runner.global_position.z, runner.global_position.z < -10.4)
 	await _clean()
+
+
+## Only fire keeps it dead.
+func _fire() -> void:
+	await _clean()
+	var one := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	one._surge_in = 99.0
+	one._attack_in = 99.0
+
+	for i in 9:
+		one.take_hit(5.0, p, &"fire", one.global_position, Vector3.BACK)
+
+	_check("F1 a fire shell's worth, close: burning, not dead (%.0f)" % one.health, one.statuses.has(&"burning") and is_equal_approx(one.health, 135.0))
+	var from: Vector3 = one.global_position
+	await _frames(int(5.2 * 60.0))
+	_check("F2 burns 8 a second for 5 s, and it keeps coming (%.0f)" % one.health, absf(one.health - 95.0) < 1.5 and one.global_position.distance_to(from) > 4.0 and not one.statuses.has(&"burning"))
+	await _clean()
+	var low := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	low._surge_in = 99.0
+	low._attack_in = 99.0
+	low.health = 10.0
+	low.take_hit(1.0, p, &"fire", low.global_position, Vector3.BACK)
+	var never_fell := true
+
+	for i in 120:
+		never_fell = never_fell and not low.is_down()
+		await get_tree().physics_frame
+
+	_check("F3 run out while burning: finished, no fall", low.dead and never_fell)
+	await _clean()
+	var down := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	down._surge_in = 99.0
+	down._attack_in = 99.0
+
+	while not down.is_down():
+		down.take_hit(55.0, p, &"bullet", down.global_position, Vector3.BACK)
+
+	await _frames(50)
+	p.power.power = 0.0
+	var paid_from: float = p.power.power
+	down.take_hit(5.0, p, &"fire", down.global_position, Vector3.BACK)
+	_check("F4 any pellet on one that's down finishes it, and pays power (%.1f)" % p.power.power, down.dead and p.power.power > paid_from)
+	await _clean()
+	var rising := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	rising._surge_in = 99.0
+	rising._attack_in = 99.0
+
+	while not rising.is_down():
+		rising.take_hit(55.0, p, &"bullet", rising.global_position, Vector3.BACK)
+
+	await _until(func(): return rising.state == STATE.RISE, 6.0)
+	rising.take_hit(5.0, p, &"fire", rising.global_position, Vector3.BACK)
+	_check("F5 caught as it rises, the same", rising.dead)
+	await _clean()
+	# The gun itself.
+	p.inventory.ammo[&"fire_shells"] = 4
+	p.loadout.pack_round(&"fire")
+	p.loadout.restock()
+	_check("F6b with fire packed the barrel holds it (%s)" % p.revolver.shot_round, p.revolver.shot_round == &"fire" and int(p.revolver.loaded[&"shot"]) == 1)
+	var shot := _revenant(Vector3(0, 0, -5.0))
+	await _frames(2)
+	shot._surge_in = 99.0
+	shot._attack_in = 99.0
+	shot._enter(STATE.STAGGER)
+	shot._row = shot._row.duplicate()
+	shot._row["stagger_time"] = 99.0
+	var aim := shot.global_position + Vector3.UP * 1.2
+	var way: Vector3 = (aim - p.camera.global_position).normalized()
+	p.rotation.y = atan2(-way.x, -way.z)
+	p.neck.rotation = Vector3(asin(way.y), 0.0, 0.0)
+	await _frames(40)
+	p.revolver.barrel = &"shot"
+	var before: float = shot.health
+	p.caster.empowered_until = p.caster._game_time + 5.0
+	await _press("throw")
+	await _frames(3)
+	_check("F6 an empowered fire shell is still fire, and burns (%.0f)" % (before - shot.health), shot.statuses.has(&"burning") and before - shot.health <= 46.0 and before - shot.health > 0.0)
+	await _frames(4)
+	await _clean()
+	var opening := _revenant(Vector3(0, 0, -2.6))
+	await _frames(2)
+	opening._surge_in = 99.0
+	opening._attack_in = 99.0
+	opening._enter(STATE.GRASP_WIND)
+	await _frames(20)
+	opening.take_hit(55.0, p, &"bullet", opening.global_position, Vector3.BACK)
+	_check("F9 lead in a wind-up doesn't break it", opening.state == STATE.GRASP_WIND)
+	opening.take_hit(5.0, p, &"fire", opening.global_position, Vector3.BACK)
+	_check("F8 a hit from fire in a grasp's wind-up breaks it", opening.state == STATE.STAGGER and not p.touch.on_you())
+	await _clean()
+	var layer := _revenant(Vector3(0, 0, -40))
+	var other := _revenant(Vector3(10, 0, -40))
+	await _frames(2)
+
+	for each in [layer, other]:
+		each._surge_in = 99.0
+		each._attack_in = 99.0
+
+	p.touch.lay(layer, 0.0, 0.0)
+	other.health = 1.0
+	other.take_hit(5.0, p, &"fire", other.global_position, Vector3.BACK)
+	await _frames(2)
+	_check("F11 another's finishing doesn't clear it", other.dead and p.touch.on_you() and p.touch.laid_by() == layer)
+	layer.health = 1.0
+	layer.take_hit(5.0, p, &"fire", layer.global_position, Vector3.BACK)
+	await _frames(2)
+	_check("F10 the touch clears when the one that laid it is finished", layer.dead and not p.touch.on_you())
+	await _clean()
+	var eye: CharacterBody3D = load("res://scripts/Monsters/FloatingEye.gd").new()
+	eye.position = Vector3(0, 2, -30)
+	add_child(eye)
+	await _frames(2)
+	var eye_had: float = eye.health
+	eye.take_hit(5.0, p, &"fire", eye.global_position, Vector3.BACK)
+	_check("F12 fire on an eye is what the Bestiary says, no burn (%.0f)" % (eye_had - eye.health), is_equal_approx(eye_had - eye.health, 5.0 * Bestiary.scale_for(&"floating_eye", &"fire")) and not eye.statuses.has(&"burning"))
+	await _clean()
+
+
+func _press(action: String) -> void:
+	Input.action_press(action)
+	await _frames(2)
+	Input.action_release(action)
 
 
 ## Two touches: the first is a grasp, and the second is the end.

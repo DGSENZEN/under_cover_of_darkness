@@ -52,7 +52,7 @@ func snapshot() -> Dictionary:
 		items[id] = int(player.loadout.item_counts.get(id, 0))
 
 	return {"barrel": gun.barrel, "round": gun.cylinder_round, "loaded": loaded_now, "chambers": chambers,
-		"shell": int(gun.loaded[&"shot"]), "reserve": int(player.inventory.ammo.get(&"shells" if gun.barrel == &"shot" else gun.stock_id(), 0)),
+		"shell": int(gun.loaded[&"shot"]), "reserve": int(player.inventory.ammo.get(gun.shell_stock_id() if gun.barrel == &"shot" else gun.stock_id(), 0)),
 		"capacity": 1 if gun.barrel == &"shot" else int(gun.weapon().rounds), "reloading": gun.is_reloading(), "items": items,
 		"evil_eye": player.statuses.has(&"evil_eye"), "using": player.loadout.using(), "selected": player.loadout.selected_item(), "switched": _switched}
 
