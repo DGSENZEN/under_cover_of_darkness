@@ -13,6 +13,8 @@ instance uniform float burn = 0.0;
 instance uniform float seared = 0.0;
 // How angry it is, 0..1: everything of the seep comes up with it.
 instance uniform float wrath = 0.0;
+// What it has just done, for what drifts on it to come after (m, in the model's space).
+instance uniform vec3 drift_way = vec3(0.0);
 // Dying, by fire: the char running over it, a hot edge ahead of it (`charred`), and then the ash of it going pale and falling away (`crumbled`).
 instance uniform float charred = 0.0;
 instance uniform float crumbled = 0.0;
@@ -35,7 +37,11 @@ void vertex() {
 	if (UV.x > 0.001) {
 		float phase = UV.y * 6.283;
 		float t = UV.x * UV.x;
-		VERTEX += vec3(sin(TIME * 0.7 + phase + UV.x * 2.6), sin(TIME * 0.45 + phase * 1.7 + UV.x * 3.3) * 0.5, cos(TIME * 0.55 + phase * 2.3 + UV.x * 2.0)) * t * 0.11;
+		// Each is its own length of slack: it comes after what the body did, the far end last, and a wave runs along it. The more it's being dragged, the more it waves.
+		float drag = length(drift_way);
+		vec3 wave = vec3(sin(TIME * 0.9 + phase - UV.x * 4.0), sin(TIME * 0.6 + phase * 1.7 - UV.x * 3.3) * 0.5, cos(TIME * 0.75 + phase * 2.3 - UV.x * 3.0));
+		VERTEX += wave * t * (0.14 + drag * 0.26);
+		VERTEX += drift_way * (0.65 + 0.5 * sin(phase * 3.0)) * mix(UV.x, t, 0.5) * 1.5;
 	}
 }
 

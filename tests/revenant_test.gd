@@ -50,6 +50,9 @@ func _ready() -> void:
 	if only == "" or only == "looks":
 		await _how_it_looks()
 
+	if only == "" or only == "mouth":
+		await _its_mouth()
+
 	print("revenant_test: %s" % ("FAILED %d" % failed if failed > 0 else "passed"))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -94,8 +97,8 @@ func _it_moves() -> void:
 			body.position += v / 60.0
 			body.tick(1.0 / 60.0, doing, v, you, 0.0, 0.0, 0.0)
 
-			# (Its first frames settle.)
-			if doing == &"walk" and i < 30 and steps == 0:
+			# (Its first frames settle; and a stutter is meant to jump.)
+			if (doing == &"walk" and i < 30 and steps == 0) or body.hitching():
 				wrist_was = [body.wrist(0), body.wrist(1)]
 				elbow_was = [body.elbow(0), body.elbow(1)]
 				head_was = body.head_at()
@@ -145,7 +148,8 @@ func _it_moves() -> void:
 						# (At a gallop a foot can trail for a tick before it goes.)
 						worst_gap = maxf(worst_gap, body.ankle_gap(side) * (0.5 if doing == &"surge" else 1.0))
 
-			var head_speed: float = body.head_at().distance_to(head_was) * 60.0
+			# (A bite is a strike: its head's what strikes.)
+			var head_speed: float = body.head_at().distance_to(head_was) * 60.0 * (0.5 if doing == &"bite" else 1.0)
 
 			if head_speed > worst_head:
 				worst_head = head_speed
@@ -481,6 +485,113 @@ func _how_it_looks() -> void:
 	p.touch.clear()
 	await _frames(45)
 	_check("D5e burnt, it goes", not hud.touch_shown())
+	await _clean()
+
+
+## Its mouth, and what drifts on it.
+func _its_mouth() -> void:
+	await _clean()
+	p.invulnerable = false
+	var one := _revenant(Vector3(0, 0, -2.3))
+	await _frames(40)
+	one._surge_in = 99.0
+	one._attack_in = 99.0
+	one._enter(STATE.WALK)
+	await _frames(180)
+	var resting_jaw: float = one.body.jaw_now()
+	var flat := func(at: Vector3) -> float: return Vector2(at.x - p.global_position.x, at.z - p.global_position.z).length()
+	var head_from: float = flat.call(one.body.head_at())
+	one._enter(STATE.BITE_WIND)
+	await _until(func(): return one._state_t > 0.75, 1.2)
+	var drawn_back: float = flat.call(one.body.head_at())
+	_check("O1 it gapes, winding up to bite (%.2f, %.2f)" % [resting_jaw, one.body.jaw_now()], one.body.jaw_now() > resting_jaw + 0.6)
+	_check("O2 its head draws back on its neck (%.2f, %.2f)" % [head_from, drawn_back], drawn_back > head_from + 0.05)
+	var health_was: float = p.health
+	await _until(func(): return one.state == STATE.BITE, 0.4)
+	var least := 99.0
+	var jaw_least := 9.0
+
+	for i in 14:
+		await get_tree().physics_frame
+		least = minf(least, flat.call(one.body.head_at()))
+		jaw_least = minf(jaw_least, one.body.jaw_now())
+
+	_check("O3 it dives at you (%.2f, %.2f)" % [drawn_back, least], least < drawn_back - 0.5)
+	_check("O4 and its jaws snap shut on you (%.2f)" % jaw_least, jaw_least < 0.35)
+	_check("O5 a bite lands 30, and soaks you (%.0f)" % (health_was - p.health), is_equal_approx(health_was - p.health, 30.0) and p.statuses.has(&"soaked"))
+	await _clean()
+	p.invulnerable = false
+	var missed := _revenant(Vector3(0, 0, -2.3))
+	await _frames(2)
+	missed._surge_in = 99.0
+	missed._attack_in = 99.0
+	missed._enter(STATE.BITE_WIND)
+	await _until(func(): return missed._state_t > 0.7, 1.0)
+	p.teleport(Transform3D(Basis.IDENTITY, p.global_position + Vector3(0, 0, 8.0)))
+	await _until(func(): return missed.state == STATE.BITE, 0.4)
+	await _frames(2)
+	_check("O6 out of its reach, it bites nothing", p.health == 100.0)
+	await _clean()
+	# It chooses its mouth, close to.
+	var chooser := _revenant(Vector3(0, 0, -2.2))
+	await _frames(2)
+	chooser._surge_in = 99.0
+	var bit := false
+
+	for i in int(40.0 * 60.0):
+		await get_tree().physics_frame
+		bit = bit or chooser.state == STATE.BITE_WIND
+
+		if bit:
+			break
+
+	_check("O7 close to, it uses its mouth", bit)
+	await _clean()
+	# Its jaw is never quite still.
+	var works := _revenant(Vector3(0, 0, -30))
+	await _frames(40)
+	works._surge_in = 99.0
+	var jaw_low := 9.0
+	var jaw_high := -9.0
+
+	for i in 150:
+		await get_tree().physics_frame
+		jaw_low = minf(jaw_low, works.body.jaw_now())
+		jaw_high = maxf(jaw_high, works.body.jaw_now())
+
+	_check("O8 its jaw works as it comes (%.2f..%.2f)" % [jaw_low, jaw_high], jaw_high - jaw_low > 0.1)
+	await _clean()
+	# What drifts on it drags behind what it does, and swings on when it stops.
+	var body: Node3D = BodyScript.new()
+	add_child(body)
+	body.position = Vector3(40, 0, -30)
+	await _frames(1)
+	var still := func(frames: int) -> void:
+		for i in frames:
+			await get_tree().physics_frame
+			body.tick(1.0 / 60.0, &"walk", Vector3.ZERO, Vector3(40, 1.6, -60), 0.0, 0.0, 0.0)
+
+	await still.call(90)
+	var at_rest: Vector3 = body.drift_now()
+
+	for i in 90:
+		await get_tree().physics_frame
+		body.position += Vector3(0, 0, -6.0) / 60.0
+		body.tick(1.0 / 60.0, &"surge", Vector3(0, 0, -6.0), Vector3(40, 1.6, -60), 0.0, 0.0, 0.0)
+
+	var running: Vector3 = body.drift_now()
+	_check("D11 running, what drifts on it streams behind it (%.2f, %.2f)" % [at_rest.z, running.z], running.z > at_rest.z + 0.25)
+	var swung := running.z
+
+	for i in 70:
+		await get_tree().physics_frame
+		body.tick(1.0 / 60.0, &"walk", Vector3.ZERO, Vector3(40, 1.6, -60), 0.0, 0.0, 0.0)
+		swung = minf(swung, body.drift_now().z)
+
+	_check("D12 stopping, it swings on past where it hangs (%.2f)" % swung, swung < at_rest.z - 0.02)
+	body.queue_free()
+	await _frames(2)
+	p.invulnerable = true
 	await _clean()
 
 

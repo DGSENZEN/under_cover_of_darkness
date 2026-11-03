@@ -6,11 +6,11 @@ extends "res://scripts/Monsters/Monster.gd"
 const RevenantBody := preload("res://scripts/Monsters/RevenantBody.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
-enum State { WALK, SURGE_TELL, SURGE, SWIPE_WIND, SWIPE, RAKE_WIND, RAKE, GRASP_WIND, GRASP, HOLD, SHOVE, STAGGER, FALL, DOWN, RISE, DYING }
+enum State { WALK, SURGE_TELL, SURGE, BITE_WIND, BITE, SWIPE_WIND, SWIPE, RAKE_WIND, RAKE, GRASP_WIND, GRASP, HOLD, SHOVE, STAGGER, FALL, DOWN, RISE, DYING }
 
-const REACH_OF := {State.SWIPE_WIND: "swipe_reach", State.RAKE_WIND: "rake_reach", State.GRASP_WIND: "grasp_reach"}
+const REACH_OF := {State.BITE_WIND: "bite_reach", State.SWIPE_WIND: "swipe_reach", State.RAKE_WIND: "rake_reach", State.GRASP_WIND: "grasp_reach"}
 const DOING := {
-	State.WALK: &"walk", State.SURGE_TELL: &"surge_tell", State.SURGE: &"surge", State.SWIPE_WIND: &"swipe_wind", State.SWIPE: &"swipe",
+	State.WALK: &"walk", State.SURGE_TELL: &"surge_tell", State.SURGE: &"surge", State.BITE_WIND: &"bite_wind", State.BITE: &"bite", State.SWIPE_WIND: &"swipe_wind", State.SWIPE: &"swipe",
 	State.RAKE_WIND: &"rake_wind", State.RAKE: &"rake", State.GRASP_WIND: &"grasp_wind", State.GRASP: &"grasp", State.HOLD: &"hold",
 	State.SHOVE: &"shove", State.STAGGER: &"stagger", State.FALL: &"fall", State.DOWN: &"down", State.RISE: &"rise", State.DYING: &"dying_a",
 }
@@ -121,6 +121,11 @@ func _sounds_for(next: State) -> void:
 		State.GRASP_WIND:
 			Sfx.play(self, &"anima_moan", global_position, -3.0, 0.36)
 			Sfx.play(self, &"bone_crack", global_position, -10.0, 0.45)
+		State.BITE_WIND:
+			Sfx.play(self, &"anima_moan", global_position, -4.0, 0.34)
+		State.BITE:
+			Sfx.play(self, &"whoosh", global_position, -6.0, 0.7)
+			Sfx.play(self, &"bone_crack", global_position, -3.0, 0.72)
 		State.SWIPE, State.RAKE, State.GRASP:
 			Sfx.play(self, &"whoosh", global_position, -5.0, 0.6)
 		State.HOLD:
@@ -357,7 +362,7 @@ func _brain(delta: float) -> Vector3:
 				return drops
 
 			return -global_basis.z * float(_row["surge_speed"]) + drops
-		State.SWIPE_WIND, State.RAKE_WIND, State.GRASP_WIND:
+		State.BITE_WIND, State.SWIPE_WIND, State.RAKE_WIND, State.GRASP_WIND:
 			var reach: float = float(_row[REACH_OF[state]])
 			_wind_up_ends(you, far)
 			# It comes after you with it: backing away as you aim doesn't beat it.
@@ -366,6 +371,8 @@ func _brain(delta: float) -> Vector3:
 			if _state_t >= float(_row["grasp_hold"]) or you.get("touch") == null or not you.touch.holding():
 				you.touch.let_go()
 				_throw_off(you)
+		State.BITE:
+			_ends_after("bite_time")
 		State.SWIPE:
 			_ends_after("swipe_time")
 		State.RAKE:
@@ -403,6 +410,11 @@ func _choose(far: float) -> void:
 		var in_rake := far <= float(_row["rake_reach"])
 		var in_grasp := far <= float(_row["grasp_reach"])
 
+		# Close to, its mouth.
+		if far <= float(_row["bite_reach"]) and _rng.randf() < float(_row["bite_chance"]):
+			_enter(State.BITE_WIND)
+			return
+
 		if in_grasp and (not in_swipe or _rng.randf() < float(_row["grasp_chance"])):
 			_enter(State.GRASP_WIND)
 			return
@@ -429,6 +441,10 @@ func _clear_run() -> bool:
 
 func _wind_up_ends(you: Node3D, far: float) -> void:
 	match state:
+		State.BITE_WIND:
+			if _state_t >= float(_row["bite_wind"]):
+				_land(you, far, "bite_reach", "bite_damage")
+				_enter(State.BITE)
 		State.SWIPE_WIND:
 			if _state_t >= float(_row["swipe_wind"]):
 				_land(you, far, "swipe_reach", "swipe_damage")

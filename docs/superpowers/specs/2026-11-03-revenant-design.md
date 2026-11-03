@@ -26,6 +26,8 @@ Its cause in the world: the drowned of the old lakebed, raised by the seepage ([
 
 **On the first body, the user:** "It's a good first start, but it needs glowy eyes, some more details that make it look more of a spectre or a supernatural being not just an undead, and the texture work and shading needs to be in tune with our aesthetic work". Claude's answer, for the user to judge: it never left the lake. Its eyes burn phosphor green, the colour of the seeped; the seep lights a split down its chest and the cracks round what holds it; the water's light crawls on it and black water runs up it; its hair, roots and rags drift as if under water; and it stands in a pool of black water that isn't on the floor. Fill and rim set as the ánimas' flesh is.
 
+**On how it moves, the user:** "The rigging and the animations are just not there ... you did some really good work with the other enemies", then, of Claude's answer, on four limbs, hauling itself on its arms, galloping when it surges, rearing up to attack: "it's better, it should also use it's mouth, and the algae like hairs should move with the creature". So: it bites, its head diving on its long neck; and what drifts on it drags behind whatever it does.
+
 ## Goals
 
 - It reads wrong from across a dark room, on shape alone.

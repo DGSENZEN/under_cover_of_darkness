@@ -16,7 +16,7 @@ const FIRE_SHEET := "res://assets/vfx/fire.png"
 const FLOOR_MASK := 1
 
 ## On four limbs: what it comes back to.
-const ON_ALL_FOURS := {"lean": 0.62, "drop": 0.05, "head": 0.62, "jaw": 0.15, "plant_l": 1.0, "plant_r": 1.0, "shut": 0.5}
+const ON_ALL_FOURS := {"lean": 0.8, "drop": 0.04, "head": 0.8, "jaw": 0.15, "plant_l": 1.0, "plant_r": 1.0, "shut": 0.5}
 ## What it is doing, as timed keys: each [seconds into it, values], eased, what a key leaves out carried from the one before. Anticipation, the blow, follow-through, in the
 ## times the brain gives each (Bestiary). lean: forward (rad), twist: its trunk round, its right shoulder back as it grows (rad), drop: its hips down (m), shift: over to its right
 ## (m), head: chin up (rad), jaw: open 0..1, shut: fingers closed (rad, on its rest), l/r: a wrist from where it hangs, in the body's x, y, z (m), reach_l/r: 0 that, 1 at you,
@@ -33,6 +33,16 @@ const POSES := {
 		[0.0, {"lean": 0.78, "drop": 0.3, "head": 0.8, "jaw": 0.85, "plant_l": 1.0, "plant_r": 1.0, "shut": 0.6, "wrath": 0.9}],
 		[0.25, {"lean": 0.86, "drop": 0.3, "head": 0.86, "jaw": 1.0, "wrath": 1.0}],
 		[0.9, {"lean": 0.9, "drop": 0.32, "head": 0.9, "jaw": 1.0, "wrath": 0.7}]]},
+	# Its mouth: its head goes back and up on its neck, the jaw falling open further than a jaw goes, the rest of it gathering under; then all of it dives in behind its head, and the jaws shut.
+	&"bite_wind": {"arms": 5.0, "stiff": 3.0, "follows": 4.0, "keys": [
+		[0.0, ON_ALL_FOURS],
+		[0.35, {"lean": 0.66, "drop": 0.1, "head": 0.3, "neck": -0.1, "head_roll": 0.3, "jaw": 0.7, "plant_l": 1.0, "plant_r": 1.0, "shut": 0.6, "wrath": 0.5}],
+		[0.85, {"lean": 0.56, "drop": 0.18, "head": 0.1, "neck": -0.24, "head_roll": 0.5, "jaw": 1.5, "plant_l": 1.0, "plant_r": 1.0, "shut": 0.75, "wrath": 1.0}]]},
+	&"bite": {"arms": 9.0, "stiff": 4.0, "follows": 8.0, "stride": [0.02, 0], "thud": 0.1, "keys": [
+		[0.0, {"lean": 0.56, "drop": 0.18, "head": 0.1, "neck": -0.24, "head_roll": 0.5, "jaw": 1.5, "plant_l": 1.0, "plant_r": 1.0, "shut": 0.75, "wrath": 1.0}],
+		[0.07, {"lean": 0.98, "drop": 0.3, "head": 0.86, "neck": 0.62, "head_roll": 0.1, "jaw": 1.6}],
+		[0.13, {"lean": 1.02, "drop": 0.32, "head": 0.9, "neck": 0.72, "head_roll": 0.0, "jaw": 0.0}],
+		[0.4, {"lean": 0.86, "drop": 0.14, "head": 0.8, "neck": 0.14, "jaw": 0.3, "wrath": 0.4}]]},
 	# A haymaker: it sinks; it comes up off its hands over its back leg, the arm going up behind it; then through, its weight following it down.
 	&"swipe_wind": {"arms": 5.5, "stiff": 3.4, "follows": 4.5, "keys": [
 		[0.0, ON_ALL_FOURS],
@@ -51,25 +61,25 @@ const POSES := {
 		[0.5, {"lean": 0.66, "drop": 0.5, "head": 0.66, "jaw": 0.5, "plant_l": 1.0, "plant_r": 1.0, "shut": 0.3, "wrath": 0.3}],
 		[0.8, {"lean": 0.2, "drop": 0.2, "head": 0.3, "jaw": 0.8, "plant_l": 0.1, "plant_r": 0.1, "l": Vector3(-0.3, 0.7, 0.1), "r": Vector3(0.3, 0.75, 0.1), "shut": -0.4, "wrath": 0.55}],
 		[1.14, {"lean": -0.36, "drop": -0.05, "head": 0.02, "jaw": 1.0, "plant_l": 0.0, "plant_r": 0.0, "l": Vector3(-0.42, 1.4, 0.04), "r": Vector3(0.42, 1.46, 0.04), "shut": -0.8, "wrath": 0.9}],
-		[1.35, {"lean": -0.46, "drop": -0.08, "head": -0.04, "jaw": 1.0, "plant_l": 0.0, "plant_r": 0.0, "l": Vector3(-0.46, 1.54, 0.14), "r": Vector3(0.46, 1.6, 0.14), "shut": -0.9, "wrath": 1.0}]]},
+		[1.35, {"lean": -0.46, "drop": -0.08, "head": -0.04, "head_roll": -0.7, "neck": -0.1, "jaw": 1.4, "plant_l": 0.0, "plant_r": 0.0, "l": Vector3(-0.46, 1.54, 0.14), "r": Vector3(0.46, 1.6, 0.14), "shut": -0.9, "wrath": 1.0}]]},
 	&"rake": {"arms": 13.0, "stiff": 6.5, "follows": 8.0, "stride": [0.03, 1], "thud": 0.3, "keys": [
-		[0.0, {"lean": -0.46, "drop": -0.08, "head": -0.04, "jaw": 1.0, "plant_l": 0.0, "plant_r": 0.0, "l": Vector3(-0.46, 1.54, 0.14), "r": Vector3(0.46, 1.6, 0.14), "shut": -0.9, "wrath": 1.0}],
-		[0.14, {"lean": 0.26, "drop": 0.16, "head": 0.34, "jaw": 1.0, "l": Vector3(-0.32, 1.0, -0.84), "r": Vector3(0.32, 1.05, -0.84), "shut": -0.3}],
+		[0.0, {"lean": -0.46, "drop": -0.08, "head": -0.04, "head_roll": -0.7, "neck": -0.1, "jaw": 1.4, "plant_l": 0.0, "plant_r": 0.0, "l": Vector3(-0.46, 1.54, 0.14), "r": Vector3(0.46, 1.6, 0.14), "shut": -0.9, "wrath": 1.0}],
+		[0.14, {"head_roll": 0.0, "neck": 0.3, "lean": 0.26, "drop": 0.16, "head": 0.34, "jaw": 1.0, "l": Vector3(-0.32, 1.0, -0.84), "r": Vector3(0.32, 1.05, -0.84), "shut": -0.3}],
 		[0.3, {"lean": 0.94, "drop": 0.5, "head": 0.8, "jaw": 1.0, "plant_l": 0.5, "plant_r": 0.5, "l": Vector3(-0.2, 0.2, -1.0), "r": Vector3(0.2, 0.24, -1.0), "shut": 0.35}],
 		[0.6, {"lean": 0.86, "drop": 0.52, "head": 0.8, "jaw": 0.6, "plant_l": 1.0, "plant_r": 1.0, "shut": 0.55, "wrath": 0.5}]]},
 	# Unlike the others: it stays down. Quiet, low, one long arm coming up off the floor at you, the fingers opening. You learn to dread this one.
 	&"grasp_wind": {"arms": 3.6, "stiff": 2.4, "follows": 3.0, "keys": [
 		[0.0, ON_ALL_FOURS],
-		[0.5, {"lean": 0.54, "twist": 0.18, "drop": 0.3, "shift": 0.05, "head": 0.58, "jaw": 0.15, "plant_l": 1.0, "plant_r": 0.0, "reach_r": 0.26, "shut": -0.5, "wrath": 0.4}],
-		[1.4, {"lean": 0.66, "twist": 0.36, "drop": 0.4, "shift": 0.08, "head": 0.7, "jaw": 0.3, "plant_l": 1.0, "plant_r": 0.0, "reach_r": 0.6, "shut": -1.05, "wrath": 1.0}]]},
+		[0.5, {"lean": 0.7, "twist": 0.18, "drop": 0.2, "shift": 0.05, "head": 0.7, "head_roll": 0.8, "jaw": 0.15, "plant_l": 1.0, "plant_r": 0.0, "reach_r": 0.26, "shut": -0.5, "wrath": 0.4}],
+		[1.4, {"lean": 0.8, "twist": 0.36, "drop": 0.3, "shift": 0.08, "head": 0.84, "neck": 0.16, "head_roll": 2.1, "jaw": 0.5, "plant_l": 1.0, "plant_r": 0.0, "reach_r": 0.6, "shut": -1.05, "wrath": 1.0}]]},
 	&"grasp": {"arms": 13.0, "stiff": 7.5, "follows": 7.0, "stride": [0.0, 1], "keys": [
-		[0.0, {"lean": 0.66, "twist": 0.36, "drop": 0.4, "head": 0.7, "jaw": 0.3, "plant_l": 1.0, "plant_r": 0.0, "reach_r": 0.6, "shut": -1.05, "wrath": 1.0}],
-		[0.14, {"lean": 0.86, "twist": -0.3, "drop": 0.22, "head": 0.8, "jaw": 1.0, "reach_r": 1.0, "shut": -0.6}],
-		[0.5, {"lean": 0.7, "twist": -0.14, "drop": 0.28, "head": 0.66, "jaw": 0.6, "plant_r": 0.4, "reach_r": 0.4, "shut": 0.25, "wrath": 0.5}]]},
+		[0.0, {"lean": 0.8, "twist": 0.36, "drop": 0.3, "head": 0.84, "neck": 0.16, "head_roll": 2.1, "jaw": 0.5, "plant_l": 1.0, "plant_r": 0.0, "reach_r": 0.6, "shut": -1.05, "wrath": 1.0}],
+		[0.14, {"lean": 0.9, "twist": -0.3, "drop": 0.2, "head": 0.86, "neck": 0.3, "head_roll": 0.4, "jaw": 1.3, "reach_r": 1.0, "shut": -0.6}],
+		[0.5, {"lean": 0.8, "twist": -0.14, "drop": 0.2, "head": 0.8, "neck": 0.1, "head_roll": 0.0, "jaw": 0.6, "plant_r": 0.4, "reach_r": 0.4, "shut": 0.25, "wrath": 0.5}]]},
 	&"hold": {"arms": 8.0, "stiff": 6.0, "follows": 4.0, "keys": [
 		[0.0, {"lean": 0.86, "twist": -0.3, "drop": 0.22, "head": 0.8, "jaw": 1.0, "plant_l": 1.0, "plant_r": 0.0, "reach_r": 1.0, "shut": -0.3, "wrath": 1.0}],
-		[0.3, {"lean": 0.5, "twist": -0.1, "drop": 0.14, "head": 0.5, "jaw": 1.0, "plant_l": 0.0, "reach_r": 1.0, "reach_l": 0.9, "shut": 0.35}],
-		[1.0, {"lean": 0.36, "twist": 0.1, "drop": 0.1, "head": 0.4, "jaw": 1.0, "plant_l": 0.0, "reach_r": 1.0, "reach_l": 1.0, "shut": 0.4}]]},
+		[0.3, {"lean": 0.5, "twist": -0.1, "drop": 0.14, "head": 0.5, "neck": 0.4, "jaw": 1.2, "plant_l": 0.0, "reach_r": 1.0, "reach_l": 0.9, "shut": 0.35}],
+		[1.0, {"lean": 0.36, "twist": 0.1, "drop": 0.1, "head": 0.4, "neck": 0.5, "jaw": 1.2, "plant_l": 0.0, "reach_r": 1.0, "reach_l": 1.0, "shut": 0.4}]]},
 	&"shove": {"arms": 11.0, "stiff": 6.0, "follows": 6.0, "keys": [
 		[0.0, {"lean": 0.36, "drop": 0.1, "head": 0.4, "jaw": 1.0, "l": Vector3(-0.1, 0.8, -0.72), "r": Vector3(0.1, 0.8, -0.72), "shut": -0.2}],
 		[0.14, {"lean": -0.02, "drop": 0.04, "head": 0.1, "jaw": 0.6, "l": Vector3(-0.2, 0.95, -1.05), "r": Vector3(0.2, 0.95, -1.05), "shut": -0.8}],
@@ -109,7 +119,7 @@ const POSES := {
 		[0.7, {"lean": 0.8, "twist": -0.2, "drop": 0.74, "head": 0.4, "jaw": 0.8, "limp": 0.7, "shut": 0.2}],
 		[1.3, {"lean": 1.2, "twist": -0.3, "drop": 0.94, "head": 0.3, "jaw": 0.5, "limp": 1.0, "shut": 0.4}]]},
 }
-const NEUTRAL := {"lean": 0.0, "twist": 0.0, "drop": 0.0, "shift": 0.0, "head": 0.0, "jaw": 0.12, "shut": 0.0, "limp": 0.0, "reach_l": 0.0, "reach_r": 0.0, "plant_l": 0.0, "plant_r": 0.0, "wrath": 0.0}
+const NEUTRAL := {"neck": 0.0, "head_roll": 0.0, "lean": 0.0, "twist": 0.0, "drop": 0.0, "shift": 0.0, "head": 0.0, "jaw": 0.12, "shut": 0.0, "limp": 0.0, "reach_l": 0.0, "reach_r": 0.0, "plant_l": 0.0, "plant_r": 0.0, "wrath": 0.0}
 const AT_REST := Vector3.ZERO
 const TRUNK_FOLLOWS := 5.5
 const SMALL_FOLLOWS := 9.0
@@ -149,6 +159,30 @@ const WEIGHT_EASES := 5.5
 const LURCH_LOW := 0.55
 const LURCH_HIGH := 1.2
 const LURCH_EASES := 6.0
+## How it is wrong. Its head goes on level through all of it, gliding while the rest of it lurches beneath (Hz, m); it hangs tilted, off true, and looks round further than a neck goes.
+## A ripple runs down its spine as it goes (rad, Hz). Its fingers go on their own. Every so often all of it hitches, a stutter, like a frame gone missing (s).
+const HEAD_GLIDES := 3.0
+const HEAD_GLIDES_MOST := 0.34
+const HEAD_HANGS_OFF := 0.34
+const HEAD_LOOKS_ROUND := 2.5
+const SPINE_RIPPLES := 0.14
+const SPINE_RIPPLE_RATE := 1.7
+const FINGERS_GO := 0.24
+const HITCH_EVERY := Vector2(2.4, 6.0)
+const HITCH_TAKES := Vector2(0.06, 0.12)
+## The neck, how fast it draws out or in, m/s; how its jaw works, always, and gnaws when it has you.
+const NECK_MOST := 6.0
+const JAW_WORKS := 0.09
+const JAW_GNAWS := 0.45
+const JAW_GNAW_RATE := 13.0
+## Its arm's elbow on the floor, up over its shoulder like a spider's; its left knee, the one that drags, bends the wrong way.
+const ELBOW_UP := Vector3(0.0, 1.0, 0.1)
+const KNEE_WRONG_SIDE := 0
+## What drifts on it trails what its head does (per m/s, m, Hz): slow to start and slow to stop, as under water.
+const DRIFT_PER := 0.16
+const DRIFT_MOST := 0.75
+const DRIFT_FOLLOWS := 0.9
+const DRIFT_DAMP := 0.34
 ## How far its head twitches, and how often (rad, s): the wrongness of something that doesn't rest.
 const TWITCH := 0.2
 const TWITCH_EVERY := Vector2(2.2, 5.5)
@@ -162,9 +196,8 @@ const ARM_DAMP := 0.62
 const STRIKES_AT := 10.0
 const HAND_TURNS := 7.0
 const ELBOW_TURNS := 7.0
-const HEAD_REACHES := 1.15
 const HEAD_TURNS := 2.8
-const JAW_OPENS := 0.6
+const JAW_OPENS := 0.72
 ## How its heel comes down and its toe leaves (rad).
 const HEEL_STRIKES := 0.42
 const TOE_LEAVES := 0.6
@@ -221,6 +254,17 @@ var _foot_out: Array[float] = [0.0, 0.0]
 var _ankle_up := 0.1
 var _legs_sink := 0.0
 var _short_by := 0.0
+var _clock := 0.0
+var _jaw_now := 0.0
+var _neck_out := 0.0
+var _head_glide := Vector3.ZERO
+var _hitch_in := 4.0
+var _hitch_left := 0.0
+var _held_at := Vector3.ZERO
+var _just_hitched := false
+var _head_was := Vector3.ZERO
+var _drift := Vector3.ZERO
+var _drift_going := Vector3.ZERO
 ## Hands on the floor, by side.
 var _hand_at: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var _hand_from: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
@@ -403,6 +447,21 @@ func eyes_now() -> float:
 	return _eyes_now
 
 
+## It is stuttering, or has just stopped: where it is isn't where it was.
+func hitching() -> bool:
+	var was := _just_hitched
+	_just_hitched = false
+	return was or _hitch_left > 0.0
+
+
+func jaw_now() -> float:
+	return _jaw_now
+
+
+func drift_now() -> Vector3:
+	return _drift
+
+
 func wrath_now() -> float:
 	return float(_springs[&"wrath"][0]) if _springs.has(&"wrath") else 0.0
 
@@ -520,6 +579,30 @@ func tick(delta: float, doing: StringName, moving: Vector3, you_at: Vector3, bur
 	if not _placed:
 		come_back()
 
+	_clock += delta
+
+	# It hitches: the whole of it, for a moment, isn't moving, and then it is where it should have been.
+	if _hitch_left > 0.0:
+		_hitch_left -= delta
+		_clip_t += delta
+		_model.global_position = _held_at
+		_work_flames(delta, burn)
+
+		if _hitch_left > 0.0:
+			return
+
+		_model.position = Vector3.ZERO
+		_model.reset_physics_interpolation()
+		_just_hitched = true
+
+	_hitch_in -= delta
+
+	if _hitch_in <= 0.0 and doing == &"walk":
+		_hitch_in = _rng.randf_range(HITCH_EVERY.x, HITCH_EVERY.y)
+		_hitch_left = _rng.randf_range(HITCH_TAKES.x, HITCH_TAKES.y)
+		_held_at = _model.global_position
+		_model.reset_physics_interpolation()
+
 	if doing != _doing:
 		_doing = doing
 		_clip_t = 0.0
@@ -538,7 +621,11 @@ func tick(delta: float, doing: StringName, moving: Vector3, you_at: Vector3, bur
 	_hurt_now = move_toward(_hurt_now, 0.0, delta / HURT_TAKES)
 	var wrath := _spring(&"wrath", float(here["wrath"]), SMALL_FOLLOWS, 0.9, delta)
 	var nod := _spring(&"head", float(here["head"]), SMALL_FOLLOWS, 0.85, delta)
-	var jaw := _spring(&"jaw", float(here["jaw"]), SMALL_FOLLOWS, 0.8, delta)
+	var gnawing: float = absf(sin(_clip_t * JAW_GNAW_RATE)) * JAW_GNAWS if doing == &"hold" else 0.0
+	var jaw := _spring(&"jaw", float(here["jaw"]) - gnawing + (sin(_clock * 2.3) * 0.6 + sin(_clock * 5.1) * 0.4) * JAW_WORKS, SMALL_FOLLOWS * 1.6, 0.85, delta)
+	_jaw_now = jaw
+	_neck_out = move_toward(_neck_out, float(here["neck"]), NECK_MOST * delta)
+	var head_roll := _spring(&"head_roll", float(here["head_roll"]), TRUNK_FOLLOWS * 0.7, 0.9, delta)
 	var shut := _spring(&"shut", float(here["shut"]), SMALL_FOLLOWS, 0.8, delta)
 	var limp := _spring(&"limp", float(here["limp"]), follows, 0.95, delta)
 	var reach := [_spring(&"reach_l", float(here["reach_l"]), SMALL_FOLLOWS, 0.9, delta), _spring(&"reach_r", float(here["reach_r"]), SMALL_FOLLOWS, 0.9, delta)]
@@ -554,7 +641,7 @@ func tick(delta: float, doing: StringName, moving: Vector3, you_at: Vector3, bur
 		slammed.emit()
 
 	_walk_limbs(delta, moving, limp, drop)
-	_pose_trunk(delta, lean, twist, drop, shift, nod, jaw, you_at)
+	_pose_trunk(delta, lean, twist, drop, shift, nod, jaw, head_roll, you_at)
 
 	for side in 2:
 		var off: Vector3 = here["l"] if side == 0 else here["r"]
@@ -573,6 +660,19 @@ func tick(delta: float, doing: StringName, moving: Vector3, you_at: Vector3, bur
 	_mesh.set_instance_shader_parameter(&"wrath", clampf(wrath, 0.0, 1.0))
 	_mesh.set_instance_shader_parameter(&"hurt", _hurt_now)
 	_trail.work(delta, float(clip["arms"]) >= STRIKES_AT, wrist(1), elbow(1), wrist(0), elbow(0))
+	_work_drift(delta)
+
+
+## What drifts on it comes after what it does.
+func _work_drift(delta: float) -> void:
+	var head_now := head_at()
+	var moved := (head_now - _head_was) / delta if _head_was != Vector3.ZERO else Vector3.ZERO
+	_head_was = head_now
+	var wanted: Vector3 = (global_basis.inverse() * -moved * DRIFT_PER).limit_length(DRIFT_MOST)
+	var w := TAU * DRIFT_FOLLOWS
+	_drift_going += (w * w * (wanted - _drift) - 2.0 * DRIFT_DAMP * w * _drift_going) * delta
+	_drift += _drift_going * delta
+	_mesh.set_instance_shader_parameter(&"drift_way", _drift)
 
 
 ## A foot driven forward under a blow: the weight goes onto it.
@@ -715,20 +815,24 @@ func _ground_under(at: Vector3, above := -1.0) -> Vector3:
 
 
 ## Everything from its hips to its head: bent over, twisted, sunk, the weight going through it.
-func _pose_trunk(delta: float, lean: float, twist: float, drop: float, shift: float, nod: float, jaw: float, you_at: Vector3) -> void:
+func _pose_trunk(delta: float, lean: float, twist: float, drop: float, shift: float, nod: float, jaw: float, head_roll: float, you_at: Vector3) -> void:
 	_turn_bone(&"root", Quaternion.IDENTITY)
 	var ride := Vector3(shift + _hips_over, -drop - _legs_sink + (0.5 - _heave) * STEP_HEAVES, 0.0)
 	var crust := Quaternion(Vector3.BACK, LEANS_TO_CRUST)
 	var hips_turn := crust * Quaternion(Vector3.UP, _hips_round + twist * 0.25) * Quaternion(Vector3.RIGHT, -lean * 0.3) * Quaternion(Vector3.BACK, -_hips_over * 0.8)
 	_turn_bone(&"hips", hips_turn, ride)
-	var spine_turn := hips_turn * Quaternion(Vector3.UP, -_hips_round * CHEST_AGAINST * 0.5 + twist * 0.35) * Quaternion(Vector3.RIGHT, -lean * 0.32)
+	# (A ripple runs down it, as down something in water.)
+	var ripple := sin(_clock * TAU * SPINE_RIPPLE_RATE) * SPINE_RIPPLES
+	var ripple_on := sin(_clock * TAU * SPINE_RIPPLE_RATE - 1.2) * SPINE_RIPPLES
+	var spine_turn := hips_turn * Quaternion(Vector3.UP, -_hips_round * CHEST_AGAINST * 0.5 + twist * 0.35) * Quaternion(Vector3.RIGHT, -lean * 0.32) * Quaternion(Vector3.BACK, ripple)
 	_turn_bone(&"spine", spine_turn)
-	var chest_turn := spine_turn * Quaternion(Vector3.UP, -_hips_round * CHEST_AGAINST * 0.5 + twist * 0.4) * Quaternion(Vector3.RIGHT, -lean * 0.38) * Quaternion(Vector3.BACK, _shoulders_roll)
+	var chest_turn := spine_turn * Quaternion(Vector3.UP, -_hips_round * CHEST_AGAINST * 0.5 + twist * 0.4) * Quaternion(Vector3.RIGHT, -lean * 0.38) * Quaternion(Vector3.BACK, _shoulders_roll + ripple_on)
 	_turn_bone(&"chest", chest_turn)
 	# Its neck comes back up against the lean, so its head stays on you.
-	var neck_turn := chest_turn * Quaternion(Vector3.RIGHT, lean * 0.3)
+	var neck_turn := chest_turn * Quaternion(Vector3.RIGHT, lean * 0.3) * Quaternion(Vector3.BACK, -ripple_on * 1.2)
 	_turn_bone(&"neck_1", neck_turn)
-	_turn_bone(&"neck_2", neck_turn * Quaternion(Vector3.RIGHT, lean * 0.2))
+	var neck_2_turn := neck_turn * Quaternion(Vector3.RIGHT, lean * 0.2)
+	_turn_bone(&"neck_2", neck_2_turn)
 	var head_rest: Transform3D = _rest[&"head"]
 	var flat_turn := neck_turn * Quaternion(Vector3.RIGHT, lean * 0.44 + nod * 0.4)
 	var head_at_now := (_now[&"neck_2"] as Transform3D) * ((_rest[&"neck_2"] as Transform3D).affine_inverse() * head_rest.origin)
@@ -736,8 +840,8 @@ func _pose_trunk(delta: float, lean: float, twist: float, drop: float, shift: fl
 	var looking: Vector3 = flat_turn * Vector3.FORWARD
 	var turn := Quaternion.IDENTITY
 
-	if to_you.length() > 0.2 and looking.angle_to(to_you) < 2.6:
-		var angle := minf(looking.angle_to(to_you), HEAD_REACHES)
+	if to_you.length() > 0.2:
+		var angle := minf(looking.angle_to(to_you), HEAD_LOOKS_ROUND)
 		var axis := looking.cross(to_you)
 
 		if axis.length() > 0.001:
@@ -753,7 +857,18 @@ func _pose_trunk(delta: float, lean: float, twist: float, drop: float, shift: fl
 
 	_twitch = _twitch.slerp(Quaternion.IDENTITY, 1.0 - exp(-TWITCH_FADES * delta))
 	var head_turn := _twitch * _head_turn * flat_turn
-	_turn_bone(&"head", head_turn)
+	# Off true: tilted, a slow wander of it, and however far a key says.
+	head_turn = head_turn * Quaternion(Vector3.BACK, HEAD_HANGS_OFF + sin(_clock * 0.43) * 0.14 + head_roll)
+	# It goes on level through all the rest of it: out along its neck as a key says, and gliding, where it should have been, a moment ago.
+	var neck_way: Vector3 = (to_you if to_you.length() > 0.1 else Vector3.FORWARD).normalized()
+	var head_should: Vector3 = _world_of(head_at_now + neck_way * _neck_out)
+	var w := minf(TAU * HEAD_GLIDES, 0.8 / delta)
+	_head_glide = head_should if _head_glide == Vector3.ZERO else _head_glide.lerp(head_should, 1.0 - exp(-w * delta))
+	var off_true := (_bones.global_transform.affine_inverse() * _head_glide) - head_at_now
+	var glides: Vector3 = (off_true - neck_way * _neck_out).limit_length(HEAD_GLIDES_MOST) + neck_way * _neck_out
+	# (The neck takes half of that, so its skin draws out between them.)
+	_turn_bone(&"neck_2", neck_2_turn, glides * 0.5)
+	_turn_bone(&"head", head_turn, glides * 0.5)
 	_turn_bone(&"eye_l", head_turn)
 	_turn_bone(&"eye_r", head_turn)
 	_set_local_turn(&"jaw", Quaternion(Vector3.RIGHT, jaw * JAW_OPENS))
@@ -883,7 +998,7 @@ func _pose_arm(delta: float, side: int, off: Vector3, reach: float, limp: float,
 	var along := span.normalized() if span.length() > 0.001 else Vector3.DOWN
 	# Elbow out, and back: it comes round to that, and never flips over the line of the arm.
 	var out := Vector3.RIGHT * (-1.0 if side == 0 else 1.0)
-	var pole := (out * 0.9 + Vector3.BACK * 0.7 + Vector3.UP * 0.35).normalized()
+	var pole := (out * 0.9 + Vector3.BACK * 0.7 + Vector3.UP * 0.35).normalized().lerp((ELBOW_UP + out * 0.6).normalized(), clampf(planted, 0.0, 1.0)).normalized()
 	pole -= along * pole.dot(along)
 
 	if pole.length() < 0.2:
@@ -905,8 +1020,11 @@ func _pose_arm(delta: float, side: int, off: Vector3, reach: float, limp: float,
 	_hand_way[side] = pointing if _hand_way[side] == Vector3.ZERO else _come_round(_hand_way[side], pointing, HAND_TURNS * delta)
 	_along(hand, _hand_way[side], drawn * 0.5)
 
-	for finger in FINGERS:
-		var curl := Quaternion(Vector3.RIGHT, shut * (0.6 if finger == "thumb" else 1.0))
+	# (They go on their own, each at its own time, whatever the hand is doing.)
+	for f in FINGERS.size():
+		var finger: String = FINGERS[f]
+		var own: float = sin(_clock * (1.7 + float(f) * 0.9 + float(side) * 0.4) + float(f) * 2.1) * FINGERS_GO
+		var curl := Quaternion(Vector3.RIGHT, (shut + own) * (0.6 if finger == "thumb" else 1.0))
 		_set_local_turn(StringName(finger + tag), curl)
 		_set_local_turn(StringName(finger + "_b" + tag), curl)
 
@@ -938,8 +1056,12 @@ func _pose_leg(delta: float, side: int) -> void:
 	var along := span.normalized() if span.length() > 0.001 else Vector3.DOWN
 	# Knees go forward and a little out.
 	var pole := (Vector3.FORWARD + Vector3.RIGHT * (-0.25 if side == 0 else 0.25)).normalized()
+
+	if side == KNEE_WRONG_SIDE:
+		pole = (Vector3.BACK + Vector3.LEFT * 0.35).normalized()
+
 	pole -= along * pole.dot(along)
-	pole = pole.normalized() if pole.length() > 0.05 else Vector3.FORWARD
+	pole = pole.normalized() if pole.length() > 0.05 else pole
 	var offset := (upper * upper - lower * lower + far * far) / (2.0 * far)
 	var knee := hip + along * offset + pole * sqrt(maxf(upper * upper - offset * offset, 0.0))
 	_along(leg_1, knee - hip)

@@ -56,9 +56,10 @@ func _ready() -> void:
 		await get_tree().physics_frame
 
 	# Each blow, seen from the side of it: it stops where it is, you in reach.
-	p.teleport(Transform3D(Basis.IDENTITY, one.global_position + Vector3(0, 1.05, 2.2)))
+	one.global_position.y = 0.0
+	p.teleport(Transform3D(Basis.IDENTITY, one.global_position + Vector3(0, 1.05, 2.3)))
 
-	for what in [STATE.SWIPE_WIND, STATE.RAKE_WIND, STATE.GRASP_WIND, STATE.SWIPE_WIND]:
+	for what in [STATE.BITE_WIND, STATE.SWIPE_WIND, STATE.RAKE_WIND, STATE.GRASP_WIND, STATE.BITE_WIND]:
 		one._attack_in = 99.0
 		one._enter(what)
 
