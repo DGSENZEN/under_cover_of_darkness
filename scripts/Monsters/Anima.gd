@@ -12,13 +12,13 @@ const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const WardScript := preload("res://scripts/Magic/Ward.gd")
 const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
 
-enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN, REST, WAKE, WIND_UP, SWIPE, BACK_OFF, LEAVE, CROWD }
+enum State { RISE, RUSH, CIRCLE, TELL, LEAP, MISSED, ON, THROWN, REST, WAKE, WIND_UP, SWIPE, BACK_OFF, LEAVE, CROWD, REACH, DRAG }
 
 const DOING := {
 	State.RISE: &"rise", State.RUSH: &"rush", State.CIRCLE: &"circle", State.TELL: &"tell",
 	State.LEAP: &"leap", State.MISSED: &"missed", State.ON: &"on", State.THROWN: &"thrown",
 	State.REST: &"rest", State.WAKE: &"wake",
-	State.WIND_UP: &"wind_up", State.SWIPE: &"swipe", State.BACK_OFF: &"back_off", State.LEAVE: &"leave", State.CROWD: &"crowd",
+	State.WIND_UP: &"wind_up", State.SWIPE: &"swipe", State.BACK_OFF: &"back_off", State.REACH: &"reach", State.DRAG: &"drag", State.LEAVE: &"leave", State.CROWD: &"crowd",
 }
 const RISE_TIME := 0.5
 ## Finished with you: how fast it crawls off, and how long before it rests.
@@ -131,6 +131,13 @@ var fed := 0.0
 ## Whips it can still take before it is thrown off (from its form).
 ## The elite mouth (set before it enters the tree), and who it has taken in.
 var elite := false
+## The small one it means to take, when it may look again, and where that one was seized. On a small one: who has
+## picked it, and who has hold of it.
+var _prey: Node3D = null
+var _hungry_in := 0.0
+var _drag_from := Vector3.ZERO
+var _claimed_by: Node3D = null
+var seized_by: Node3D = null
 var _taken: Array[StringName] = []
 var grip_left := 1
 ## The mouth's ribs, broken by a whip, as long as it goes on holding you.
@@ -168,6 +175,126 @@ func hit_radius() -> float:
 ## One of this one's numbers, as it stands now.
 func form_number(what: String) -> float:
 	return float(_form[what])
+
+
+## What it is feeding on, if anything.
+func prey() -> Node3D:
+	return _prey if is_instance_valid(_prey) else null
+
+
+## Whether a mouth has this one, and is taking it in.
+func is_seized() -> bool:
+	return seized_by != null
+
+
+func let_go_of_prey() -> void:
+	if is_instance_valid(_prey):
+		_prey._claimed_by = null
+
+		if _prey.seized_by == self:
+			_prey._dropped()
+
+	_prey = null
+
+	if body != null and form == &"torso":
+		body.unseize()
+
+
+## Let go of, it drops where it is, and gets on with what it was doing.
+func _dropped() -> void:
+	seized_by = null
+	_claimed_by = null
+	_enter(State.RUSH)
+
+
+## Hurt, with room in it and something near: it looks to feed, if it isn't busy with you.
+func _look_for_prey(you: Node3D) -> void:
+	if not elite or _hungry_in > 0.0 or (state != State.RUSH and state != State.CIRCLE and state != State.BACK_OFF):
+		return
+
+	var row: Dictionary = _form["elite"]
+
+	if _taken.size() >= int(row["most_taken"]) or health >= float(row["health"]) * float(row["hungry_below"]) or statuses.has(&"smoked"):
+		return
+
+	var best := float(row["looks_within"])
+	var nearest: Node3D = null
+
+	for other in get_tree().get_nodes_in_group(&"monsters"):
+		if other == self or other.dead or other.asleep or other.get("form") == null or other.form == &"torso":
+			continue
+
+		if other.state == State.ON or other._claimed_by != null or other.is_seized():
+			continue
+
+		var off: float = other.global_position.distance_to(global_position)
+
+		if off < best and _clear_to(other):
+			best = off
+			nearest = other
+
+	if nearest != null:
+		_prey = nearest
+		_prey._claimed_by = self
+		_hungry_in = float(row["hungry_every"])
+		_enter(State.REACH)
+
+
+## Nothing in the way of that one: a wall, or a copal line.
+func _clear_to(other: Node3D) -> bool:
+	var ray := PhysicsRayQueryParameters3D.create(global_position, other.global_position, 1)
+	ray.exclude = [get_rid(), other.get_rid()]
+	return get_world_3d().direct_space_state.intersect_ray(ray).is_empty() and CopalLine.crossing(get_tree(), global_position, other.global_position) == null
+
+
+## Hauling itself to the one it has picked, until an arm will get there.
+func _reach_for_prey(delta: float) -> Vector3:
+	var row: Dictionary = _form["elite"]
+	var who := prey()
+
+	if who == null or who.dead or who.asleep or who.state == State.ON or _state_t >= float(row["gives_up"]) or not _clear_to(who):
+		_enter(State.RUSH)
+		return _hold_height(Vector3.ZERO, delta)
+
+	var to: Vector3 = (who.global_position - global_position) * Vector3(1.0, 0.0, 1.0)
+
+	if to.length() <= float(row["seizes_within"]) + float(row["seizes_up"]) * float(_taken.size()) and not statuses.has(&"smoked"):
+		who.seized_by = self
+		who._enter(State.THROWN)
+		_drag_from = who.global_position
+		_enter(State.DRAG)
+		return _hold_height(Vector3.ZERO, delta)
+
+	return _hold_height(_feel_round(to.normalized(), delta) * float(_form["speed"]) * _pace() * _slowed(), delta)
+
+
+## It has it: dragged in, thrashing, and under its skin.
+func _drag_in_prey(delta: float) -> Vector3:
+	var row: Dictionary = _form["elite"]
+	var who := prey()
+
+	if who == null or who.dead or who.asleep:
+		_enter(State.RUSH)
+		return _hold_height(Vector3.ZERO, delta)
+
+	var u := clampf(_state_t / float(row["drags"]), 0.0, 1.0)
+	var eased := u * u
+	var into: Vector3 = global_position + Vector3.UP * 0.25
+	who.global_position = _drag_from.lerp(into, eased)
+	body.seize(who.global_position)
+
+	if u >= 1.0:
+		var kind_of: StringName = who.form
+		_prey = null
+		who.seized_by = null
+		who._claimed_by = null
+		who._lay_down()
+		who._leave_you()
+		take_in(kind_of)
+		body.unseize()
+		_enter(State.RUSH)
+
+	return _hold_height(Vector3.ZERO, delta)
 
 
 ## The elite these small ones are drawn to, if there is one about: not itself, nor another mouth.
@@ -238,7 +365,7 @@ func _ready() -> void:
 
 
 func _is_opening() -> bool:
-	return state == State.TELL or state == State.WIND_UP
+	return state == State.TELL or state == State.WIND_UP or state == State.REACH or state == State.DRAG
 
 
 ## Lead passes through it, even then.
@@ -257,6 +384,7 @@ func _physics_process(delta: float) -> void:
 
 func _exit_tree() -> void:
 	_leave_you()
+	let_go_of_prey()
 
 
 func drain_power() -> float:
@@ -328,6 +456,7 @@ func _leech() -> Node:
 
 func _die(by: Node3D) -> void:
 	_leave_you()
+	let_go_of_prey()
 	var you: Node3D = target()
 
 	if is_instance_valid(you) and you.get("power") != null and fed > 0.0:
@@ -344,6 +473,14 @@ func _die(by: Node3D) -> void:
 
 func _brain(delta: float) -> Vector3:
 	_state_t += delta
+	_hungry_in = maxf(_hungry_in - delta, 0.0)
+
+	if is_seized():
+		if not is_instance_valid(seized_by) or seized_by.dead or seized_by.asleep or seized_by.prey() != self:
+			_dropped()
+		else:
+			return Vector3.ZERO
+
 	# (Whatever it is doing: a leap and a hold on you never ask for its height.)
 	_lift = move_toward(_lift, 0.0, FLUNG_DIES * delta)
 	_swipe_in = maxf(_swipe_in - delta, 0.0)
@@ -457,6 +594,7 @@ func lose_interest() -> void:
 
 ## The velocity it wants, as it is now.
 func _wish(you: Node3D, delta: float) -> Vector3:
+	_look_for_prey(you)
 	match state:
 		State.RISE:
 			if _state_t >= _weighs("rise_time", RISE_TIME):
@@ -531,6 +669,10 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 				_enter(State.RUSH)
 			else:
 				return _hold_height(_back_way * _weighs("back_off_speed", BACK_OFF_SPEED) * _slowed(), delta)
+		State.REACH:
+			return _reach_for_prey(delta)
+		State.DRAG:
+			return _drag_in_prey(delta)
 		State.TELL:
 			if _state_t >= float(_form["tell"]):
 				_leap_way = (_chest(you) - global_position).normalized()
@@ -685,6 +827,10 @@ func _lands_on(you: Node3D) -> bool:
 
 
 func _enter(next: int) -> void:
+	# Whatever takes it off what it was feeding on, it lets go.
+	if next != State.REACH and next != State.DRAG:
+		let_go_of_prey()
+
 	state = next
 	_state_t = 0.0
 
@@ -760,7 +906,7 @@ func _on_struck(result: StringName, source: StringName) -> void:
 	rouse()
 
 	# A hit from anything but lead breaks its leap, or its swing.
-	if (state == State.TELL or state == State.WIND_UP) and source != &"lead":
+	if (state == State.TELL or state == State.WIND_UP or state == State.REACH or state == State.DRAG) and source != &"lead":
 		throw_off(target().global_position if target() != null else global_position + Vector3.FORWARD)
 	elif state == State.ON:
 		# Copal loosens it at once; a blow, once its grip is spent.

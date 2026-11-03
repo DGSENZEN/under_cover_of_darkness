@@ -6,6 +6,7 @@ const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
 const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
+const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
 const STATE: Dictionary = AnimaScript.State
 const HOME := Vector3(0, 1.05, 0)
 
@@ -28,6 +29,7 @@ func _ready() -> void:
 	await _frames(60)
 	await _it_grows()
 	await _they_stay_near()
+	await _it_feeds()
 	print("elite_mouth_test: %s" % ("all passed" if failed == 0 else "%d FAILED" % failed))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -102,6 +104,203 @@ func _they_stay_near() -> void:
 	await _frames(120)
 	_check("E2d with no elite, nothing has changed", alone.global_position.distance_to(p.global_position) < was - 2.0)
 	_free([alone])
+	await _frames(3)
+
+
+## An elite, hurt enough to feed, and small ones by it, you far off.
+func _hungry_at(health: float, smalls: Array) -> Array:
+	await _clean()
+	var one := _elite(HOME + Vector3(0.0, -0.5, -14.0))
+	one.leap_chance = 0.0
+	var made: Array = [one]
+
+	for spot in smalls:
+		var small := _anima(spot[0], one.position + spot[1])
+		small.leap_chance = 0.0
+		made.append(small)
+
+	await _frames(3)
+	one.health = health
+	return made
+
+
+func _it_feeds() -> void:
+	# Whole, it fights on.
+	var whole: Array = await _hungry_at(240.0, [[&"hands", Vector3(3.0, 0.0, 0.0)]])
+	await _frames(120)
+	_check("E3 whole, it doesn't look for one", whole[0].state != STATE.REACH and whole[0].prey() == null)
+	_free(whole)
+	# The nearest.
+	var two: Array = await _hungry_at(150.0, [[&"hands", Vector3(4.6, 0.0, 0.0)], [&"face", Vector3(0.0, 0.8, 3.2)]])
+	var one: CharacterBody3D = two[0]
+	await _until(func(): return one.prey() != null, 3.0)
+	_check("E3a below two-thirds it goes for the nearest", one.prey() != null and one.prey().global_position.distance_to(one.global_position) <= two[2].global_position.distance_to(one.global_position) + 0.01)
+	var small: CharacterBody3D = one.prey()
+	await _until(func(): return one.state == STATE.DRAG, 8.0)
+	_check("E3j seized, the small one stops and thrashes", one.state == STATE.DRAG and small.is_seized())
+	var at_start: float = small.global_position.distance_to(one.global_position)
+	await _frames(35)
+	_check("E3j2 and is dragged in (%.2f from %.2f)" % [small.global_position.distance_to(one.global_position), at_start], small.global_position.distance_to(one.global_position) < at_start - 0.4)
+	var power_was: float = p.power.power
+	var health_was: float = one.health
+	await _until(func(): return one.state != STATE.DRAG, 3.0)
+	_check("E3k taken in: gone as the dead are, no burn, no reward", small.dead and not small.visible and p.power.power == power_was and one.taken_count() == 1)
+	_check("E3k2 and it gets its health (%.0f)" % one.health, one.health > health_was + 60.0 and one.prey() == null)
+	_free(two)
+	# Lead does nothing; anything else stops it, and pays.
+	var stopped: Array = await _hungry_at(150.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
+	one = stopped[0]
+	small = stopped[1]
+	await _until(func(): return one.state == STATE.DRAG, 8.0)
+	_hit(one, &"bullet", &"lead")
+	_check("E3m lead changes nothing", one.state == STATE.DRAG and small.is_seized())
+	p.power.power = 10.0
+	one.health = 220.0
+	var result: StringName = _hit(one, &"bullet", &"copal")
+	_check("E3l another round: triple (%.0f), power back, stunned, and it lets go" % _lost, result == &"weak" and one.state == STATE.THROWN and _lost > 140.0 and p.power.power > 10.0)
+	await _frames(2)
+	_check("E3l2 the small one drops, alive", not small.is_seized() and not small.dead and one.taken_count() == 0)
+	await _frames(40)
+	_check("E3l3 and fights on", small.visible and small.state != STATE.THROWN or small.state == STATE.RUSH)
+	_free(stopped)
+	# Kill the small one.
+	var killed: Array = await _hungry_at(150.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
+	one = killed[0]
+	small = killed[1]
+	await _until(func(): return one.state == STATE.DRAG, 8.0)
+	small.health = 1.0
+	_hit(small, &"bullet", &"copal")
+	await _frames(3)
+	_check("E3n kill the small one: it gets nothing", one.taken_count() == 0 and one.state != STATE.DRAG and one.prey() == null)
+	_free(killed)
+	# On the very tick it would have gone in.
+	var just: Array = await _hungry_at(150.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
+	one = just[0]
+	small = just[1]
+	await _until(func(): return one.state == STATE.DRAG, 8.0)
+	one._state_t = 99.0
+	small.health = 1.0
+	_hit(small, &"bullet", &"copal")
+	await _frames(2)
+	_check("E3b dying as it is taken: no heal, no growth, no error", one.taken_count() == 0 and one.health <= 150.0)
+	_free(just)
+	# The mouth dies, or sleeps, mid-drag.
+	var dies: Array = await _hungry_at(150.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
+	one = dies[0]
+	small = dies[1]
+	await _until(func(): return one.state == STATE.DRAG, 8.0)
+	one.health = 1.0
+	_hit(one, &"bullet", &"copal")
+	await _frames(3)
+	_check("E3c the mouth dies mid-drag: the small one drops alive", not small.is_seized() and not small.dead)
+	if is_instance_valid(one) and one.body != null:
+		pass
+	_free(dies)
+	var sleeps: Array = await _hungry_at(150.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
+	one = sleeps[0]
+	small = sleeps[1]
+	await _until(func(): return one.state == STATE.DRAG, 8.0)
+	one.sleep()
+	await _frames(3)
+	_check("E3c2 or sleeps: the same", not small.is_seized() and not small.dead)
+	_free(sleeps)
+	# Only from crawling, circling, backing off.
+	var holding: Array = await _hungry_at(240.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
+	one = holding[0]
+	one.global_position = HOME + Vector3(0.0, -0.5, -1.2)
+	holding[1].global_position = HOME + Vector3(2.0, -0.5, -1.2)
+	await _frames(1)
+	one.put_on_you()
+	one.health = 100.0
+	await _frames(120)
+	_check("E3g it never lets go of you to feed", one.state == STATE.ON and one.prey() == null)
+	p.leech.free_all()
+	_free(holding)
+	var telling: Array = await _hungry_at(240.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
+	one = telling[0]
+	one.state = STATE.TELL
+	one._state_t = -9.0
+	one.health = 100.0
+	await _frames(120)
+	_check("E3g2 nor from a lunge it is gathering", one.state == STATE.TELL and one.prey() == null)
+	_free(telling)
+	# Walled off, smoked.
+	var walled: Array = await _hungry_at(150.0, [[&"hands", Vector3(3.2, 0.0, 0.0)]])
+	one = walled[0]
+	walled[1].process_mode = Node.PROCESS_MODE_DISABLED
+	var wall: Node = Props.block(self, one.global_position + Vector3(1.6, 0.0, 0.0), Vector3(0.5, 3.0, 8.0))
+	await _frames(120)
+	_check("E3h a wall between: no", one.prey() == null and one.state != STATE.REACH)
+	wall.free()
+	_free(walled)
+	var lined: Array = await _hungry_at(150.0, [[&"hands", Vector3(3.2, 0.0, 0.0)]])
+	one = lined[0]
+	lined[1].process_mode = Node.PROCESS_MODE_DISABLED
+	var line: Node3D = CopalLine.lay(p, one.global_position + Vector3(1.6, -0.5, 0.0))
+	await _frames(100)
+	_check("E3h2 a copal line between: no", one.prey() == null and one.state != STATE.DRAG)
+	line.queue_free()
+	_free(lined)
+	var smoked: Array = await _hungry_at(150.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
+	one = smoked[0]
+	smoked[1].process_mode = Node.PROCESS_MODE_DISABLED
+	one.statuses.apply(&"smoked", 20.0)
+	await _frames(200)
+	_check("E3i smoked, it can't seize", one.state != STATE.DRAG and one.taken_count() == 0)
+	_free(smoked)
+	# Gives up; and waits before trying again.
+	var far_off: Array = await _hungry_at(150.0, [[&"hands", Vector3(5.2, 0.0, 0.0)]])
+	one = far_off[0]
+	far_off[1].process_mode = Node.PROCESS_MODE_DISABLED
+	var pin: Vector3 = one.global_position
+	var began := -1
+	var ended := -1
+	var again := -1
+
+	for i in 1000:
+		await get_tree().physics_frame
+		one.global_position = pin
+
+		if began < 0 and one.state == STATE.REACH:
+			began = i
+		elif began >= 0 and ended < 0 and one.state != STATE.REACH:
+			ended = i
+		elif ended >= 0 and again < 0 and one.state == STATE.REACH:
+			again = i
+
+	_check("E3p it gives up after 6 s if it can't get there (%d frames)" % (ended - began), began >= 0 and absi(ended - began - 360) < 8)
+	_check("E3o and 6 s from one try to the next (%d frames)" % (again - began), again < 0 or again - began >= 354)
+	_free(far_off)
+	# Two elites; one on you.
+	await _clean()
+	var a := _elite(HOME + Vector3(-1.2, -0.5, -14.0))
+	var b := _elite(HOME + Vector3(1.2, -0.5, -14.0))
+	a.leap_chance = 0.0
+	b.leap_chance = 0.0
+	var between := _anima(&"hands", HOME + Vector3(0.0, -0.5, -12.0))
+	between.leap_chance = 0.0
+	await _frames(3)
+	a.health = 100.0
+	b.health = 100.0
+	var shared := false
+
+	for i in 60:
+		await get_tree().physics_frame
+		shared = shared or (a.prey() != null and a.prey() == b.prey())
+
+	_check("E3e two elites: never one prey between them", not shared)
+	_free([a, b, between])
+	await _clean()
+	var feeding := _elite(HOME + Vector3(0.0, -0.5, -3.0))
+	feeding.leap_chance = 0.0
+	var on_you := _anima(&"hands", HOME + Vector3(0.8, -0.5, -0.5))
+	await _frames(1)
+	on_you.put_on_you()
+	feeding.health = 100.0
+	await _frames(120)
+	_check("E3f one on you is never taken off you", on_you.state == STATE.ON and feeding.prey() != on_you)
+	p.leech.free_all()
+	_free([feeding, on_you])
 	await _frames(3)
 
 

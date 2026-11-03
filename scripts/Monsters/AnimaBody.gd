@@ -153,6 +153,8 @@ const MOUTH_POSES := {
 	&"back_off": {"ribs": 0.12, "rear": 0.1, "snap": 1.5, "rears": 1.0},
 	&"crowd": {"ribs": 0.85, "rear": 0.9, "snap": 1.1, "rears": 0.9, "rake": -0.3, "swell": 0.5, "swells": 0.8},
 	&"leave": {"ribs": 0.05, "rear": 0.0, "snap": 1.1, "rears": 0.9},
+	&"reach": {"ribs": 0.5, "rear": 0.15, "snap": 1.6, "rears": 1.2, "swell": 0.3},
+	&"drag": {"ribs": 1.0, "rear": 0.55, "snap": 2.6, "rears": 1.6, "swell": 0.7, "swells": 1.8},
 	&"on": {"ribs": 0.6, "rear": 0.5, "snap": 5.0, "digs": false, "grab": 1.0, "swell": 1.0},
 }
 ## How fast it can come round (rad/s); how near you it keeps you in its mouth, whichever way it is going (m).
@@ -480,6 +482,16 @@ func hold_press(n: int, at: Vector3, jaw: float) -> void:
 
 
 ## It has taken one in, and stands this big now.
+## An arm out at what it is taking, or back.
+func seize(at: Vector3) -> void:
+	_mouth.seize_at(at)
+
+
+func unseize() -> void:
+	if _mouth != null:
+		_mouth.seize_off()
+
+
 func has_taken(kind: StringName, size: float) -> void:
 	_mouth.has_taken(kind, size)
 

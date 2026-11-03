@@ -122,6 +122,10 @@ const PRESS_KIND: Array[int] = [0, 1, 0, 1, 0, 1]
 const PRESS_SIZE: Array[float] = [0.26, 0.34, 0.2]
 ## The elite: how many it can hold, how many of its candles are alight, how far out what it took stands (m).
 const MOST_TAKEN := 3
+## The arm it seizes with, how fast, and how far out it may be drawn.
+const SEIZING_ARM := 2
+const SEIZE_RATE := 22.0
+const SEIZE_DRAWS_OUT := 2.6
 const CANDLE_FLAMES := 7
 const TAKEN_FACE_OUT := 0.02
 const TAKEN_HAND_OUT := 0.012
@@ -229,6 +233,8 @@ var _skin_hand: Mesh
 var _skin_look: ShaderMaterial
 var _light_look: ShaderMaterial
 ## The elite: how big it stands, of the plain one.
+var _seizing := false
+var _seized_at := Vector3.ZERO
 var _elite := false
 var _size := 1.0
 var _candle_flames: Array[MeshInstance3D] = []
@@ -782,6 +788,16 @@ func _new_sheathed(kind: int) -> Array:
 			eyes.append(ember)
 
 	return [root, jaw, eyes]
+
+
+## Its arm out at what it is taking, wherever that is now.
+func seize_at(at: Vector3) -> void:
+	_seizing = true
+	_seized_at = at
+
+
+func seize_off() -> void:
+	_seizing = false
 
 
 ## The elite: bigger, its candles alight.
@@ -1444,10 +1460,15 @@ func tick(delta: float, speed: float, going: Vector3, rake_to: float, digs: bool
 
 	for i in _hands.size():
 		# The two that haul stay on the earth to the last; the rest come up for a rake.
-		var on_earth: bool = digs and i < DIGGERS and (i < HAULERS or absf(rake_to) < 0.01)
+		var on_earth: bool = digs and i < DIGGERS and (i < HAULERS or absf(rake_to) < 0.01) and not (i == SEIZING_ARM and _seizing)
 		var shut_to: float
 
-		if on_earth:
+		if i == SEIZING_ARM and _seizing:
+			# Out past where an arm goes, shut on it.
+			_dug[i] = false
+			_wrist[i] = _wrist[i].lerp(_seized_at, 1.0 - exp(-SEIZE_RATE * delta))
+			shut_to = DUG_SHUT
+		elif on_earth:
 			shut_to = _dig(i, delta, speed, going)
 		else:
 			_dug[i] = false
@@ -1760,7 +1781,7 @@ func _solve_arm(i: int, grab: float, grab_at: Vector3) -> void:
 	var span := shoulder - wrist_at
 	var far := span.length()
 	var reach := BONE_LENGTH * 2.0
-	var stretch := clampf(far / (reach * 0.98), 1.0, DRAWN_OUT_MOST * 1.2)
+	var stretch := clampf(far / (reach * 0.98), 1.0, SEIZE_DRAWS_OUT if i == SEIZING_ARM and _seizing else DRAWN_OUT_MOST * 1.2)
 	_stretch[i] = stretch
 	var bone := BONE_LENGTH * stretch
 	var along_span: Vector3 = span / maxf(far, 0.001)
