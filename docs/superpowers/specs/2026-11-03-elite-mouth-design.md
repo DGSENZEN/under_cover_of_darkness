@@ -38,6 +38,12 @@ Its cause in the world: nothing new. What made the mouth, souls no one lit a can
 - Anything on screen in words of ours.
 - New modelled bodies that look stuck on: what it absorbs goes in under its skin, as the fused faces are ([[connected-topology-details-make-sense]]).
 
+## How often
+
+The user: three absorbs happens if you neglect it. The first absorb happens in most fights, so you see it feed and learn you can stop it; a good player rarely sees three, so that when it happens it is frightening and your own doing.
+
+Claude's call on how: hands and faces in a wave with an elite are drawn to it. They wait round it, circling, until something draws them off (you, near enough), and when they have nothing on you they drift back. So there is nearly always one in its reach. The wave is laid out to suit: small ones starting near it. A check plays a fight where the player does nothing to stop it and shows it reaching three; another plays one where the player interrupts or clears them and shows it doesn't.
+
 ## How it goes
 
 Numbers are Claude's first go, all in `Bestiary`, to be tuned in play.
