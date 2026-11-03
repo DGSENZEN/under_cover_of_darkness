@@ -23,6 +23,7 @@ const PowerPoolScript := preload("res://scripts/Magic/PowerPool.gd")
 const CasterScript := preload("res://scripts/Magic/Caster.gd")
 const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
 const EvilEyeCurseScript := preload("res://scripts/Monsters/EvilEyeCurse.gd")
+const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
 ## How far off the floor your head comes to rest.
 const DEATH_ABOVE_FLOOR := 0.22
 const DEATH_LEVELS := 7.0
@@ -1271,7 +1272,7 @@ func _feel_statuses() -> void:
 		power.refill_scale = curse.magic_regen() * (0.0 if leech != null and leech.count() > 0 else 1.0)
 
 	if combat != null:
-		combat.stamina_regen_scale = curse.stamina_regen()
+		combat.stamina_regen_scale = curse.stamina_regen() * (float(Bestiary.info(&"revenant")["soaked_stamina"]) if statuses.has(&"soaked") else 1.0)
 
 	if juice != null:
 		juice.set_unsteady(maxf(curse.unsteady(), leech.HEAVY if leech != null and leech.count() > 0 else 0.0))
@@ -1743,7 +1744,8 @@ func drain_life(amount: float) -> void:
 
 ## Left alone long enough, the shield you are in fills again.
 func _recover(delta: float) -> void:
-	if health <= 0.0 or health >= max_health or _game_time - _hurt_at < recover_delay:
+	# (Soaked, by a revenant's blow, it doesn't: lake water in the lungs.)
+	if health <= 0.0 or health >= max_health or _game_time - _hurt_at < recover_delay or statuses.has(&"soaked"):
 		return
 
 	var shield := max_health / float(maxi(shields, 1))

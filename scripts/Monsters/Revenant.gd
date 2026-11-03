@@ -7,6 +7,7 @@ const RevenantBody := preload("res://scripts/Monsters/RevenantBody.gd")
 
 enum State { WALK, SURGE_TELL, SURGE, SWIPE_WIND, SWIPE, RAKE_WIND, RAKE, GRASP_WIND, GRASP, HOLD, SHOVE, STAGGER, FALL, DOWN, RISE, DYING }
 
+const REACH_OF := {State.SWIPE_WIND: "swipe_reach", State.RAKE_WIND: "rake_reach", State.GRASP_WIND: "grasp_reach"}
 const DOING := {
 	State.WALK: &"walk", State.SURGE_TELL: &"surge_tell", State.SURGE: &"surge", State.SWIPE_WIND: &"swipe_wind", State.SWIPE: &"swipe",
 	State.RAKE_WIND: &"rake_wind", State.RAKE: &"rake", State.GRASP_WIND: &"grasp_wind", State.GRASP: &"grasp", State.HOLD: &"hold",
@@ -147,7 +148,8 @@ func _brain(delta: float) -> Vector3:
 	match state:
 		State.WALK:
 			_choose(far)
-			return way * float(_row["speed"]) + drops
+			# (It stops short of you: it reaches, it doesn't walk through you.)
+			return way * (float(_row["speed"]) if far > float(_row["keeps_off"]) else 0.0) + drops
 		State.SURGE_TELL:
 			if _state_t >= float(_row["surge_tell"]):
 				_enter(State.SURGE)
@@ -163,8 +165,10 @@ func _brain(delta: float) -> Vector3:
 
 			return -global_basis.z * float(_row["surge_speed"]) + drops
 		State.SWIPE_WIND, State.RAKE_WIND, State.GRASP_WIND:
+			var reach: float = float(_row[REACH_OF[state]])
 			_wind_up_ends(you, far)
-			return way * float(_row["speed"]) * float(_row["steps_winding"]) + drops
+			# It comes after you with it: backing away as you aim doesn't beat it.
+			return way * (float(_row["lurches"]) if far > reach else 0.0) + drops
 		State.SWIPE:
 			_ends_after("swipe_time")
 		State.RAKE:
@@ -246,7 +250,14 @@ func _land(you: Node3D, far: float, reach: String, damage: String) -> void:
 	var dodged: bool = you.get("combat") != null and you.combat.is_dodging()
 
 	if far <= float(_row[reach]) + float(_row["finds"]) and not dodged and you.has_method("take_damage"):
+		# (First: if it kills you, you fall away from this side.)
+		if you.get("hud") != null and you.hud.has_method("claw_at"):
+			you.hud.claw_at(you.camera.to_local(global_position).x if you.get("camera") != null else 1.0)
+
 		you.take_damage(float(_row[damage]), self)
+
+		if you.get("statuses") != null:
+			you.statuses.apply(&"soaked", float(_row["soaked_time"]))
 
 
 func _ends_after(how_long: String) -> void:

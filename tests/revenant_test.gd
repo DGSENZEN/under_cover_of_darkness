@@ -38,6 +38,9 @@ func _ready() -> void:
 	if only == "" or only == "brain":
 		await _its_brain()
 
+	if only == "" or only == "hits":
+		await _its_blows()
+
 	print("revenant_test: %s" % ("FAILED %d" % failed if failed > 0 else "passed"))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -240,10 +243,94 @@ func _its_brain() -> void:
 	await _clean()
 
 
+## A swipe hurts, a rake hurts more, and either leaves you soaked.
+func _its_blows() -> void:
+	await _clean()
+	p.invulnerable = false
+	var one := _revenant(Vector3(0, 0, -1.9))
+	await _frames(2)
+	one._surge_in = 99.0
+	one._attack_in = 99.0
+	one._enter(STATE.SWIPE_WIND)
+	await _until(func(): return one.state == STATE.SWIPE, 1.2)
+	await _frames(1)
+	_check("H1 a swipe lands 25 (%.0f)" % (100.0 - p.health), is_equal_approx(p.health, 75.0))
+	_check("H4 a hit soaks you for 8 s", p.statuses.has(&"soaked") and p.statuses.left(&"soaked") > 7.8)
+	_check("H6 stamina comes back at 40%%", await _stamina_scale_is(0.4))
+	p.health = 100.0
+	await _frames(100)
+	one._enter(STATE.RAKE_WIND)
+	await _until(func(): return one.state == STATE.RAKE, 1.5)
+	await _frames(1)
+	_check("H2 a rake lands 35 (%.0f)" % (100.0 - p.health), is_equal_approx(p.health, 65.0))
+	_check("H7 a new hit starts the 8 s again (%.1f)" % p.statuses.left(&"soaked"), p.statuses.left(&"soaked") > 7.8)
+	one.global_position = Vector3(0, 0, -60)
+	p.health = 62.0
+	await _frames(int(7.0 * 60.0))
+	_check("H5 your shield doesn't fill while it lasts (%.1f)" % p.health, p.health <= 62.0 and p.statuses.has(&"soaked"))
+	var filled: bool = await _until(func(): return p.health > 63.0, 7.0)
+	_check("H5b and does after", filled and not p.statuses.has(&"soaked"))
+	await _clean()
+	p.invulnerable = false
+	var dodged := _revenant(Vector3(0, 0, -1.9))
+	await _frames(2)
+	dodged._surge_in = 99.0
+	dodged._attack_in = 99.0
+	dodged._enter(STATE.SWIPE_WIND)
+	await _frames(20)
+	Input.action_press("gun_dodge")
+	await _frames(2)
+	Input.action_release("gun_dodge")
+	await _until(func(): return dodged.state == STATE.SWIPE, 1.0)
+	await _frames(1)
+	_check("H3 dodged, nothing (%.0f)" % p.health, p.health == 100.0)
+	await _clean()
+	p.invulnerable = false
+	# Backing off as you aim doesn't beat it: it comes after you. Running does.
+	var after_walk := await _backed_off_from(4.55)
+	await _clean()
+	p.invulnerable = false
+	var after_run := await _backed_off_from(8.5)
+	_check("H8 backing off at an aiming walk it catches you, at a sprint it doesn't (%.0f, %.0f)" % [after_walk, after_run], after_walk < 100.0 and after_run == 100.0)
+	await _clean()
+	p.invulnerable = false
+	var near := _revenant(Vector3(0, 0, -3.0))
+	await _frames(2)
+	near._surge_in = 99.0
+	near._attack_in = 99.0
+	near._enter(STATE.WALK)
+	await _frames(180)
+	var off_you: float = Vector2(near.global_position.x - p.global_position.x, near.global_position.z - p.global_position.z).length()
+	_check("H9 it stops short of you, not through you (%.2f)" % off_you, off_you > 1.3 and off_you < 1.7)
+	p.invulnerable = true
+	await _clean()
+
+
+func _stamina_scale_is(scale: float) -> bool:
+	await _frames(2)
+	return is_equal_approx(p.combat.stamina_regen_scale, scale)
+
+
+func _backed_off_from(speed: float) -> float:
+	var one := _revenant(Vector3(0, 0, -2.2))
+	await _frames(2)
+	one._surge_in = 99.0
+	one._attack_in = 99.0
+	one._enter(STATE.SWIPE_WIND)
+
+	while one.state == STATE.SWIPE_WIND:
+		p.teleport(Transform3D(Basis.IDENTITY, p.global_position + Vector3(0, 0, speed / 60.0)))
+		await get_tree().physics_frame
+
+	await _frames(1)
+	return p.health
+
+
 func _clean() -> void:
 	for monster in get_tree().get_nodes_in_group(&"monsters"):
 		monster.queue_free()
 
+	p.statuses.clear(&"soaked")
 	p.health = 100.0
 	p.teleport(Transform3D(Basis.IDENTITY, HOME))
 	await _frames(3)
