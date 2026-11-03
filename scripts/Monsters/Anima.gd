@@ -320,6 +320,38 @@ func is_full() -> bool:
 	return elite and _taken.size() >= int(_form["elite"]["most_taken"])
 
 
+## How many of a form it has taken in.
+func taken_of(kind_of: StringName) -> int:
+	return _taken.count(kind_of)
+
+
+## What it has taken goes with it. What it was doing doesn't: off a save nothing is mid-drag, and nothing held.
+func save_state() -> Dictionary:
+	var saved := super.save_state()
+
+	if elite:
+		saved["taken"] = _taken.map(func(one): return String(one))
+
+	return saved
+
+
+func load_state(saved: Dictionary) -> void:
+	let_go_of_prey()
+	seized_by = null
+	_claimed_by = null
+	var health_was: float = float(saved.get("health", health))
+
+	if elite and _taken.is_empty():
+		for one in saved.get("taken", []):
+			take_in(StringName(one))
+
+	super.load_state(saved)
+	health = health_was
+
+	if state == State.REACH or state == State.DRAG or state == State.THROWN:
+		_enter(State.RUSH)
+
+
 ## How many it has taken in.
 func taken_count() -> int:
 	return _taken.size()

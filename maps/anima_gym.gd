@@ -8,7 +8,10 @@ const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
 const LEAP_CHANCE := 0.45
 
 ## Each wave, by form.
-const ANIMA_WAVES := [{&"hands": 5}, {&"face": 2, &"hands": 4}, {&"torso": 1, &"face": 2, &"hands": 4}]
+## How many start round an elite, and how far from it.
+const ELITE_KEEPS := 6
+const ELITE_KEEPS_AT := 2.4
+const ANIMA_WAVES := [{&"hands": 5}, {&"face": 2, &"hands": 4}, {&"torso": 1, &"face": 2, &"hands": 4}, {&"elite": 1, &"face": 2, &"hands": 4}]
 ## Where they come up: drains in the floor, grilles low in the walls.
 const DRAINS := [Vector3(-8, 0, -14), Vector3(8, 0, -18), Vector3(0, 0, -26), Vector3(-10, 0, -30), Vector3(10, 0, -32)]
 const GRILLES := [Vector3(-14.6, 0, -24), Vector3(14.6, 0, -12), Vector3(-4, 0, -35.6)]
@@ -65,17 +68,27 @@ func _lay_out_waves() -> void:
 
 	for number in ANIMA_WAVES.size():
 		var members: Array = []
+		var elite_at := Vector3.INF
 
 		for form in ANIMA_WAVES[number]:
 			for i in int(ANIMA_WAVES[number][form]):
 				var anima: Node3D = AnimaScript.new()
-				anima.form = form
+				anima.form = &"torso" if form == &"elite" else form
+				anima.elite = form == &"elite"
 				anima.rests = true
 				anima.leap_chance = LEAP_CHANCE
 				anima.name = "Anima%d" % seed_value
 				seed_value += 1
 				var spot: Vector3 = spawns[next % spawns.size()]
 				next += 1
+
+				# What is drawn to an elite starts by it.
+				if form == &"elite":
+					elite_at = spot
+				elif elite_at != Vector3.INF:
+					var round_it := float(members.size()) / float(ELITE_KEEPS) * TAU
+					spot = elite_at + Vector3(cos(round_it), 0.0, sin(round_it)) * ELITE_KEEPS_AT
+
 				anima.position = Vector3(spot.x, 0.5 if form != &"face" else 1.3, spot.z)
 				add_child(anima)
 				anima.sleep()

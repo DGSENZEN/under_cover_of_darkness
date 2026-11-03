@@ -42,6 +42,8 @@ const FACES: Array[Vector4] = [
 	Vector4(-0.6, 0.05, -0.74, 0.3), Vector4(0.62, 0.15, -0.78, -0.45),
 	Vector4(0.22, 0.47, -0.84, 2.9), Vector4(-0.44, 0.47, -0.82, 0.6),
 ]
+## And those the elite has taken, in the room there is.
+const MORE_FACES: Array[Vector4] = [Vector4(-0.72, -0.26, -0.88, -0.4), Vector4(0.74, -0.3, -0.9, 0.5), Vector4(0.64, 0.54, -0.98, 0.2)]
 const FACE_SIZE := 1.0
 const HANDS: Array[Vector3] = [Vector3(-0.72, 0.34, -0.82), Vector3(0.8, 0.3, -0.86)]
 const HAND_SIZE := 0.62
@@ -49,6 +51,8 @@ const FACE_HINGE := Vector3(0.0, -0.043, -0.042)
 const FACE_EYE := Vector3(0.044, 0.005, -0.088)
 const JAW_DROPS := 0.85
 
+## How many of those it took are looking at you.
+var more_faces := 0
 var _ribs_left: MeshInstance3D
 var _ribs_right: MeshInstance3D
 var _whole: Array[Mesh] = []
@@ -103,7 +107,7 @@ func _init(layer: int, z_clip: float, fov: float) -> void:
 	light.set_shader_parameter(&"z_clip", z_clip)
 	light.set_shader_parameter(&"fov_override", fov)
 
-	for at in FACES:
+	for at in FACES + MORE_FACES:
 		var root := Node3D.new()
 		_body.add_child(root)
 		_piece(skull_mesh, flesh, root)
@@ -166,7 +170,7 @@ func closed() -> float:
 
 ## How many are staring at you.
 func faces_shown() -> int:
-	return _faces.size() if visible else 0
+	return FACES.size() + more_faces if visible else 0
 
 
 func cracked_shown() -> bool:
@@ -272,7 +276,12 @@ func close_in(delta: float, gulp: float, coming: float, arrived: float, last: fl
 	_over.transform = Transform3D(Basis(Vector3.RIGHT, OVER_TILT), OVER_AT + Vector3(0.0, -rises - last * 0.3, 0.0))
 
 	for i in _faces.size():
-		var spot: Vector4 = FACES[i]
+		_faces[i].visible = i < FACES.size() + more_faces
+
+		if not _faces[i].visible:
+			continue
+
+		var spot: Vector4 = FACES[i] if i < FACES.size() else MORE_FACES[i - FACES.size()]
 		var seed := float(i) * 2.3
 		var at := Vector3(spot.x, spot.y, spot.z)
 		# Each a beat behind the last, pressing in as it swallows, its jaw going wide before.

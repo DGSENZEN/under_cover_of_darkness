@@ -31,6 +31,7 @@ func _ready() -> void:
 	await _they_stay_near()
 	await _it_feeds()
 	await _at_three()
+	await _in_the_world()
 	print("elite_mouth_test: %s" % ("all passed" if failed == 0 else "%d FAILED" % failed))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -105,6 +106,94 @@ func _they_stay_near() -> void:
 	await _frames(120)
 	_check("E2d with no elite, nothing has changed", alone.global_position.distance_to(p.global_position) < was - 2.0)
 	_free([alone])
+	await _frames(3)
+
+
+## Left alone it reaches three; tended, it doesn't. It keeps what it took through a save, shows it in its cage, and gives it up as it dies.
+func _in_the_world() -> void:
+	var left: Array = await _hungry_at(120.0, [[&"hands", Vector3(2.0, 0.0, 0.0)], [&"face", Vector3(-2.0, 0.8, 0.0)], [&"hands", Vector3(0.0, 0.0, 2.2)]])
+	var neglected: CharacterBody3D = left[0]
+
+	for i in 1800:
+		await get_tree().physics_frame
+		neglected.health = minf(neglected.health, 120.0)
+
+		if neglected.taken_count() >= 3:
+			break
+
+	_check("E5 left alone and hurt, it reaches three (%d)" % neglected.taken_count(), neglected.taken_count() == 3)
+	_free(left)
+	var kept: Array = await _hungry_at(120.0, [[&"hands", Vector3(2.0, 0.0, 0.0)], [&"face", Vector3(-2.0, 0.8, 0.0)]])
+	var tended: CharacterBody3D = kept[0]
+
+	for i in 1200:
+		await get_tree().physics_frame
+
+		if tended.state == STATE.DRAG:
+			tended.health = 220.0
+			_hit(tended, &"bullet", &"copal")
+
+		tended.health = minf(tended.health, 120.0)
+
+	_check("E5b stopped each time, it doesn't (%d)" % tended.taken_count(), tended.taken_count() == 0)
+	_free(kept)
+	# A save, mid-drag.
+	var saving: Array = await _hungry_at(150.0, [[&"hands", Vector3(2.0, 0.0, 0.0)], [&"face", Vector3(-2.0, 0.8, 0.0)]])
+	var saved_one: CharacterBody3D = saving[0]
+	saved_one.take_in(&"face")
+	saved_one.health = 150.0
+	await _until(func(): return saved_one.state == STATE.DRAG, 8.0)
+	var mouth_saved: Dictionary = saved_one.save_state()
+	var small_saved: Dictionary = saved_one.prey().save_state()
+	var loaded := _elite(HOME + Vector3(6.0, -0.5, -14.0))
+	var small_loaded := _anima(&"hands", HOME + Vector3(8.0, -0.5, -14.0))
+	await _frames(3)
+	loaded.load_state(mouth_saved)
+	small_loaded.load_state(small_saved)
+	await _frames(5)
+	_check("E5c saved mid-drag, loaded: no drag, the small one back, what it took stays", loaded.state != STATE.DRAG and not small_loaded.is_seized() and not small_loaded.dead and loaded.taken_count() == 1 and loaded.body.taken_shown(&"face") == 1)
+	_check("E5c2 as big as it was", is_equal_approx(loaded.hit_radius(), saved_one.hit_radius()))
+	_free(saving)
+	_free([loaded, small_loaded])
+	# In its cage.
+	await _clean()
+	var caged := _elite(HOME + Vector3(0.8, -0.5, -0.8))
+	await _frames(2)
+	caged.take_in(&"face")
+	caged.take_in(&"face")
+	caged.put_on_you()
+	await _frames(40)
+	var cage: Node3D = p.leech_hands.cage()
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var clear := true
+
+	for i in 90:
+		await get_tree().physics_frame
+		clear = clear and cage.in_the_middle(size.x / size.y) == ""
+
+	_check("E5d in its cage, a face for each it took (%d), and the middle clear" % cage.faces_shown(), cage.faces_shown() == 6 and clear)
+	p.leech.free_all()
+	_free([caged])
+	await _frames(3)
+	# Dying.
+	await _clean()
+	var dies := _elite(HOME + Vector3(0.0, -0.5, -6.0))
+	dies.leap_chance = 0.0
+	dies.death_kind = 0
+	await _frames(5)
+	dies.take_in(&"face")
+	dies.take_in(&"hands")
+	dies.take_in(&"face")
+	await _frames(5)
+	var dead_body: Node3D = dies.body
+	_check("E5f its candles are lit till it dies", dead_body.candles_lit())
+	dies.health = 1.0
+	_hit(dies, &"bullet", &"copal")
+	await _frames(100)
+	_check("E5e dying, what it took comes out too (%d)" % dead_body.souls_apart(), dead_body.souls_apart() >= 11)
+	await _until(func(): return not is_instance_valid(dead_body), 22.0)
+	_check("E5g and all of it burns away", not is_instance_valid(dead_body))
+	_free([dies])
 	await _frames(3)
 
 

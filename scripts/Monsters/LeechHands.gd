@@ -281,11 +281,14 @@ func _mouth_has_you() -> bool:
 func _work_cage(delta: float) -> void:
 	var arrived := -1.0
 	var cracked := false
+	var faces_taken := 0
 
 	for slot in 3:
 		if player.leech.holds_mouth(slot):
+			var mouth: Node3D = player.leech.who_in(slot)
 			arrived = maxf(arrived, _arrive[slot])
-			cracked = cracked or bool(player.leech.who_in(slot).get("ribs_cracked"))
+			cracked = cracked or bool(mouth.get("ribs_cracked"))
+			faces_taken = maxi(faces_taken, mouth.taken_of(&"face"))
 
 	if arrived < 0.0:
 		if _cage != null and _cage.visible:
@@ -300,6 +303,7 @@ func _work_cage(delta: float) -> void:
 		_cage = LeechCageScript.new(VIEWMODEL_LAYER, ViewArmsScript.Z_CLIP, ViewArmsScript.VIEW_FOV)
 		add_child(_cage)
 
+	_cage.more_faces = faces_taken
 	_cage.close_in(delta, player.leech.gulp(), player.leech.coming(), arrived, player.leech.last_gulp(), cracked)
 
 

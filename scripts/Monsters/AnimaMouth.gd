@@ -1024,6 +1024,13 @@ func start_dying(seed_of: int) -> Array:
 	for n in _skulls.size():
 		_still_in.append(PRESSES + n)
 
+	# And those it took.
+	for n in _taken.size():
+		_still_in.append(PRESSES + _skulls.size() + n)
+
+	for flame in _candle_flames:
+		flame.visible = false
+
 	# Not in order.
 	for k in range(_still_in.size() - 1, 0, -1):
 		var other: int = _rng.randi() % (k + 1)
@@ -1047,6 +1054,11 @@ func start_dying(seed_of: int) -> Array:
 	for skull in _skulls:
 		for piece in skull.find_children("*", "MeshInstance3D", true, false):
 			meshes.append([piece, 0.3])
+
+	for one in _taken:
+		for piece in one["root"].find_children("*", "MeshInstance3D", false, false):
+			if not one["lights"].has(piece):
+				meshes.append([piece, _rng.randf_range(0.0, 0.4)])
 
 	for b in BURSTS:
 		_burst_nodes[b].visible = false
@@ -1075,6 +1087,9 @@ func flame_spots(finger_flame: float) -> Array:
 	for skull in _skulls:
 		spots.append([skull, Vector3.ZERO, FLAME_ON_THEM])
 
+	for one in _taken:
+		spots.append([one["root"], Vector3.ZERO, FLAME_ON_THEM])
+
 	return spots
 
 
@@ -1089,9 +1104,14 @@ func _tear_free(which: int, floor_y: float) -> void:
 		way = part(&"Mass").global_basis * _press_way[which]
 		_press_strength[which] = 0.0
 		_tear_at.append(which)
-	else:
+	elif which < PRESSES + _skulls.size():
 		node = _skulls[which - PRESSES]
 		way = -node.global_basis.z
+	else:
+		var one: Dictionary = _taken[which - PRESSES - _skulls.size()]
+		node = one["root"]
+		way = part(&"Mass").global_basis * (one["spot"][1] as Vector3)
+		one["out"] = true
 
 	_fling(node, way, _rng.randf_range(FREED_SPEED.x, FREED_SPEED.y), _rng.randf_range(FREED_UP.x, FREED_UP.y), FREED_LIES, false)
 	Fx.blood(self, node.global_position, way, 0.25)
@@ -1262,6 +1282,13 @@ func _work_dying_presses(delta: float, pose: Dictionary) -> void:
 
 	for b in BURSTS:
 		_uniform_at[PRESSES + b].w = 0.0
+
+	for n in _taken.size():
+		if _taken[n].get("out", false):
+			var slot := PRESSES + BURSTS + n
+			_uniform_way[slot].w = 2.0
+			_uniform_up[slot].w = 1.0
+			_uniform_size[slot] = PRESS_SIZE[2] * 1.4
 
 	_mass_look.set_shader_parameter(&"press_at", _uniform_at)
 	_mass_look.set_shader_parameter(&"press_way", _uniform_way)

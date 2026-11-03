@@ -55,7 +55,14 @@ func _layout() -> void:
 	_clear(_awake())
 	await _until(func(): return gym.wave_now == 3, 8.0)
 	await _frames(5)
-	_check("X2b the third: a torso, two faces, three hands, four eyes (%s)" % str(_counts(_awake())), _counts(_awake()) == {&"torso": 1, &"face": 2, &"hands": 3, &"eyes": 4})
+	var third_is: Dictionary = _counts(_awake())
+	_clear(_awake())
+	await _until(func(): return gym.wave_now == 4, 8.0)
+	await _frames(5)
+	var last_wave: Array = _awake()
+	var the_elite: Array = last_wave.filter(func(m): return _is_anima(m) and m.elite)
+	_check("X2c the last: an elite, with enough by it to take three (%s)" % str(_counts(last_wave)), the_elite.size() == 1 and _counts(last_wave) == {&"torso": 1, &"face": 2, &"hands": 4, &"eyes": 3} and last_wave.filter(func(m): return _is_anima(m) and m != the_elite[0] and m.global_position.distance_to(the_elite[0].global_position) < 4.0).size() >= 3)
+	_check("X2b the third: a torso, two faces, three hands, four eyes (%s)" % str(third_is), third_is == {&"torso": 1, &"face": 2, &"hands": 3, &"eyes": 4})
 
 
 ## Wave one, with copal and the whip, at most 60 s of it.

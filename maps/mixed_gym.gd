@@ -4,7 +4,7 @@ extends "res://maps/anima_gym.gd"
 ## F5 starts it again, F6 calls the next wave.
 
 ## Each wave: ánimas by form, and eyes.
-const MIXED_WAVES := [{&"hands": 3, &"eyes": 2}, {&"face": 2, &"hands": 3, &"eyes": 3}, {&"torso": 1, &"face": 2, &"hands": 3, &"eyes": 4}]
+const MIXED_WAVES := [{&"hands": 3, &"eyes": 2}, {&"face": 2, &"hands": 3, &"eyes": 3}, {&"torso": 1, &"face": 2, &"hands": 3, &"eyes": 4}, {&"elite": 1, &"face": 2, &"hands": 4, &"eyes": 3}]
 ## How far out from the yard's middle the eyes wait, and how high.
 const EYES_OUT := 8.0
 const EYES_HIGH := 3.0
@@ -35,6 +35,7 @@ func _lay_out_waves() -> void:
 
 	for number in MIXED_WAVES.size():
 		var members: Array = []
+		var elite_at := Vector3.INF
 
 		for what in MIXED_WAVES[number]:
 			var many := int(MIXED_WAVES[number][what])
@@ -50,12 +51,21 @@ func _lay_out_waves() -> void:
 					one.position = EYES_MIDDLE + Vector3(cos(turn) * EYES_OUT, EYES_HIGH, sin(turn) * EYES_OUT)
 				else:
 					one = AnimaScript.new()
-					one.form = what
+					one.form = &"torso" if what == &"elite" else what
+					one.elite = what == &"elite"
 					one.rests = true
 					one.leap_chance = LEAP_CHANCE
 					one.name = "Anima%d" % seed_value
 					var spot: Vector3 = spawns[next % spawns.size()]
 					next += 1
+
+					# What is drawn to an elite starts by it.
+					if what == &"elite":
+						elite_at = spot
+					elif elite_at != Vector3.INF:
+						var round_it := float(members.size()) / float(ELITE_KEEPS) * TAU
+						spot = elite_at + Vector3(cos(round_it), 0.0, sin(round_it)) * ELITE_KEEPS_AT
+
 					one.position = Vector3(spot.x, 0.5 if what != &"face" else 1.3, spot.z)
 
 				seed_value += 1
