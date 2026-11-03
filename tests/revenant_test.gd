@@ -4,6 +4,10 @@ extends Node3D
 const PLAYER := preload("res://Player.tscn")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const BodyScript := preload("res://scripts/Monsters/RevenantBody.gd")
+const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
+const RevenantScript := preload("res://scripts/Monsters/Revenant.gd")
+const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
+const STATE: Dictionary = RevenantScript.State
 const HOME := Vector3(0, 1.05, 0)
 
 var p: CharacterBody3D
@@ -30,6 +34,9 @@ func _ready() -> void:
 
 	if only == "" or only == "moves":
 		await _it_moves()
+
+	if only == "" or only == "brain":
+		await _its_brain()
 
 	print("revenant_test: %s" % ("FAILED %d" % failed if failed > 0 else "passed"))
 	get_tree().quit(1 if failed > 0 else 0)
@@ -119,6 +126,134 @@ func _it_moves() -> void:
 	_check("M3 the head never jumps (%.1f m/s, %s)" % [worst_head, at_head], worst_head < 8.5)
 	body.queue_free()
 	await _frames(2)
+
+
+## What it is: down isn't dead, and it gets back up.
+func _its_brain() -> void:
+	await _clean()
+	var one := _revenant(Vector3(0, 0, -30))
+	await _frames(2)
+	one._surge_in = 99.0
+	var balls := 0
+
+	while not one.is_down() and balls < 30:
+		one.take_hit(55.0, p, &"bullet", one.global_position, Vector3.FORWARD)
+		balls += 1
+
+	_check("R1 eleven balls of lead put it down, not ten (%d)" % balls, balls == 11)
+	_check("R2 down, not dead", one.is_down() and not one.dead)
+	var before: float = one.health
+	one.take_hit(55.0, p, &"bullet", one.global_position, Vector3.FORWARD)
+	one.take_hit(20.0, p, &"power", one.global_position, Vector3.FORWARD)
+	one.kick(Vector3(2, 0, 0), p)
+	_check("R3 hits do nothing while it's down", one.health == before and one.is_down())
+	var rose: bool = await _until(func(): return one.state == STATE.WALK, 7.2)
+	_check("R4 it gets up, after 5 s and 1.6 s, with 40%% (%.0f)" % one.health, rose and one._state_t < 0.5 and is_equal_approx(one.health, 72.0))
+	var times := 0
+
+	for i in 3:
+		while not one.is_down():
+			one.take_hit(55.0, p, &"bullet", one.global_position, Vector3.FORWARD)
+
+		times += 1 if await _until(func(): return one.state == STATE.WALK, 7.2) else 0
+
+	_check("R5 and does so again and again (%d)" % times, times == 3)
+	await _clean()
+	var walker := _revenant(Vector3(0, 0, -30))
+	await _frames(20)
+	walker._surge_in = 99.0
+	var from: Vector3 = walker.global_position
+	await _frames(120)
+	var pace: float = walker.global_position.distance_to(from) / 2.0
+	_check("R6 walks at 1.6 m/s (%.2f)" % pace, absf(pace - 1.6) < 0.2)
+	walker.statuses.apply(&"smoked", 4.0)
+	from = walker.global_position
+	await _frames(120)
+	var smoked_pace: float = walker.global_position.distance_to(from) / 2.0
+	_check("R9 copal smoke doesn't slow it (%.2f)" % smoked_pace, absf(smoked_pace - pace) < 0.2)
+	var line: Node3D = CopalLine.lay(p, walker.global_position + Vector3(0, 0, 1.2))
+	var line_z: float = line.global_position.z
+	var crossed: bool = await _until(func(): return walker.global_position.z > line_z + 0.3, 3.0)
+	_check("R9b a copal line doesn't stop it", crossed)
+	walker._surge_in = 0.0
+	var told: bool = await _until(func(): return walker.state == STATE.SURGE_TELL, 0.5)
+	var surged: bool = await _until(func(): return walker.state == STATE.SURGE, 1.0)
+	from = walker.global_position
+	await _frames(30)
+	var surge_pace: float = walker.global_position.distance_to(from) / 0.5
+	_check("R7 surges at about 6 m/s, with a tell (%.1f)" % surge_pace, told and surged and surge_pace > 5.0)
+	await _clean()
+	var hit := _revenant(Vector3(0, 0, -30))
+	await _frames(20)
+	hit._surge_in = 99.0
+
+	for i in 8:
+		hit.take_hit(55.0, p, &"bullet", hit.global_position, Vector3.RIGHT)
+		await _frames(10)
+
+	_check("R8 lead doesn't turn it aside (%.2f)" % absf(hit.global_position.x), absf(hit.global_position.x) < 0.3)
+	await _clean()
+	var booted := _revenant(Vector3(0, 0, -40))
+	await _frames(20)
+	booted._surge_in = 99.0
+	var x: float = booted.global_position.x
+	booted.kick(Vector3(10, 0, 0), p)
+	await _frames(30)
+	var shoved := absf(booted.global_position.x - x)
+	x = booted.global_position.x
+	booted.take_hit(20.0, p, &"burst", booted.global_position, Vector3.RIGHT)
+	await _frames(30)
+	var thrown := absf(booted.global_position.x - x)
+	_check("R10 a boot barely moves it, Burst throws it (%.2f, %.2f)" % [shoved, thrown], shoved < 0.8 and thrown > 1.5)
+	await _clean()
+	# A ramp, and it falls on it.
+	var ramp := StaticBody3D.new()
+	var slope := CollisionShape3D.new()
+	var plank := BoxShape3D.new()
+	plank.size = Vector3(10, 0.4, 10)
+	slope.shape = plank
+	ramp.add_child(slope)
+	add_child(ramp)
+	ramp.position = Vector3(30, 0.9, -30)
+	ramp.rotation.x = 0.2
+	var fell := _revenant(Vector3(30, 3.0, -30))
+	await _frames(60)
+	fell._surge_in = 99.0
+
+	while not fell.is_down():
+		fell.take_hit(55.0, p, &"bullet", fell.global_position, Vector3.FORWARD)
+
+	await _frames(150)
+	var under: Vector3 = fell.global_position
+	var lowest: float = minf(fell.body.wrist(0).y, fell.body.wrist(1).y)
+	_check("M4 fallen on a slope, it stays on the floor, its hands above it (%.2f)" % (lowest - under.y), lowest > under.y - 0.6 and lowest < under.y + 0.9)
+	ramp.queue_free()
+	await _clean()
+	Props.block(self, Vector3(-40, 2, -10), Vector3(10, 4, 1))
+	var runner := _revenant(Vector3(-40, 0, -16))
+	p.teleport(Transform3D(Basis.IDENTITY, Vector3(-40, 1.05, 2)))
+	await _frames(20)
+	runner._surge_in = 0.0
+	await _until(func(): return runner.state == STATE.SURGE, 1.5)
+	await _frames(70)
+	_check("M5 a surge stops at a wall (%.2f)" % runner.global_position.z, runner.global_position.z < -10.4)
+	await _clean()
+
+
+func _clean() -> void:
+	for monster in get_tree().get_nodes_in_group(&"monsters"):
+		monster.queue_free()
+
+	p.health = 100.0
+	p.teleport(Transform3D(Basis.IDENTITY, HOME))
+	await _frames(3)
+
+
+func _revenant(at: Vector3) -> CharacterBody3D:
+	var one: CharacterBody3D = RevenantScript.new()
+	one.position = at
+	add_child(one)
+	return one
 
 
 func _frames(count: int) -> void:

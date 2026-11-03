@@ -174,7 +174,7 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 	var weak := Bestiary.is_weak(kind, source) or opening
 	var was_exposed := is_exposed()
 	health -= damage * Bestiary.scale_for(kind, source) * (EXPOSED_SCALE if was_exposed else 1.0) * (OPENING_SCALE if opening else 1.0)
-	_push += direction.normalized() * float(PUSH.get(hit_kind, PUSH_DEFAULT))
+	_push += direction.normalized() * float(PUSH.get(hit_kind, PUSH_DEFAULT)) * _hit_pushes(hit_kind)
 
 	if hit_kind == &"bullet":
 		var round_is: Dictionary = Rounds.info(round_hint)
@@ -193,7 +193,9 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 
 	var result := &"hit"
 
-	if health <= 0.0:
+	if health <= 0.0 and _goes_down(attacker, source):
+		result = &"hit"
+	elif health <= 0.0:
 		result = &"killed"
 		_die(attacker)
 	elif weak:
@@ -203,6 +205,16 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 
 	struck.emit(result, source)
 	return result
+
+
+## How much of a hit's push it takes: all, unless a kind is heavy.
+func _hit_pushes(_hit_kind: StringName) -> float:
+	return 1.0
+
+
+## Its health has run out: whether this only puts it down, for a kind that gets up.
+func _goes_down(_by: Node3D, _source: StringName) -> bool:
+	return false
 
 
 ## A boot: it hurts, and throws it along `push`.

@@ -13,6 +13,20 @@ const TABLE := {
 		"weak": {&"shot": 1.0, &"copal": 1.2, &"obsidian": 1.5, &"blast": 1.5},
 		"resist": {&"lead": 0.3},
 	},
+	# The drowned of the old lakebed, raised by the seepage: a body, so copal is only a ball to it. Fire is what keeps it dead (Revenant.gd).
+	&"revenant": {
+		"health": 180.0,
+		"resist": {&"lead": 0.3, &"copal": 0.3, &"shot": 0.5},
+		"speed": 1.6, "hit_radius": 0.55, "height": 2.6, "turns": 1.7, "steps_winding": 0.55,
+		"surge_every": [4.0, 7.0], "surge_tell": 0.5, "surge_speed": 6.0, "surge_time": 0.9, "surge_from": 3.6,
+		"swipe_reach": 2.4, "swipe_wind": 0.7, "swipe_damage": 25.0, "swipe_time": 0.45,
+		"rake_reach": 2.2, "rake_wind": 1.0, "rake_damage": 35.0, "rake_time": 0.6,
+		"grasp_reach": 3.0, "grasp_wind": 1.1, "grasp_damage": 5.0, "grasp_hold": 1.0, "grasp_time": 0.5, "touch_grace": 1.5, "grasp_chance": 0.4,
+		"finds": 0.3, "between_attacks": 0.9, "shove_time": 0.4, "stagger_time": 0.55,
+		"soaked_time": 8.0, "soaked_stamina": 0.4,
+		"down_time": 5.0, "rise_time": 1.6, "rises_with": 0.4,
+		"burn_time": 5.0, "burn_rate": 8.0, "seared_time": 3.0, "push_takes": 0.15, "thrown_takes": 0.8,
+	},
 	# Souls no one lit a candle for: what they drink, how they come. Copal hurts them;
 	# lead passes through; a shell's few pellets that tell are a poor answer.
 	&"anima": {
