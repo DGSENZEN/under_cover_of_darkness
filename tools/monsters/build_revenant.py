@@ -4,7 +4,7 @@ swollen and sagging with water; a real skull with flesh hung on it, its teeth it
 on one shoulder, milagros nailed into it, what it wore rotted into it, and a rig of its own. The stance is its rest
 pose: it stands hunched, arms hanging past its knees, and that is what its skin is built for.
 
-It never left the lake. Its hair, the roots grown on its crust and its rags drift up off it as if it were still under
+It never left the lake. Its hair, the roots grown on its crust and its rags hang off it and sway as if it were still under
 water (UV x: how far along each it is, for revenant_flesh.gdshader; UV y: its own phase), and the seep that raised it
 lights a split down its chest and the cracks round what holds it (colour alpha: under 0.85 how much seep; above, its eyes).
 
@@ -81,10 +81,10 @@ SILT = (0.045, 0.05, 0.042)
 ROT = (0.26, 0.2, 0.13)
 WOOL = (0.17, 0.145, 0.12)
 WOOL_LIT = (0.3, 0.25, 0.2)
-HAIR = (0.018, 0.022, 0.024)
-HAIR_TIP = (0.05, 0.07, 0.06)
-ROOT = (0.07, 0.05, 0.035)
-ROOT_TIP = (0.16, 0.14, 0.08)
+HAIR = (0.03, 0.05, 0.035)
+HAIR_TIP = (0.13, 0.2, 0.09)
+ROOT = (0.06, 0.06, 0.03)
+ROOT_TIP = (0.17, 0.2, 0.08)
 TEZONTLE = (0.2, 0.065, 0.05)
 LAKE_CRUST = (0.42, 0.39, 0.3)
 TIN = (0.6, 0.58, 0.47)
@@ -647,23 +647,31 @@ def milagro(bm_out, at, normal, rng, marks):
     bmesh.ops.recalc_face_normals(bm_out, faces=faces + nail_faces)
 
 
-def strand(bm, roots, marks, kind, root, way, length, radius, flat, rng, uv_layer, attach_layer):
-    """One thing drifting off it: a closed taper, or a flat rag, rising and curling as it would under water."""
-    rows = 11
+def strand(bm, roots, marks, kind, root, way, length, radius, flat, rng, uv_layer, attach_layer, fall):
+    """One thing hanging off it, as weed does in slow water: out of where it grows, over, and down, swaying from side to side,
+    its ribbon turning as it goes, its tip lifting. fall: which way is down, there, as it goes on all fours (its rest stands upright)."""
+    rows = 14 if kind == "hair" else 11
     sides = 4 if flat else 6
     phase = rng.random()
     seed = rng.uniform(0.0, 50.0)
     at = root - way * radius
     heading = way.copy()
+    sideways = fall.cross(Vector((0.13, 0.27, 0.95))).normalized()
+    sways = rng.uniform(0.3, 0.55) * (1.0 if rng.random() < 0.5 else -1.0)
+    twists = rng.uniform(1.5, 4.5) * (1.0 if rng.random() < 0.5 else -1.0)
     rings = []
     roots.append(root.copy())
     index = len(roots)
 
     for i in range(rows):
         t = i / float(rows - 1)
-        across = heading.cross(Vector((0.13, 0.27, 0.95))).normalized()
+        flat_way = heading.cross(Vector((0.13, 0.27, 0.95))).normalized()
+        along = heading.cross(flat_way).normalized()
+        turn = phase * math.tau + t * twists if flat else 0.0
+        across = flat_way * math.cos(turn) + along * math.sin(turn)
         other = heading.cross(across).normalized()
-        wide = (radius * (1.0 - t * 0.92) if not flat else radius * (1.0 - t * 0.88))
+        # (A blade of weed is widest a third of the way along it.)
+        wide = (radius * (1.0 - t * 0.92) if not flat else radius * (0.55 + 0.45 * smooth(0.0, 0.32, t)) * (1.0 - smooth(0.55, 1.0, t) * 0.86))
         ring = []
 
         for k in range(sides):
@@ -672,8 +680,11 @@ def strand(bm, roots, marks, kind, root, way, length, radius, flat, rng, uv_laye
             ring.append(bm.verts.new(at + offset))
 
         rings.append((ring, t))
-        # Mostly back, and only a little up: it's being carried by something slow.
-        heading = (heading + Vector((0.0, -0.16, 0.05)) + Vector((noise.noise(Vector((seed, t * 2.4, 0.0))), noise.noise(Vector((seed, t * 2.4, 7.0))), noise.noise(Vector((seed, t * 2.4, 13.0))) * 0.6)) * 0.42).normalized()
+        # It falls, soon; its tip, light, lifts out of the fall and curls.
+        falls = fall * (0.62 * (1.0 - smooth(0.72, 1.0, t) * 0.8))
+        sway = sideways * (math.sin(seed + t * 6.5) * sways)
+        wander = Vector((noise.noise(Vector((seed, t * 1.9, 0.0))), noise.noise(Vector((seed, t * 1.9, 7.0))), noise.noise(Vector((seed, t * 1.9, 13.0))))) * 0.24
+        heading = (heading + falls + sway + wander).normalized()
         at += heading * length / (rows - 1)
 
     faces = [bm.faces.new([v for v in reversed(rings[0][0])]), bm.faces.new(rings[-1][0])]
@@ -699,6 +710,17 @@ def strand(bm, roots, marks, kind, root, way, length, radius, flat, rng, uv_laye
             loop[uv_layer].uv = (place_t[loop.vert], phase)
 
 
+## Which way is down and a little back, in its upright rest, for what's fixed to each part of it as it goes on all fours (measured on the walk). Its head stays level; its trunk doesn't.
+FALLS_HEAD = Vector((0.0, -0.2, -0.98)).normalized()
+FALLS_CHEST = Vector((0.0, 0.55, -0.83)).normalized()
+FALLS_HIPS = Vector((0.0, 0.08, -0.99)).normalized()
+
+
+def falls_at(at):
+    """Which way down is, for what's fixed here on its trunk."""
+    return FALLS_HIPS.lerp(FALLS_CHEST, smooth(0.95, 1.6, at.z)).normalized()
+
+
 def strands_on(bm, tree, marks, lookup, cloth_of, crust_at, sockets, rng):
     """Its hair, the lake's roots grown on its crust, and its rags. Returns where each is fixed, for its weights."""
     uv_layer = bm.loops.layers.uv.get("UVMap") or bm.loops.layers.uv.new("UVMap")
@@ -708,20 +730,22 @@ def strands_on(bm, tree, marks, lookup, cloth_of, crust_at, sockets, rng):
     hair = roots_made = rags = 0
 
     for _attempt in range(400):
-        if hair >= 30:
+        if hair >= 58:
             break
 
-        way = Vector((rng.gauss(0.0, 0.8), rng.uniform(-1.0, -0.1), rng.uniform(-0.1, 0.8))).normalized()
+        way = Vector((rng.gauss(0.0, 0.9), rng.uniform(-1.0, -0.05), rng.uniform(0.0, 0.8))).normalized()
         hit, normal, _i, _d = tree.ray_cast(crown + way * 0.8, -way, 0.8)
 
         if hit is None or normal.dot(way) < 0.25:
             continue
 
-        strand(bm, roots, marks, "hair", hit, (way + Vector((0.0, -0.5, 0.1))).normalized(), rng.uniform(0.4, 0.95), rng.uniform(0.014, 0.024), False, rng, uv_layer, attach_layer)
+        # (Seaweed: most of it flat ribbons, a few rope.)
+        ribbon = hair % 3 != 0
+        strand(bm, roots, marks, "hair", hit, way, rng.uniform(0.7, 1.5), rng.uniform(0.034, 0.07) if ribbon else rng.uniform(0.014, 0.022), ribbon, rng, uv_layer, attach_layer, FALLS_HEAD)
         hair += 1
 
     for _attempt in range(400):
-        if roots_made >= 16:
+        if roots_made >= 30:
             break
 
         at, size = crust_at[rng.randrange(len(crust_at))]
@@ -731,7 +755,8 @@ def strands_on(bm, tree, marks, lookup, cloth_of, crust_at, sockets, rng):
         if hit is None or normal.dot(way) < 0.2 or (hit - at).length > size:
             continue
 
-        strand(bm, roots, marks, "root", hit, (normal + Vector((0.0, -0.3, -0.2))).normalized(), rng.uniform(0.2, 0.5), rng.uniform(0.012, 0.02), False, rng, uv_layer, attach_layer)
+        ribbon = roots_made % 2 == 0
+        strand(bm, roots, marks, "root", hit, normal, rng.uniform(0.35, 0.85), rng.uniform(0.03, 0.055) if ribbon else rng.uniform(0.01, 0.018), ribbon, rng, uv_layer, attach_layer, falls_at(hit))
         roots_made += 1
 
     for _attempt in range(1500):
@@ -751,7 +776,7 @@ def strands_on(bm, tree, marks, lookup, cloth_of, crust_at, sockets, rng):
         if here < 0.05 or here > 0.95:
             continue
 
-        strand(bm, roots, marks, "rag", hit, (normal * 0.8 + Vector((0.0, -0.3, 0.15))).normalized(), rng.uniform(0.2, 0.46), rng.uniform(0.025, 0.05), True, rng, uv_layer, attach_layer)
+        strand(bm, roots, marks, "rag", hit, normal, rng.uniform(0.2, 0.46), rng.uniform(0.025, 0.05), True, rng, uv_layer, attach_layer, falls_at(hit))
         rags += 1
 
     print("DRIFTING", hair, roots_made, rags)
@@ -1151,7 +1176,7 @@ def main():
     stone_and_cloth(obj, looked_up, crust_at, cloth_of, hinge, split_top, split_bottom)
     closed_and_cut(obj)
     bm, marks = nail_them_on(obj, looked_up, rng)
-    bm.loops.layers.uv.new("UVMap")
+    uv_layer = bm.loops.layers.uv.new("UVMap")
     # Its own teeth, what hangs in its mouth, and its eyes, far back in their sockets.
     for kind, parts in (("tooth", skull_teeth + jaw_teeth), ("gullet", tongue)):
         for part in parts:
@@ -1161,6 +1186,10 @@ def main():
             for f in bm.faces:
                 if f not in before:
                     marks[f] = kind
+
+                    # (What it brought in its UVs would have it sway with the weed.)
+                    for loop in f.loops:
+                        loop[uv_layer].uv = (0.0, 0.0)
 
     in_their_sockets(bm, sockets, Matrix.Rotation(HEAD_TILT, 3, "X") @ Vector((0.0, 1.0, 0.0)))
 

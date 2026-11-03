@@ -11,6 +11,7 @@ signal slammed
 const MODEL := preload("res://assets/monsters/revenant.glb")
 const RevenantLook := preload("res://scripts/Monsters/RevenantLook.gd")
 const RevenantTrail := preload("res://scripts/Monsters/RevenantTrail.gd")
+const RevenantWater := preload("res://scripts/Monsters/RevenantWater.gd")
 const FireShader := preload("res://scripts/Monsters/anima_fire.gdshader")
 const FIRE_SHEET := "res://assets/vfx/fire.png"
 const FLOOR_MASK := 1
@@ -128,16 +129,16 @@ const TRUNK_TURNS_MOST := 3.0
 const TRUNK_SINKS_MOST := 2.6
 const LONGEST_CHANGES := 3.5
 ## It carries the crust on its left: it leans to it, and that leg drags: slower, lower, shorter than the other.
-const LEANS_TO_CRUST := 0.075
+const LEANS_TO_CRUST := 0.06
 const LEG_TAKES := [1.3, 0.9]
 const LEG_LIFTS := [0.4, 1.25]
 const LEG_REACHES := [0.82, 1.1]
 ## Where a foot lands, ahead of its hips (m), and how far behind where it wants to be before it goes; how long a step takes, at a walk and at its quickest (s); how high it lifts.
 const STEP_LANDS_AHEAD := 0.42
 const STEP_LETS_GO := 0.72
-const STEP_TAKES := 0.56
+const STEP_TAKES := 0.7
 const STEP_QUICKEST := 0.19
-const STEP_LIFTS := 0.17
+const STEP_LIFTS := 0.25
 ## It stands wide, its toes out; its knees bow out, as its elbows do, the left (the one that drags) furthest: all wrong, and braced.
 const STANCE_WIDE := 1.45
 const TOES_OUT := 0.38
@@ -150,32 +151,32 @@ const DRIVEN_TAKES := 0.26
 const HAND_LANDS_AHEAD := 0.5
 const HAND_LANDS_OUT := 0.2
 const HAND_LETS_GO := 0.78
-const HAND_TAKES := 0.5
+const HAND_TAKES := 0.68
 const HAND_QUICKEST := 0.27
-const HAND_LIFTS := 0.22
+const HAND_LIFTS := 0.3
 const HAND_ON_FLOOR := 0.11
 ## What a step does to the rest of it: its hips rise and fall, go over what's planted, and swing round with the leg, its chest the other way; its shoulders roll over the hand that's down.
-const STEP_HEAVES := 0.08
-const HIPS_OVER := 0.075
-const HIPS_ROUND := 0.2
-const CHEST_AGAINST := 1.4
-const SHOULDERS_ROLL := 0.13
+const STEP_HEAVES := 0.035
+const HIPS_OVER := 0.03
+const HIPS_ROUND := 0.08
+const CHEST_AGAINST := 1.2
+const SHOULDERS_ROLL := 0.045
 const SHOULDER_GOES_WITH := 0.34
-const WEIGHT_EASES := 5.5
+const WEIGHT_EASES := 3.2
 ## Its pace, of its speed, as a hand hauls and between: averages about 1.
-const LURCH_LOW := 0.55
-const LURCH_HIGH := 1.2
-const LURCH_EASES := 6.0
+const LURCH_LOW := 0.82
+const LURCH_HIGH := 1.14
+const LURCH_EASES := 2.5
 ## How it is wrong. Its head goes on level through all of it, gliding while the rest of it lurches beneath (Hz, m); it hangs tilted, off true, and looks round further than a neck goes.
 ## A ripple runs down its spine as it goes (rad, Hz). Its fingers go on their own. Every so often all of it hitches, a stutter, like a frame gone missing (s).
 const HEAD_GLIDES := 3.0
 const HEAD_GLIDES_MOST := 0.34
 const HEAD_HANGS_OFF := 0.34
 const HEAD_LOOKS_ROUND := 2.5
-const SPINE_RIPPLES := 0.14
-const SPINE_RIPPLE_RATE := 1.7
+const SPINE_RIPPLES := 0.05
+const SPINE_RIPPLE_RATE := 0.42
 const FINGERS_GO := 0.24
-const HITCH_EVERY := Vector2(2.4, 6.0)
+const HITCH_EVERY := Vector2(5.0, 11.0)
 const HITCH_TAKES := Vector2(0.06, 0.12)
 ## The neck, how fast it draws out or in, m/s; how its jaw works, always, and gnaws when it has you.
 const NECK_MOST := 6.0
@@ -189,8 +190,11 @@ const DRIFT_PER := 0.16
 const DRIFT_MOST := 0.75
 const DRIFT_FOLLOWS := 0.9
 const DRIFT_DAMP := 0.34
+## Which way what hangs off its trunk hangs from, in its upright rest, as it goes on all fours (build_revenant.py's FALLS_CHEST, in the game's axes); how far (m) it swings back toward hanging when its trunk turns from that.
+const FALLS_CHEST := Vector3(0.0, -0.83, -0.55)
+const HANGS_BACK := 0.7
 ## How far its head twitches, and how often (rad, s): the wrongness of something that doesn't rest.
-const TWITCH := 0.2
+const TWITCH := 0.13
 const TWITCH_EVERY := Vector2(2.2, 5.5)
 const TWITCH_FADES := 7.0
 ## A free arm always keeps a bend, as near straight as it goes in a blow; wanting you, it draws out past its length at each joint (of its length; m). How much a free wrist overshoots.
@@ -204,6 +208,13 @@ const HAND_TURNS := 7.0
 const ELBOW_TURNS := 7.0
 const HEAD_TURNS := 2.8
 const JAW_OPENS := 0.72
+## How much silt what lands brings up.
+const FOOT_SPLASH := 0.72
+const HAND_SPLASH := 0.5
+const SLAM_SPLASH := 1.9
+## How it floats, as in deep water (m, rad/s).
+const FLOATS := 0.022
+const FLOATS_RATE := 0.8
 ## How its heel comes down and its toe leaves (rad).
 const HEEL_STRIKES := 0.42
 const TOE_LEAVES := 0.6
@@ -314,6 +325,7 @@ var _flinch := 0.0
 var _flinch_side := 1.0
 var _hurt_now := 0.0
 var _trail: Node3D
+var _water: Node3D
 var _flames: MultiMeshInstance3D
 var _fire_light: OmniLight3D
 var _fire := 0.0
@@ -347,6 +359,9 @@ func _ready() -> void:
 	_trail = RevenantTrail.new()
 	_trail.name = "Trail"
 	add_child(_trail)
+	_water = RevenantWater.new()
+	_water.name = "Water"
+	add_child(_water)
 
 	for found in _bones.find_children("Halo", "MeshInstance3D", true, false):
 		_halos.append(found)
@@ -454,16 +469,8 @@ func chest_at() -> Vector3:
 	return _world_of((_now[&"chest"] as Transform3D).origin)
 
 
-func rings_now() -> int:
-	return 0
-
-
 func silt_now() -> int:
-	return 0
-
-
-func bubbles_rising() -> bool:
-	return false
+	return _water.silt_now()
 
 
 func hips_at() -> Vector3:
@@ -707,6 +714,7 @@ func tick(delta: float, doing: StringName, moving: Vector3, you_at: Vector3, bur
 	if clip.has("thud") and not _thud_done and _clip_t >= float(clip["thud"]):
 		_thud_done = true
 		slammed.emit()
+		_water.splash(chest_at() + Vector3.DOWN * (chest_at().y - _floor_y), SLAM_SPLASH)
 
 	_walk_limbs(delta, moving, limp, drop)
 	_pose_trunk(delta, lean, twist, drop, shift, nod, jaw, head_roll, you_at)
@@ -729,6 +737,7 @@ func tick(delta: float, doing: StringName, moving: Vector3, you_at: Vector3, bur
 	_mesh.set_instance_shader_parameter(&"hurt", _hurt_now)
 	_trail.work(delta, float(clip["arms"]) >= STRIKES_AT, wrist(1), elbow(1), wrist(0), elbow(0))
 	_work_drift(delta)
+	_water.work(delta)
 
 
 ## What drifts on it comes after what it does.
@@ -737,6 +746,10 @@ func _work_drift(delta: float) -> void:
 	var moved := (head_now - _head_was) / delta if _head_was != Vector3.ZERO else Vector3.ZERO
 	_head_was = head_now
 	var wanted: Vector3 = (global_basis.inverse() * -moved * DRIFT_PER).limit_length(DRIFT_MOST)
+	# (It hangs, whatever its trunk is doing: reared up, what hangs off its trunk swings down, and slowly, as this spring does.)
+	var chest := _bones.find_bone("chest")
+	var turned: Basis = (_bones.get_bone_global_pose(chest).basis * _bones.get_bone_global_rest(chest).basis.inverse())
+	wanted = (wanted + (Vector3.DOWN - turned * FALLS_CHEST) * HANGS_BACK).limit_length(DRIFT_MOST)
 	var w := TAU * DRIFT_FOLLOWS
 	_drift_going += (w * w * (wanted - _drift) - 2.0 * DRIFT_DAMP * w * _drift_going) * delta
 	_drift += _drift_going * delta
@@ -779,6 +792,7 @@ func _walk_limbs(delta: float, moving: Vector3, limp: float, drop: float) -> voi
 				_foot_at[side] = _foot_to[side]
 				_step_t[side] = -1.0
 				step_landed.emit(side)
+				_water.splash(_foot_at[side], FOOT_SPLASH)
 
 		if _hand_t[side] >= 0.0:
 			_hand_t[side] += delta / _hand_takes[side]
@@ -791,6 +805,7 @@ func _walk_limbs(delta: float, moving: Vector3, limp: float, drop: float) -> voi
 				_hand_at[side] = _hand_to[side]
 				_hand_t[side] = -1.0
 				hand_landed.emit(side)
+				_water.splash(_hand_at[side], HAND_SPLASH)
 
 	# (Down on its knees it doesn't step.)
 	if drop < 0.62 and limp < 0.4:
@@ -893,7 +908,8 @@ func _ground_under(at: Vector3, above := -1.0) -> Vector3:
 ## Everything from its hips to its head: bent over, twisted, sunk, the weight going through it.
 func _pose_trunk(delta: float, lean: float, twist: float, drop: float, shift: float, nod: float, jaw: float, head_roll: float, you_at: Vector3) -> void:
 	_turn_bone(&"root", Quaternion.IDENTITY)
-	var ride := Vector3(shift + _hips_over, -drop - _legs_sink + (0.5 - _heave) * STEP_HEAVES, (lean - COUNTERS_FROM) * HIPS_COUNTER)
+	# (And it floats a little, as anything does in deep water, slower than it walks.)
+	var ride := Vector3(shift + _hips_over, -drop - _legs_sink + (0.5 - _heave) * STEP_HEAVES + sin(_clock * FLOATS_RATE) * FLOATS, (lean - COUNTERS_FROM) * HIPS_COUNTER)
 	var crust := Quaternion(Vector3.BACK, LEANS_TO_CRUST)
 	var hips_turn := crust * Quaternion(Vector3.UP, _hips_round + twist * 0.25) * Quaternion(Vector3.RIGHT, -lean * 0.3) * Quaternion(Vector3.BACK, -_hips_over * 0.8)
 	_turn_bone(&"hips", hips_turn, ride)

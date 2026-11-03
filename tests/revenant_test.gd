@@ -687,7 +687,6 @@ func _in_water() -> void:
 	var pace_high := -9.0
 	var longest := 0
 	var going_for := [0, 0]
-	var rings_most := 0
 	var silt_most := 0
 
 	for i in 300:
@@ -699,7 +698,6 @@ func _in_water() -> void:
 		most = Vector3(maxf(most.x, chest.x), maxf(most.y, chest.y), maxf(most.z, chest.z))
 		pace_low = minf(pace_low, body.lurch())
 		pace_high = maxf(pace_high, body.lurch())
-		rings_most = maxi(rings_most, body.rings_now())
 		silt_most = maxi(silt_most, body.silt_now())
 
 		for side in 2:
@@ -709,9 +707,9 @@ func _in_water() -> void:
 	_check("W1 it doesn't wobble: its chest stays over itself (%.2f across, %.2f up)" % [most.x - least.x, most.y - least.y], most.x - least.x < 0.16 and most.y - least.y < 0.12)
 	_check("W2 its pace is steady, not lurching (%.2f..%.2f)" % [pace_low, pace_high], pace_high - pace_low < 0.4)
 	_check("W3 its steps are slow, through something (%.2f s)" % (float(longest) / 60.0), float(longest) / 60.0 >= 0.62)
-	_check("W4 the water rings out from where it steps (%d)" % rings_most, rings_most >= 2)
+	_check("W4 no rings where it steps, or in its pool", not body.has_method("rings_now") and not (load("res://scripts/Monsters/revenant_pool.gdshader") as Shader).code.contains("rings"))
 	_check("W5 silt comes up where it treads (%d)" % silt_most, silt_most >= 2)
-	_check("W6 bubbles go up off it", body.bubbles_rising())
+	_check("W6 no bubbles off it", body.find_children("*", "GPUParticles3D", true, false).is_empty())
 	var mesh: MeshInstance3D = body._mesh
 	var arrays: Array = mesh.mesh.surface_get_arrays(0)
 	var far_along := 0
@@ -719,9 +717,84 @@ func _in_water() -> void:
 	for uv: Vector2 in arrays[Mesh.ARRAY_TEX_UV]:
 		far_along += 1 if uv.x > 0.8 else 0
 
-	_check("W7 seaweed: a lot of it (%d)" % far_along, far_along > 1400)
+	_check("W7 seaweed: a lot of it (%d)" % far_along, far_along > 5000)
+	var hangs := _how_it_hangs(body)
+	_check("W8 its seaweed hangs: most tips below their roots as it walks (%.2f)" % hangs[0], hangs[0] >= 0.8)
+	_check("W9 none of it stands up off it (%.2f of them over a hand above their root)" % hangs[1], hangs[1] <= 0.04)
+	_check("W11 only what hangs sways: its teeth and its head don't (%d others)" % hangs[2], hangs[2] == 0)
+	# (Reared up, what hangs off its trunk would point ahead of it: it swings back to hanging, slowly.)
+	var still_drift: Vector3 = body.drift_now()
+
+	for i in 80:
+		await get_tree().physics_frame
+		body.tick(1.0 / 60.0, &"swipe_wind", Vector3.ZERO, you, 0.0, 0.0, 0.0)
+
+	var reared: Vector3 = body.drift_now()
+	_check("W10 reared, its weed swings back to hanging (%.2f toward its back)" % (reared.z - still_drift.z), reared.z - still_drift.z > 0.12)
 	body.queue_free()
 	await _frames(2)
+
+
+## Of what drifts on it, as posed now: the share whose tip hangs below its root by a quarter of how long it is, and the share whose tip stands more than 10 cm over its root.
+func _how_it_hangs(body: Node3D) -> Array:
+	var mesh: MeshInstance3D = body._mesh
+	var skeleton: Skeleton3D = mesh.get_node(mesh.skeleton)
+	var skin: Skin = mesh.skin
+	var by_bone := {}
+
+	for i in skin.get_bind_count():
+		var bone := skeleton.find_bone(skin.get_bind_name(i)) if skin.get_bind_name(i) != &"" else skin.get_bind_bone(i)
+		by_bone[i] = skeleton.global_transform * skeleton.get_bone_global_pose(bone) * skin.get_bind_pose(i)
+
+	var arrays: Array = mesh.mesh.surface_get_arrays(0)
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var at: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+	var per := bones.size() / at.size()
+	var strands := {}
+
+	for i in at.size():
+		if uvs[i].x < 0.001 and uvs[i].y < 0.001:
+			continue
+
+		var key := int(uvs[i].y * 100000.0)
+		var one: Array = strands.get(key, [INF, Vector3.ZERO, -INF, Vector3.ZERO])
+		var here := Vector3.ZERO
+
+		for k in per:
+			if weights[i * per + k] > 0.0:
+				here += (by_bone[bones[i * per + k]] as Transform3D) * at[i] * weights[i * per + k]
+
+		if uvs[i].x < one[0]:
+			one[0] = uvs[i].x
+			one[1] = here
+
+		if uvs[i].x > one[2]:
+			one[2] = uvs[i].x
+			one[3] = here
+
+		strands[key] = one
+
+	var hanging := 0
+	var standing := 0
+	var counted := 0
+
+	var strays := 0
+
+	for one: Array in strands.values():
+		# (What runs along nothing isn't a strand, and shouldn't be swaying as if it were.)
+		if float(one[2]) - float(one[0]) < 0.5:
+			strays += 1 if float(one[2]) > 0.001 else 0
+			continue
+
+		counted += 1
+		var fall: float = (one[1] as Vector3).y - (one[3] as Vector3).y
+		var long: float = maxf((one[1] as Vector3).distance_to(one[3]), 0.01)
+		hanging += 1 if fall > long * 0.25 else 0
+		standing += 1 if fall < -0.1 else 0
+
+	return [float(hanging) / maxf(counted, 1.0), float(standing) / maxf(counted, 1.0), strays]
 
 
 ## Its legs carry what it does: braced and bent under the weight, not stilts; its feet go when a blow says.

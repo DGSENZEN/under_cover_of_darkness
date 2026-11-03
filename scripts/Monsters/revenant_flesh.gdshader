@@ -37,10 +37,11 @@ void vertex() {
 	if (UV.x > 0.001) {
 		float phase = UV.y * 6.283;
 		float t = UV.x * UV.x;
-		// Each is its own length of slack: it comes after what the body did, the far end last, and a wave runs along it. The more it's being dragged, the more it waves.
+		// Seaweed: it floats, and a slow wave runs out along it, each at its own time. It comes after what the body did, the far end last; the more it's being dragged, the more it waves.
 		float drag = length(drift_way);
-		vec3 wave = vec3(sin(TIME * 0.9 + phase - UV.x * 4.0), sin(TIME * 0.6 + phase * 1.7 - UV.x * 3.3) * 0.5, cos(TIME * 0.75 + phase * 2.3 - UV.x * 3.0));
-		VERTEX += wave * t * (0.14 + drag * 0.26);
+		vec3 wave = vec3(sin(TIME * 0.7 + phase - UV.x * 4.6), sin(TIME * 0.5 + phase * 1.7 - UV.x * 3.6) * 0.6, cos(TIME * 0.6 + phase * 2.3 - UV.x * 3.9));
+		vec3 fine = vec3(sin(TIME * 1.3 + phase * 3.0 - UV.x * 9.0), 0.0, cos(TIME * 1.1 + phase * 4.0 - UV.x * 8.0));
+		VERTEX += wave * t * (0.24 + drag * 0.3) + fine * t * 0.05;
 		VERTEX += drift_way * (0.65 + 0.5 * sin(phase * 3.0)) * mix(UV.x, t, 0.5) * 1.5;
 	}
 }
@@ -72,7 +73,8 @@ void fragment() {
 		float ripple_a = 1.0 - abs(eye_noise(paint_at * 9.0 + vec3(TIME * 0.22, TIME * 0.1, 0.0)) * 2.0 - 1.0);
 		float ripple_b = 1.0 - abs(eye_noise(paint_at * 11.0 + vec3(-TIME * 0.17, 3.0, TIME * 0.19)) * 2.0 - 1.0);
 		float caustic = smoothstep(0.955, 0.985, max(ripple_a, ripple_b)) * smoothstep(0.42, 0.6, eye_noise(paint_at * 2.3 + vec3(0.0, TIME * 0.06, 0.0)));
-		skin = mix(skin, skin * vec3(1.35, 1.5, 1.45), caustic * 0.55 * rest);
+		skin = mix(skin, skin * vec3(1.4, 1.65, 1.55), caustic * 0.7 * rest);
+		light_of += SEEP * caustic * 0.025 * rest;
 		// The seep, in cracks: thin, and only where it lies near: round the split, the nails, the crust's edge.
 		float crack_a = 1.0 - abs(eye_noise(paint_at * vec3(17.0, 11.0, 17.0) + vec3(0.0, -TIME * 0.2, 0.0)) * 2.0 - 1.0);
 		float crack_b = eye_noise(paint_at * vec3(3.1, 4.2, 3.4) + vec3(TIME * 0.05, 0.0, TIME * 0.09));

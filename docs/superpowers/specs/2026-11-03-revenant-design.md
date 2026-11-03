@@ -30,6 +30,8 @@ Its cause in the world: the drowned of the old lakebed, raised by the seepage ([
 
 **And:** "I really don't like how the legs act when it attacks"; so it braces, wide and low, knees bowed out, its feet going when a blow says. "make it look as if it were walking in water with his seaweed hair and generally, adds to the unnatural feeling, also, it's wobbling too much too."
 
+**On the first go at that:** "remove the water look with the rings and the bubbles, but yes": the slow, floating way it moves and its seaweed stay; no rings, no bubbles. Its seaweed hangs off it as it walks and swings back to hanging when it rears; silt clouds and the dark pool stay until the user says otherwise.
+
 ## Goals
 
 - It reads wrong from across a dark room, on shape alone.
