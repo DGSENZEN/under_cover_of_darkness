@@ -32,6 +32,7 @@ func _ready() -> void:
 	await _face_life()
 	await _hands_life()
 	await _mouth_model()
+	await _mouth_on_its_body()
 	await _forms()
 	await _round_cover()
 	await _swipes()
@@ -208,6 +209,49 @@ func _mouth_model() -> void:
 	made.free()
 
 
+func _mouth_on_its_body() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(10)
+	var one := _anima(&"torso", HOME + Vector3(0.0, -0.5, -9.0))
+	one.leap_chance = 0.0
+	await _frames(20)
+	var body: Node3D = one.body
+	_check("O3 it wears the mouth, and no boxes", body.part(&"Mass") != null and body.part(&"RibsLeft") != null and body._look == null)
+	_check("O4 five arms and three faces on it", body.souls().size() == 8)
+	_check("O4b it sits on the floor, as big as it should (%.2f)" % one.global_position.y, absf(one.global_position.y - 0.5) < 0.15)
+	var top: Vector3 = one.global_position + Vector3(0.0, 0.7, 0.0)
+	var from: Vector3 = top + Vector3(0.0, 0.0, 6.0)
+	_check("O5 a shot at its upper flesh lands", one.global_position.distance_to(Geometry3D.get_closest_point_to_segment(one.global_position, from, top + Vector3(0.0, 0.0, -6.0))) <= one.hit_radius())
+	var jaw_was: Array = []
+
+	for soul in body.souls():
+		jaw_was.append(soul.transform)
+
+	var moved := 0
+	await _frames(40)
+
+	for i in body.souls().size():
+		if not body.souls()[i].transform.is_equal_approx(jaw_was[i]):
+			moved += 1
+
+	_check("O6 they move, each of its own (%d)" % moved, moved == 8)
+	body.ribs_to(1.0)
+	await _frames(3)
+	var left: Node3D = body.part(&"RibsLeft")
+	var right: Node3D = body.part(&"RibsRight")
+	_check("O7 the ribs swing apart", left.rotation.y * right.rotation.y < 0.0 and absf(left.rotation.y) > 0.3 and is_equal_approx(body.ribs_open(), 1.0))
+	var left_fang: Vector3 = left.global_transform * Vector3(0.0, 0.0, -0.5)
+	var right_fang: Vector3 = right.global_transform * Vector3(0.0, 0.0, -0.5)
+	body.ribs_to(0.0)
+	await _frames(3)
+	var left_shut: Vector3 = left.global_transform * Vector3(0.0, 0.0, -0.5)
+	var right_shut: Vector3 = right.global_transform * Vector3(0.0, 0.0, -0.5)
+	_check("O7b outward, each to its own side", left_fang.distance_to(right_fang) > left_shut.distance_to(right_shut) + 0.2)
+	one.free()
+	await _frames(2)
+
+
 func _forms() -> void:
 	var hands := _anima(&"hands", Vector3(0, 0.3, -30))
 	var face := _anima(&"face", Vector3(4, 1.3, -30))
@@ -252,7 +296,7 @@ func _rush() -> void:
 			fastest = maxf(fastest, flat)
 
 	_check("A5c it creeps and surges (%.1f to %.1f m/s)" % [slowest, fastest], slowest < 2.2 and fastest > slowest * 2.0 and fastest < 6.0)
-	_check("A8 hands and torso keep to the floor (%.2f, %.2f)" % [hands.global_position.y, torso.global_position.y], absf(hands.global_position.y - 0.25) < 0.2 and absf(torso.global_position.y - 0.35) < 0.2)
+	_check("A8 hands and torso keep to the floor (%.2f, %.2f)" % [hands.global_position.y, torso.global_position.y], absf(hands.global_position.y - 0.25) < 0.2 and absf(torso.global_position.y - 0.5) < 0.2)
 	_free([hands, torso])
 	var face := _anima(&"face", Vector3(0, 1.3, -14))
 	await _until(func(): return face.state == STATE.RUSH, 3.0)

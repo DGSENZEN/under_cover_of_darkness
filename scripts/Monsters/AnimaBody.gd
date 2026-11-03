@@ -7,7 +7,7 @@ extends Node3D
 ## hands dangling; hauling itself through the air after you; drawn back and gaping in its
 ## tell, then hands and teeth thrown at you; biting on nothing when it misses. Its pose runs
 ## on springs, so each change overshoots and settles. On you, it is on your face instead
-## (LeechFace.gd). The torso is a stand-in shape until its model is made and approved (the
+## (LeechFace.gd). The torso is the mouth (AnimaMouth.gd), awaiting its own moves (the
 ## plan's Task 12).
 
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -131,6 +131,10 @@ const SKULL_FLAMES := [[Vector3(0.0, -0.13, -0.12), 0.4], [Vector3(0.045, 0.012,
 ## How long a miss's bite lasts before it opens again and looks for you.
 const BITE_HOLDS := 0.28
 const LOOKS_ABOUT := 0.34
+const AnimaMouthScript := preload("res://scripts/Monsters/AnimaMouth.gd")
+const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
+## The mouth: where its fire trails from, from its middle.
+const MOUTH_FIRES := [Vector3(0.05, -0.2, 1.3), Vector3(-0.15, -0.28, 1.1), Vector3(0.2, -0.25, 1.05)]
 const FIRE_CORE := Color("#8E9C3C")
 const FIRE_BODY := Color("#3E4624")
 const FIRE_EDGE := Color("#16160E")
@@ -182,6 +186,7 @@ var _face_roots: Array[Node3D] = []
 var _bones := {}
 var _tips: Array[Vector3] = []
 var _look: StandardMaterial3D
+var _mouth: Node3D
 var _flesh: ShaderMaterial
 var _rng := RandomNumberGenerator.new()
 
@@ -196,7 +201,7 @@ func _ready() -> void:
 	elif form == &"face":
 		_build_face()
 	else:
-		_build_stand_in()
+		_build_mouth()
 
 
 func part(id: StringName) -> MeshInstance3D:
@@ -342,33 +347,40 @@ func _build_fire() -> void:
 	at.add_child(flame)
 
 
-func _build_stand_in() -> void:
-	_look = StandardMaterial3D.new()
-	_look.albedo_color = Color(0.13, 0.12, 0.1)
-	_look.emission_enabled = true
-	_look.emission = Color(0.38, 0.5, 0.08)
-	_look.emission_energy_multiplier = 0.25
+func _build_mouth() -> void:
+	_flesh = _new_flesh()
+	var bone := _new_flesh()
+	# Bone stays bone: not the red the painted fill gives things in the dark.
+	bone.set_shader_parameter(&"fill_sky", Color(0.42, 0.42, 0.37))
+	bone.set_shader_parameter(&"fill_ground", Color(0.42, 0.34, 0.26))
+	_mouth = AnimaMouthScript.new(_flesh, bone, float(Bestiary.form(&"anima", form)["height"]))
+	add_child(_mouth)
 
-	match form:
-		&"face":
-			_piece(Vector3(0.34, 0.42, 0.26), Vector3.ZERO)
-			for x in [-0.34, 0.34]:
-				_piece(Vector3(0.1, 0.1, 0.6), Vector3(x, -0.1, -0.3))
-		_:
-			_piece(Vector3(0.5, 0.42, 0.56), Vector3(0.0, 0.15, 0.2))
-			_piece(Vector3(0.26, 0.3, 0.26), Vector3(0.0, 0.4, -0.1))
-			for x in [-0.42, 0.42]:
-				_piece(Vector3(0.12, 0.12, 0.9), Vector3(x, 0.0, -0.45))
+	for id in AnimaMouthScript.MESHES:
+		_parts[id] = _mouth.part(id)
+
+	# What is left of its fire, where the rest of it was.
+	for at in MOUTH_FIRES:
+		var flame := MeshInstance3D.new()
+		flame.mesh = MeshVfx.flame(0.42, 0.09, 8, 8)
+		flame.material_override = MeshVfx.look(FIRE_CORE, FIRE_BODY, FIRE_EDGE, 0.7, 0.5, 1.1)
+		flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		flame.position = at
+		_mouth.add_child(flame)
 
 
-func _piece(size: Vector3, at: Vector3) -> void:
-	var piece := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = size
-	box.material = _look
-	piece.mesh = box
-	piece.position = at
-	add_child(piece)
+## The mouth: what pushes out of it, how far its ribs stand open.
+func souls() -> Array[Node3D]:
+	return _mouth.souls() if _mouth != null else ([] as Array[Node3D])
+
+
+func ribs_open() -> float:
+	return _mouth.ribs_open() if _mouth != null else 0.0
+
+
+func ribs_to(open: float) -> void:
+	if _mouth != null:
+		_mouth.ribs_to(open)
 
 
 ## Each tick: what it is doing, whom at, how it moves, how much it has drunk (0..1).
@@ -411,9 +423,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 		_work_face(delta, doing, Vector3(moving.x, 0.0, moving.z).length(), fed)
 		return
 
-	position.y = 0.16 + sin(_clock * 40.0) * 0.015 if doing == &"tell" else 0.0
-	_look.emission_energy_multiplier = 0.2 + fed * 0.5 + (0.3 if exposed else 0.0)
-	_look.emission = Color(1.0, 0.5, 0.1) if smoked else Color(0.38, 0.5, 0.08)
+	_mouth.tick(delta, fed, hurt, smoulder)
 
 
 ## How far its fire is up, 0..1.

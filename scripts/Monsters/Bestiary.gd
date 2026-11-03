@@ -23,7 +23,7 @@ const TABLE := {
 		"forms": {
 			&"hands": {"swipe_damage": 6.0, "swipe_reach": 1.7, "swipe_wind": 0.32, "health": 40.0, "power_drain": 5.0, "life_drain": 1.5, "grip": 1, "speed": 2.6, "tell": 0.55, "leap_reach": 2.6, "leap_speed": 8.0, "hit_radius": 0.4, "height": 0.25, "floats": false},
 			&"face": {"swipe_damage": 10.0, "swipe_reach": 2.0, "swipe_wind": 0.42, "health": 70.0, "power_drain": 8.0, "life_drain": 2.5, "grip": 1, "speed": 2.1, "tell": 0.7, "leap_reach": 3.4, "leap_speed": 7.5, "hit_radius": 0.4, "height": 1.3, "floats": true},
-			&"torso": {"swipe_damage": 14.0, "swipe_reach": 2.2, "swipe_wind": 0.6, "health": 130.0, "power_drain": 12.0, "life_drain": 4.0, "grip": 2, "speed": 1.4, "tell": 0.95, "leap_reach": 5.0, "leap_speed": 8.5, "hit_radius": 0.55, "height": 0.35, "floats": false},
+			&"torso": {"swipe_damage": 14.0, "swipe_reach": 2.2, "swipe_wind": 0.6, "health": 130.0, "power_drain": 12.0, "life_drain": 4.0, "grip": 2, "speed": 1.4, "tell": 0.95, "leap_reach": 5.0, "leap_speed": 8.5, "hit_radius": 0.95, "height": 0.5, "floats": false},
 		},
 	},
 }

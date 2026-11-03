@@ -66,6 +66,11 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 
+	if only == "mouth":
+		await _mouth_stills()
+		get_tree().quit()
+		return
+
 	if only == "spit":
 		await _spit()
 		get_tree().quit()
@@ -501,6 +506,46 @@ func _shard() -> void:
 
 
 ## The eye and the eye turned, side by side, in the game's looks: lit room and dark yard.
+## The mouth in the room and the yard: far, near, from the floor, its ribs shut and open.
+func _mouth_stills() -> void:
+	for place in [[Vector3(0, 1.05, -2.7), "room"], [Vector3(-3.5, 1.05, -16.0), "yard"]]:
+		var facing := Basis(Vector3.UP, PI) if place[1] == "room" else Basis.IDENTITY
+		p.teleport(Transform3D(facing, place[0]))
+		await _frames(6)
+		var ahead: Vector3 = -facing.z
+		var one: CharacterBody3D = AnimaScript.new()
+		one.form = &"torso"
+		one.leap_chance = 0.0
+		one.position = place[0] + ahead * 4.2 + Vector3(0.0, -0.5, 0.0)
+		add_child(one)
+		await _frames(2)
+		one.process_mode = Node.PROCESS_MODE_DISABLED
+		one.body.tick(0.016, &"rush", p, Vector3.ZERO, 0.0, false, false)
+		one.body.global_basis = Basis.looking_at(-ahead, Vector3.UP)
+		one.process_mode = Node.PROCESS_MODE_INHERIT
+		one.notice = 0.0
+		var pin: Vector3 = one.global_position
+
+		for shot in [["far", 4.2, 0.0, 0.0], ["near", 2.4, 0.0, 0.0], ["near_open", 2.4, 1.0, 0.0], ["quarter", 2.8, 0.4, 1.6], ["floor", 2.2, 1.0, 0.0]]:
+			one.global_position = place[0] + ahead * shot[1] + Vector3(shot[3], -0.55, 0.0)
+			pin = one.global_position
+			var look_to: Vector3 = pin + Vector3(0.0, 0.1, 0.0)
+
+			for i in 30:
+				one.global_position = pin
+				one.state = one.State.CIRCLE
+				one.body.ribs_to(shot[2])
+				var way: Vector3 = (look_to - p.camera.global_position).normalized()
+				p.rotation.y = atan2(-way.x, -way.z)
+				p.neck.rotation.x = asin(way.y)
+				await get_tree().physics_frame
+
+			await _shot("mouth_%s_%s" % [place[1], shot[0]])
+
+		one.free()
+		await _frames(3)
+
+
 ## A death, as it plays, one a run (it can't be taken back): --only=die_eyes|animas|both|swipe,
 ## --place=room|yard.
 func _dying_stills(how: String) -> void:
