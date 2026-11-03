@@ -6,6 +6,7 @@ extends CanvasLayer
 const HuntReadoutScript := preload("res://scripts/UI/HuntReadout.gd")
 const EvilEyeView := preload("res://scripts/UI/evil_eye_view.gdshader")
 const LifeDrainView := preload("res://scripts/UI/life_drain_view.gdshader")
+const RevenantTouchView := preload("res://scripts/UI/revenant_touch_view.gdshader")
 const TimeFx := preload("res://scripts/Visual/TimeFx.gd")
 const AdrenalineViewScript := preload("res://scripts/Visual/AdrenalineView.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -97,6 +98,9 @@ var _font: SystemFont
 var _ammo: HuntReadoutScript
 ## The evil eye's lids of ink, and how far closed they are shown.
 var _curse_view: ColorRect
+var _water_view: ColorRect
+var _soaked_now := 0.0
+var _touch_now := 0.0
 var _drain_view: ColorRect
 var _drain_shown := 0.0
 var _drain_release := 0.0
@@ -183,6 +187,9 @@ const CLAWS_CLEAR_FROM := 0.48
 const SWIPE_MARKS_HELD := 0.25
 const DRAIN_COMES := 1.2
 const DRAIN_GOES := 5.0
+## A revenant's water, on your sight: how long it takes to come, and to go.
+const WATER_COMES := 0.35
+const WATER_GOES := 0.5
 const DRAIN_RELEASE_TIME := 0.5
 const DRAIN_CLAW_TIME := 1.1
 ## From the wrist of a hand in your view to its palm, on the screen.
@@ -866,6 +873,15 @@ func setup(p_player: CharacterBody3D) -> void:
 	_white.visible = false
 	_play.add_child(_white)
 
+	_water_view = ColorRect.new()
+	_water_view.name = "RevenantTouch"
+	_water_view.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_water_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_water_view.material = ShaderMaterial.new()
+	_water_view.material.shader = RevenantTouchView
+	_water_view.material.set_shader_parameter(&"stroke_sheet", load("res://textures/painted/eclipse/brush.png"))
+	_water_view.visible = false
+	_play.add_child(_water_view)
 	_drain_view = ColorRect.new()
 	_drain_view.name = "LifeDrain"
 	_drain_view.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1181,6 +1197,34 @@ func egg_broke() -> void:
 
 ## Being drunk from (life_drain_view.gdshader): deepening with each one on you, a
 ## thread to each, and colour flooding back when the last is off you.
+## What a revenant has done to your sight: soaked, and its touch. Each goes lowkey when it goes (revenant_touch_view.gdshader).
+func _show_revenant(delta: float) -> void:
+	if player == null or _water_view == null or player.get("touch") == null:
+		return
+
+	var soaked_on: bool = player.statuses.has(&"soaked") and not player.is_dead
+	var touch_on: bool = player.touch.on_you() or player.death.kind == &"possessed"
+	_soaked_now = move_toward(_soaked_now, 1.0 if soaked_on else 0.0, delta / WATER_COMES if soaked_on else delta / WATER_GOES)
+	_touch_now = move_toward(_touch_now, 1.0 if touch_on else 0.0, delta / WATER_COMES if touch_on else delta / WATER_GOES)
+	_water_view.visible = _soaked_now > 0.01 or _touch_now > 0.01
+
+	if _water_view.visible:
+		_water_view.material.set_shader_parameter(&"soaked", _soaked_now)
+		_water_view.material.set_shader_parameter(&"touch", _touch_now)
+
+
+func soaked_shown() -> bool:
+	return _soaked_now > 0.01
+
+
+func soaked_amount() -> float:
+	return _soaked_now
+
+
+func touch_shown() -> bool:
+	return _touch_now > 0.01
+
+
 func _show_drain(delta: float) -> void:
 	var leech: Node = player.get("leech") if player != null else null
 
@@ -1457,6 +1501,7 @@ func _process(delta: float) -> void:
 	_ammo.size = Vector2(170, 120)
 	_show_curse(delta)
 	_show_drain(delta)
+	_show_revenant(delta)
 	_tell_each_other(delta)
 	_ammo.visible = not _ammo.snapshot().is_empty()
 	_ammo.queue_redraw()

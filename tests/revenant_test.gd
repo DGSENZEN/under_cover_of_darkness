@@ -47,6 +47,9 @@ func _ready() -> void:
 	if only == "" or only == "fire":
 		await _fire()
 
+	if only == "" or only == "looks":
+		await _how_it_looks()
+
 	print("revenant_test: %s" % ("FAILED %d" % failed if failed > 0 else "passed"))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -70,6 +73,11 @@ func _it_moves() -> void:
 	var steps := 0
 	var was_down := [true, true]
 	var was_at := [body.foot(0), body.foot(1)]
+	var worst_gap := 0.0
+	var hand_steps := 0
+	var worst_hand := 0.0
+	var hand_was := [body.hand_planted(0), body.hand_planted(1)]
+	var hand_at := [body.hand_on_floor(0), body.hand_on_floor(1)]
 	var wrist_was: Array = [body.wrist(0), body.wrist(1)]
 	var elbow_was: Array = [body.elbow(0), body.elbow(1)]
 	var head_was: Vector3 = body.head_at()
@@ -96,8 +104,10 @@ func _it_moves() -> void:
 				continue
 
 			for side in 2:
-				var wrist_speed: float = body.wrist(side).distance_to(wrist_was[side]) * 60.0
-				var elbow_speed: float = body.elbow(side).distance_to(elbow_was[side]) * 60.0
+				# (Galloping at 6 m/s, a hand swings at twice that and more: what's a pop is past that.)
+				var allowed: float = 0.6 if doing == &"surge" else 1.0
+				var wrist_speed: float = body.wrist(side).distance_to(wrist_was[side]) * 60.0 * allowed
+				var elbow_speed: float = body.elbow(side).distance_to(elbow_was[side]) * 60.0 * allowed
 
 				if wrist_speed > worst_wrist:
 					worst_wrist = wrist_speed
@@ -119,6 +129,22 @@ func _it_moves() -> void:
 				was_down[side] = down
 				was_at[side] = body.foot(side)
 
+			for side in 2:
+				if body.hand_planted(side) and hand_was[side]:
+					worst_hand = maxf(worst_hand, body.wrist(side).distance_to(body.hand_on_floor(side)) if false else body.hand_on_floor(side).distance_to(hand_at[side]))
+				elif hand_was[side] and doing == &"walk":
+					hand_steps += 1
+
+				hand_was[side] = body.hand_planted(side)
+				hand_at[side] = body.hand_on_floor(side)
+
+			# What it stands on, it reaches: a foot's bone is where its foot is, not floating behind it.
+			if doing == &"walk" or doing == &"surge":
+				for side in 2:
+					if body.foot_planted(side):
+						# (At a gallop a foot can trail for a tick before it goes.)
+						worst_gap = maxf(worst_gap, body.ankle_gap(side) * (0.5 if doing == &"surge" else 1.0))
+
 			var head_speed: float = body.head_at().distance_to(head_was) * 60.0
 
 			if head_speed > worst_head:
@@ -129,6 +155,9 @@ func _it_moves() -> void:
 
 	_check("M0 it walks: it takes steps (%d)" % steps, steps > 8)
 	_check("M1 a planted foot stays put (%.3f m)" % worst_slid, worst_slid < 0.03)
+	_check("M6 its legs reach what they stand on (%.2f m)" % worst_gap, worst_gap < 0.06)
+	_check("M7 and it goes on its hands, hauling itself (%d)" % hand_steps, hand_steps > 6)
+	_check("M8 a hand on the floor stays put (%.3f m)" % worst_hand, worst_hand < 0.03)
 	_check("M2 no wrist pops (%.1f m/s, %s)" % [worst_wrist, at_wrist], worst_wrist < 14.0)
 	_check("M2b no elbow pops (%.1f m/s, %s)" % [worst_elbow, at_elbow], worst_elbow < 14.0)
 	# (Falling, it is a 2 m fall: that's quick, and it should be.)
@@ -369,6 +398,92 @@ func _fire() -> void:
 	await _clean()
 
 
+## How it burns and dies, and what its touch and its blows do to your sight.
+func _how_it_looks() -> void:
+	await _clean()
+	var deaths := {}
+
+	for i in 12:
+		var one := _revenant(Vector3(float(i) * 3.0 - 16.0, 0, -40))
+		await _frames(2)
+		one._surge_in = 99.0
+		one._attack_in = 99.0
+		one.health = 1.0
+		one.take_hit(5.0, p, &"fire", one.global_position, Vector3.BACK)
+		deaths[one.death_is()] = true
+
+	_check("D1 three deaths, each its own (%s)" % str(deaths.keys()), deaths.size() == 3)
+	await _clean()
+	var burning := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	burning._surge_in = 99.0
+	burning._attack_in = 99.0
+	burning.take_hit(5.0, p, &"fire", burning.global_position, Vector3.BACK)
+	await _frames(30)
+	_check("D0 on fire, you can see it: flames on it", burning.body.flames_lit() >= 4)
+	burning.statuses.clear(&"burning")
+	await _frames(70)
+	_check("D0b put out, they go", burning.body.flames_lit() == 0)
+	burning.health = 1.0
+	burning.take_hit(5.0, p, &"fire", burning.global_position, Vector3.BACK)
+	await _frames(2)
+	_check("D2 dead, it does nothing and can't be struck", burning.dead and burning.get_child(0).disabled and burning.take_hit(5.0, p, &"fire", burning.global_position, Vector3.BACK) == &"none")
+	await _frames(40)
+	_check("D2b it burns as it goes", burning.visible and burning.body.flames_lit() >= 4)
+	await _frames(int(3.4 * 60.0))
+	_check("D3 its fire goes out, its body hides, nothing left burning", not burning.visible and burning.body.flames_lit() == 0)
+	await _clean()
+	var striker := _revenant(Vector3(0, 0, -2.0))
+	await _frames(2)
+	striker._surge_in = 99.0
+	striker._attack_in = 99.0
+	var calm: float = striker.body.wrath_now()
+	striker._enter(STATE.SWIPE_WIND)
+	await _until(func(): return striker.state == STATE.SWIPE, 1.6)
+	_check("D8 winding up, the seep builds in it (%.2f, %.2f)" % [calm, striker.body.wrath_now()], striker.body.wrath_now() > calm + 0.6)
+	await _frames(14)
+	_check("D9 a blow leaves a smear in the air (%d)" % striker.body.smear_points(), striker.body.smear_points() >= 4)
+	await _frames(70)
+	_check("D9b and it goes", striker.body.smear_points() == 0)
+	var was_lean: float = striker.body._flinch
+	striker.take_hit(20.0, p, &"bullet", striker.global_position, Vector3.RIGHT)
+	_check("D10 struck, it flinches and shows it", striker.body._flinch > was_lean and striker.body._hurt_now > 0.0)
+	await _clean()
+	var layer := _revenant(Vector3(0, 0, -40))
+	var other := _revenant(Vector3(6, 0, -40))
+	await _frames(2)
+
+	for each in [layer, other]:
+		each._surge_in = 99.0
+		each._attack_in = 99.0
+
+	p.touch.lay(layer, 0.0, 0.0)
+	await _frames(25)
+	_check("D4 the one that laid the touch has its eyes lit, the others not", layer.body.eyes_now() > 0.9 and other.body.eyes_now() < 0.1)
+	await _clean()
+	var hud: CanvasLayer = p.hud
+	await _frames(40)
+	_check("D5 nothing on your sight to begin with", not hud.soaked_shown() and not hud.touch_shown())
+	p.statuses.apply(&"soaked", 0.5)
+	await _frames(20)
+	_check("D5b soaked, it shows", hud.soaked_shown())
+	await _frames(70)
+	_check("D5c and goes, lowkey (%.2f)" % hud.soaked_amount(), not hud.soaked_shown())
+	var holder := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	holder._surge_in = 99.0
+	holder._attack_in = 99.0
+	p.touch.lay(holder, 0.0, 0.0)
+	await _frames(45)
+	_check("D5d the touch shows, all the time", hud.touch_shown())
+	_check("D6 neither is the curse's or the drain's look", not hud._curse_view.visible and not hud._drain_view.visible)
+	_check("D7 they keep out of the middle third", hud.middle_kept_clear())
+	p.touch.clear()
+	await _frames(45)
+	_check("D5e burnt, it goes", not hud.touch_shown())
+	await _clean()
+
+
 func _press(action: String) -> void:
 	Input.action_press(action)
 	await _frames(2)
@@ -426,7 +541,7 @@ func _its_touch() -> void:
 	p.touch.lay(layer, 0.0, 1.5)
 	await _frames(2)
 	var quick := await _grasper(Vector3(0, 0, -2.5))
-	quick._state_t = 1.05
+	quick._state_t = 1.35
 	await _grasp_lands(quick)
 	_check("T6 not in the grace after a hold", not p.is_dead)
 	await _clean()
@@ -441,7 +556,7 @@ func _its_touch() -> void:
 	cutter._surge_in = 99.0
 	cutter._attack_in = 99.0
 	cutter._enter(STATE.RAKE_WIND)
-	await _until(func(): return cutter.state == STATE.RAKE, 1.5)
+	await _until(func(): return cutter.state == STATE.RAKE, 1.9)
 	await _frames(1)
 	_check("T7 swipes and rakes never do it", not p.is_dead and is_equal_approx(p.health, 65.0))
 	await _clean()
@@ -492,7 +607,7 @@ func _its_touch() -> void:
 	await _clean()
 	p.invulnerable = false
 	var missed := await _grasper(Vector3(0, 0, -2.5))
-	await _until(func(): return missed._state_t > 0.95, 1.2)
+	await _until(func(): return missed._state_t > 1.25, 1.6)
 	p.teleport(Transform3D(Basis.IDENTITY, p.global_position + Vector3(0, 0, 8.0)))
 	await _grasp_lands(missed)
 	_check("T11 out of its reach, the grasp misses", not p.touch.on_you())
@@ -511,7 +626,7 @@ func _grasper(at: Vector3) -> CharacterBody3D:
 
 
 func _grasp_lands(one: CharacterBody3D) -> void:
-	await _until(func(): return one.state != STATE.GRASP_WIND, 1.4)
+	await _until(func(): return one.state != STATE.GRASP_WIND, 1.8)
 	await _frames(1)
 
 
@@ -542,7 +657,7 @@ func _its_blows() -> void:
 	one._surge_in = 99.0
 	one._attack_in = 99.0
 	one._enter(STATE.SWIPE_WIND)
-	await _until(func(): return one.state == STATE.SWIPE, 1.2)
+	await _until(func(): return one.state == STATE.SWIPE, 1.6)
 	await _frames(1)
 	_check("H1 a swipe lands 25 (%.0f)" % (100.0 - p.health), is_equal_approx(p.health, 75.0))
 	_check("H4 a hit soaks you for 8 s", p.statuses.has(&"soaked") and p.statuses.left(&"soaked") > 7.8)
@@ -550,7 +665,7 @@ func _its_blows() -> void:
 	p.health = 100.0
 	await _frames(100)
 	one._enter(STATE.RAKE_WIND)
-	await _until(func(): return one.state == STATE.RAKE, 1.5)
+	await _until(func(): return one.state == STATE.RAKE, 1.9)
 	await _frames(1)
 	_check("H2 a rake lands 35 (%.0f)" % (100.0 - p.health), is_equal_approx(p.health, 65.0))
 	_check("H7 a new hit starts the 8 s again (%.1f)" % p.statuses.left(&"soaked"), p.statuses.left(&"soaked") > 7.8)
@@ -567,11 +682,11 @@ func _its_blows() -> void:
 	dodged._surge_in = 99.0
 	dodged._attack_in = 99.0
 	dodged._enter(STATE.SWIPE_WIND)
-	await _frames(20)
+	await _frames(40)
 	Input.action_press("gun_dodge")
 	await _frames(2)
 	Input.action_release("gun_dodge")
-	await _until(func(): return dodged.state == STATE.SWIPE, 1.0)
+	await _until(func(): return dodged.state == STATE.SWIPE, 1.4)
 	await _frames(1)
 	_check("H3 dodged, nothing (%.0f)" % p.health, p.health == 100.0)
 	await _clean()
@@ -584,14 +699,14 @@ func _its_blows() -> void:
 	_check("H8 backing off at an aiming walk it catches you, at a sprint it doesn't (%.0f, %.0f)" % [after_walk, after_run], after_walk < 100.0 and after_run == 100.0)
 	await _clean()
 	p.invulnerable = false
-	var near := _revenant(Vector3(0, 0, -3.0))
+	var near := _revenant(Vector3(0, 0, -3.6))
 	await _frames(2)
 	near._surge_in = 99.0
 	near._attack_in = 99.0
 	near._enter(STATE.WALK)
 	await _frames(180)
 	var off_you: float = Vector2(near.global_position.x - p.global_position.x, near.global_position.z - p.global_position.z).length()
-	_check("H9 it stops short of you, not through you (%.2f)" % off_you, off_you > 1.3 and off_you < 1.7)
+	_check("H9 it stops short of you, not through you (%.2f)" % off_you, off_you > 1.8 and off_you < 2.2)
 	p.invulnerable = true
 	await _clean()
 

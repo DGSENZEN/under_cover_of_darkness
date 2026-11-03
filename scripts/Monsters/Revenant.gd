@@ -4,6 +4,7 @@ extends "res://scripts/Monsters/Monster.gd"
 ## (docs/superpowers/specs/2026-11-03-revenant-design.md)
 
 const RevenantBody := preload("res://scripts/Monsters/RevenantBody.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 enum State { WALK, SURGE_TELL, SURGE, SWIPE_WIND, SWIPE, RAKE_WIND, RAKE, GRASP_WIND, GRASP, HOLD, SHOVE, STAGGER, FALL, DOWN, RISE, DYING }
 
@@ -13,6 +14,18 @@ const DOING := {
 	State.RAKE_WIND: &"rake_wind", State.RAKE: &"rake", State.GRASP_WIND: &"grasp_wind", State.GRASP: &"grasp", State.HOLD: &"hold",
 	State.SHOVE: &"shove", State.STAGGER: &"stagger", State.FALL: &"fall", State.DOWN: &"down", State.RISE: &"rise", State.DYING: &"dying_a",
 }
+## How it goes in fire: [how long before the next, what next]. Three, each its own, chosen by its seed. Reaching for you to the last; reared up,
+## screaming at nothing; or just folding.
+const DEATHS := [[&"dying_a", 1.9, &"dying_c"], [&"dying_b", 1.5, &"dying_c"], [&"dying_c", 9.0, &"dying_c"]]
+const CHARS_IN := 2.2
+const BURNS_AWAY_FOR := 1.1
+## How much its footfalls and its slams shake you, and how near you must be to feel them (m).
+const STEP_TRAUMA := 0.05
+const SLAM_TRAUMA := 0.42
+const FELT_WITHIN := 7.0
+## Its chest, ahead of its hips, for what strikes it (m).
+const FORE_AT := Vector3(0.0, 1.3, -0.75)
+const FORE_SIZE := 0.5
 ## What gets you out of its hands.
 const FREES := [&"power", &"kick", &"blast", &"burst", &"brazier"]
 ## How far it falls before it counts as lying (s).
@@ -33,8 +46,11 @@ var _attack_in := 0.0
 var _fall_speed := 0.0
 var _rng := RandomNumberGenerator.new()
 var _dying_left := 0.0
+var _death: Array = []
+var _doing_now: StringName = &"walk"
 var _burner: Node3D = null
 var _shape: CollisionShape3D
+var _fore: CollisionShape3D
 var body: Node3D
 
 
@@ -53,6 +69,67 @@ func _ready() -> void:
 	body = RevenantBody.new()
 	body.name = "Body"
 	add_child(body)
+	body.step_landed.connect(_stepped)
+	body.hand_landed.connect(_hand_down)
+	body.slammed.connect(_slammed)
+	# (Its chest and head go well ahead of its hips: what you shoot at is there.)
+	_fore = CollisionShape3D.new()
+	_fore.shape = SphereShape3D.new()
+	(_fore.shape as SphereShape3D).radius = FORE_SIZE
+	_fore.position = FORE_AT
+	add_child(_fore)
+
+
+func _stepped(_side: int) -> void:
+	Sfx.play(self, &"flesh_heavy", global_position, -13.0, randf_range(0.42, 0.55))
+	_felt(STEP_TRAUMA)
+
+
+func _hand_down(_side: int) -> void:
+	Sfx.play(self, &"flesh", global_position, -15.0, randf_range(0.45, 0.6))
+
+
+## All of it, coming down: you feel that in your feet.
+func _slammed() -> void:
+	Sfx.play(self, &"flesh_heavy", global_position, 0.0, 0.42)
+	Sfx.play(self, &"bone_crack", global_position, -9.0, 0.5)
+	_felt(SLAM_TRAUMA)
+
+
+func _felt(how_hard: float) -> void:
+	var you: Node3D = target()
+
+	if not is_instance_valid(you) or you.get("juice") == null:
+		return
+
+	var far := global_position.distance_to(you.global_position)
+	you.juice.add_trauma(how_hard * clampf(1.0 - far / FELT_WITHIN, 0.0, 1.0))
+
+
+## Stand-ins, on sounds_needed.md.
+func _sounds_for(next: State) -> void:
+	if not is_inside_tree():
+		return
+
+	match next:
+		State.SURGE_TELL:
+			Sfx.play(self, &"anima_moan", global_position, -5.0, 0.42)
+		State.SURGE:
+			Sfx.play(self, &"flesh_heavy", global_position, -5.0, 0.5)
+		State.SWIPE_WIND, State.RAKE_WIND:
+			Sfx.play(self, &"anima_moan", global_position, -9.0, 0.5)
+		State.GRASP_WIND:
+			Sfx.play(self, &"anima_moan", global_position, -3.0, 0.36)
+			Sfx.play(self, &"bone_crack", global_position, -10.0, 0.45)
+		State.SWIPE, State.RAKE, State.GRASP:
+			Sfx.play(self, &"whoosh", global_position, -5.0, 0.6)
+		State.HOLD:
+			Sfx.play(self, &"flesh", global_position, -3.0, 0.5)
+		State.FALL:
+			Sfx.play(self, &"flesh_heavy", global_position, -1.0, 0.45)
+			Sfx.play(self, &"bone_crack", global_position, -8.0, 0.55)
+		State.RISE:
+			Sfx.play(self, &"anima_moan", global_position, -6.0, 0.38)
 
 
 func hit_radius() -> float:
@@ -86,17 +163,23 @@ func _physics_process(delta: float) -> void:
 	if dead:
 		if _dying_left > 0.0:
 			_dying_left -= delta
-			body.tick(delta, DOING[state], Vector3.ZERO, _face_of(you), 1.0, 0.0, 0.0)
+			var since := float(_row["dies_in"]) - _dying_left
+			var burns := 1.0 if _dying_left > BURNS_AWAY_FOR * 0.4 else 0.0
+			body.tick(delta, _death[0] if since < float(_death[1]) else _death[2], Vector3.ZERO, _face_of(you), burns, 0.0, 0.0)
+			body.burn_away(clampf(since / CHARS_IN, 0.0, 1.0), clampf(1.0 - _dying_left / BURNS_AWAY_FOR, 0.0, 1.0))
 
 			if _dying_left <= 0.0:
+				body.tick(delta, _death[2], Vector3.ZERO, _face_of(you), 0.0, 0.0, 0.0)
 				_put_out()
+				body.put_out_now()
 
 		return
 
 	if is_on_floor():
 		body.lie_at(global_position.y)
 
-	body.tick(delta, DOING[state], velocity, _face_of(you), 0.6 if statuses.has(&"burning") else 0.0, 0.0, 0.0)
+	var marked: bool = is_instance_valid(you) and you.get("touch") != null and you.touch.laid_by() == self
+	body.tick(delta, DOING[state], velocity, _face_of(you), 0.6 if statuses.has(&"burning") else 0.0, 0.0, 1.0 if marked else 0.0)
 
 
 func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vector3, direction: Vector3) -> StringName:
@@ -122,6 +205,10 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 	var was_gathering := state == State.GRASP_WIND
 	_burner = attacker if source == &"fire" else _burner
 	var result: StringName = super.take_hit(damage, attacker, hit_kind, point, direction)
+
+	# It gives a little, and shows it: you hit something.
+	if body != null:
+		body.flinch(signf(global_basis.x.dot(direction) + 0.001), clampf(damage / 30.0, 0.35, 1.0))
 
 	if dead or is_down():
 		return result
@@ -173,9 +260,17 @@ func _finish(by: Node3D) -> void:
 	_die(by)
 
 
+## Which of its deaths it is having.
+func death_is() -> StringName:
+	return _death[0] if not _death.is_empty() else &""
+
+
 func _die(by: Node3D) -> void:
 	_dying_left = float(_row["dies_in"])
+	_death = DEATHS[_rng.randi_range(0, DEATHS.size() - 1)]
 	_enter(State.DYING)
+	Sfx.play(self, &"anima_moan", global_position, -3.0, 0.42)
+	Sfx.play(self, &"flesh_heavy", global_position, -4.0, 0.5)
 	var you: Node3D = target()
 
 	if is_instance_valid(you) and you.get("touch") != null:
@@ -191,6 +286,9 @@ func _lay_down() -> void:
 	if _dying_left > 0.0:
 		velocity = Vector3.ZERO
 		get_child(0).set_deferred(&"disabled", true)
+
+		if _fore != null:
+			_fore.set_deferred(&"disabled", true)
 	else:
 		_put_out()
 
@@ -198,11 +296,18 @@ func _lay_down() -> void:
 func _enter(next: State) -> void:
 	state = next
 	_state_t = 0.0
+	_sounds_for(next)
 
 	if next == State.FALL:
 		_stand_tall(LIES_TALL)
+
+		if _fore != null:
+			_fore.position = FORE_AT * Vector3(1.0, 0.5, 1.1)
 	elif next == State.WALK:
 		_stand_tall(STANDS_TALL)
+
+		if _fore != null:
+			_fore.position = FORE_AT
 
 
 func _brain(delta: float) -> Vector3:
@@ -237,7 +342,7 @@ func _brain(delta: float) -> Vector3:
 		State.WALK:
 			_choose(far)
 			# (It stops short of you: it reaches, it doesn't walk through you.)
-			return way * (float(_row["speed"]) if far > float(_row["keeps_off"]) else 0.0) + drops
+			return way * (float(_row["speed"]) * body.lurch() if far > float(_row["keeps_off"]) else 0.0) + drops
 		State.SURGE_TELL:
 			if _state_t >= float(_row["surge_tell"]):
 				_enter(State.SURGE)

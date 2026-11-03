@@ -50,11 +50,11 @@ STANCE = [
     ("clavicle_l", (1.0, -0.5, -0.34), 1.4, 1.0),
     ("upperarm_l", (0.42, -0.38, -1.0), 2.1, 0.72),
     ("lowerarm_l", (0.2, -0.55, -1.0), 2.2, 0.74),
-    ("hand_l", (0.1, -0.4, -1.0), 1.7, 1.35),
+    ("hand_l", (0.1, -0.4, -1.0), 1.85, 1.6),
     ("clavicle_r", (-1.0, -0.2, 0.08), 1.5, 1.0),
     ("upperarm_r", (-0.5, -0.2, -1.0), 2.25, 0.66),
     ("lowerarm_r", (-0.12, -0.7, -1.0), 2.35, 0.64),
-    ("hand_r", (-0.05, -0.55, -1.0), 1.7, 1.35),
+    ("hand_r", (-0.05, -0.55, -1.0), 1.85, 1.6),
     ("thigh_l", (0.3, -0.5, -1.0), 1.36, 0.78),
     ("calf_l", (0.06, 0.48, -1.0), 1.48, 0.68),
     ("foot_l", (0.05, -1.0, -0.45), 1.45, 0.95),
@@ -64,7 +64,7 @@ STANCE = [
 ]
 FINGERS = ("index", "middle", "ring", "pinky", "thumb")
 FINGERS_STRETCH = 1.95
-FINGERS_ACROSS = 1.12
+FINGERS_ACROSS = 1.3
 
 # Its bones: name, what it follows, and the base's bones it takes the weights of.
 FINGER_NAMES = {"index": "finger_1", "middle": "finger_2", "ring": "finger_3", "pinky": "finger_4", "thumb": "thumb"}
@@ -219,8 +219,9 @@ def stance():
     mesh.transform(place)
     # Stands on the floor.
     lowest = min(v.co.z for v in mesh.vertices)
-    mesh.transform(Matrix.Translation((0.0, 0.0, -lowest)))
-    drop = Vector((0.0, 0.0, -lowest))
+    # (And over its hips, whatever its stance has done: what stands on the floor and turns is there, its head well ahead of it.)
+    drop = Vector((-joints["hips"].x, -joints["hips"].y, -lowest))
+    mesh.transform(Matrix.Translation(drop))
 
     for key in joints:
         joints[key] += drop
@@ -333,6 +334,31 @@ def head_on(joints):
     return skull, joined(jaw_flesh), skull_teeth, jaw_teeth, [pieces["Gullet"]], [pieces["Tongue"]], hinge_at, sockets
 
 
+def knobs_of(joints):
+    """Its joints: bone standing out of the flesh at the elbow, wrist, knee, ankle and shoulder, the flesh wasted between them, so a limb has a place to bend and you can see it."""
+    out = []
+
+    for side in ("_l", "_r"):
+        shoulder, elbow, wrist = joints["arm_1" + side], joints["arm_2" + side], joints["hand" + side]
+        hip, knee, ankle = joints["leg_1" + side], joints["leg_2" + side], joints["foot" + side]
+        out += [
+            (elbow + Vector((0.0, -0.03, 0.0)), Vector((0.075, 0.075, 0.075)), 0.05, 0.0),
+            (wrist, Vector((0.055, 0.055, 0.05)), 0.024, 0.0),
+            (knee + Vector((0.0, 0.03, 0.0)), Vector((0.085, 0.085, 0.085)), 0.05, 0.0),
+            (ankle, Vector((0.06, 0.06, 0.05)), 0.022, 0.0),
+            (shoulder, Vector((0.1, 0.1, 0.1)), 0.04, 0.0),
+            # (The muscle of it: high on the bone, wasted below.)
+            (shoulder.lerp(elbow, 0.34), Vector((0.1, 0.1, 0.17)), 0.028, 0.0),
+            (elbow.lerp(wrist, 0.26), Vector((0.08, 0.08, 0.15)), 0.024, 0.0),
+            (elbow.lerp(wrist, 0.76), Vector((0.075, 0.075, 0.16)), -0.016, 0.0),
+            (hip.lerp(knee, 0.4), Vector((0.12, 0.12, 0.2)), 0.03, 0.0),
+            (knee.lerp(ankle, 0.28), Vector((0.09, 0.09, 0.15)), 0.028, 0.0),
+            (knee.lerp(ankle, 0.8), Vector((0.08, 0.08, 0.15)), -0.012, 0.0),
+        ]
+
+    return out
+
+
 def sacks_of(joints):
     """Where the water has gathered, and how it hangs: [centre, radii, how far out, how far down]. Its left is -x here."""
     chest = joints["chest"]
@@ -355,7 +381,7 @@ def sacks_of(joints):
         (thigh, Vector((0.18, 0.18, 0.3)), 0.05, 0.03),
         (jowl_l, Vector((0.1, 0.1, 0.11)), 0.05, 0.05),
         (jowl_r, Vector((0.1, 0.1, 0.11)), 0.06, 0.06),
-    ]
+    ] + knobs_of(joints)
 
 
 def nails_on(joints):
@@ -989,7 +1015,8 @@ def skin_it(obj, rig, lookup, attach_points):
     attach = bm.verts.layers.int.get("Attach")
     rows = [lookup(attach_points[v[attach] - 1]) if v[attach] > 0 else lookup(v.co) for v in bm.verts]
 
-    for _ in range(2):
+    # (Once: more and its joints go to rubber.)
+    for _ in range(1):
         soft = []
 
         for v in bm.verts:

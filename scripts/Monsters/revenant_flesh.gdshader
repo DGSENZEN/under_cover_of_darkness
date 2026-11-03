@@ -13,6 +13,9 @@ instance uniform float burn = 0.0;
 instance uniform float seared = 0.0;
 // How angry it is, 0..1: everything of the seep comes up with it.
 instance uniform float wrath = 0.0;
+// Dying, by fire: the char running over it, a hot edge ahead of it (`charred`), and then the ash of it going pale and falling away (`crumbled`).
+instance uniform float charred = 0.0;
+instance uniform float crumbled = 0.0;
 
 const vec3 SEEP = vec3(0.5, 0.83, 0.42);
 const vec3 SEEP_HOT = vec3(1.1, 1.5, 0.75);
@@ -43,6 +46,13 @@ void fragment() {
 	vec3 skin = COLOR.rgb * 0.6;
 	skin = mix(skin, skin * vec3(1.2, 1.2, 1.1), smoothstep(0.45, 0.62, stroke) * 0.7);
 	skin = mix(skin, skin * vec3(0.55, 0.62, 0.62), smoothstep(0.55, 0.38, stroke) * 0.8);
+	// Where the fire is at, here. Read always, out here: it should run in its own shapes, and from the middle of it out.
+	float burn_at = clamp(stroke * 0.5 + eye_noise(paint_at * 4.3) * 0.5 + length(paint_at - vec3(0.0, 1.3, 0.0)) * 0.1, 0.0, 1.0);
+
+	if (crumbled > 0.0 && burn_at < crumbled * 1.25 - 0.1) {
+		discard;
+	}
+
 	float is_eye = step(0.86, seep_here);
 	float rest = 1.0 - is_eye;
 	vec3 light_of = vec3(0.0);
@@ -76,12 +86,24 @@ void fragment() {
 	// Scored by the coals: dark, with heat in the cuts.
 	float scored = smoothstep(0.58, 0.44, stroke) * seared;
 	skin = mix(skin, vec3(0.03, 0.02, 0.018), scored * 0.8);
-	// Burning: black coming up from under, in the brush's shapes.
-	float char_here = smoothstep(0.62 - burn * 0.7, 0.7 - burn * 0.7, stroke) * step(0.001, burn);
-	skin = mix(skin, vec3(0.012), char_here * 0.85);
+	// Burning as it comes: the hide splitting, heat in its folds, not all black. Dying: the char takes it all, from the middle out, and goes to pale ash at the last.
+	float fire_cracks = smoothstep(0.46, 0.38, stroke) * burn;
+	skin = mix(skin, skin * 0.4, smoothstep(0.62, 0.42, stroke) * burn * 0.8);
+	float front = charred * 1.3 - 0.15;
+	float char_here = 1.0 - smoothstep(front - 0.05, front + 0.03, burn_at);
+	vec3 ash = vec3(0.016, 0.015, 0.014) + vec3(0.012) * smoothstep(0.4, 0.62, stroke);
+	float crumble_front = crumbled * 1.25 - 0.1;
+	float pale = crumbled > 0.0 ? 1.0 - smoothstep(crumble_front + 0.03, crumble_front + 0.26, burn_at) : 0.0;
+	ash = mix(ash, vec3(0.22, 0.21, 0.2) * (0.55 + 0.75 * smoothstep(0.32, 0.62, stroke)), pale);
+	skin = mix(skin, ash, char_here);
+	skin = mix(skin, vec3(0.34, 0.03, 0.02), hurt * 0.45);
+	float hot_edge = (1.0 - smoothstep(0.0, 0.05, abs(burn_at - front))) * step(0.001, charred) * (1.0 - smoothstep(0.92, 1.0, charred));
+	float glow_behind = smoothstep(front - 0.2, front - 0.02, burn_at) * (1.0 - smoothstep(front - 0.02, front + 0.02, burn_at)) * step(0.001, charred);
 	ALBEDO = skin * rest;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
+	// (All the seep on it goes out, as it burns.)
+	light_of *= 1.0 - smoothstep(0.1, 0.6, charred);
 	vec3 world_normal = (INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz;
 	// Its edge, in broken bands, as the mouth's is.
 	float edge = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);
@@ -90,7 +112,8 @@ void fragment() {
 	light_of += SEEP * (smoothstep(0.66, 0.7, edge_shape) * 0.05 + smoothstep(0.84, 0.88, edge_shape) * 0.11) * (0.5 + wrath) * rest;
 	EMISSION = painted_fill(skin * rest, world_normal, NORMAL, VIEW) * 0.8
 		+ light_of
-		+ is_eye * mix(EYE, EYE_HOT, eyes)
-		+ FIRE * (scored * 0.7 + char_here * (1.0 - char_here) * 2.0 * burn)
+		+ is_eye * mix(EYE, EYE_HOT, max(eyes, wrath * 0.6)) * (1.0 - smoothstep(0.3, 0.75, charred))
+		+ FIRE * (scored * 0.7 + fire_cracks * (0.5 + 0.5 * sin(TIME * 7.0 + paint_at.y * 9.0)) * 0.34 + hot_edge * 1.3 + glow_behind * 0.12)
+		+ FIRE * char_here * (1.0 - crumbled) * smoothstep(0.64, 0.72, stroke) * 0.22
 		+ eye_smoulder(paint_at * 2.0, NORMAL, VIEW, TIME);
 }
