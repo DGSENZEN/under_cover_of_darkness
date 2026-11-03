@@ -133,6 +133,32 @@ const BITE_HOLDS := 0.28
 const LOOKS_ABOUT := 0.34
 const AnimaMouthScript := preload("res://scripts/Monsters/AnimaMouth.gd")
 const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
+## The mouth, by what it is doing: how far its ribs stand open, how far it has reared (0..1), its
+## arms (-1 drawn back, 1 come over), how quick its ribs and its rearing go. Rearing: how far back it
+## tips (rad), how far up it comes (m). Knocked: how far over it goes (rad).
+const MOUTH_POSES := {
+	&"rest": {"ribs": 0.03, "rear": 0.0, "snap": 2.0},
+	&"wake": {"ribs": 0.6, "rear": 0.4, "snap": 8.0, "rears": 5.0},
+	&"rise": {"ribs": 0.3, "rear": 0.1},
+	&"rush": {"ribs": 0.12, "rear": 0.0, "snap": 3.0},
+	&"circle": {"ribs": 0.22, "rear": 0.1, "snap": 3.0},
+	&"tell": {"ribs": 1.0, "rear": 1.0, "snap": 3.0, "rears": 2.2, "rake": -0.6},
+	&"leap": {"ribs": 1.0, "rear": 0.45, "snap": 9.0, "rears": 6.0, "rake": 0.5},
+	&"missed": {"ribs": 0.08, "rear": 0.0, "snap": 12.0, "rears": 6.0, "rake": 0.9},
+	&"thrown": {"ribs": 0.7, "rear": 0.2, "snap": 9.0},
+	&"wind_up": {"ribs": 0.85, "rear": 0.65, "snap": 6.0, "rears": 4.0, "rake": -1.0},
+	&"swipe": {"ribs": 0.0, "rear": 0.3, "snap": 22.0, "rears": 9.0, "rake": 1.0},
+	&"back_off": {"ribs": 0.12, "rear": 0.1, "snap": 5.0},
+	&"crowd": {"ribs": 0.85, "rear": 0.9, "snap": 3.0, "rears": 2.5, "rake": -0.3},
+	&"leave": {"ribs": 0.05, "rear": 0.0, "snap": 2.0, "rears": 2.0},
+	&"on": {"ribs": 0.6, "rear": 0.5, "snap": 5.0},
+}
+## Too heavy to spin: it comes round slowly.
+const MOUTH_TURNS := 5.0
+const MOUTH_REARS := 0.5
+const MOUTH_RISES := 0.28
+const MOUTH_TUMBLES := 1.1
+const MOUTH_JOLTS := 0.4
 ## The mouth: where its fire trails from, from its middle.
 const MOUTH_FIRES := [Vector3(0.05, -0.2, 1.3), Vector3(-0.15, -0.28, 1.1), Vector3(0.2, -0.25, 1.05)]
 const FIRE_CORE := Color("#8E9C3C")
@@ -187,6 +213,7 @@ var _bones := {}
 var _tips: Array[Vector3] = []
 var _look: StandardMaterial3D
 var _mouth: Node3D
+var _reared := 0.0
 var _flesh: ShaderMaterial
 var _rng := RandomNumberGenerator.new()
 
@@ -374,6 +401,47 @@ func souls() -> Array[Node3D]:
 	return _mouth.souls() if _mouth != null else ([] as Array[Node3D])
 
 
+## The mouth: where a dragging arm is in its stride, how high it has heaved, how far it has reared
+## (0..1), how far over it has been knocked, and how many arms are raking.
+func arm_stride(which: int) -> float:
+	return _mouth.arm_stride(which)
+
+
+func heave() -> float:
+	return _mouth.heave()
+
+
+func reared() -> float:
+	return _reared
+
+
+func tipped() -> float:
+	return _mouth.rotation.z
+
+
+func arms_raking() -> int:
+	return _mouth.arms_raking()
+
+
+## Too many arms hauling one mass: it heaves and rolls with them. It rears up with its ribs apart
+## before it comes, and they snap shut on the swing.
+## Backing off or going round you, the mouth keeps you in it: it doesn't turn its back and walk.
+func _mouth_stays_on_you(doing: StringName) -> bool:
+	return form == &"torso" and (doing == &"back_off" or doing == &"circle")
+
+
+func _work_mouth(delta: float, doing: StringName, speed: float, fed: float) -> void:
+	var pose: Dictionary = MOUTH_POSES.get(doing, MOUTH_POSES[&"rush"])
+	var snap: float = float(pose.get("snap", 5.0))
+	_mouth.ribs_to(clampf(_spring(&"mouth_ribs", float(pose["ribs"]), snap, 0.8, delta), 0.0, 1.15))
+	_reared = maxf(_spring(&"mouth_rear", float(pose["rear"]), float(pose.get("rears", 3.0)), 0.7, delta), 0.0)
+	var rake_to: float = float(pose.get("rake", 0.0))
+	_mouth.tick(delta, speed, rake_to, fed, hurt, smoulder)
+	var knocked := _tumble * MOUTH_TUMBLES * _lies_side + _jolt * MOUTH_JOLTS * _lies_side
+	_mouth.rotation = Vector3(_reared * MOUTH_REARS + _tumble * MOUTH_TUMBLES * 0.5, 0.0, _mouth.roll() + knocked)
+	_mouth.position = Vector3(0.0, _mouth.heave() + _reared * MOUTH_RISES, 0.0)
+
+
 func ribs_open() -> float:
 	return _mouth.ribs_open() if _mouth != null else 0.0
 
@@ -402,7 +470,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 	smoulder = move_toward(smoulder, 1.0 if smoked else 0.0, delta * (6.0 if smoked else 3.0))
 	var flat := Vector3(moving.x, 0.0, moving.z)
 
-	if you != null and doing != &"rest" and (flat.length() < 0.2 or doing == &"tell" or doing == &"on" or doing == &"wind_up" or doing == &"swipe"):
+	if you != null and doing != &"rest" and (flat.length() < 0.2 or doing == &"tell" or doing == &"on" or doing == &"wind_up" or doing == &"swipe" or _mouth_stays_on_you(doing)):
 		var way := you.global_position - global_position
 		way.y = 0.0
 
@@ -411,7 +479,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 
 	if flat.length() > 0.01 and doing != &"thrown":
 		var wanted := Basis.looking_at(flat.normalized(), Vector3.UP)
-		global_basis = global_basis.orthonormalized().slerp(wanted, 1.0 - exp(-12.0 * delta))
+		global_basis = global_basis.orthonormalized().slerp(wanted, 1.0 - exp(-(MOUTH_TURNS if form == &"torso" else 12.0) * delta))
 
 	if form == &"hands":
 		_walk_hand(delta, doing, Vector3(moving.x, 0.0, moving.z).length(), fed, exposed)
@@ -423,7 +491,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 		_work_face(delta, doing, Vector3(moving.x, 0.0, moving.z).length(), fed)
 		return
 
-	_mouth.tick(delta, fed, hurt, smoulder)
+	_work_mouth(delta, doing, Vector3(moving.x, 0.0, moving.z).length(), fed)
 
 
 ## How far its fire is up, 0..1.

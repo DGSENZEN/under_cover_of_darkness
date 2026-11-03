@@ -21,6 +21,17 @@ const MIDDLE_BEHIND := -0.25
 const SIZE := 1.25
 ## How far each side of the ribs swings at the widest (rad).
 const RIBS_SWING := 0.42
+## The two that drag it: how fast each goes for its speed (not in step), how far each reaches and
+## hauls (rad). How far it heaves with them (m), and rolls (rad).
+const STRIDES := [2.1, 2.75]
+const STRIDE_REACH := 0.6
+const HEAVES := 0.09
+const ROLLS := 0.11
+## The rake: how far back each arm draws, how far over it comes (rad), a little after the last.
+const RAKE_BACK := 0.75
+const RAKE_OVER := 1.15
+const RAKE_LAGS := 0.035
+const RAKING_PAST := 0.35
 ## The life in what pushes out of it: how far an arm sways (rad), a finger's curl about what, how far.
 const SWAY := 0.14
 const CURL := 0.42
@@ -36,7 +47,12 @@ var _skulls: Array[Node3D] = []
 var _embers: Array[MeshInstance3D] = []
 var _rest: Dictionary = {}
 var _ribs_open := 0.0
+var _haul := 0.0
 var _clock := 0.0
+var _stride := [0.0, 0.0]
+var _heave := 0.0
+var _rake: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0]
+var _rake_speed: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0]
 
 
 ## Built on the body's flesh, and its bone: the same paint as the other forms.
@@ -95,16 +111,63 @@ func ribs_to(open: float) -> void:
 	part(&"RibsRight").rotation.y = -RIBS_SWING * open
 
 
-## Each tick: what pushes out of it goes on moving, each in its own time. `fed` shows on all of it.
-func tick(delta: float, fed: float, hurt: float, smoulder: float) -> void:
+## Where each dragging arm is in its stride, -1..1.
+func arm_stride(which: int) -> float:
+	return sin(_stride[which])
+
+
+## How high the mass has heaved with them (m).
+func heave() -> float:
+	return _heave
+
+
+## How far over it the mass has rolled with them (rad).
+func roll() -> float:
+	return (sin(_stride[0]) - sin(_stride[1])) * ROLLS * minf(_haul, 1.0)
+
+
+## How many arms are coming over in a rake.
+func arms_raking() -> int:
+	var count := 0
+
+	for value in _rake:
+		count += 1 if value > RAKING_PAST else 0
+
+	return count
+
+
+## Each tick: what pushes out of it goes on moving, each in its own time. `speed`: how fast it is
+## being dragged. `rake_to`: -1 drawn back, 0 at rest, 1 come over. `fed` shows on all of it.
+func tick(delta: float, speed: float, rake_to: float, fed: float, hurt: float, smoulder: float) -> void:
 	_clock += delta
+	_haul = move_toward(_haul, minf(speed, 1.5), delta * 3.0)
+
+	for i in _stride.size():
+		_stride[i] += delta * STRIDES[i] * speed
+
+	# Each haul lifts it and lets it drop.
+	_heave = (absf(sin(_stride[0])) + absf(sin(_stride[1]))) * 0.5 * HEAVES * minf(_haul, 1.0)
+
+	for i in _rake.size():
+		var w := minf(TAU * 7.0, 0.8 / delta)
+		var late := clampf(float(i) * RAKE_LAGS, 0.0, 0.2)
+		_rake_speed[i] += (w * w * (rake_to - _rake[i]) - 2.0 * 0.75 * w * _rake_speed[i]) * delta * (1.0 - late)
+		_rake[i] += _rake_speed[i] * delta
 
 	for i in _souls.size():
 		var soul := _souls[i]
 		var seed := float(i) * 2.3 + 0.7
 		var sway := Basis.from_euler(Vector3(sin(_clock * (0.9 + float(i) * 0.13) + seed), sin(_clock * (0.7 + float(i) * 0.09) + seed * 1.7), 0.0) * SWAY)
 		var rest: Transform3D = _rest[soul]
-		soul.transform = Transform3D(sway * rest.basis, rest.origin)
+		var swing := Basis.IDENTITY
+
+		if i < _rake.size():
+			var over: float = _rake[i] * (RAKE_OVER if _rake[i] > 0.0 else RAKE_BACK)
+			# The two that drag it go on hauling.
+			var haul: float = sin(_stride[i]) * STRIDE_REACH * minf(_haul, 1.0) if i < _stride.size() else 0.0
+			swing = Basis(Vector3.RIGHT, -over + haul)
+
+		soul.transform = Transform3D(swing * sway * rest.basis, rest.origin)
 
 	for i in _hands.size():
 		_curl_fingers(_hands[i], i)

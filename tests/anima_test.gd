@@ -33,6 +33,7 @@ func _ready() -> void:
 	await _hands_life()
 	await _mouth_model()
 	await _mouth_on_its_body()
+	await _mouth_moves()
 	await _forms()
 	await _round_cover()
 	await _swipes()
@@ -209,6 +210,122 @@ func _mouth_model() -> void:
 	made.free()
 
 
+func _mouth_moves() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(10)
+	var one := _anima(&"torso", HOME + Vector3(0.0, -0.5, -14.0))
+	one.leap_chance = 0.0
+	await _frames(10)
+	await _until(func(): return one.state == STATE.RUSH, 3.0)
+	var body: Node3D = one.body
+	var out_of_step := 0.0
+	var low := 9.0
+	var high := -9.0
+
+	for i in 150:
+		await get_tree().physics_frame
+		out_of_step = maxf(out_of_step, absf(body.arm_stride(0) - body.arm_stride(1)))
+		low = minf(low, body.heave())
+		high = maxf(high, body.heave())
+
+	_check("T1 its dragging arms are out of step (%.2f)" % out_of_step, out_of_step > 0.2)
+	_check("T2 it heaves as it goes (%.3f)" % (high - low), high - low > 0.04)
+	one.free()
+	await _frames(2)
+	# Its tell.
+	var teller := _anima(&"torso", HOME + Vector3(0.0, -0.5, -4.0))
+	teller.leap_chance = 1.0
+	await _until(func(): return teller.state == STATE.TELL, 6.0)
+	await _frames(40)
+	_check("T3 in its tell the ribs open wide and it rears (%.2f, %.2f)" % [teller.body.ribs_open(), teller.body.reared()], teller.body.ribs_open() > 0.8 and teller.body.reared() > 0.8)
+	teller.free()
+	await _frames(2)
+	# Its rake.
+	var raker := _anima(&"torso", HOME + Vector3(0.0, -0.5, -2.8))
+	raker.leap_chance = 0.0
+	raker.health = 500.0
+	await _until(func(): return raker.state == STATE.WIND_UP, 8.0)
+	await _frames(25)
+	_check("T3b winding up, they open too (%.2f)" % raker.body.ribs_open(), raker.body.ribs_open() > 0.5)
+	await _until(func(): return raker.state == STATE.SWIPE, 2.0)
+	var least := 1.0
+	var most_raking := 0
+
+	while raker.state == STATE.SWIPE or raker.state == STATE.BACK_OFF and most_raking == 0:
+		await get_tree().physics_frame
+		least = minf(least, raker.body.ribs_open())
+		most_raking = maxi(most_raking, raker.body.arms_raking())
+
+	_check("T4 on the swing they snap shut (%.2f)" % least, least < 0.25)
+	_check("T5 up close several arms rake (%d)" % most_raking, most_raking >= 3)
+	# Backing off, the mouth stays on you: it doesn't turn its back and walk.
+	await _until(func(): return raker.state == STATE.BACK_OFF, 2.0)
+	var worst_facing := 1.0
+
+	while raker.state == STATE.BACK_OFF:
+		await get_tree().physics_frame
+		var to_you: Vector3 = (p.global_position - raker.global_position) * Vector3(1.0, 0.0, 1.0)
+		worst_facing = minf(worst_facing, (-raker.body.global_basis.z).normalized().dot(to_you.normalized()))
+
+	_check("T9 it backs off with its mouth still on you (%.2f)" % worst_facing, worst_facing > 0.5)
+	raker.free()
+	await _frames(2)
+	# Cover, and a gap.
+	var block: Node = Props.block(self, HOME + Vector3(0.0, 0.0, -3.0), Vector3(3.0, 3.0, 0.6))
+	var round_it := _anima(&"torso", HOME + Vector3(0.3, -0.5, -5.5))
+	round_it.leap_chance = 0.0
+	var got_round: bool = await _until(func(): return round_it.global_position.distance_to(p.global_position) < 2.6, 16.0)
+	_check("T6 it gets round cover (%.1f m left)" % round_it.global_position.distance_to(p.global_position), got_round)
+	round_it.free()
+	block.free()
+	var left_wall: Node = Props.block(self, HOME + Vector3(-2.2, 0.0, -3.0), Vector3(3.0, 3.0, 0.6))
+	var right_wall: Node = Props.block(self, HOME + Vector3(2.2, 0.0, -3.0), Vector3(3.0, 3.0, 0.6))
+	var through := _anima(&"torso", HOME + Vector3(0.0, -0.5, -5.5))
+	through.leap_chance = 0.0
+	var got_through: bool = await _until(func(): return through.global_position.z > HOME.z - 2.2, 16.0)
+	_check("T6b and through a gap of 1.4 m", got_through)
+	through.free()
+	left_wall.free()
+	right_wall.free()
+	await _frames(2)
+	# Its lunge against a wall.
+	var stood: Vector3 = p.global_position
+	var wall: Node = Props.block(self, HOME + Vector3(0.0, 0.0, -2.2), Vector3(6.0, 3.0, 0.6))
+	var lunger := _anima(&"torso", HOME + Vector3(0.0, -0.5, -4.6))
+	lunger.leap_chance = 1.0
+	var latched := [false]
+
+	for i in 300:
+		await get_tree().physics_frame
+		latched[0] = latched[0] or lunger.state == STATE.ON
+
+	_check("T7 its lunge never takes you through a wall", not latched[0] and p.global_position.distance_to(stood) < 0.05 and lunger.global_position.z < wall.global_position.z)
+	lunger.free()
+	wall.free()
+	await _frames(2)
+	# Glass.
+	var struck_one := _anima(&"torso", HOME + Vector3(0.0, -0.5, -7.0))
+	struck_one.leap_chance = 0.0
+	await _frames(20)
+	var from_y: float = struck_one.global_position.y
+	struck_one.jolted(Vector3.FORWARD)
+	struck_one.body.jolt(Vector3.FORWARD)
+	struck_one.body.tumble(Vector3.FORWARD)
+	var went_up := 0.0
+	var tipped := 0.0
+
+	for i in 30:
+		await get_tree().physics_frame
+		went_up = maxf(went_up, struck_one.global_position.y - from_y)
+		tipped = maxf(tipped, absf(struck_one.body.tipped()))
+
+	var limbs_on: bool = struck_one.body.souls().all(func(soul): return struck_one.body.is_ancestor_of(soul))
+	_check("T8 the Burst and the Shard move it (%.2f up, %.2f tipped), and its limbs stay on it" % [went_up, tipped], went_up > 0.05 and tipped > 0.1 and limbs_on)
+	struck_one.free()
+	await _frames(2)
+
+
 func _mouth_on_its_body() -> void:
 	await _place_player(HOME)
 	_clear_all()
@@ -236,6 +353,8 @@ func _mouth_on_its_body() -> void:
 			moved += 1
 
 	_check("O6 they move, each of its own (%d)" % moved, moved == 8)
+	# (Stilled, so what it is doing doesn't set them back.)
+	one.process_mode = Node.PROCESS_MODE_DISABLED
 	body.ribs_to(1.0)
 	await _frames(3)
 	var left: Node3D = body.part(&"RibsLeft")
