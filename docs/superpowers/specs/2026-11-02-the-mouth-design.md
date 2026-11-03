@@ -88,3 +88,7 @@ Claude's calls:
 - The exact form of the first-person cage, within: ribs round the frame, faces and hands on every side, the middle clear.
 - The three deaths, within: ribs burst, the mass comes apart, each soul its own way, in the fire already approved.
 - Which approved sounds stand in.
+
+## Later: the elite form
+
+The user, Nov 2: "with certain cases it can absorb other hands and other skulls into it making it bigger, but that's an *elite* form of the torso enemy." Not the plain torso. To be designed once the mouth stands; what "certain cases" are is still open.

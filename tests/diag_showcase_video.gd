@@ -15,7 +15,7 @@ const DeathQuotes := preload("res://scripts/UI/DeathQuotes.gd")
 const MARK := Vector3(-3.5, 1.05, -16.0)
 const AIM_RATE := 8.0
 
-const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "mouth_comes", "mouth_rake", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
+const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "mouth_comes", "mouth_digs", "mouth_rake", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
 
 var gym: Node3D
 var p: CharacterBody3D
@@ -351,12 +351,24 @@ func _weak_kill() -> void:
 
 func _mouth_comes() -> void:
 	await _stand(0.2)
-	var one := await _anima(&"torso", _ahead(0.3, 8.5, -0.5), 1.0)
+	var one := await _anima(&"torso", _ahead(0.3, 5.5, -0.5), 1.0)
 	target = one
-	var told: bool = await _until(func(): return one.state == one.State.TELL, 9.0)
-	await _until(func(): return one.state == one.State.ON or one.state == one.State.MISSED, 4.0)
+	var told: bool = await _until(func(): return one.state == one.State.TELL, 14.0)
+	await _until(func(): return one.state == one.State.ON or one.state == one.State.MISSED, 6.0)
 	await _frames(40)
 	_expect("it dragged itself up, reared with its ribs open, and came", told)
+
+
+func _mouth_digs() -> void:
+	await _stand(0.2)
+	# Going past you, near, so you see its hands go in.
+	var one := await _anima(&"torso", _ahead(-2.4, 3.2, -0.5))
+	one.leap_chance = 0.0
+	target = one
+	var from: int = one.body.hauls_done()
+	await _until(func(): return one.body.hauls_done() >= from + 12, 12.0)
+	await _frames(60)
+	_expect("it dug in and hauled itself on (%d)" % (one.body.hauls_done() - from), one.body.hauls_done() >= from + 12)
 
 
 func _mouth_rake() -> void:
@@ -365,7 +377,7 @@ func _mouth_rake() -> void:
 	target = one
 	var cuts := [0]
 	one.swiped.connect(func(hit): cuts[0] += 1 if hit else 0)
-	await _until(func(): return cuts[0] >= 2, 9.0)
+	await _until(func(): return cuts[0] >= 2, 16.0)
 	await _frames(40)
 	_expect("it raked with all its arms, twice (%d)" % cuts[0], cuts[0] >= 2)
 

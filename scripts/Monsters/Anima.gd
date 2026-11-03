@@ -66,6 +66,9 @@ const LEAP_STARTS_AT := 0.12
 const COMES_DOWN_CARRIES := 0.4
 const COMES_DOWN_SHAKES := 0.3
 const COMES_DOWN_FELT := 8.0
+## What hauls itself: each haul, how much you feel it, from how far (m).
+const HAUL_SHAKES := 0.16
+const HAUL_FELT := 7.0
 ## Flung up by the Burst: how hard, how fast that dies.
 const FLUNG_UP := 6.5
 const FLUNG_DIES := 10.0
@@ -123,6 +126,7 @@ var fed := 0.0
 var grip_left := 1
 ## What it is still carrying, if it has the weight to carry anything.
 var _carried := Vector3.ZERO
+var _hauls_heard := 0
 
 var _form := {}
 var _state_t := 0.0
@@ -543,7 +547,16 @@ func _chest_distance(you: Node3D) -> float:
 ## takes it and it surges a little way, and creeps again. Its own rhythm, not the others'.
 ## How fast it goes for now, of its speed. What hauls itself goes as its arms do; the rest in surges.
 func _pace() -> float:
-	return float(body.lurch()) if _form.get("hauls", false) and body != null else _hunger()
+	if not _form.get("hauls", false) or body == null:
+		return _hunger()
+
+	var done: int = body.hauls_done()
+
+	if done != _hauls_heard:
+		_hauls_heard = done
+		_thud(-13.0, HAUL_SHAKES, HAUL_FELT)
+
+	return float(body.lurch())
 
 
 ## What this form's weight says, if it says, or what they all do.
@@ -557,12 +570,17 @@ func _comes_down() -> void:
 		return
 
 	_carried = Vector3(velocity.x, 0.0, velocity.z) * COMES_DOWN_CARRIES
-	Sfx.play(self, &"flesh", global_position, -2.0, 0.45)
+	_thud(-2.0, COMES_DOWN_SHAKES, COMES_DOWN_FELT)
+
+
+## It lands: you hear it, and if you are near, you feel it through the floor.
+func _thud(loudness: float, shakes: float, felt_from: float) -> void:
+	Sfx.play(self, &"flesh", global_position, loudness, randf_range(0.38, 0.46))
 	var you: Node3D = target()
 	var juice: Variant = you.get("juice") if you != null else null
 
 	if juice != null:
-		juice.add_trauma(COMES_DOWN_SHAKES * (1.0 - smoothstep(1.0, COMES_DOWN_FELT, global_position.distance_to(you.global_position))))
+		juice.add_trauma(shakes * (1.0 - smoothstep(1.0, felt_from, global_position.distance_to(you.global_position))))
 
 
 func _hunger() -> float:

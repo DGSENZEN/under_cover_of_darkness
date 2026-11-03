@@ -35,6 +35,10 @@ func _ready() -> void:
 	await _mouth_on_its_body()
 	await _mouth_moves()
 	await _mouth_is_heavy()
+	await _mouth_digs()
+	await _mouth_swells()
+	await _mouth_arrives_whole()
+	await _mouth_spectral()
 	await _forms()
 	await _round_cover()
 	await _swipes()
@@ -237,8 +241,8 @@ func _mouth_moves() -> void:
 	# Its tell.
 	var teller := _anima(&"torso", HOME + Vector3(0.0, -0.5, -4.0))
 	teller.leap_chance = 1.0
-	await _until(func(): return teller.state == STATE.TELL, 6.0)
-	await _frames(40)
+	await _until(func(): return teller.state == STATE.TELL, 9.0)
+	await _frames(90)
 	_check("T3 in its tell the ribs open wide and it rears (%.2f, %.2f)" % [teller.body.ribs_open(), teller.body.reared()], teller.body.ribs_open() > 0.8 and teller.body.reared() > 0.8)
 	teller.free()
 	await _frames(2)
@@ -247,7 +251,7 @@ func _mouth_moves() -> void:
 	raker.leap_chance = 0.0
 	raker.health = 500.0
 	await _until(func(): return raker.state == STATE.WIND_UP, 8.0)
-	await _frames(25)
+	await _frames(55)
 	_check("T3b winding up, they open too (%.2f)" % raker.body.ribs_open(), raker.body.ribs_open() > 0.5)
 	await _until(func(): return raker.state == STATE.SWIPE, 2.0)
 	var least := 1.0
@@ -276,7 +280,7 @@ func _mouth_moves() -> void:
 	var block: Node = Props.block(self, HOME + Vector3(0.0, 0.0, -3.0), Vector3(3.0, 3.0, 0.6))
 	var round_it := _anima(&"torso", HOME + Vector3(0.3, -0.5, -5.5))
 	round_it.leap_chance = 0.0
-	var got_round: bool = await _until(func(): return round_it.global_position.distance_to(p.global_position) < 2.6, 16.0)
+	var got_round: bool = await _until(func(): return round_it.global_position.distance_to(p.global_position) < 2.6, 30.0)
 	_check("T6 it gets round cover (%.1f m left)" % round_it.global_position.distance_to(p.global_position), got_round)
 	round_it.free()
 	block.free()
@@ -284,7 +288,7 @@ func _mouth_moves() -> void:
 	var right_wall: Node = Props.block(self, HOME + Vector3(2.2, 0.0, -3.0), Vector3(3.0, 3.0, 0.6))
 	var through := _anima(&"torso", HOME + Vector3(0.0, -0.5, -5.5))
 	through.leap_chance = 0.0
-	var got_through: bool = await _until(func(): return through.global_position.z > HOME.z - 2.2, 16.0)
+	var got_through: bool = await _until(func(): return through.global_position.z > HOME.z - 2.2, 30.0)
 	_check("T6b and through a gap of 1.4 m", got_through)
 	through.free()
 	left_wall.free()
@@ -327,6 +331,234 @@ func _mouth_moves() -> void:
 	await _frames(2)
 
 
+## Its bottom hands dig in, and what is on them is hauled up to them.
+func _mouth_digs() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(10)
+	var one := _anima(&"torso", HOME + Vector3(0.3, -0.5, -14.0))
+	one.leap_chance = 0.0
+	await _until(func(): return one.state == STATE.RUSH, 4.0)
+	await _frames(30)
+	var body: Node3D = one.body
+	var hauls_from: int = body.hauls_done()
+	var worst_slip := 0.0
+	var dragged_most := 0.0
+	var dug_frames := 0
+	var tips_under := true
+	var wrist_clear := true
+	var highest := -9.0
+	var stretched := 0.0
+	var plants: Array[Vector3] = []
+	var held_at := Vector3.ZERO
+	var body_at := Vector3.ZERO
+	var was_dug := false
+
+	for i in 480:
+		await get_tree().physics_frame
+
+		for arm in 4:
+			stretched = maxf(stretched, body.arm_stretch(arm))
+
+		var dug: bool = body.arm_dug_in(0)
+		var floor_y: float = body.dug_floor(0)
+
+		if dug and not was_dug:
+			held_at = body.wrist(0)
+			body_at = one.global_position
+			plants.append(held_at)
+		elif dug:
+			worst_slip = maxf(worst_slip, body.wrist(0).distance_to(held_at))
+			dragged_most = maxf(dragged_most, one.global_position.distance_to(body_at))
+			dug_frames += 1
+
+			if dug_frames % 10 == 0:
+				tips_under = tips_under and body.fingertip_y(0) < floor_y
+				wrist_clear = wrist_clear and body.wrist(0).y > floor_y + 0.08
+		else:
+			highest = maxf(highest, body.wrist(0).y - floor_y)
+
+		was_dug = dug
+
+	_check("Dg1 a hand dug in stays where it dug (%.3f m)" % worst_slip, dug_frames > 60 and worst_slip < 0.012)
+	_check("Dg2 and the mass is dragged up to it (%.2f m)" % dragged_most, dragged_most > 0.2)
+	_check("Dg3 its fingers are in the earth, its wrist out of it", tips_under and wrist_clear)
+	_check("Dg4 it comes up and over, to dig in again (%.2f)" % highest, highest > 0.28)
+	_check("Dg5 each time further on (%d)" % plants.size(), plants.size() >= 2 and plants[-1].distance_to(p.global_position) < plants[0].distance_to(p.global_position) - 0.3)
+	_check("Dg6 all of them, none in step (%d)" % (body.hauls_done() - hauls_from), body.hauls_done() - hauls_from >= 6)
+	_check("Dg7 no arm drawn out past what an arm can be (%.2f)" % stretched, stretched < 1.3)
+	_check("Dg8 its arm reaches back into it, unbroken (%.3f)" % body.arm_end_gap(0), body.arm_end_gap(0) < 0.03)
+	_check("Dg8b it throws up earth where they go in (%d)" % body.earth_shown(), body.earth_shown() >= 3)
+	# Thrown, they let go; and they dig in again.
+	one.throw_off(p.global_position)
+	await _frames(3)
+	var any_dug := false
+
+	for i in 40:
+		await get_tree().physics_frame
+
+		for arm in 4:
+			any_dug = any_dug or body.arm_dug_in(arm)
+
+	_check("Dg9 thrown, they let go", not any_dug)
+	await _until(func(): return one.state == STATE.RUSH, 4.0)
+	await _frames(150)
+	_check("Dg10 and it digs in again", body.arm_dug_in(0) or body.arm_dug_in(1))
+	one.free()
+	await _frames(2)
+	# It doesn't dig through a wall.
+	var wall: Node = Props.block(self, HOME + Vector3(0.0, 0.0, -4.0), Vector3(8.0, 3.0, 0.6))
+	var at_wall := _anima(&"torso", HOME + Vector3(0.0, -0.5, -5.6))
+	at_wall.leap_chance = 0.0
+	var through_it := false
+
+	for i in 300:
+		await get_tree().physics_frame
+
+		for arm in 4:
+			if at_wall.body.arm_dug_in(arm):
+				through_it = through_it or at_wall.body.wrist(arm).z > wall.global_position.z - 0.25
+
+	_check("Dg11 it digs in on its own side of a wall", not through_it)
+	at_wall.free()
+	wall.free()
+	await _frames(2)
+	# Braced for its tell.
+	var teller := _anima(&"torso", HOME + Vector3(0.0, -0.5, -3.2))
+	teller.leap_chance = 1.0
+	await _until(func(): return teller.state == STATE.TELL, 10.0)
+	await _frames(90)
+	_check("Dg12 gathering, its front hands are dug in, braced", teller.body.arm_dug_in(0) and teller.body.arm_dug_in(1))
+	teller.free()
+	await _frames(2)
+
+
+## It is whole the moment it is there: arms working, hands in the earth, looking at you.
+func _mouth_arrives_whole() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(10)
+	var one := _anima(&"torso", HOME + Vector3(2.5, -0.5, 5.0))
+	one.leap_chance = 0.0
+	var body: Node3D = one.body
+	var all_dug: bool = range(4).all(func(arm): return body.arm_dug_in(arm))
+	_check("Ar1 before a frame has gone, its hands are in the earth", all_dug)
+	_check("Ar2 and its arm goes back into it, unbroken (%.3f)" % body.arm_end_gap(0), body.arm_end_gap(0) < 0.03)
+	await _frames(2)
+	all_dug = range(4).all(func(arm): return body.arm_dug_in(arm))
+	_check("Ar3 still, on its first tick", all_dug and body.hauls_done() == 0 and body.earth_shown() == 0)
+	var to_you: Vector3 = ((p.global_position - one.global_position) * Vector3(1.0, 0.0, 1.0)).normalized()
+	_check("Ar4 facing you (%.2f)" % (-body.global_basis.z).dot(to_you), (-body.global_basis.z).dot(to_you) > 0.9)
+	var a: float = body.arm_stride(0)
+	var b: float = body.arm_stride(1)
+	_check("Ar5 not in step, from the start (%.2f, %.2f)" % [a, b], absf(a - b) > 0.1)
+	one.free()
+	await _frames(2)
+
+
+## It is not meat: it is what is left of a great many, and they are not quiet in it.
+func _mouth_spectral() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(10)
+	var one := _anima(&"torso", HOME + Vector3(0.0, -0.5, -7.0))
+	one.leap_chance = 0.0
+	await _frames(5)
+	var body: Node3D = one.body
+	var mass: MeshInstance3D = body.part(&"Mass")
+	var look: ShaderMaterial = mass.get_surface_override_material(0)
+	_check("Sp1 its flesh is spectral", float(look.get_shader_parameter(&"spectral")) > 0.5)
+	_check("Sp2 and frays, where its bone doesn't", float(look.get_shader_parameter(&"frays")) > 0.0 and not body.part(&"RibsLeft").get_surface_override_material(0).get_shader_parameter(&"frays"))
+	_check("Sp3 it shows its hunger all over", mass.get_instance_shader_parameter(&"hunger") != null and body.part(&"RibsLeft").get_instance_shader_parameter(&"hunger") != null)
+	var others := _anima(&"hands", HOME + Vector3(5.0, -0.5, -7.0))
+	await _frames(2)
+	_check("Sp4 the other forms' skin is as it was", not others.body._flesh.get_shader_parameter(&"spectral"))
+	others.free()
+	_check("Sp5 souls in it, straining out (%d)" % body.souls_held(), body.souls_held() >= 6)
+	var furthest := 0.0
+	var most_out := 0
+	var yanked := false
+
+	for i in 480:
+		await get_tree().physics_frame
+		furthest = maxf(furthest, body.soul_reach())
+		most_out = maxi(most_out, body.souls_out())
+		yanked = yanked or body.soul_yanked()
+
+	_check("Sp6 a long way out of it (%.2f m)" % furthest, furthest > 0.6)
+	_check("Sp7 and it hauls them back (%d out at most)" % most_out, yanked and most_out >= 2)
+	_check("Sp8 quiet enough, crawling (%.2f)" % body.hunger(), body.hunger() < 0.3)
+	one.free()
+	await _frames(2)
+	var teller := _anima(&"torso", HOME + Vector3(0.0, -0.5, -3.2))
+	teller.leap_chance = 1.0
+	await _until(func(): return teller.state == STATE.TELL, 10.0)
+	await _frames(100)
+	var lean_toward := 0.0
+
+	for i in 10:
+		await get_tree().physics_frame
+		lean_toward = maxf(lean_toward, teller.body.souls_toward(p.global_position))
+
+	_check("Sp9 gathering, it blazes (%.2f)" % teller.body.hunger(), teller.body.hunger() > 0.6)
+	_check("Sp10 and they all strain at you (%d out, %.2f)" % [teller.body.souls_out(), lean_toward], teller.body.souls_out() >= 5 and lean_toward > 0.6)
+	teller.free()
+	await _frames(2)
+
+
+## It swells at you as it grabs.
+func _mouth_swells() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(10)
+	var one := _anima(&"torso", HOME + Vector3(0.0, -0.5, -3.3))
+	one.leap_chance = 1.0
+	await _frames(30)
+	var body: Node3D = one.body
+	_check("Sw0 crawling, it isn't swollen (%.2f)" % body.swollen(), body.swollen() < 0.1)
+	var at_rest: Vector3 = body.mouth_size()
+	var front_was: float = body.front_of_it().distance_to(p.global_position)
+	await _until(func(): return one.state == STATE.TELL, 10.0)
+	await _until(func(): return one.state == STATE.LEAP, 3.0)
+	_check("Sw1 gathering, it swells (%.2f)" % body.swollen(), body.swollen() > 0.5)
+	var size_now: Vector3 = body.mouth_size()
+	_check("Sw2 wider, and out toward you", size_now.x > at_rest.x * 1.1 and size_now.z > at_rest.z * 1.15)
+	_check("Sw3 its flesh is stretched", float(body.part(&"Mass").get_instance_shader_parameter(&"swell")) > 0.3)
+	var nearest := 99.0
+	var biggest := 0.0
+
+	while one.state == STATE.LEAP:
+		await get_tree().physics_frame
+		biggest = maxf(biggest, body.swollen())
+
+		for arm in 5:
+			nearest = minf(nearest, body.wrist(arm).distance_to(p.global_position + Vector3.UP * 0.15))
+
+	_check("Sw4 lunging, at its fullest (%.2f)" % biggest, biggest > 0.8)
+	_check("Sw5 and every arm it has comes at you (%.2f m)" % nearest, nearest < 1.1)
+	one.free()
+	p.leech.free_all()
+	await _frames(2)
+	# Up close.
+	var raker := _anima(&"torso", HOME + Vector3(0.0, -0.5, -2.7))
+	raker.leap_chance = 0.0
+	raker.health = 500.0
+	await _until(func(): return raker.state == STATE.SWIPE, 9.0)
+	var swung := 0.0
+	var back_up := 0
+
+	while raker.state == STATE.SWIPE:
+		await get_tree().physics_frame
+		swung = maxf(swung, raker.body.swollen())
+
+	_check("Sw6 it swells into a rake too (%.2f)" % swung, swung > 0.4)
+	await _until(func(): return raker.state == STATE.RUSH, 4.0)
+	await _frames(40)
+	_check("Sw7 and it goes down again (%.2f)" % raker.body.swollen(), raker.body.swollen() < 0.2)
+	raker.free()
+	await _frames(2)
+
+
 ## It is a great many of them dragged along as one: it has to read as a weight, everywhere it goes.
 func _mouth_is_heavy() -> void:
 	await _place_player(HOME)
@@ -341,17 +573,37 @@ func _mouth_is_heavy() -> void:
 	var fastest := 0.0
 	var slowest := 99.0
 	var frames := 360
+	var hauls_from: int = one.body.hauls_done()
+	var rocked_low := 9.0
+	var rocked_high := -9.0
 
 	for i in frames:
 		await get_tree().physics_frame
 		var pace: float = (one.velocity * Vector3(1.0, 0.0, 1.0)).length()
 		fastest = maxf(fastest, pace)
 		slowest = minf(slowest, pace)
+		rocked_low = minf(rocked_low, one.body.rock())
+		rocked_high = maxf(rocked_high, one.body.rock())
 
 	var mean: float = (one.global_position - from).length() / (float(frames) / 60.0)
-	_check("Wt1 it crawls, under a metre a second (%.2f)" % mean, mean > 0.5 and mean < 1.0)
-	_check("Wt2 it comes in hauls, not at a glide (%.2f..%.2f)" % [slowest, fastest], fastest > slowest * 2.0 and fastest < 1.7)
+	_check("Wt1 it crawls, about half a metre a second (%.2f)" % mean, mean > 0.3 and mean < 0.6)
+	_check("Wt2b each haul lands (%d)" % (one.body.hauls_done() - hauls_from), one.body.hauls_done() - hauls_from >= 2)
+	_check("Wt2c the mass rocks with them (%.3f)" % (rocked_high - rocked_low), rocked_high - rocked_low > 0.05)
+	_check("Wt2 it comes in hauls, not at a glide (%.2f..%.2f)" % [slowest, fastest], fastest > slowest * 2.0 and fastest < 1.1)
 	one.free()
+	await _frames(2)
+	# Near it, you feel it come.
+	var near_it := _anima(&"torso", HOME + Vector3(0.0, -0.5, -5.5))
+	near_it.leap_chance = 0.0
+	await _frames(60)
+	var felt := 0.0
+
+	for i in 300:
+		await get_tree().physics_frame
+		felt = maxf(felt, p.juice.trauma())
+
+	_check("Wt2d near it, you feel each haul (%.3f)" % felt, felt > 0.02)
+	near_it.free()
 	await _frames(2)
 	# Its lunge: a long time gathering, then the weight of it goes over.
 	var lunger := _anima(&"torso", HOME + Vector3(0.0, -0.5, -3.2))
@@ -363,20 +615,20 @@ func _mouth_is_heavy() -> void:
 		await get_tree().physics_frame
 		told += 1
 
-	_check("Wt3 it takes well over a second to gather (%.2f s)" % (float(told) / 60.0), told >= 84)
+	_check("Wt3 it takes well over a second to gather (%.2f s)" % (float(told) / 60.0), told >= 114)
 	var early: Vector3 = lunger.global_position
 	var fastest_lunge := 0.0
 	var steps := 0
 
 	while lunger.state == STATE.LEAP:
 		if steps == 12:
-			_check("Wt4 it gets going slowly (%.2f m in 0.2 s)" % lunger.global_position.distance_to(early), lunger.global_position.distance_to(early) < 0.6)
+			_check("Wt4 it gets going slowly (%.2f m in 0.2 s)" % lunger.global_position.distance_to(early), lunger.global_position.distance_to(early) < 0.25)
 
 		await get_tree().physics_frame
 		steps += 1
 		fastest_lunge = maxf(fastest_lunge, lunger.velocity.length())
 
-	_check("Wt5 at its fastest it is no leap (%.1f m/s)" % fastest_lunge, fastest_lunge < 5.5)
+	_check("Wt5 at its fastest it is no leap (%.1f m/s)" % fastest_lunge, fastest_lunge < 3.6)
 	lunger.free()
 	p.leech.free_all()
 	await _frames(2)
@@ -394,7 +646,7 @@ func _mouth_is_heavy() -> void:
 		await get_tree().physics_frame
 		lay += 1
 
-	_check("Wt6 missing, it takes a long time to gather itself (%.2f s)" % (float(lay) / 60.0), lay >= 72)
+	_check("Wt6 missing, it takes a long time to gather itself (%.2f s)" % (float(lay) / 60.0), lay >= 130)
 	missed.free()
 	await _frames(2)
 	# Up close.
@@ -408,7 +660,7 @@ func _mouth_is_heavy() -> void:
 		await get_tree().physics_frame
 		drew += 1
 
-	_check("Wt7 it draws back slowly for a rake (%.2f s)" % (float(drew) / 60.0), drew >= 50)
+	_check("Wt7 it draws back slowly for a rake (%.2f s)" % (float(drew) / 60.0), drew >= 75)
 	var back_fastest := 0.0
 	var turned_fastest := 0.0
 	await _until(func(): return raker.state == STATE.BACK_OFF, 2.0)
@@ -430,8 +682,8 @@ func _mouth_is_heavy() -> void:
 		var to_you: Vector3 = ((p.global_position - raker.global_position) * Vector3(1.0, 0.0, 1.0)).normalized()
 		worst_after = minf(worst_after, facing.dot(to_you))
 
-	_check("Wt8 it backs off at its own pace (%.2f m/s)" % back_fastest, back_fastest < 1.3)
-	_check("Wt9 it doesn't whip round (%.2f rad/s)" % turned_fastest, turned_fastest < 2.0)
+	_check("Wt8 it backs off at its own pace (%.2f m/s)" % back_fastest, back_fastest < 0.85)
+	_check("Wt9 it doesn't whip round (%.2f rad/s)" % turned_fastest, turned_fastest < 1.4)
 	_check("Wt9b near you, it never turns from you, whatever it is carrying (%.2f)" % worst_after, worst_after > 0.5)
 	raker.free()
 	await _frames(2)
@@ -552,17 +804,18 @@ func _mouth_on_its_body() -> void:
 	_check("O5 a shot at its upper flesh lands", one.global_position.distance_to(Geometry3D.get_closest_point_to_segment(one.global_position, from, top + Vector3(0.0, 0.0, -6.0))) <= one.hit_radius())
 	var jaw_was: Array = []
 
-	for soul in body.souls():
-		jaw_was.append(soul.transform)
+	for i in body.souls().size():
+		jaw_was.append(body.soul_at(i))
 
 	var moved := 0
 	await _frames(40)
 
 	for i in body.souls().size():
-		if not body.souls()[i].transform.is_equal_approx(jaw_was[i]):
+		if not body.soul_at(i).is_equal_approx(jaw_was[i]):
 			moved += 1
 
-	_check("O6 they move, each of its own (%d)" % moved, moved == 8)
+	# (Its four dug in stay where they dug: the arm that's free and its heads go on moving.)
+	_check("O6 they move, each of its own (%d)" % moved, moved == 4)
 	# (Stilled, so what it is doing doesn't set them back.)
 	one.process_mode = Node.PROCESS_MODE_DISABLED
 	body.ribs_to(1.0)
@@ -610,7 +863,7 @@ func _rush() -> void:
 	await _frames(60)
 	var hands_covered := hands_from.distance_to(hands.global_position)
 	var torso_covered := torso_from.distance_to(torso.global_position)
-	_check("A5 from far off it rushes you (%.1f m)" % hands_covered, hands.global_position.distance_to(p.global_position) < hands_from.distance_to(p.global_position) - 1.5)
+	_check("A5 from far off it rushes you (%.1f m)" % hands_covered, hands.global_position.distance_to(p.global_position) < hands_from.distance_to(p.global_position) - 1.2)
 	_check("A5b hands are faster than a torso, but slow enough to aim at (%.1f, %.1f)" % [hands_covered, torso_covered], hands_covered > torso_covered * 1.4 and hands_covered < 4.2)
 	# It goes hungrily: a slow creep you can hit, broken by surges.
 	var slowest := 99.0
@@ -643,8 +896,8 @@ func _rush() -> void:
 	_check("A7 in its tell, a copal hit breaks it: weak, triple (%.1f)" % _lost, result == &"weak" and open.state == STATE.THROWN and is_equal_approx(_lost, 150.0))
 	_free([open])
 	await _frames(3)
-	var through := _anima(&"torso", Vector3(0, 0.4, -7))
-	await _until(func(): return through.state == STATE.TELL, 8.0)
+	var through := _anima(&"torso", Vector3(0, 0.4, -4))
+	await _until(func(): return through.state == STATE.TELL, 12.0)
 	var lead_result := _hit(through, &"bullet", &"lead")
 	_check("A7b in its tell, lead still does nothing to it", through.state == STATE.TELL and lead_result == &"resisted")
 	_free([through])

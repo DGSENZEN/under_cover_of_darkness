@@ -10,6 +10,16 @@ shader_type spatial;
 #include "res://scripts/Monsters/eye_paint.gdshaderinc"
 
 instance uniform float fed = 0.0;
+// Stretched, swelling at you: the skin goes out on what is under it, and splits along its folds.
+instance uniform float swell = 0.0;
+// What is not flesh at all (the mouth): a dead ash over it, the fire of those in it running under its skin
+// toward its throat, a broken light at its edges, and, where `frays`, places it just isn't there.
+uniform float spectral = 0.0;
+uniform float frays = 0.0;
+instance uniform float hunger = 0.0;
+const vec3 ASHEN = vec3(0.72, 0.76, 0.66);
+const vec3 SOUL_FIRE = vec3(0.3, 0.42, 0.11);
+const vec3 SOUL_HOT = vec3(0.62, 0.74, 0.34);
 uniform float z_clip = 1.0;
 uniform float fov_override = 0.0;
 uniform sampler2D burn_noise : filter_linear_mipmap, repeat_enable;
@@ -30,7 +40,7 @@ void vertex() {
 	paint_at = VERTEX;
 	paint_normal = NORMAL;
 	world_at = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	VERTEX += NORMAL * fed * 0.006;
+	VERTEX += NORMAL * (fed * 0.006 + swell * 0.075);
 	Z_CLIP_SCALE = z_clip;
 
 	if (fov_override > 0.0) {
@@ -47,6 +57,37 @@ void fragment() {
 	vec3 skin = COLOR.rgb;
 	skin = mix(skin, skin * vec3(1.32, 1.16, 0.96), smoothstep(0.45, 0.62, stroke) * 0.7);
 	skin = mix(skin, skin * vec3(0.6, 0.52, 0.56), smoothstep(0.55, 0.38, stroke) * 0.75);
+	skin = mix(skin, vec3(0.3, 0.035, 0.03), smoothstep(0.52, 0.34, stroke) * swell * 0.9);
+	float soul_edge = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.0);
+	vec3 soul_light = vec3(0.0);
+
+	if (spectral > 0.0) {
+		// The meat goes out of it.
+		float dull = dot(skin, vec3(0.3, 0.55, 0.15));
+		skin = mix(skin, ASHEN * dull * 0.85, spectral * 0.6 * (1.0 - swell * 0.6));
+		// Veins of them, running to its throat: two sets of ridges, crossed, only where both are.
+		float ridge_a = 1.0 - abs(eye_noise(paint_at * vec3(11.0, 7.0, 4.5) + vec3(0.0, 0.0, TIME * 0.32)) * 2.0 - 1.0);
+		float ridge_b = eye_noise(paint_at * vec3(2.6, 4.0, 3.0) + vec3(TIME * 0.07, 0.0, TIME * 0.21));
+		float veins = smoothstep(0.962, 0.985, ridge_a) * smoothstep(0.42, 0.6, ridge_b);
+		soul_light += mix(SOUL_FIRE, SOUL_HOT, hunger) * veins * (0.3 + hunger * 1.3);
+		// Its edge, in broken bands.
+		float broken = eye_noise(paint_at * 7.0 + vec3(0.0, -TIME * 0.5, 0.0));
+		float edge_shape = soul_edge * (0.55 + broken * 0.8);
+		soul_light += SOUL_FIRE * (smoothstep(0.46, 0.5, edge_shape) * 0.14 + smoothstep(0.68, 0.72, edge_shape) * 0.22) * (0.35 + hunger * 1.5) * spectral;
+
+		if (frays > 0.0) {
+			// Where it isn't: slowly going and coming, wider at its edges, lit round where it stops.
+			float there = eye_noise(paint_at * 3.4 + vec3(TIME * 0.05, TIME * 0.11, 0.0)) + soul_edge * 0.1 + broken * 0.05;
+			float stops = 0.96 - frays * 0.1;
+
+			if (there > stops) {
+				discard;
+			}
+
+			soul_light += SOUL_FIRE * smoothstep(stops - 0.03, stops - 0.004, there) * (0.45 + hunger * 1.0);
+		}
+	}
+
 	skin = mix(skin, vec3(0.62, 0.02, 0.015), hurt * 0.75);
 	// Where the fire has been. (Read always, out here: inside a branch it picks the wrong mip
 	// at the branch's edge, and draws a line.) Sooner the nearer to where it caught.
@@ -80,6 +121,7 @@ void fragment() {
 	EMISSION = painted_fill(skin, world_normal, NORMAL, VIEW) * 0.8
 		+ SICK * (0.012 + under * fed * (0.1 + beat * 0.16))
 		+ eye_smoulder(paint_at * 2.0, NORMAL, VIEW, TIME)
+		+ soul_light
 		// The heat at the fire's edge, thin and hot, dying off into the black behind it.
 		+ FIRE_EDGE * (smoothstep(front - 0.05, front - 0.005, burn_at) * (1.0 - smoothstep(front - 0.005, front + 0.05, burn_at)) * 1.5
 			+ smoothstep(front - 0.26, front - 0.02, burn_at) * (1.0 - smoothstep(front - 0.02, front + 0.03, burn_at)) * 0.22)
