@@ -20,6 +20,7 @@ import sys
 
 import bmesh
 import bpy
+from mathutils.bvhtree import BVHTree
 from mathutils import Matrix, Vector, noise
 
 ARGS = sys.argv[sys.argv.index("--") + 1:]
@@ -42,8 +43,8 @@ TOOTH_IN = 0.12
 TOOTH_DOWN = 0.05
 RIB_WANDER = 0.012
 RIB_VOXEL = 0.0065
-RIB_THICKER = 0.005
-RIB_TRIS = 3400
+RIB_THICKER = 0.0015
+RIB_TRIS = 3000
 ## The fang each rib is drawn out into: which ribs (their size in the skeleton), how long, how thick.
 FANG_FROM = 110
 FANG_LONG = (0.15, 0.3)
@@ -58,7 +59,13 @@ HINGE = Vector((0.0, -0.3, 0.55))
 HOLLOW = Vector((0.0, 0.05, 0.56))
 HOLLOW_SIZE = Vector((0.3, 0.32, 0.46))
 MASS_VOXEL = 0.012
-MASS_TRIS = 13500
+MASS_TRIS = 20000
+## Those fused into it for good: the skin-drawn faces and hands (build_mouth_sheaths.py), how many tries at a place,
+## how far apart, how fine it is remeshed to keep them.
+FUSED_MODEL = "mouth_sheath.glb"
+FUSED_TRIES = 150
+FUSED_APART = 0.19
+FUSED_VOXEL = 0.0088
 ## How the flesh has dried on what is under it: its long folds and its fine wrinkles, how deep.
 FOLDS = (7.0, 0.05)
 WRINKLES = (24.0, 0.012)
@@ -79,8 +86,10 @@ FACES = (
 COLLAR = 0.095
 CANDLES = 7
 ## Paint: bone, dried leather, what is under it, and where the fire has been.
-BONE = (0.5, 0.43, 0.3)
-BONE_DARK = (0.17, 0.13, 0.09)
+BONE = (0.33, 0.28, 0.19)
+BONE_DARK = (0.075, 0.055, 0.04)
+TAUT = (0.36, 0.3, 0.21)
+INK = (0.016, 0.011, 0.01)
 LEATHER = (0.2, 0.135, 0.09)
 LEATHER_DARK = (0.075, 0.05, 0.04)
 RAW = (0.27, 0.07, 0.055)
@@ -401,6 +410,7 @@ def paint_bone(obj):
     bm.from_mesh(obj.data)
     bm.normal_update()
     layer = bm.loops.layers.color.new("Color")
+    stands = how_they_stand(bm)
 
     for f in bm.faces:
         f.smooth = True
@@ -414,6 +424,12 @@ def paint_bone(obj):
             tone = mix(tone, LEATHER_DARK, root * 0.85)
             tone = mix(tone, RAW, smooth(0.62, 0.75, noise.noise(c * 9.0) * 0.5 + 0.5) * root)
             tone = mix(tone, BONE_DARK, smooth(-0.1, -0.6, loop.vert.normal.z) * 0.5)
+            # Old, handled, filthy: long soot down it, ink in every pit, what it has been through still on it.
+            soot = noise.noise(Vector((c.x * 9.0, c.y * 3.0, c.z * 26.0))) * 0.5 + 0.5
+            tone = mix(tone, BONE_DARK, smooth(0.5, 0.68, soot) * 0.75)
+            tone = mix(tone, INK, smooth(-0.0004, -0.003, stands[loop.vert]) * 0.9)
+            blood = noise.noise(c * 6.0 + Vector((5.0, 1.0, 0.0))) * 0.5 + 0.5
+            tone = mix(tone, RAW, smooth(0.66, 0.76, blood) * 0.5)
             loop[layer] = paint_value(tone)
 
     bm.to_mesh(obj.data)
@@ -484,14 +500,107 @@ def build_mass(rng):
     mass = bpy.data.objects.new("Mass", mesh)
     bpy.context.collection.objects.link(mass)
     apply(mass, "REMESH", mode="VOXEL", voxel_size=MASS_VOXEL, use_smooth_shade=True)
+    # (Dried first: drawn over them it would melt them. They stand out of what has dried.)
     dry_out(mass)
+    fuse_them_in(mass, rng)
+    apply(mass, "REMESH", mode="VOXEL", voxel_size=FUSED_VOXEL, use_smooth_shade=True)
     press_out_the_hollow(mass)
     reduce(mass, MASS_TRIS)
     # (What a collapse leaves is faceted, and shows close up.)
-    apply(mass, "SMOOTH", factor=0.5, iterations=1)
     paint_flesh(mass)
     closed(mass)
     return mass
+
+
+def fuse_them_in(mass, rng):
+    """It is made of them: faces and hands half sunk in it all over, every way up, one skin with it."""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(os.path.dirname(GLB), FUSED_MODEL))
+    made = set(bpy.data.objects) - before
+    pieces = {}
+
+    for obj in made:
+        if obj.type == "MESH":
+            mesh = obj.data.copy()
+            mesh.transform(obj.matrix_world)
+            pieces[obj.name.split(".")[0]] = mesh
+
+    hinge = next(o for o in made if o.name.startswith("SkinJaw")).matrix_world.to_translation()
+
+    for obj in made:
+        bpy.data.objects.remove(obj)
+
+    bpy.context.view_layer.update()
+    tree = BVHTree.FromObject(mass, bpy.context.evaluated_depsgraph_get())
+    middle = Vector((0.0, -0.55, 0.52))
+    keep_clear = [at for _name, at, _way in ARMS + FACES]
+    spots = []
+
+    for attempt in range(FUSED_TRIES):
+        way = Vector((rng.gauss(0.0, 1.0), rng.gauss(0.0, 1.0) - 0.15, rng.gauss(0.0, 1.0) + 0.3)).normalized()
+        # (From outside it, in to the first skin.)
+        hit, normal, _index, _distance = tree.ray_cast(middle + way * 2.5, -way, 3.0)
+
+        if hit is None or normal.dot(way) < 0.35 or hit.z < 0.14:
+            continue
+
+        # Not in its mouth, nor where the fire has had the rest.
+        if (abs(hit.x) < 0.36 and hit.y > -0.32) or hit.y < -1.1:
+            continue
+
+        if any((hit - other).length < FUSED_APART for other, _n in spots) or any((hit - at).length < FUSED_APART for at in keep_clear):
+            continue
+
+        spots.append((hit, normal))
+
+    bm = bmesh.new()
+    bm.from_mesh(mass.data)
+    faces = hands = 0
+
+    def add(mesh, matrix):
+        copy = mesh.copy()
+        copy.transform(matrix)
+        bm.from_mesh(copy)
+        bpy.data.meshes.remove(copy)
+
+    for at, normal in spots:
+        roll = Matrix.Rotation(rng.choice((rng.uniform(-0.8, 0.8), rng.uniform(-0.8, 0.8), math.pi + rng.uniform(-0.5, 0.5))), 4, "Y")
+        if rng.random() < 0.62:
+            # A face: its front (+Y) out of it, as far out as it got.
+            size = rng.uniform(0.95, 1.5)
+            turn = normal.to_track_quat("Y", "Z").to_matrix().to_4x4() @ roll
+            sunk = at - normal * rng.uniform(0.03, 0.085) * size
+            place = Matrix.Translation(sunk) @ turn @ Matrix.Scale(size, 4)
+            add(pieces["SkinSkull"], place)
+            gape = Matrix.Translation(hinge) @ Matrix.Rotation(-rng.uniform(0.05, 0.75), 4, "X") @ Matrix.Translation(-hinge)
+            add(pieces["SkinJaw"], place @ gape)
+            faces += 1
+        else:
+            # A hand: its back (+Z) out, flat against it, pushing.
+            size = rng.uniform(0.5, 0.8)
+            turn = normal.to_track_quat("Z", "Y").to_matrix().to_4x4() @ Matrix.Rotation(rng.uniform(0.0, math.tau), 4, "Z")
+            place = Matrix.Translation(at - normal * 0.022) @ turn @ Matrix.Translation((0.0, -0.22 * size, 0.0)) @ Matrix.Scale(size, 4)
+            add(pieces["SkinHand"], place)
+            hands += 1
+
+    bm.to_mesh(mass.data)
+    bm.free()
+    print("FUSED", faces, "FACES", hands, "HANDS")
+
+
+def how_they_stand(bm):
+    """How far each vertex stands out of what is round it (+), or sinks into it (-), smoothed a little."""
+    stands = {}
+
+    for v in bm.verts:
+        around = [e.other_vert(v).co for e in v.link_edges]
+        here = sum(around, Vector()) / max(len(around), 1)
+        stands[v] = (v.co - here).dot(v.normal)
+
+    for _ in range(2):
+        stands = {v: (stands[v] + sum(stands[e.other_vert(v)] for e in v.link_edges) / max(len(v.link_edges), 1)) * 0.5 for v in bm.verts}
+
+    return stands
 
 
 def dry_out(mass):
@@ -532,6 +641,7 @@ def paint_flesh(mass):
     bm.from_mesh(mass.data)
     bm.normal_update()
     layer = bm.loops.layers.color.new("Color")
+    stands = how_they_stand(bm)
 
     for f in bm.faces:
         f.smooth = True
@@ -543,8 +653,11 @@ def paint_flesh(mass):
             crack = 1.0 - abs(noise.noise(c * 11.0)) * 6.0
             tone = mix(LEATHER_DARK, LEATHER, smooth(0.2, 0.7, up * 0.55 + streak * 0.55))
             tone = mix(tone, FAT, smooth(0.66, 0.78, noise.noise(c * 8.0 + Vector((2.0, 0.0, 1.0))) * 0.5 + 0.5) * 0.45)
-            # Split where it has dried, the raw showing.
-            tone = mix(tone, RAW, smooth(0.5, 0.9, crack) * 0.75)
+            # Pale where it is stretched over one of them; ink where it sinks between them.
+            tone = mix(tone, TAUT, smooth(0.0, 0.0035, stands[loop.vert]) * 0.85)
+            tone = mix(tone, INK, smooth(-0.0005, -0.0045, stands[loop.vert]))
+            # Split where it has dried, the raw showing, and only a little of it.
+            tone = mix(tone, RAW, smooth(0.62, 0.95, crack) * 0.4)
             # Wet and dark toward the mouth; burnt to nothing behind.
             hollow = (c - HOLLOW)
             scaled = Vector((hollow.x / HOLLOW_SIZE.x, hollow.y / HOLLOW_SIZE.y, hollow.z / HOLLOW_SIZE.z)).length

@@ -105,7 +105,7 @@ void fragment() {
 	vec3 skin = COLOR.rgb;
 	skin = mix(skin, skin * vec3(1.32, 1.16, 0.96), smoothstep(0.45, 0.62, stroke) * 0.7);
 	skin = mix(skin, skin * vec3(0.6, 0.52, 0.56), smoothstep(0.55, 0.38, stroke) * 0.75);
-	skin = mix(skin, vec3(0.3, 0.035, 0.03), smoothstep(0.52, 0.34, stroke) * swell * 0.9);
+	skin = mix(skin, vec3(0.3, 0.035, 0.03), smoothstep(0.5, 0.34, stroke) * swell * 0.45);
 	// What is pressing at it from inside: the skin takes the shape, goes taut and pale, and what is in there
 	// shows through where it is thinnest. Where it is torn there is only dark, and that light.
 	float taut = 0.0;
@@ -141,7 +141,7 @@ void fragment() {
 	if (spectral > 0.0) {
 		// The meat goes out of it.
 		float dull = dot(skin, vec3(0.3, 0.55, 0.15));
-		skin = mix(skin, ASHEN * dull * 0.85, spectral * 0.6 * (1.0 - swell * 0.6));
+		skin = mix(skin, ASHEN * dull * 0.72, spectral * 0.6 * (1.0 - swell * 0.6));
 		// Veins of them, running to its throat: two sets of ridges, crossed, only where both are.
 		float ridge_a = 1.0 - abs(eye_noise(paint_at * vec3(11.0, 7.0, 4.5) + vec3(0.0, 0.0, TIME * 0.32)) * 2.0 - 1.0);
 		float ridge_b = eye_noise(paint_at * vec3(2.6, 4.0, 3.0) + vec3(TIME * 0.07, 0.0, TIME * 0.21));
@@ -151,7 +151,7 @@ void fragment() {
 		// Its edge, in broken bands.
 		float broken = eye_noise(paint_at * 7.0 + vec3(0.0, -TIME * 0.5, 0.0));
 		float edge_shape = soul_edge * (0.55 + broken * 0.8);
-		soul_light += SOUL_FIRE * (smoothstep(0.46, 0.5, edge_shape) * 0.14 + smoothstep(0.68, 0.72, edge_shape) * 0.22) * (0.35 + hunger * 1.5) * spectral * (0.3 + frays * 0.7);
+		soul_light += SOUL_FIRE * (smoothstep(0.62, 0.66, edge_shape) * 0.12 + smoothstep(0.8, 0.84, edge_shape) * 0.22) * (0.35 + hunger * 1.1) * spectral * (0.3 + frays * 0.7);
 
 		// Torn: nothing in there but dark and that light, burning at its edge.
 		soul_light += SOUL_HOT * (smoothstep(0.1, 0.5, torn_here) - smoothstep(0.5, 0.95, torn_here)) * 1.3;

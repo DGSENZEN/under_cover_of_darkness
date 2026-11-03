@@ -212,7 +212,7 @@ func _mouth_model() -> void:
 			tris += (arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
 
 	_check("O1 the mouth's parts (%d arms, %d faces)" % [arms, faces], parts_all_there and arms == 5 and faces == 3)
-	_check("O2 within budget (%d)" % tris, tris > 0 and tris < 30000)
+	_check("O2 within budget (%d)" % tris, tris > 0 and tris < 34000)
 	made.free()
 
 
