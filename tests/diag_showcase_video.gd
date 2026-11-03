@@ -15,7 +15,7 @@ const DeathQuotes := preload("res://scripts/UI/DeathQuotes.gd")
 const MARK := Vector3(-3.5, 1.05, -16.0)
 const AIM_RATE := 8.0
 
-const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "mouth_comes", "mouth_digs", "mouth_close", "mouth_rake", "mouth_bursts", "mouth_they_get_out", "mouth_last_haul", "mouth_on_you", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
+const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "mouth_comes", "mouth_digs", "mouth_close", "mouth_rake", "mouth_bursts", "mouth_they_get_out", "mouth_last_haul", "mouth_on_you", "elite_stands", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
 
 var gym: Node3D
 var p: CharacterBody3D
@@ -422,6 +422,25 @@ func _mouth_on_you() -> void:
 	await _until(func(): return one.state == one.State.ON, 12.0)
 	await _frames(260)
 	_expect("it closed on you", one.state == one.State.ON)
+
+
+## An elite, and an elite that has taken three.
+func _elite_stands() -> void:
+	await _stand(0.2)
+	var one: CharacterBody3D = AnimaScript.new()
+	one.form = &"torso"
+	one.elite = true
+	one.leap_chance = 0.0
+	one.position = _ahead(0.0, 4.2, -0.5)
+	add_child(one)
+	target = one
+	await _frames(90)
+
+	for kind in [&"face", &"hands", &"face"]:
+		one.take_in(kind)
+		await _frames(90)
+
+	_expect("it took three, and shows it", one.body.taken_up() == 3)
 
 
 func _mouth_rake() -> void:

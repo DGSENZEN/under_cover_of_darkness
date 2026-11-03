@@ -20,10 +20,10 @@ instance uniform float hunger = 0.0;
 // Where those in it push up through the skin (AnimaMouth.gd), in the mesh's own space. `at` w how hard, `way` w
 // 2 where a real hand has torn it, `up` w how far that tear is open.
 uniform int press_count = 0;
-uniform vec4 press_at[8];
-uniform vec4 press_way[8];
-uniform vec4 press_up[8];
-uniform float press_size[8];
+uniform vec4 press_at[11];
+uniform vec4 press_way[11];
+uniform vec4 press_up[11];
+uniform float press_size[11];
 uniform sampler2D burn_noise : filter_linear_mipmap, repeat_enable;
 // How fine the burn runs over it: big shapes want it finer, or it is patches.
 uniform float burn_tile = 1.0;

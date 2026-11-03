@@ -120,6 +120,11 @@ const RIGHT_BARE := "res://assets/monsters/anima_hands.glb"
 const PRESSES := 6
 const PRESS_KIND: Array[int] = [0, 1, 0, 1, 0, 1]
 const PRESS_SIZE: Array[float] = [0.26, 0.34, 0.2]
+## The elite: how many it can hold, how many of its candles are alight, how far out what it took stands (m).
+const MOST_TAKEN := 3
+const CANDLE_FLAMES := 7
+const TAKEN_FACE_OUT := 0.02
+const TAKEN_HAND_OUT := 0.012
 const PRESS_PICKS := 4
 const SPOT_TRIES := 140
 const SPOT_CLEAR := 0.16
@@ -218,6 +223,17 @@ var _earth_age: Array[float] = []
 var _earth_next := 0
 var _earth_look: ShaderMaterial
 var _mass_look: ShaderMaterial
+var _skin_skull: Mesh
+var _skin_jaw: Mesh
+var _skin_hand: Mesh
+var _skin_look: ShaderMaterial
+var _light_look: ShaderMaterial
+## The elite: how big it stands, of the plain one.
+var _elite := false
+var _size := 1.0
+var _candle_flames: Array[MeshInstance3D] = []
+var _taken: Array[Dictionary] = []
+var _taken_spots: Array[int] = []
 var _press_nodes: Array[Node3D] = []
 var _press_jaws: Array = []
 var _press_lights: Array = []
@@ -233,10 +249,10 @@ var _press_way: Array[Vector3] = []
 var _press_up: Array[Vector3] = []
 var _press_roll: Array[float] = []
 var _press_slide: Array[Vector3] = []
-var _uniform_at := PackedVector4Array([Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4()])
-var _uniform_way := PackedVector4Array([Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4()])
-var _uniform_up := PackedVector4Array([Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4()])
-var _uniform_size := PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+var _uniform_at := PackedVector4Array([Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4()])
+var _uniform_way := PackedVector4Array([Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4()])
+var _uniform_up := PackedVector4Array([Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4()])
+var _uniform_size := PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 var _burst_nodes: Array[Node3D] = []
 var _burst_skeletons: Array[Skeleton3D] = []
 var _burst_stage: Array[int] = []
@@ -358,9 +374,9 @@ func _vary_step(i: int) -> void:
 	var by := func() -> float: return 1.0 + _rng.randf_range(-STEP_VARIES, STEP_VARIES)
 	_step_takes[i] = REACH_TAKES[i] * by.call()
 	_step_lift[i] = REACH_LIFT[i] * by.call()
-	_step_ahead[i] = DIGS_AHEAD[i] * by.call()
-	_step_out[i] = DIGS_OUT[i] * by.call()
-	_step_wrist[i] = WRIST_UP[i] * lerpf(1.0, by.call(), 0.6)
+	_step_ahead[i] = DIGS_AHEAD[i] * by.call() * _size
+	_step_out[i] = DIGS_OUT[i] * by.call() * _size
+	_step_wrist[i] = WRIST_UP[i] * lerpf(1.0, by.call(), 0.6) * _size
 	_step_turn[i] = _rng.randf_range(-STEP_TURNS, STEP_TURNS)
 	_step_hovers[i] = _rng.randf() < HOVER_CHANCE
 
@@ -503,49 +519,20 @@ func _build_presses() -> void:
 	_mass_look = look
 	var spots := _skin_spots()
 	var made: Node3D = (load(SHEATH_MODEL) as PackedScene).instantiate()
-	var skin_skull: Mesh = (made.find_child("SkinSkull", true, false) as MeshInstance3D).mesh
-	var skin_jaw: Mesh = (made.find_child("SkinJaw", true, false) as MeshInstance3D).mesh
-	var skin_hand: Mesh = (made.find_child("SkinHand", true, false) as MeshInstance3D).mesh
+	_skin_skull = (made.find_child("SkinSkull", true, false) as MeshInstance3D).mesh
+	_skin_jaw = (made.find_child("SkinJaw", true, false) as MeshInstance3D).mesh
+	_skin_hand = (made.find_child("SkinHand", true, false) as MeshInstance3D).mesh
 	made.free()
-	var skin: ShaderMaterial = _flesh_look.duplicate()
-	skin.set_shader_parameter(&"frays", 0.0)
-	var light := ShaderMaterial.new()
-	light.shader = LightShader
+	_skin_look = _flesh_look.duplicate()
+	_skin_look.set_shader_parameter(&"frays", 0.0)
+	_light_look = ShaderMaterial.new()
+	_light_look.shader = LightShader
 
 	for n in PRESSES:
-		var root := Node3D.new()
-		root.visible = false
-		_made.add_child(root)
-		var skinned := MeshInstance3D.new()
-		skinned.mesh = skin_hand if PRESS_KIND[n] == 1 else skin_skull
-		skinned.material_override = skin
-		skinned.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		root.add_child(skinned)
-		var jaw: MeshInstance3D = null
-		var eyes: Array[MeshInstance3D] = []
-
-		if PRESS_KIND[n] == 0:
-			jaw = MeshInstance3D.new()
-			jaw.mesh = skin_jaw
-			jaw.material_override = skin
-			jaw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			jaw.position = FACE_HINGE
-			root.add_child(jaw)
-
-			for bit in [FACE_EYE * Vector3(-1.0, 1.0, 1.0), FACE_EYE, FACE_THROAT]:
-				var ember := MeshInstance3D.new()
-				var ball := SphereMesh.new()
-				ball.radial_segments = 12
-				ball.rings = 8
-				ball.radius = 0.016 if bit != FACE_THROAT else 0.02
-				ball.height = ball.radius * 2.0
-				ember.mesh = ball
-				ember.material_override = light
-				ember.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				ember.position = bit
-				root.add_child(ember)
-				eyes.append(ember)
-
+		var built: Array = _new_sheathed(PRESS_KIND[n])
+		var root: Node3D = built[0]
+		var jaw: Variant = built[1]
+		var eyes: Array = built[2]
 		_press_nodes.append(root)
 		_press_jaws.append(jaw)
 		_press_lights.append(eyes)
@@ -686,6 +673,8 @@ func _work_presses(delta: float, grab_at: Vector3) -> void:
 		var up := (up_was - _press_way[n] * up_was.dot(_press_way[n])).normalized()
 		_press_up[n] = up.rotated(_press_way[n], _press_roll[n])
 
+	_work_taken()
+
 	# The uniforms: the faces and hands, then where a real one has torn it.
 	for n in PRESSES:
 		_uniform_at[n] = Vector4(_press_at[n].x, _press_at[n].y, _press_at[n].z, _press_strength[n])
@@ -754,6 +743,132 @@ func _press_choose(n: int, spots: Array, to_you: Vector3) -> void:
 	var way: Vector3 = spots[index][1]
 	var across := way.cross(Vector3.UP)
 	_press_slide[n] = (across.normalized() if across.length() > 0.01 else Vector3.RIGHT) * _rng.randf_range(-0.2, 0.2) if PRESS_KIND[n] == 1 else Vector3.ZERO
+
+
+## One of them with its skin drawn over it, not yet anywhere: a face (0), with its jaw and its lights, or a hand (1).
+## [its root, its jaw or null, its lights].
+func _new_sheathed(kind: int) -> Array:
+	var root := Node3D.new()
+	root.visible = false
+	_made.add_child(root)
+	var skinned := MeshInstance3D.new()
+	skinned.mesh = _skin_hand if kind == 1 else _skin_skull
+	skinned.material_override = _skin_look
+	skinned.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(skinned)
+	var jaw: MeshInstance3D = null
+	var eyes: Array[MeshInstance3D] = []
+
+	if kind == 0:
+		jaw = MeshInstance3D.new()
+		jaw.mesh = _skin_jaw
+		jaw.material_override = _skin_look
+		jaw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		jaw.position = FACE_HINGE
+		root.add_child(jaw)
+
+		for bit in [FACE_EYE * Vector3(-1.0, 1.0, 1.0), FACE_EYE, FACE_THROAT]:
+			var ember := MeshInstance3D.new()
+			var ball := SphereMesh.new()
+			ball.radial_segments = 12
+			ball.rings = 8
+			ball.radius = 0.018 if bit != FACE_THROAT else 0.02
+			ball.height = ball.radius * 2.0
+			ember.mesh = ball
+			ember.material_override = _light_look
+			ember.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			ember.position = bit
+			root.add_child(ember)
+			eyes.append(ember)
+
+	return [root, jaw, eyes]
+
+
+## The elite: bigger, its candles alight.
+func be_elite(size: float, flame: Mesh, look: Material) -> void:
+	_size = size
+	_elite = true
+	_mass_look.set_shader_parameter(&"press_count", PRESSES + BURSTS + MOST_TAKEN)
+	var candles := part(&"Candles")
+	var points: PackedVector3Array = candles.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var sorted: Array = Array(points)
+	sorted.sort_custom(func(a, b): return a.y > b.y)
+	var picked: Array[Vector3] = []
+
+	# Each candle's top: the highest of it, clear of the tops found.
+	for at: Vector3 in sorted:
+		if picked.size() >= CANDLE_FLAMES:
+			break
+
+		if picked.all(func(other): return Vector2(other.x - at.x, other.z - at.z).length() > 0.09):
+			picked.append(at)
+			var lit := MeshInstance3D.new()
+			lit.mesh = flame
+			lit.material_override = look
+			lit.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			lit.position = at
+			candles.add_child(lit)
+			_candle_flames.append(lit)
+
+
+func candles_lit() -> bool:
+	return not _candle_flames.is_empty() and _candle_flames[0].is_visible_in_tree()
+
+
+## It has taken one in: it is this big now, and that one is there to see, up out of its flesh, and stays.
+func has_taken(kind: StringName, size: float) -> void:
+	_size = size
+	var which: int = 0 if kind == &"face" else 1
+	var built: Array = _new_sheathed(which)
+	var spots := _skin_spots()
+	var best := -1
+	var best_how := -9.0
+
+	# The one most toward its front that is free.
+	for k in spots.size():
+		var way: Vector3 = spots[k][1]
+		var how_much: float = -way.z + way.y * 0.4 + _rng.randf_range(-0.25, 0.25)
+
+		if not _taken_spots.has(k) and how_much > best_how:
+			best_how = how_much
+			best = k
+
+	_taken_spots.append(best)
+	_taken.append({"kind": kind, "which": which, "root": built[0], "jaw": built[1], "lights": built[2], "spot": spots[best], "roll": _rng.randf_range(-0.6, 0.6)})
+
+
+func taken_shown(kind: StringName) -> int:
+	return _taken.filter(func(one): return one["kind"] == kind).size()
+
+
+func taken_up() -> int:
+	return _taken.filter(func(one): return one["root"].visible).size()
+
+
+## What it has taken, straining still, for good.
+func _work_taken() -> void:
+	for n in _taken.size():
+		var one: Dictionary = _taken[n]
+		var at: Vector3 = one["spot"][0]
+		var way: Vector3 = one["spot"][1]
+		var up_was := Vector3.UP if absf(way.y) < 0.9 else Vector3.BACK
+		var up: Vector3 = (up_was - way * up_was.dot(way)).normalized().rotated(way, one["roll"])
+		var root: Node3D = one["root"]
+		root.visible = true
+		var strain := sin(_clock * (17.0 + float(n) * 3.0)) * 0.006
+
+		if one["which"] == 0:
+			root.transform = Transform3D(Basis.looking_at(way, up).scaled(Vector3.ONE * FACE_SIZE), at + way * (TAKEN_FACE_OUT + strain))
+			one["jaw"].rotation.x = -clampf(0.55 + sin(_clock * (2.0 + float(n))) * 0.35, 0.0, 1.0) * JAW_DROPS
+		else:
+			var across := way.cross(up).normalized()
+			root.transform = Transform3D((Basis(way, sin(_clock * 2.3 + float(n)) * 0.1) * Basis(across, way, -up)).scaled(Vector3.ONE * HAND_SIZE), at + way * (TAKEN_HAND_OUT + strain) - up * 0.26 * HAND_SIZE)
+
+		var slot := PRESSES + BURSTS + n
+		_uniform_at[slot] = Vector4(at.x, at.y, at.z, 0.85)
+		_uniform_way[slot] = Vector4(way.x, way.y, way.z, 0.0)
+		_uniform_up[slot] = Vector4(up.x, up.y, up.z, 0.0)
+		_uniform_size[slot] = PRESS_SIZE[one["which"]]
 
 
 func _build_bursts() -> void:
@@ -1032,7 +1147,7 @@ func tick_dying(delta: float, speed: float, going: Vector3, digs: bool, grab: fl
 	_swell = swell
 	_floor_y = floor_y
 	var limp: bool = pose.get("limp", false)
-	_made.scale = Vector3(1.0 + SWELLS.x * swell + SLUMP_OUT * slump, 1.0 + SWELLS.y * swell - SLUMP_DOWN * slump, 1.0 + SWELLS.z * swell + SLUMP_OUT * slump * 0.5) * SIZE
+	_made.scale = Vector3(1.0 + SWELLS.x * swell + SLUMP_OUT * slump, 1.0 + SWELLS.y * swell - SLUMP_DOWN * slump, 1.0 + SWELLS.z * swell + SLUMP_OUT * slump * 0.5) * SIZE * _size
 	_made.position = _made_at + Vector3(0.0, 0.0, -SWELLS_ON * swell)
 	_hunger = lerpf(_hunger, 0.0 if limp else 1.0, 1.0 - exp(-3.0 * delta))
 	_work_gait(delta, speed)
@@ -1307,7 +1422,7 @@ func size_now() -> Vector3:
 func tick(delta: float, speed: float, going: Vector3, rake_to: float, digs: bool, grab: float, grab_at: Vector3, swell: float, fed: float, hurt: float, smoulder: float) -> void:
 	_clock += delta
 	_swell = swell
-	_made.scale = (Vector3.ONE + SWELLS * swell) * SIZE
+	_made.scale = (Vector3.ONE + SWELLS * swell) * SIZE * _size
 	_made.position = _made_at + Vector3(0.0, 0.0, -SWELLS_ON * swell)
 
 	if not _placed:
@@ -1397,7 +1512,7 @@ func _dig(i: int, delta: float, speed: float, going: Vector3) -> float:
 		if speed > 0.05:
 			_haul_t[i] += delta
 
-		if (_wrist[i] - shoulder_at).length() > TRAILS_MOST:
+		if (_wrist[i] - shoulder_at).length() > TRAILS_MOST * _size:
 			_let_go(i)
 
 		return DUG_SHUT + sin(_clock * 3.0 + float(i)) * 0.03
@@ -1594,7 +1709,7 @@ func _grab_point(i: int, grab_at: Vector3) -> Vector3:
 func _within_reach(i: int, wanted: Vector3) -> Vector3:
 	var shoulder_at := _world_shoulder(i)
 	var off := wanted - shoulder_at
-	return shoulder_at + off.limit_length(ARM_GETS)
+	return shoulder_at + off.limit_length(ARM_GETS * _size)
 
 
 ## The shoulder, in the arm's own space: sunk in the flesh, behind where it comes out.

@@ -25,7 +25,9 @@ const TABLE := {
 			&"face": {"swipe_damage": 10.0, "swipe_reach": 2.0, "swipe_wind": 0.42, "health": 70.0, "power_drain": 8.0, "life_drain": 2.5, "grip": 1, "speed": 2.1, "tell": 0.7, "leap_reach": 3.4, "leap_speed": 7.5, "hit_radius": 0.4, "height": 1.3, "floats": true},
 			&"torso": {"swipe_damage": 14.0, "swipe_reach": 2.2, "swipe_wind": 1.35, "health": 130.0, "power_drain": 12.0, "life_drain": 4.0, "grip": 2, "speed": 0.6, "tell": 2.0, "leap_reach": 3.0, "leap_speed": 3.4, "hit_radius": 0.95, "height": 0.5, "floats": false,
 				# It is a great many dragged along as one: all of this is how heavy that is (Anima.gd).
-				"hauls": true, "inertia": 1.8, "leap_gathers": 0.75, "rise_time": 1.5, "wake_time": 1.5, "missed_time": 2.4, "swipe_time": 0.5, "swipe_lunge": 0.7, "back_off_time": 1.4, "back_off_speed": 0.7, "circle_speed": 0.5, "edges_round": 0.3, "throw_speed": 3.5},
+				"hauls": true, "inertia": 1.8, "leap_gathers": 0.75, "rise_time": 1.5, "wake_time": 1.5, "missed_time": 2.4, "swipe_time": 0.5, "swipe_lunge": 0.7, "back_off_time": 1.4, "back_off_speed": 0.7, "circle_speed": 0.5, "edges_round": 0.3, "throw_speed": 3.5,
+				# The elite: what it starts as, what each it takes does to it, and how it goes about taking them.
+				"elite": {"health": 240.0, "start_size": 1.08, "grows": 0.12, "heals": 0.3, "most_taken": 3, "swipe_up": 0.2, "drain_up": 0.25, "slows": 0.08, "swipe_reach_up": 0.2, "leap_reach_up": 0.3, "hungry_below": 0.667, "hungry_every": 6.0, "looks_within": 5.5, "seizes_within": 2.6, "seizes_up": 0.3, "gives_up": 6.0, "drags": 1.2}},
 		},
 	},
 }
@@ -34,6 +36,22 @@ const TABLE := {
 ## {health, weak, resist}; {} for an unknown kind.
 static func info(kind: StringName) -> Dictionary:
 	return TABLE.get(kind, {})
+
+
+## The elite mouth's numbers, as it stands having taken `taken`.
+static func elite_form(taken: int) -> Dictionary:
+	var base: Dictionary = form(&"anima", &"torso").duplicate()
+	var row: Dictionary = base["elite"]
+	var scale: float = float(row["start_size"]) * (1.0 + float(row["grows"]) * float(taken))
+	base["health"] = row["health"]
+	base["size"] = scale
+	base["hit_radius"] = float(base["hit_radius"]) * scale
+	base["swipe_damage"] = float(base["swipe_damage"]) * (1.0 + float(row["swipe_up"]) * float(taken))
+	base["life_drain"] = float(base["life_drain"]) * (1.0 + float(row["drain_up"]) * float(taken))
+	base["speed"] = float(base["speed"]) * (1.0 - float(row["slows"]) * float(taken))
+	base["swipe_reach"] = float(base["swipe_reach"]) + float(row["swipe_reach_up"]) * float(taken)
+	base["leap_reach"] = float(base["leap_reach"]) + float(row["leap_reach_up"]) * float(taken)
+	return base
 
 
 ## One of a kind's forms, {} if it has none by that name.

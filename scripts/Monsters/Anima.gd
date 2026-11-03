@@ -123,6 +123,9 @@ var whip_reach := 1.6
 ## What it has drunk of your power. Half of it comes back when it dies.
 var fed := 0.0
 ## Whips it can still take before it is thrown off (from its form).
+## The elite mouth (set before it enters the tree), and who it has taken in.
+var elite := false
+var _taken: Array[StringName] = []
 var grip_left := 1
 ## The mouth's ribs, broken by a whip, as long as it goes on holding you.
 var ribs_cracked := false
@@ -150,7 +153,33 @@ func _init() -> void:
 
 
 func hit_radius() -> float:
+	if elite:
+		return float(Bestiary.elite_form(_taken.size())["hit_radius"])
+
 	return float(Bestiary.form(&"anima", form).get("hit_radius", DEFAULT_RADIUS))
+
+
+## One of this one's numbers, as it stands now.
+func form_number(what: String) -> float:
+	return float(_form[what])
+
+
+## How many it has taken in.
+func taken_count() -> int:
+	return _taken.size()
+
+
+## It has taken one in, a `kind` of form: back comes some of its health, and it is worse for it.
+func take_in(kind: StringName) -> void:
+	var row: Dictionary = _form["elite"]
+
+	if _taken.size() >= int(row["most_taken"]):
+		return
+
+	_taken.append(kind)
+	_form = Bestiary.elite_form(_taken.size())
+	health = minf(health + float(row["health"]) * float(row["heals"]), float(row["health"]))
+	body.has_taken(kind, float(_form["size"]))
 
 
 ## A crawler's body rests on the floor, whatever reach its hands have.
@@ -161,8 +190,12 @@ func _body_shape() -> Shape3D:
 
 
 func _ready() -> void:
-	_form = Bestiary.form(&"anima", form)
+	_form = Bestiary.elite_form(_taken.size()) if elite else Bestiary.form(&"anima", form)
 	health = float(_form["health"])
+
+	if elite:
+		add_to_group(&"elite_mouths")
+
 	grip_left = int(_form["grip"])
 	super._ready()
 	# (Godot stops a body dead against a wall it meets nearly square, unless told not to.)
@@ -175,6 +208,7 @@ func _ready() -> void:
 	body = AnimaBody.new()
 	body.name = "Body"
 	body.form = form
+	body.elite_size = float(_form["size"]) if elite else 0.0
 	add_child(body)
 	struck.connect(_on_struck)
 

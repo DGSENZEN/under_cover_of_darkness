@@ -169,6 +169,8 @@ const FIRE_BODY := Color("#3E4624")
 const FIRE_EDGE := Color("#16160E")
 
 var form: StringName = &"hands"
+## How big, if it is the elite mouth.
+var elite_size := 0.0
 ## How much it has drunk, shown, 0..1.
 var fed_shown := 0.0
 var hurt := 0.0
@@ -401,6 +403,10 @@ func _build_mouth() -> void:
 	_mouth = AnimaMouthScript.new(_flesh, bone, float(Bestiary.form(&"anima", form)["height"]))
 	add_child(_mouth)
 
+	# Its candles, alight: it has eaten what was left for the others.
+	if elite_size > 0.0:
+		_mouth.be_elite(elite_size, MeshVfx.flame(0.36, 0.07, 8, 8), MeshVfx.look(Color("#E4F09A"), Color("#8EB03C"), Color("#2A3414"), 1.4, 0.8, 1.1))
+
 	for id in AnimaMouthScript.MESHES:
 		_parts[id] = _mouth.part(id)
 
@@ -471,6 +477,23 @@ func press_held_off(n: int) -> void:
 
 func hold_press(n: int, at: Vector3, jaw: float) -> void:
 	_mouth.hold_press(n, at, jaw)
+
+
+## It has taken one in, and stands this big now.
+func has_taken(kind: StringName, size: float) -> void:
+	_mouth.has_taken(kind, size)
+
+
+func candles_lit() -> bool:
+	return _mouth.candles_lit()
+
+
+func taken_shown(kind: StringName) -> int:
+	return _mouth.taken_shown(kind)
+
+
+func taken_up() -> int:
+	return _mouth.taken_up()
 
 
 func press_shown(n: int) -> bool:
