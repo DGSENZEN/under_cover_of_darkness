@@ -589,6 +589,14 @@ func fingertip_y(which: int) -> float:
 	return _mouth.fingertip_y(which)
 
 
+func elbow(which: int) -> Vector3:
+	return _mouth.elbow(which)
+
+
+func hand_way(which: int) -> Vector3:
+	return _mouth.hand_way(which)
+
+
 func arm_stretch(which: int) -> float:
 	return _mouth.arm_stretch(which)
 

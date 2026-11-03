@@ -38,6 +38,8 @@ Its cause in the world: nothing new. What made the mouth, souls no one lit a can
 - Anything on screen in words of ours.
 - New modelled bodies that look stuck on: what it absorbs goes in under its skin, as the fused faces are ([[connected-topology-details-make-sense]]).
 
+The user, having played it: "he feels a bit too easy to kill". Its health is 380, up from the first go of 240.
+
 ## How often
 
 The user: three absorbs happens if you neglect it. The first absorb happens in most fights, so you see it feed and learn you can stop it; a good player rarely sees three, so that when it happens it is frightening and your own doing.

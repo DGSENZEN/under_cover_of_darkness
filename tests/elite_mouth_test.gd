@@ -28,6 +28,12 @@ func _ready() -> void:
 	p.inventory.select_by_id(&"revolver")
 	p.inventory.ammo[&"copal_rounds"] = 60
 	await _frames(60)
+	if "--only-arms" in OS.get_cmdline_user_args():
+		await _arms_move_well()
+		get_tree().quit(1 if failed > 0 else 0)
+		return
+
+	await _arms_move_well()
 	await _it_grows()
 	await _they_stay_near()
 	await _it_feeds()
@@ -49,7 +55,7 @@ func _it_grows() -> void:
 	await _frames(5)
 	_check("E1 a plain torso is as it was", plain.hit_radius() == 0.95 and not plain.body.candles_lit() and plain.health == 130.0)
 	_check("E1b you can tell one: lit, and bigger", one.body.candles_lit() and one.hit_radius() > plain.hit_radius() and one.body.mouth_size().x > plain.body.mouth_size().x)
-	_check("E1b2 its own health", one.health == 240.0)
+	_check("E1b2 its own health", one.health == 380.0)
 	one.health = 100.0
 	var size_was: float = one.body.mouth_size().x
 	var swipe_was: float = one.form_number("swipe_damage")
@@ -59,17 +65,17 @@ func _it_grows() -> void:
 	var leap_reach_was: float = one.form_number("leap_reach")
 	var radius_was: float = one.hit_radius()
 	one.take_in(&"face")
-	_check("E1c it wins back 30%% of its most (%.0f)" % one.health, is_equal_approx(one.health, 100.0 + 240.0 * 0.3))
+	_check("E1c it wins back 30%% of its most (%.0f)" % one.health, is_equal_approx(one.health, 100.0 + 380.0 * 0.3))
 	await _frames(20)
 	_check("E1d each one bigger (%.2f, %.2f), and it still stands on the floor (%.2f)" % [size_was, one.body.mouth_size().x, one.global_position.y], one.body.mouth_size().x > size_was * 1.08 and absf(one.global_position.y - 0.5) < 0.15)
 	_check("E1d2 harder to miss", one.hit_radius() > radius_was)
 	_check("E1f harder, slower, further", one.form_number("swipe_damage") > swipe_was and one.drain_life() > drain_was and one.form_number("speed") < speed_was and is_equal_approx(one.form_number("swipe_reach"), swipe_reach_was + 0.2) and is_equal_approx(one.form_number("leap_reach"), leap_reach_was + 0.3))
-	one.health = 239.0
+	one.health = 379.0
 	one.take_in(&"hands")
 	one.take_in(&"hands")
 	one.take_in(&"face")
 	await _frames(40)
-	_check("E1g never above its most, never over three (%.0f, %d)" % [one.health, one.taken_count()], one.health <= 240.0 and one.taken_count() == 3)
+	_check("E1g never above its most, never over three (%.0f, %d)" % [one.health, one.taken_count()], one.health <= 380.0 and one.taken_count() == 3)
 	_check("E1h what it took stays, a face for a face, a hand for a hand", one.body.taken_shown(&"face") == 1 and one.body.taken_shown(&"hands") == 2)
 	_check("E1i all three are up out of its skin", one.body.taken_up() == 3)
 	await _until(func(): return one.body.arm_dug_in(0), 5.0)
@@ -109,6 +115,94 @@ func _they_stay_near() -> void:
 	await _frames(120)
 	_check("E2d with no elite, nothing has changed", alone.global_position.distance_to(p.global_position) < was - 2.0)
 	_free([alone])
+	await _frames(3)
+
+
+## An arm goes where it goes in one piece: no jump, no snap, no pop, whatever it is doing.
+func _arms_move_well() -> void:
+	await _clean()
+	var one := _anima(&"torso", HOME + Vector3(0.3, -0.5, -9.0))
+	one.leap_chance = 1.0
+	one.health = 5000.0
+	await _until(func(): return one.state == STATE.RUSH, 4.0)
+	await _frames(20)
+	var body: Node3D = one.body
+	var wrist_was: Array = []
+	var elbow_was: Array = []
+	var way_was: Array = []
+
+	for arm in 5:
+		wrist_was.append(body.wrist(arm))
+		elbow_was.append(body.elbow(arm))
+		way_was.append(body.hand_way(arm))
+
+	var worst_wrist := 0.0
+	var worst_elbow := 0.0
+	var worst_turn := 0.0
+	var at_wrist := ""
+	var at_elbow := ""
+	var at_turn := ""
+	var most_stretch := 0.0
+	var mass_at: Vector3 = body._mouth.position
+	var mass_tip: Vector3 = body._mouth.rotation
+	var worst_lift := 0.0
+	var worst_tip := 0.0
+	var at_lift := ""
+	var at_tip := ""
+
+	for i in 1500:
+		await get_tree().physics_frame
+
+		# It comes, it rakes, it lunges and you throw it off: all it does.
+		if one.state == STATE.ON:
+			p.leech.free_all()
+
+		var lifted: float = body._mouth.position.distance_to(mass_at) * 60.0
+		var tipped: float = (body._mouth.rotation - mass_tip).length() * 60.0
+
+		if lifted > worst_lift:
+			worst_lift = lifted
+			at_lift = one.DOING[one.state]
+
+		if tipped > worst_tip:
+			worst_tip = tipped
+			at_tip = one.DOING[one.state]
+
+		mass_at = body._mouth.position
+		mass_tip = body._mouth.rotation
+
+		for arm in 5:
+			var wrist_now: Vector3 = body.wrist(arm)
+			var elbow_now: Vector3 = body.elbow(arm)
+			var way_now: Vector3 = body.hand_way(arm)
+			var moved: float = wrist_now.distance_to(wrist_was[arm]) * 60.0
+			var bent: float = elbow_now.distance_to(elbow_was[arm]) * 60.0
+			var turned: float = way_now.angle_to(way_was[arm]) * 60.0
+
+			if moved > worst_wrist:
+				worst_wrist = moved
+				at_wrist = "arm %d %s" % [arm, one.DOING[one.state]]
+
+			if bent > worst_elbow:
+				worst_elbow = bent
+				at_elbow = "arm %d %s" % [arm, one.DOING[one.state]]
+
+			if turned > worst_turn:
+				worst_turn = turned
+				at_turn = "arm %d %s" % [arm, one.DOING[one.state]]
+
+			most_stretch = maxf(most_stretch, body.arm_stretch(arm))
+			wrist_was[arm] = wrist_now
+			elbow_was[arm] = elbow_now
+			way_was[arm] = way_now
+
+	_check("P1 no wrist jumps (%.1f m/s, %s)" % [worst_wrist, at_wrist], worst_wrist < 7.0)
+	_check("P2 no elbow pops (%.1f m/s, %s)" % [worst_elbow, at_elbow], worst_elbow < 8.0)
+	_check("P3 no hand snaps round (%.1f rad/s, %s)" % [worst_turn, at_turn], worst_turn < 12.0)
+	_check("P4 the mass never jumps up or down (%.1f m/s, %s)" % [worst_lift, at_lift], worst_lift < 1.5)
+	_check("P5 the mass never jumps over (%.1f rad/s, %s)" % [worst_tip, at_tip], worst_tip < 2.5)
+	print("arms: most stretch %.2f" % most_stretch)
+	_free([one])
 	await _frames(3)
 
 
@@ -366,7 +460,7 @@ func _at_three() -> void:
 		await get_tree().physics_frame
 		told += 1
 
-	full.health = 240.0
+	full.health = 380.0
 	full.state = STATE.TELL
 	full._state_t = 0.0
 	_hit(full, &"bullet", &"copal")
@@ -394,7 +488,7 @@ func _hungry_at(health: float, smalls: Array) -> Array:
 
 func _it_feeds() -> void:
 	# Whole, it fights on.
-	var whole: Array = await _hungry_at(240.0, [[&"hands", Vector3(3.0, 0.0, 0.0)]])
+	var whole: Array = await _hungry_at(380.0, [[&"hands", Vector3(3.0, 0.0, 0.0)]])
 	await _frames(120)
 	_check("E3 whole, it doesn't look for one", whole[0].state != STATE.REACH and whole[0].prey() == null)
 	_free(whole)
@@ -473,7 +567,7 @@ func _it_feeds() -> void:
 	_check("E3c2 or sleeps: the same", not small.is_seized() and not small.dead)
 	_free(sleeps)
 	# Only from crawling, circling, backing off.
-	var holding: Array = await _hungry_at(240.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
+	var holding: Array = await _hungry_at(380.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
 	one = holding[0]
 	one.global_position = HOME + Vector3(0.0, -0.5, -1.2)
 	holding[1].global_position = HOME + Vector3(2.0, -0.5, -1.2)
@@ -484,7 +578,7 @@ func _it_feeds() -> void:
 	_check("E3g it never lets go of you to feed", one.state == STATE.ON and one.prey() == null)
 	p.leech.free_all()
 	_free(holding)
-	var telling: Array = await _hungry_at(240.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
+	var telling: Array = await _hungry_at(380.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
 	one = telling[0]
 	one.state = STATE.TELL
 	one._state_t = -9.0

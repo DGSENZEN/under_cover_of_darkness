@@ -61,6 +61,15 @@ const HOVER_SLOWS := 0.28
 const DRIVES_DOWN := 1.5
 const DUG_SHUT := 0.62
 const STEP_TURNS := 0.45
+## An arm goes where it goes in one piece. The fastest a wrist goes (m/s); how soon a step settles on where it
+## is going, as what it has to go by changes; the fastest a hand and an elbow come round (rad/s); how bent an arm
+## always stays (m), so that it never pops straight. Backing, how little of a reach it makes behind it.
+const WRIST_FASTEST := 6.0
+const STEP_SETTLES := 3.0
+const HAND_TURNS := 6.0
+const ELBOW_TURNS := 7.0
+const ALWAYS_BENT := 0.22
+const BACKING_REACHES := 0.45
 ## How far it lets a dug hand trail before it has to let go (m).
 const TRAILS_MOST := 1.18
 ## It goes as it hauls: how fast, of its speed, with nothing hauling, and hauling flat out; what the
@@ -71,6 +80,9 @@ const BRACES_ADD := 0.25
 const HEAVES := 0.13
 const ROLLS := 0.14
 const ROCKS := 0.12
+## How fast the mass takes up or lets go of a haul (per second): faster than any haul goes, so a haul is
+## as it was, but a hand off the earth doesn't drop it all at once.
+const HAUL_FELT_EASES := 3.0
 ## How far it leans off a limb that is up (rad).
 const LEANS_OFF := 0.07
 ## An arm that isn't digging, out from its shoulder (m), hanging; how fast it gets where it is going.
@@ -154,7 +166,7 @@ const PRESS_HUNGRY_FROM := 0.55
 const BURSTS := 2
 const BURST_FIRST := 2.0
 const BURST_SWELLS := 0.7
-const BURST_COMES := 0.16
+const BURST_COMES := 0.3
 const BURST_CLAWS := Vector2(0.9, 2.2)
 const BURST_HAULED := 0.14
 const BURST_RESTS := Vector2(3.0, 8.0)
@@ -208,10 +220,15 @@ var _wrist: Array[Vector3] = []
 var _dug: Array[bool] = []
 var _dug_floor: Array[float] = []
 var _haul_t: Array[float] = []
+var _haul_felt: Array[float] = []
 var _reach_t: Array[float] = []
 var _came_from: Array[Vector3] = []
 var _shut: Array[float] = []
 var _stretch: Array[float] = []
+var _step_to: Array[Vector3] = []
+var _pointing: Array[Vector3] = []
+var _back: Array[Vector3] = []
+var _elbow_way: Array[Vector3] = []
 ## This step of each limb: how long, how high, how far on, how far out, how high its wrist, how turned; whether it hovers.
 var _step_takes: Array[float] = []
 var _step_lift: Array[float] = []
@@ -323,10 +340,15 @@ func _init(flesh: ShaderMaterial, bone: ShaderMaterial, height: float) -> void:
 		_dug.append(false)
 		_dug_floor.append(0.0)
 		_haul_t.append(0.0)
+		_haul_felt.append(0.0)
 		_reach_t.append(0.0)
 		_came_from.append(Vector3.ZERO)
 		_shut.append(CURL)
 		_stretch.append(1.0)
+		_step_to.append(Vector3.INF)
+		_pointing.append(Vector3.ZERO)
+		_back.append(Vector3.UP)
+		_elbow_way.append(Vector3.ZERO)
 		var limb := mini(_markers.size() - 1, DIGGERS - 1)
 		_step_takes.append(REACH_TAKES[limb])
 		_step_lift.append(REACH_LIFT[limb])
@@ -417,6 +439,7 @@ func _let_go(i: int) -> void:
 	_dug[i] = false
 	_reach_t[i] = 0.0
 	_came_from[i] = _wrist[i]
+	_step_to[i] = Vector3.INF
 	_vary_step(i)
 
 
@@ -1248,15 +1271,12 @@ func tick_dying(delta: float, speed: float, going: Vector3, digs: bool, grab: fl
 				_frees_in = 0.0
 
 	_work_freed(delta, floor_y)
-	var heaved := 0.0
-
 	for i in _hands.size():
 		var on_earth: bool = digs and i < DIGGERS and not limp
 		var shut_to: float
 
 		if on_earth:
 			shut_to = _dig(i, delta, speed, going)
-			heaved = maxf(heaved, _hauling(i) if i < HAULERS else 0.0)
 		else:
 			_dug[i] = false
 			_reach_t[i] = 0.0
@@ -1273,11 +1293,11 @@ func tick_dying(delta: float, speed: float, going: Vector3, digs: bool, grab: fl
 			shut_to = 0.25 if limp else lerpf(CURL, -0.1, grab)
 
 		_shut[i] = lerpf(_shut[i], shut_to, 1.0 - exp(-8.0 * delta))
-		_solve_arm(i, grab, grab_at)
+		_solve_arm(i, grab, grab_at, delta)
 		_curl_fingers(_hands[i], i)
 		_hand_meshes[i].set_instance_shader_parameter(&"hunger", _hunger)
 
-	_heave = heaved * HEAVES
+	_feel_hauls(delta)
 	_work_dying_presses(delta, pose)
 
 	# Their lights last as long as there is anything of them.
@@ -1414,6 +1434,18 @@ func arm_stride(which: int) -> float:
 	return sin(into / round_takes * TAU)
 
 
+## That arm's elbow, in the world, and how its hand stands.
+func elbow(which: int) -> Vector3:
+	var hand := _hands[which]
+	return hand.global_transform * (hand.get_bone_global_pose(hand.find_bone("arm_2")).origin)
+
+
+func hand_way(which: int) -> Vector3:
+	var hand := _hands[which]
+	var pose: Transform3D = hand.get_bone_global_pose(hand.find_bone("hand"))
+	return (hand.global_basis * pose.basis.y).normalized()
+
+
 ## Whether this arm's hand has dug in.
 func arm_dug_in(which: int) -> bool:
 	return _dug[which]
@@ -1466,12 +1498,12 @@ func heave() -> float:
 
 ## How far over it the mass has rolled with them (rad).
 func roll() -> float:
-	return (_hauling(0) - _hauling(1)) * ROLLS + _leaning
+	return (_haul_felt[0] - _haul_felt[1]) * ROLLS + _leaning
 
 
 ## How far over onto its front the mass has rocked (rad): it pitches into each haul.
 func rock() -> float:
-	return (maxf(_hauling(0), _hauling(1)) - 0.5) * ROCKS * 2.0
+	return (maxf(_haul_felt[0], _haul_felt[1]) - 0.5) * ROCKS * 2.0
 
 
 ## How it goes for now, of its speed: lurching on with each haul, and all but stopping between.
@@ -1481,6 +1513,14 @@ func lurch() -> float:
 
 
 ## How far it is into its haul with that arm: nothing as it digs in, the most midway, nothing as it lets go.
+## What the mass feels of the hauls, and how far up that heaves it.
+func _feel_hauls(delta: float) -> void:
+	for i in HAULERS:
+		_haul_felt[i] = move_toward(_haul_felt[i], _hauling(i), HAUL_FELT_EASES * delta)
+
+	_heave = maxf(_haul_felt[0], _haul_felt[1]) * HEAVES
+
+
 func _hauling(which: int) -> float:
 	return sin(clampf(_haul_t[which] / HAUL_TAKES[which], 0.0, 1.0) * PI) if _dug[which] else 0.0
 
@@ -1523,15 +1563,14 @@ func tick(delta: float, speed: float, going: Vector3, rake_to: float, digs: bool
 	_hunger = move_toward(_hunger, clampf(hunger_least + swell * 1.1 + fed * 0.25, 0.0, 1.0), delta * HUNGER_RATE)
 	_work_presses(delta, grab_at)
 	_work_bursts(delta)
-	_work_gait(delta, speed)
+	# (Rearing for a rake or a lunge it has its hands where it wants them: it doesn't go on stepping.)
+	_work_gait(delta, speed if absf(rake_to) < 0.01 and swell < 0.2 else 0.0)
 
 	for i in _rake.size():
 		var w := minf(TAU * RAKE_RATE, 0.8 / delta)
 		var late := clampf(float(i) * RAKE_LAGS, 0.0, 0.2)
 		_rake_speed[i] += (w * w * (rake_to - _rake[i]) - 2.0 * 0.75 * w * _rake_speed[i]) * delta * (1.0 - late)
 		_rake[i] += _rake_speed[i] * delta
-
-	var heaved := 0.0
 
 	for i in _hands.size():
 		# The two that haul stay on the earth to the last; the rest come up for a rake.
@@ -1550,20 +1589,18 @@ func tick(delta: float, speed: float, going: Vector3, rake_to: float, digs: bool
 			_reach_t[i] = 0.0
 			_came_from[i] = _wrist[i]
 			var wanted := _within_reach(i, _free_wrist(i, grab).lerp(_grab_point(i, grab_at), grab))
-			_wrist[i] = _wrist[i].lerp(wanted, 1.0 - exp(-lerpf(FREE_RATE, GRAB_RATE, grab) * delta))
+			var going_to: Vector3 = _wrist[i].lerp(wanted, 1.0 - exp(-lerpf(FREE_RATE, GRAB_RATE, grab) * delta))
+			_wrist[i] = _wrist[i].move_toward(going_to, WRIST_FASTEST * _size * delta)
 			shut_to = lerpf(CURL, -0.1, grab)
 
 		_shut[i] = lerpf(_shut[i], shut_to, 1.0 - exp(-14.0 * delta))
-		_solve_arm(i, grab, grab_at)
+		_solve_arm(i, grab, grab_at, delta)
 		_curl_fingers(_hands[i], i)
 		_hand_meshes[i].set_instance_shader_parameter(&"fed", fed)
 		_hand_meshes[i].set_instance_shader_parameter(&"hurt", hurt)
 		_hand_meshes[i].set_instance_shader_parameter(&"smoulder", smoulder)
 
-		if i < HAULERS:
-			heaved = maxf(heaved, _hauling(i))
-
-	_heave = heaved * HEAVES
+	_feel_hauls(delta)
 	# Off whichever is up.
 	var leans_to := 0.0
 
@@ -1620,15 +1657,21 @@ func _dig(i: int, delta: float, speed: float, going: Vector3) -> float:
 	var heading := Vector3(going.x, 0.0, going.z)
 	var ahead: Vector3 = heading.normalized() if heading.length() > 0.08 else -global_basis.z
 	var out: Vector3 = global_basis.x * signf(_markers[i].position.x)
-	var to: Vector3 = _clear_of_walls(shoulder_at, shoulder_at + ahead * _step_ahead[i] + out * _step_out[i])
+	# (Going backward, it doesn't throw an arm out behind it the length it would ahead.)
+	var how_far: float = _step_ahead[i] * (BACKING_REACHES if ahead.dot(-global_basis.z) < 0.0 else 1.0)
+	var to: Vector3 = _clear_of_walls(shoulder_at, shoulder_at + ahead * how_far + out * _step_out[i])
 	to.y = _floor_y + _step_wrist[i]
+	# It settles on where it is going, it doesn't jump when what it goes by does.
+	_step_to[i] = to if _step_to[i] == Vector3.INF else _step_to[i].lerp(to, 1.0 - exp(-STEP_SETTLES * delta))
+	to = _step_to[i]
 	# Out of the earth and over, the most of the way; then the last of it, down, hard.
 	var across := smoothstep(0.08, STEP_OVER, u) * 0.93 + smoothstep(STEP_HOVER_ENDS, 1.0, u) * 0.07
 	var over := sin(minf(u / STEP_OVER, 1.0) * PI * 0.5 + maxf(0.0, u - 0.34) / 0.34 * PI * 0.25)
 	var high := lerpf(_step_lift[i] * clampf(over, 0.0, 1.0), HOVER_HIGH * (1.0 - smoothstep(STEP_HOVER_ENDS, 1.0, u)), smoothstep(STEP_OVER * 0.75, STEP_OVER, u))
-	_wrist[i] = _came_from[i].lerp(to, across) + Vector3.UP * high
+	var heading_to: Vector3 = _came_from[i].lerp(to, across) + Vector3.UP * high
+	_wrist[i] = _wrist[i].move_toward(heading_to, WRIST_FASTEST * _size * delta)
 
-	if u >= 1.0:
+	if u >= 1.0 and _wrist[i].distance_to(heading_to) < 0.04:
 		_dig_in(i, to)
 
 	# Limp coming up, spread feeling for the ground, and it shuts as it goes in.
@@ -1818,7 +1861,7 @@ func _world_shoulder(i: int) -> Vector3:
 
 
 ## The arm from its wrist back to its shoulder: the elbow out and up, the hand where it is going and how.
-func _solve_arm(i: int, grab: float, grab_at: Vector3) -> void:
+func _solve_arm(i: int, grab: float, grab_at: Vector3, delta := 99.0) -> void:
 	var hand := _hands[i]
 	var into := hand.global_transform.affine_inverse()
 	var wrist_at: Vector3 = into * _wrist[i]
@@ -1840,10 +1883,19 @@ func _solve_arm(i: int, grab: float, grab_at: Vector3) -> void:
 		var from_shoulder: Vector3 = (_wrist[i] - _world_shoulder(i)).normalized()
 		pointing = from_shoulder.lerp((grab_at - _wrist[i]).normalized(), grab).normalized()
 
-	var fingers: Vector3 = (into.basis * pointing).normalized()
-	var back: Vector3 = (into.basis * Vector3.UP).normalized()
+	_pointing[i] = pointing if _pointing[i] == Vector3.ZERO else _come_round(_pointing[i], pointing, HAND_TURNS * delta)
+	# Its back stays up, as near as it can; pointed straight up or down, it goes by the way the mouth faces.
+	var back_up: Vector3 = Vector3.UP - _pointing[i] * Vector3.UP.dot(_pointing[i])
 
-	if absf(fingers.dot(back)) > 0.95:
+	if back_up.length() < 0.35:
+		back_up = -global_basis.z - _pointing[i] * (-global_basis.z).dot(_pointing[i])
+
+	_back[i] = _come_round(_back[i], back_up.normalized(), HAND_TURNS * delta)
+	_back[i] = (_back[i] - _pointing[i] * _back[i].dot(_pointing[i])).normalized()
+	var fingers: Vector3 = (into.basis * _pointing[i]).normalized()
+	var back: Vector3 = (into.basis * _back[i]).normalized()
+
+	if absf(fingers.dot(back)) > 0.98:
 		back = (into.basis * (-global_basis.z)).normalized()
 
 	var hand_turned := Basis.looking_at(fingers, back)
@@ -1856,11 +1908,26 @@ func _solve_arm(i: int, grab: float, grab_at: Vector3) -> void:
 	var span := shoulder - wrist_at
 	var far := span.length()
 	var reach := BONE_LENGTH * 2.0
-	var stretch := clampf(far / (reach * 0.98), 1.0, SEIZE_DRAWS_OUT if i == SEIZING_ARM and _seizing else DRAWN_OUT_MOST * 1.2)
+	# Never quite straight, so its elbow doesn't shoot out as it comes near it: past that it draws out instead.
+	var bent := maxf(sqrt(maxf(BONE_LENGTH * BONE_LENGTH - far * far * 0.25, 0.0)), ALWAYS_BENT)
+	var bone := sqrt(bent * bent + far * far * 0.25)
+	var stretch := clampf(bone / BONE_LENGTH, 1.0, SEIZE_DRAWS_OUT if i == SEIZING_ARM and _seizing else DRAWN_OUT_MOST * 1.2)
 	_stretch[i] = stretch
-	var bone := BONE_LENGTH * stretch
+	bone = BONE_LENGTH * stretch
 	var along_span: Vector3 = span / maxf(far, 0.001)
-	var elbow_way: Vector3 = (into.basis * (Vector3.UP + global_basis.x * side * ELBOW_OUT[mini(i, DIGGERS - 1)])).normalized()
+	# Up and out, off the line of the arm: it comes round to that, and never flips over the line.
+	var along_world: Vector3 = (_world_shoulder(i) - _wrist[i]).normalized()
+	var elbow_wanted: Vector3 = (Vector3.UP + global_basis.x * side * ELBOW_OUT[mini(i, DIGGERS - 1)]).normalized()
+	elbow_wanted -= along_world * elbow_wanted.dot(along_world)
+
+	if elbow_wanted.length() < 0.25:
+		elbow_wanted = global_basis.x * side - along_world * (global_basis.x * side).dot(along_world)
+
+	elbow_wanted = elbow_wanted.normalized()
+	# (What it had, carried round with the arm as the arm turns, so it is never left lying along the arm.)
+	var had: Vector3 = _elbow_way[i] - along_world * _elbow_way[i].dot(along_world)
+	_elbow_way[i] = elbow_wanted if had.length() < 0.05 else _come_round(had.normalized(), elbow_wanted, ELBOW_TURNS * delta)
+	var elbow_way: Vector3 = (into.basis * _elbow_way[i]).normalized()
 	elbow_way = (elbow_way - along_span * elbow_way.dot(along_span)).normalized()
 	var elbow := wrist_at + span * 0.5 + elbow_way * sqrt(maxf(bone * bone - far * far * 0.25, 0.0))
 	var arm_1 := hand.find_bone("arm_1")
@@ -1868,6 +1935,21 @@ func _solve_arm(i: int, grab: float, grab_at: Vector3) -> void:
 	var forearm := _aim(hand, arm_1, hand_basis, (elbow - wrist_at).normalized())
 	hand.set_bone_pose_scale(arm_1, Vector3(1.0, stretch, 1.0))
 	_aim(hand, arm_2, forearm, (shoulder - elbow).normalized())
+
+
+## A way, brought round toward another, no more than `most` radians.
+func _come_round(from: Vector3, to: Vector3, most: float) -> Vector3:
+	var angle := from.angle_to(to)
+
+	if angle < 0.0005 or most >= angle:
+		return to
+
+	var axis := from.cross(to)
+
+	if axis.length() < 0.001:
+		axis = from.cross(Vector3.RIGHT if absf(from.x) < 0.9 else Vector3.UP)
+
+	return from.rotated(axis.normalized(), most).normalized()
 
 
 func _aim(hand: Skeleton3D, bone: int, parent: Basis, wanted: Vector3) -> Basis:
