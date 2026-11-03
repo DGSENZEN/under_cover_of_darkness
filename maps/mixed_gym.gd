@@ -61,6 +61,7 @@ func _lay_out_waves() -> void:
 
 					# What is drawn to an elite starts by it.
 					if what == &"elite":
+						spot = ELITE_AT
 						elite_at = spot
 					elif elite_at != Vector3.INF:
 						var round_it := float(members.size()) / float(ELITE_KEEPS) * TAU

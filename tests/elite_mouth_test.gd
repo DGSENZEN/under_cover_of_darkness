@@ -34,6 +34,7 @@ func _ready() -> void:
 	await _at_three()
 	await _in_the_world()
 	await _heard_it()
+	await _reviewed()
 	print("elite_mouth_test: %s" % ("all passed" if failed == 0 else "%d FAILED" % failed))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -108,6 +109,103 @@ func _they_stay_near() -> void:
 	await _frames(120)
 	_check("E2d with no elite, nothing has changed", alone.global_position.distance_to(p.global_position) < was - 2.0)
 	_free([alone])
+	await _frames(3)
+
+
+## What the review found.
+func _reviewed() -> void:
+	# Never mirrored: what presses out, or what it took, or anything that gets out.
+	await _clean()
+	var one := _elite(HOME + Vector3(0.0, -0.5, -12.0))
+	one.leap_chance = 0.0
+	await _frames(3)
+	one.take_in(&"hands")
+	one.take_in(&"face")
+	await _frames(240)
+	_check("F2 nothing of it is mirrored", one.body.none_mirrored())
+	_free([one])
+	await _frames(3)
+	# Its arm, when it has done seizing.
+	var seizing: Array = await _hungry_at(150.0, [[&"hands", Vector3(2.0, 0.0, 0.0)]])
+	one = seizing[0]
+	var small: CharacterBody3D = seizing[1]
+	await _until(func(): return one.state == STATE.DRAG, 8.0)
+	await _frames(30)
+	var was: Vector3 = one.body.wrist(2)
+	small.health = 1.0
+	_hit(small, &"bullet", &"copal")
+	var jumped := 0.0
+
+	for i in 30:
+		await get_tree().physics_frame
+		jumped = maxf(jumped, one.body.wrist(2).distance_to(was))
+		was = one.body.wrist(2)
+
+	_check("F3 its arm comes back, it doesn't snap (%.2f m in a tick)" % jumped, jumped < 0.3)
+	_free(seizing)
+	await _frames(3)
+	# Its lights, dying.
+	await _clean()
+	var dies := _elite(HOME + Vector3(0.0, -0.5, -6.0))
+	dies.leap_chance = 0.0
+	dies.death_kind = 0
+	await _frames(5)
+	dies.take_in(&"face")
+	dies.take_in(&"face")
+	await _frames(5)
+	var body: Node3D = dies.body
+	dies.health = 1.0
+	_hit(dies, &"bullet", &"copal")
+	await _frames(480)
+	_check("F4 no light left in what it took, once it has burnt (%d)" % body.lights_lit(), body.lights_lit() == 0)
+	_free([dies])
+
+	if is_instance_valid(body):
+		body.queue_free()
+
+	await _frames(3)
+	# Nothing from a hidden body.
+	await _clean()
+	var holding := _anima(&"torso", HOME + Vector3(0.8, -0.5, -0.8))
+	await _frames(1)
+	holding.put_on_you()
+	var from_it: int = holding.body.blood_thrown()
+	await _frames(1200)
+	_check("F5 having you, it throws no blood from where it isn't (%d)" % (holding.body.blood_thrown() - from_it), holding.body.blood_thrown() == from_it)
+	p.leech.free_all()
+	_free([holding])
+	await _frames(3)
+	# Waiting, they don't stand on each other, and they go round.
+	await _clean()
+	var elite := _elite(HOME + Vector3(0.0, -0.5, -24.0))
+	elite.leap_chance = 0.0
+	elite.process_mode = Node.PROCESS_MODE_DISABLED
+	var ring: Array = []
+
+	for i in 6:
+		var turn := float(i) / 6.0 * TAU
+		ring.append(_anima(&"hands" if i % 3 != 0 else &"face", elite.position + Vector3(cos(turn), 0.0, sin(turn)) * 2.4))
+
+	await _frames(420)
+	var nearest := 99.0
+
+	for a in ring:
+		for b in ring:
+			if a != b:
+				nearest = minf(nearest, a.global_position.distance_to(b.global_position))
+
+	_check("F6 waiting, they don't stand on each other (%.2f m)" % nearest, nearest > 0.5)
+	var at_was: Vector3 = ring[1].global_position
+	await _frames(180)
+	_check("F6b and they go round it (%.2f m in 3 s)" % ring[1].global_position.distance_to(at_was), ring[1].global_position.distance_to(at_was) > 0.3)
+	# Shot from afar, it comes for you.
+	var shot: CharacterBody3D = ring[2]
+	var off: float = shot.global_position.distance_to(p.global_position)
+	_hit(shot, &"bullet", &"lead")
+	await _frames(240)
+	_check("F7 shot from afar, it comes for you (%.1f from %.1f)" % [shot.global_position.distance_to(p.global_position), off], shot.global_position.distance_to(p.global_position) < off - 3.0)
+	_free(ring)
+	_free([elite])
 	await _frames(3)
 
 

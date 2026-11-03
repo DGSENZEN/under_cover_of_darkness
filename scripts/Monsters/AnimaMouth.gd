@@ -235,6 +235,7 @@ var _skin_hand: Mesh
 var _skin_look: ShaderMaterial
 var _light_look: ShaderMaterial
 ## The elite: how big it stands, of the plain one.
+var _blood_thrown := 0
 var _seizing := false
 var _seized_at := Vector3.ZERO
 var _elite := false
@@ -720,7 +721,7 @@ func _show_press(n: int) -> void:
 			ember.visible = strength > LIGHT_SHOWS_FROM
 			ember.scale = Vector3.ONE * (0.8 + _hunger * 0.35 + sin(_clock * 13.0 + float(n)) * 0.08)
 	else:
-		var across := way.cross(up).normalized()
+		var across := up.cross(way).normalized()
 		var flat := Basis(across, way, -up)
 		var out := lerpf(HAND_OUT.x, HAND_OUT.y, clampf(strength, 0.0, 1.15))
 		var twist := Basis(way, sin(_clock * 3.1 + float(n)) * 0.12)
@@ -799,6 +800,10 @@ func seize_at(at: Vector3) -> void:
 
 
 func seize_off() -> void:
+	# (From where it is: it has been nowhere near the earth.)
+	if _seizing:
+		_let_go(SEIZING_ARM)
+
 	_seizing = false
 
 
@@ -855,6 +860,34 @@ func has_taken(kind: StringName, size: float) -> void:
 	_taken.append({"kind": kind, "which": which, "root": built[0], "jaw": built[1], "lights": built[2], "spot": spots[best], "roll": _rng.randf_range(-0.6, 0.6)})
 
 
+## Whether all that presses out of it, and all it took, is the right way round.
+func none_mirrored() -> bool:
+	var roots: Array = _press_nodes.duplicate()
+
+	for one in _taken:
+		roots.append(one["root"])
+
+	return roots.all(func(root): return root.basis.determinant() > 0.0)
+
+
+## How many of the lights in them are burning.
+func lights_lit() -> int:
+	var lit := 0
+
+	for lights in _press_lights:
+		lit += lights.filter(func(ember): return ember.is_visible_in_tree()).size()
+
+	for one in _taken:
+		lit += one["lights"].filter(func(ember): return ember.is_visible_in_tree()).size()
+
+	return lit
+
+
+## How much blood the hands tearing out of it have thrown.
+func blood_thrown() -> int:
+	return _blood_thrown
+
+
 func taken_shown(kind: StringName) -> int:
 	return _taken.filter(func(one): return one["kind"] == kind).size()
 
@@ -879,7 +912,7 @@ func _work_taken() -> void:
 			root.transform = Transform3D(Basis.looking_at(way, up).scaled(Vector3.ONE * FACE_SIZE), at + way * (TAKEN_FACE_OUT + strain))
 			one["jaw"].rotation.x = -clampf(0.55 + sin(_clock * (2.0 + float(n))) * 0.35, 0.0, 1.0) * JAW_DROPS
 		else:
-			var across := way.cross(up).normalized()
+			var across := up.cross(way).normalized()
 			root.transform = Transform3D((Basis(way, sin(_clock * 2.3 + float(n)) * 0.1) * Basis(across, way, -up)).scaled(Vector3.ONE * HAND_SIZE), at + way * (TAKEN_HAND_OUT + strain) - up * 0.26 * HAND_SIZE)
 
 		var slot := PRESSES + BURSTS + n
@@ -930,7 +963,11 @@ func _work_bursts(delta: float) -> void:
 				3:
 					_burst_takes[b] = _rng.randf_range(BURST_CLAWS.x, BURST_CLAWS.y)
 					var spot_way: Vector3 = spots[_burst_spot[b]][1]
-					Fx.blood(self, _burst_nodes[b].global_transform * Vector3.ZERO, _made.global_basis * spot_way, 0.3)
+
+					# (Having you, it isn't there.)
+					if is_visible_in_tree():
+						Fx.blood(self, _burst_nodes[b].global_transform * Vector3.ZERO, _made.global_basis * spot_way, 0.3)
+						_blood_thrown += 1
 				4:
 					_burst_takes[b] = BURST_HAULED
 				0:
@@ -1244,9 +1281,15 @@ func tick_dying(delta: float, speed: float, going: Vector3, digs: bool, grab: fl
 	_work_dying_presses(delta, pose)
 
 	# Their lights last as long as there is anything of them.
+	var still_burning := not limp or flare > 0.3
+
 	for lights in _press_lights:
 		for ember in lights:
-			ember.visible = not limp or flare > 0.3
+			ember.visible = still_burning
+
+	for one in _taken:
+		for ember in one["lights"]:
+			ember.visible = still_burning
 
 	for i in _skulls.size():
 		if _still_in.has(PRESSES + i):

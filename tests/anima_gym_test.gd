@@ -61,6 +61,8 @@ func _layout() -> void:
 	await _until(func(): return gym.wave_now == 4, 8.0)
 	var elites: Array = _awake().filter(func(m): return m.elite)
 	_check("G5b the last: an elite, and what it can take", elites.size() == 1 and _forms(_awake()) == {&"torso": 1, &"face": 2, &"hands": 4})
+	var round_it: Array = _awake().filter(func(m): return m != elites[0])
+	_check("G5c all of them in the open with it", round_it.all(func(m): return elites[0]._clear_to(m)))
 	var ev := InputEventKey.new()
 	ev.pressed = true
 	ev.keycode = KEY_F6

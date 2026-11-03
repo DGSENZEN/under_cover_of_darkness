@@ -66,6 +66,10 @@ const WAITS_WITHIN := 14.0
 const WAITS_WHILE_YOU_ARE := 2.0
 const WAITS_ROUND := 2.2
 const WAITS_PACE := 0.55
+const WAITS_IN_A_RING := 6.0
+const WAITS_GO_ROUND := 0.3
+## Shot, how long it forgets all that (s).
+const RILED_FOR := 10.0
 ## What weighs anything: how much of its speed it starts a leap with; coming down, how much it
 ## carries on with, how much you feel it, and from how far (m).
 const LEAP_STARTS_AT := 0.12
@@ -138,6 +142,10 @@ var _hungry_in := 0.0
 var _drag_from := Vector3.ZERO
 var _claimed_by: Node3D = null
 var seized_by: Node3D = null
+## On a small one: where in the ring it has its place, and how long it is riled. On the elite: how many have taken a place.
+var _wait_turn := -1.0
+var _riled := 0.0
+var _waiting_here := 0
 var _taken: Array[StringName] = []
 var grip_left := 1
 ## The mouth's ribs, broken by a whip, as long as it goes on holding you.
@@ -315,6 +323,12 @@ func _drag_in_prey(delta: float) -> Vector3:
 		_enter(State.RUSH)
 
 	return _hold_height(Vector3.ZERO, delta)
+
+
+## A place in the ring round it, for one that has come to wait: each its own, evenly round.
+func place_round_it() -> float:
+	_waiting_here += 1
+	return TAU * float(_waiting_here - 1) / WAITS_IN_A_RING
 
 
 ## The elite these small ones are drawn to, if there is one about: not itself, nor another mouth.
@@ -540,6 +554,7 @@ func _die(by: Node3D) -> void:
 func _brain(delta: float) -> Vector3:
 	_state_t += delta
 	_hungry_in = maxf(_hungry_in - delta, 0.0)
+	_riled = maxf(_riled - delta, 0.0)
 
 	if is_seized():
 		if not is_instance_valid(seized_by) or seized_by.dead or seized_by.asleep or seized_by.prey() != self:
@@ -680,8 +695,12 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 			var waits_by := elite_near()
 
 			# With you far off, the small ones stay round what they will feed.
-			if waits_by != null and far > reach * WAITS_WHILE_YOU_ARE:
-				var spot: Vector3 = waits_by.global_position + Vector3(cos(_spread_turn), 0.0, sin(_spread_turn)) * WAITS_ROUND
+			if waits_by != null and far > reach * WAITS_WHILE_YOU_ARE and _riled <= 0.0:
+				if _wait_turn < 0.0:
+					_wait_turn = waits_by.place_round_it()
+
+				_wait_turn = fposmod(_wait_turn + WAITS_GO_ROUND * delta, TAU)
+				var spot: Vector3 = waits_by.global_position + Vector3(cos(_wait_turn), 0.0, sin(_wait_turn)) * WAITS_ROUND
 				var to_spot: Vector3 = (spot - global_position) * Vector3(1.0, 0.0, 1.0)
 				return _hold_height(_feel_round(to_spot.limit_length(1.0), delta) * float(_form["speed"]) * WAITS_PACE * _slowed(), delta)
 
@@ -966,6 +985,8 @@ func flung_up(from: Vector3) -> void:
 func _on_struck(result: StringName, source: StringName) -> void:
 	if result == &"killed":
 		return
+
+	_riled = RILED_FOR
 
 	if body != null:
 		body.struck(last_hit_at, last_hit_way, result, source)

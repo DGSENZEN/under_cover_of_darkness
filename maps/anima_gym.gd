@@ -8,7 +8,8 @@ const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
 const LEAP_CHANCE := 0.45
 
 ## Each wave, by form.
-## How many start round an elite, and how far from it.
+## Where an elite starts, in the open, how many start round it, and how far from it.
+const ELITE_AT := Vector3(-3.5, 0.0, -18.5)
 const ELITE_KEEPS := 6
 const ELITE_KEEPS_AT := 2.4
 const ANIMA_WAVES := [{&"hands": 5}, {&"face": 2, &"hands": 4}, {&"torso": 1, &"face": 2, &"hands": 4}, {&"elite": 1, &"face": 2, &"hands": 4}]
@@ -84,6 +85,7 @@ func _lay_out_waves() -> void:
 
 				# What is drawn to an elite starts by it.
 				if form == &"elite":
+					spot = ELITE_AT
 					elite_at = spot
 				elif elite_at != Vector3.INF:
 					var round_it := float(members.size()) / float(ELITE_KEEPS) * TAU

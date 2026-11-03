@@ -62,6 +62,10 @@ func _layout() -> void:
 	var last_wave: Array = _awake()
 	var the_elite: Array = last_wave.filter(func(m): return _is_anima(m) and m.elite)
 	_check("X2c the last: an elite, with enough by it to take three (%s)" % str(_counts(last_wave)), the_elite.size() == 1 and _counts(last_wave) == {&"torso": 1, &"face": 2, &"hands": 4, &"eyes": 3} and last_wave.filter(func(m): return _is_anima(m) and m != the_elite[0] and m.global_position.distance_to(the_elite[0].global_position) < 4.0).size() >= 3)
+	var others: Array = last_wave.filter(func(m): return _is_anima(m) and m != the_elite[0])
+	_check("X2d all of them in the open with it, none in a wall", others.all(func(m): return the_elite[0]._clear_to(m)) and others.size() == 6)
+	await _frames(240)
+	_check("X2e and none falls out of the world", others.all(func(m): return m.global_position.y > -1.0))
 	_check("X2b the third: a torso, two faces, three hands, four eyes (%s)" % str(third_is), third_is == {&"torso": 1, &"face": 2, &"hands": 3, &"eyes": 4})
 
 

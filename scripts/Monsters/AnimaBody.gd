@@ -492,6 +492,18 @@ func unseize() -> void:
 		_mouth.seize_off()
 
 
+func none_mirrored() -> bool:
+	return _mouth.none_mirrored()
+
+
+func lights_lit() -> int:
+	return _mouth.lights_lit()
+
+
+func blood_thrown() -> int:
+	return _mouth.blood_thrown()
+
+
 func has_taken(kind: StringName, size: float) -> void:
 	_mouth.has_taken(kind, size)
 
