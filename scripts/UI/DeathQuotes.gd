@@ -19,6 +19,8 @@ const ALL := [
 const FOR := {
 	&"animas": [1, 0, 7],
 	&"mouth": [1, 0, 7],
+	# (The ánimas', until the user says which: their words.)
+	&"possessed": [1, 0, 7],
 	&"eyes": [3, 4, 2],
 	&"both": [2, 0, 6, 7],
 	&"swipe": [4, 5, 1],

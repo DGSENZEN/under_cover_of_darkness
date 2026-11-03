@@ -22,7 +22,7 @@ const TABLE := {
 		"swipe_reach": 2.4, "swipe_wind": 0.7, "swipe_damage": 25.0, "swipe_time": 0.45,
 		"rake_reach": 2.2, "rake_wind": 1.0, "rake_damage": 35.0, "rake_time": 0.6,
 		"grasp_reach": 3.0, "grasp_wind": 1.1, "grasp_damage": 5.0, "grasp_hold": 1.0, "grasp_time": 0.5, "touch_grace": 1.5, "grasp_chance": 0.4,
-		"finds": 0.3, "lurches": 5.2, "keeps_off": 1.5, "between_attacks": 0.9, "shove_time": 0.4, "stagger_time": 0.55,
+		"finds": 0.3, "lurches": 5.2, "keeps_off": 1.5, "shoves": 8.0, "between_attacks": 0.9, "shove_time": 0.4, "stagger_time": 0.55,
 		"soaked_time": 8.0, "soaked_stamina": 0.4,
 		"down_time": 5.0, "rise_time": 1.6, "rises_with": 0.4,
 		"burn_time": 5.0, "burn_rate": 8.0, "seared_time": 3.0, "push_takes": 0.15, "thrown_takes": 0.8,

@@ -41,6 +41,9 @@ func _ready() -> void:
 	if only == "" or only == "hits":
 		await _its_blows()
 
+	if only == "" or only == "touch":
+		await _its_touch()
+
 	print("revenant_test: %s" % ("FAILED %d" % failed if failed > 0 else "passed"))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -243,6 +246,164 @@ func _its_brain() -> void:
 	await _clean()
 
 
+## Two touches: the first is a grasp, and the second is the end.
+func _its_touch() -> void:
+	await _clean()
+	p.invulnerable = false
+	var one := await _grasper(Vector3(0, 0, -2.5))
+	await _grasp_lands(one)
+	_check("T1 a first grasp lands 5, and the touch is on you (%.0f)" % (100.0 - p.health), is_equal_approx(p.health, 95.0) and p.touch.on_you() and p.touch.laid_by() == one)
+	var was_held: bool = p.touch.holding() and one.state == STATE.HOLD
+	var at: Vector3 = p.global_position
+	await _frames(50)
+	_check("T2 it holds you up to 1 s", was_held and p.touch.holding() and p.global_position.distance_to(at) < 0.1)
+	await _until(func(): return not p.touch.holding(), 0.5)
+	var got_away: bool = await _until(func(): return p.global_position.distance_to(at) > 0.6, 0.8)
+	_check("T2b then shoves you away, the touch still on you", got_away and p.touch.on_you())
+	await _clean()
+	p.invulnerable = false
+	var freed := await _grasper(Vector3(0, 0, -2.5))
+	await _grasp_lands(freed)
+	await _frames(10)
+	freed.take_hit(20.0, p, &"power", freed.global_position, Vector3.FORWARD)
+	await _frames(1)
+	_check("T3 a whip frees you sooner, and the touch stays", not p.touch.holding() and p.touch.on_you())
+	await _clean()
+	p.invulnerable = false
+	var twice := await _grasper(Vector3(0, 0, -2.5))
+	p.touch.lay(twice, 0.0, 0.0)
+	await _frames(2)
+	await _grasp_lands(twice)
+	_check("T4 a second grasp kills you there and then (%s)" % p.death.kind, p.is_dead and p.death.kind == &"possessed")
+	await _new_player()
+	await _clean()
+	p.invulnerable = false
+	var first := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	first._surge_in = 99.0
+	first._attack_in = 99.0
+	p.touch.lay(first, 0.0, 0.0)
+	await _frames(2)
+	var other := await _grasper(Vector3(0, 0, -2.5))
+	await _grasp_lands(other)
+	_check("T5 another's grasp counts", p.is_dead and p.death.kind == &"possessed")
+	await _new_player()
+	await _clean()
+	p.invulnerable = false
+	var layer := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	layer._surge_in = 99.0
+	layer._attack_in = 99.0
+	p.touch.lay(layer, 0.0, 1.5)
+	await _frames(2)
+	var quick := await _grasper(Vector3(0, 0, -2.5))
+	quick._state_t = 1.05
+	await _grasp_lands(quick)
+	_check("T6 not in the grace after a hold", not p.is_dead)
+	await _clean()
+	p.invulnerable = false
+	var layer_two := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	layer_two._attack_in = 99.0
+	layer_two._surge_in = 99.0
+	p.touch.lay(layer_two, 0.0, 0.0)
+	var cutter := _revenant(Vector3(0, 0, -1.9))
+	await _frames(2)
+	cutter._surge_in = 99.0
+	cutter._attack_in = 99.0
+	cutter._enter(STATE.RAKE_WIND)
+	await _until(func(): return cutter.state == STATE.RAKE, 1.5)
+	await _frames(1)
+	_check("T7 swipes and rakes never do it", not p.is_dead and is_equal_approx(p.health, 65.0))
+	await _clean()
+	p.invulnerable = true
+	var guarded := await _grasper(Vector3(0, 0, -2.5))
+	p.touch.lay(guarded, 0.0, 0.0)
+	await _frames(2)
+	await _grasp_lands(guarded)
+	_check("T8 invulnerable holds", not p.is_dead)
+	await _clean()
+	p.invulnerable = false
+	var gone := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	gone._attack_in = 99.0
+	gone._surge_in = 99.0
+	p.touch.lay(gone, 0.0, 0.0)
+	await _frames(2)
+	gone.sleep()
+	await _frames(2)
+	var went_asleep: bool = not p.touch.on_you()
+	gone.wake()
+	p.touch.lay(gone, 0.0, 0.0)
+	await _frames(2)
+	gone.queue_free()
+	await _frames(3)
+	_check("T9 the touch goes if the one that laid it is gone from play", went_asleep and not p.touch.on_you())
+	await _clean()
+	p.invulnerable = false
+	var stays := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	stays._attack_in = 99.0
+	stays._surge_in = 99.0
+	p.touch.lay(stays, 0.0, 0.0)
+
+	while not stays.is_down():
+		stays.take_hit(55.0, p, &"bullet", stays.global_position, Vector3.FORWARD)
+
+	await _frames(5)
+	var stayed: bool = p.touch.on_you()
+	p.loadout.owned[&"egg"] = 2
+	p.loadout.pack_item(&"egg")
+	p.loadout.restock()
+	p.loadout.use_item(0)
+	await _frames(90)
+	var egg_did_nothing: bool = p.touch.on_you()
+	p.touch.clear()
+	_check("T10 going down doesn't clear it, nor the egg", stayed and egg_did_nothing)
+	await _clean()
+	p.invulnerable = false
+	var missed := await _grasper(Vector3(0, 0, -2.5))
+	await _until(func(): return missed._state_t > 0.95, 1.2)
+	p.teleport(Transform3D(Basis.IDENTITY, p.global_position + Vector3(0, 0, 8.0)))
+	await _grasp_lands(missed)
+	_check("T11 out of its reach, the grasp misses", not p.touch.on_you())
+	p.invulnerable = true
+	await _clean()
+
+
+## One gathering to grasp you, its own clock running.
+func _grasper(at: Vector3) -> CharacterBody3D:
+	var one := _revenant(at)
+	await _frames(2)
+	one._surge_in = 99.0
+	one._attack_in = 99.0
+	one._enter(STATE.GRASP_WIND)
+	return one
+
+
+func _grasp_lands(one: CharacterBody3D) -> void:
+	await _until(func(): return one.state != STATE.GRASP_WIND, 1.4)
+	await _frames(1)
+
+
+## Dead is dead: a new player for what's left to try.
+func _new_player() -> void:
+	for monster in get_tree().get_nodes_in_group(&"monsters"):
+		monster.queue_free()
+
+	p.free()
+	await _frames(2)
+	p = PLAYER.instantiate()
+	add_child(p)
+	p.debug_traversal = false
+	p.invulnerable = true
+	p.reload_on_death = false
+	p.position = HOME
+	Props.give_revolver(p, 200, 40)
+	p.inventory.select_by_id(&"revolver")
+	await _frames(30)
+
+
 ## A swipe hurts, a rake hurts more, and either leaves you soaked.
 func _its_blows() -> void:
 	await _clean()
@@ -331,6 +492,10 @@ func _clean() -> void:
 		monster.queue_free()
 
 	p.statuses.clear(&"soaked")
+
+	if p.get("touch") != null:
+		p.touch.clear()
+
 	p.health = 100.0
 	p.teleport(Transform3D(Basis.IDENTITY, HOME))
 	await _frames(3)

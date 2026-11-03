@@ -30,6 +30,7 @@ func _ready() -> void:
 	await _heard()
 	await _marked_dead()
 	await _quotes()
+	await _possessed()
 	await _review_of_the_deaths()
 	await _stronger()
 	await _caged()
@@ -105,6 +106,23 @@ func _dying_by(cursed: bool, feeding: bool, blow: StringName) -> void:
 			man.queue_free()
 		_:
 			p.drain_life(50.0)
+
+
+## A revenant's second touch: your body turns without you and walks, and then you go down, and the words come.
+func _possessed() -> void:
+	await _fresh()
+	p.death.possessed = true
+	p.drain_life(p.health + 1.0)
+	await _frames(2)
+	_check("P20 possessed: its own death, holding the screen (%s)" % p.death.kind, p.death.kind == &"possessed" and p.death.holds_screen() and p.death.playing())
+	await _frames(60)
+	var turned: Dictionary = p.death.camera_pose()
+	_check("P21 your head goes round without you", absf((turned["turn"] as Vector3).y) > 0.5 and float(turned["down"]) < 0.3)
+	await _frames(150)
+	var down: Dictionary = p.death.camera_pose()
+	_check("P22 and you go down at the last", float(down["down"]) > 1.0)
+	await _frames(40)
+	_check("P23 it ends, in about 3.5 s", not p.death.playing())
 
 
 func _which() -> void:

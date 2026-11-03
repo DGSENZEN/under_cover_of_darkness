@@ -24,6 +24,7 @@ const CasterScript := preload("res://scripts/Magic/Caster.gd")
 const StatusesScript := preload("res://scripts/Monsters/Statuses.gd")
 const EvilEyeCurseScript := preload("res://scripts/Monsters/EvilEyeCurse.gd")
 const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
+const RevenantTouchScript := preload("res://scripts/Monsters/RevenantTouch.gd")
 ## How far off the floor your head comes to rest.
 const DEATH_ABOVE_FLOOR := 0.22
 const DEATH_LEVELS := 7.0
@@ -421,6 +422,8 @@ var caster: Node = null
 var statuses: Node = null
 ## The evil eye's depth and what it costs you (EvilEyeCurse.gd).
 var curse: Node = null
+## A revenant's touch on you (RevenantTouch.gd).
+var touch: Node = null
 ## What is on you and drinking (LifeLeech.gd).
 var leech: Node = null
 ## How you die, if it is something you can fight (PlayerDeath.gd), and what last struck you says it
@@ -650,6 +653,9 @@ func _ready() -> void:
 	add_child(caster)
 	statuses = StatusesScript.new()
 	statuses.name = "Statuses"
+	touch = RevenantTouchScript.new()
+	touch.name = "Touch"
+	add_child(touch)
 	curse = EvilEyeCurseScript.new()
 	curse.name = "Curse"
 	curse.statuses = statuses
@@ -1726,7 +1732,7 @@ func take_damage(amount: float, from: Node) -> void:
 
 ## Your pace under what is on you: the evil eye, and what is drinking from you.
 func fight_pace() -> float:
-	return (curse.speed() if curse != null else 1.0) * (leech.speed() if leech != null else 1.0)
+	return (curse.speed() if curse != null else 1.0) * (leech.speed() if leech != null else 1.0) * (0.0 if touch != null and touch.holding() else 1.0)
 
 
 ## Your life drunk away, a little at a time: it hurts no more than that, with no

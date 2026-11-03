@@ -56,6 +56,7 @@ func _physics_process(delta: float) -> void:
 		out_for += delta
 	elif player.loadout.locked and not player.is_dead and out_for >= MIN_OUT and not _hunted(player):
 		player.health = player.max_health
+		player.touch.clear()
 		player.loadout.unlock()
 		player.loadout.restock()
 		returned.emit()

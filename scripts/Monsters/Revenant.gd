@@ -13,6 +13,8 @@ const DOING := {
 	State.RAKE_WIND: &"rake_wind", State.RAKE: &"rake", State.GRASP_WIND: &"grasp_wind", State.GRASP: &"grasp", State.HOLD: &"hold",
 	State.SHOVE: &"shove", State.STAGGER: &"stagger", State.FALL: &"fall", State.DOWN: &"down", State.RISE: &"rise", State.DYING: &"dying_a",
 }
+## What gets you out of its hands.
+const FREES := [&"power", &"kick", &"blast", &"burst", &"brazier"]
 ## How far it falls before it counts as lying (s).
 const FALLS_IN := 0.7
 const GRAVITY := 18.0
@@ -95,7 +97,15 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 		struck.emit(&"resisted", Bestiary.source_of(hit_kind, round_hint))
 		return &"resisted"
 
-	return super.take_hit(damage, attacker, hit_kind, point, direction)
+	var was_holding := state == State.HOLD
+	var result: StringName = super.take_hit(damage, attacker, hit_kind, point, direction)
+
+	# A whip or a boot or a blast: you get free of it. The touch stays.
+	if was_holding and state == State.HOLD and FREES.has(hit_kind) and is_instance_valid(target()):
+		target().touch.let_go()
+		_enter(State.STAGGER)
+
+	return result
 
 
 func kick(push: Vector3, by: Node3D) -> void:
@@ -169,6 +179,10 @@ func _brain(delta: float) -> Vector3:
 			_wind_up_ends(you, far)
 			# It comes after you with it: backing away as you aim doesn't beat it.
 			return way * (float(_row["lurches"]) if far > reach else 0.0) + drops
+		State.HOLD:
+			if _state_t >= float(_row["grasp_hold"]) or you.get("touch") == null or not you.touch.holding():
+				you.touch.let_go()
+				_throw_off(you)
 		State.SWIPE:
 			_ends_after("swipe_time")
 		State.RAKE:
@@ -242,7 +256,43 @@ func _wind_up_ends(you: Node3D, far: float) -> void:
 				_enter(State.RAKE)
 		State.GRASP_WIND:
 			if _state_t >= float(_row["grasp_wind"]):
-				_enter(State.GRASP)
+				_grasp(you, far)
+
+
+## The grasp. Out of reach or dodged, it closes on nothing. The first touch holds you and stays on you; the second is the end of you.
+func _grasp(you: Node3D, far: float) -> void:
+	var touch: Node = you.get("touch")
+	var dodged: bool = you.get("combat") != null and you.combat.is_dodging()
+
+	if touch == null or dodged or far > float(_row["grasp_reach"]) + float(_row["finds"]):
+		_enter(State.GRASP)
+	elif not touch.on_you():
+		you.take_damage(float(_row["grasp_damage"]), self)
+		touch.lay(self, float(_row["grasp_hold"]), float(_row["touch_grace"]))
+		_enter(State.HOLD)
+	elif touch.in_grace():
+		_throw_off(you)
+	else:
+		_possess(you)
+		_enter(State.GRASP)
+
+
+func _possess(you: Node3D) -> void:
+	if you.is_dead or you.invulnerable:
+		return
+
+	you.death.possessed = true
+	you.drain_life(you.health + 1.0)
+
+
+func _throw_off(you: Node3D) -> void:
+	var away := you.global_position - global_position
+	away.y = 0.0
+
+	if you.has_method("shove"):
+		you.shove(away.normalized() * float(_row["shoves"]), float(_row["shove_time"]))
+
+	_enter(State.SHOVE)
 
 
 ## The blow lands, if you are still in reach and not out of its way.

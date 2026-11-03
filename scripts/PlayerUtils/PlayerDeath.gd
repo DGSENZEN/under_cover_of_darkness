@@ -15,13 +15,13 @@ signal page_due
 const FALL_TAKES := 2.0
 const QUOTE_TAKES := 3.4
 ## How long each takes (s).
-const LENGTHS := {&"eyes": 3.0, &"animas": 4.2, &"both": 4.6, &"swipe": 2.0, &"mouth": 2.6}
+const LENGTHS := {&"eyes": 3.0, &"animas": 4.2, &"both": 4.6, &"swipe": 2.0, &"mouth": 2.6, &"possessed": 3.5}
 ## An attack press ends it, after this long. The words come up over this much at the very end.
 const SKIP_AFTER := 1.0
 const WORDS_FROM_END := 0.5
 ## How long in what has you goes on holding you (s): its gulps slowing to this many times as long,
 ## and a last long one taking this long.
-const LETS_GO := {&"animas": 3.2, &"both": 3.6, &"swipe": 0.4, &"mouth": 2.4}
+const LETS_GO := {&"animas": 3.2, &"both": 3.6, &"swipe": 0.4, &"mouth": 2.4, &"possessed": 2.5}
 const GULPS_SLOW_TO := 3.0
 const LAST_GULP_TAKES := 1.0
 ## What has you hauls you down: buckled at once, a lurch with each gulp, the floor with the last;
@@ -45,12 +45,21 @@ const SWIPE_DOWN_TAKES := 0.7
 ## Swallowed by the mouth, full: how long its ribs take to shut on you.
 const SWALLOW_TAKES := 1.0
 
+## Possessed: your head wrenched round (rad) and a body walking under you that isn't yours (how fast, how far), until it lets you drop.
+## (Your hands: a stand-in, none of their own yet. They are posed with the user: plan Task 11.)
+const POSSESSED_TURNS := 1.5
+const POSSESSED_NODS := 0.28
+const POSSESSED_STEPS := 5.5
+const POSSESSED_BOBS := 0.04
+const POSSESSED_SWAYS := 0.045
+const POSSESSED_DROPS_AT := 2.5
+
 ## The eyes' death: your heart, how long between beats at the start and at its fastest, and from
 ## how far through it stops (as the HUD's flesh fails: StealthHUD.EYES_FAIL_FROM).
 const HEART_GAPS := Vector2(0.55, 0.26)
 const HEART_STOPS_AT := 0.7
 ## When you hit the floor (s), for each; when the last eye tears open (share).
-const FLOORED := {&"eyes": 2.7, &"animas": 3.1, &"both": 3.5, &"swipe": 0.65, &"mouth": 1.9}
+const FLOORED := {&"eyes": 2.7, &"animas": 3.1, &"both": 3.5, &"swipe": 0.65, &"mouth": 1.9, &"possessed": 3.2}
 const EYE_TEARS_AT := 0.6
 
 ## How many beats of your heart it has played.
@@ -78,6 +87,8 @@ var _side := 1.0
 ## You are going. `last_blow` is what the blow says it kills as (`kills_as`), or nothing.
 ## The full mouth had you: it was no ordinary death.
 var swallowed := false
+## A revenant's second touch: your body isn't yours, and that is how you go.
+var possessed := false
 
 
 func begin(last_blow: StringName) -> void:
@@ -129,8 +140,17 @@ func camera_pose() -> Dictionary:
 			return _laid_down(smoothstep(0.0, SWIPE_DOWN_TAKES, _at))
 		&"mouth":
 			return _laid_down(smoothstep(SWALLOW_TAKES * 0.5, SWALLOW_TAKES * 2.0, _at))
+		&"possessed":
+			var round_on := smoothstep(0.15, 1.5, _at)
+			var walks := smoothstep(0.5, 1.0, _at) * (1.0 - smoothstep(POSSESSED_DROPS_AT - 0.2, POSSESSED_DROPS_AT, _at))
+			var laid := _laid_down(smoothstep(POSSESSED_DROPS_AT, length_of_possessed(), _at))
+			return {"down": sin(_at * POSSESSED_STEPS) * POSSESSED_BOBS * walks + float(laid["down"]), "turn": Vector3(-POSSESSED_NODS * round_on, POSSESSED_TURNS * round_on, 0.1 * sin(_at * POSSESSED_STEPS * 0.5) * walks) + (laid["turn"] as Vector3), "side": sin(_at * POSSESSED_STEPS * 0.5) * POSSESSED_SWAYS * walks + float(laid["side"])}
 
 	return {}
+
+
+func length_of_possessed() -> float:
+	return float(FLOORED[&"possessed"]) + 0.1
 
 
 func _laid_down(how_far: float) -> Dictionary:
@@ -138,6 +158,9 @@ func _laid_down(how_far: float) -> Dictionary:
 
 
 func _which(last_blow: StringName) -> StringName:
+	if possessed:
+		return &"possessed"
+
 	if swallowed:
 		return &"mouth"
 
