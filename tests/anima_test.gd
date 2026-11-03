@@ -439,6 +439,14 @@ func _mouth_arrives_whole() -> void:
 	await _place_player(HOME)
 	_clear_all()
 	await _frames(10)
+	# Gone, it leaves nothing of itself behind.
+	var orphans_before: float = Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
+	var passing := _anima(&"torso", HOME + Vector3(2.5, -0.5, 5.0))
+	await _frames(3)
+	passing.free()
+	await _frames(3)
+	var left: float = Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT) - orphans_before
+	_check("Ar0 gone, it leaves nothing behind (%d nodes)" % int(left), left == 0.0)
 	var one := _anima(&"torso", HOME + Vector3(2.5, -0.5, 5.0))
 	one.leap_chance = 0.0
 	var body: Node3D = one.body

@@ -151,7 +151,7 @@ void fragment() {
 		// Its edge, in broken bands.
 		float broken = eye_noise(paint_at * 7.0 + vec3(0.0, -TIME * 0.5, 0.0));
 		float edge_shape = soul_edge * (0.55 + broken * 0.8);
-		soul_light += SOUL_FIRE * (smoothstep(0.46, 0.5, edge_shape) * 0.14 + smoothstep(0.68, 0.72, edge_shape) * 0.22) * (0.35 + hunger * 1.5) * spectral;
+		soul_light += SOUL_FIRE * (smoothstep(0.46, 0.5, edge_shape) * 0.14 + smoothstep(0.68, 0.72, edge_shape) * 0.22) * (0.35 + hunger * 1.5) * spectral * (0.3 + frays * 0.7);
 
 		// Torn: nothing in there but dark and that light, burning at its edge.
 		soul_light += SOUL_HOT * (smoothstep(0.1, 0.5, torn_here) - smoothstep(0.5, 0.95, torn_here)) * 1.3;

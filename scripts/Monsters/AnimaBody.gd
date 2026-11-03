@@ -383,6 +383,9 @@ func _build_mouth() -> void:
 	bone.set_shader_parameter(&"fill_sky", Color(0.42, 0.42, 0.37))
 	bone.set_shader_parameter(&"fill_ground", Color(0.42, 0.34, 0.26))
 	# Neither is what it looks like (anima_flesh.gdshader).
+	# (No lilac from the moon in its edges: only what is its own.)
+	_flesh.set_shader_parameter(&"rim_colour", Color(0.42, 0.46, 0.34))
+	bone.set_shader_parameter(&"rim_colour", Color(0.42, 0.46, 0.34))
 	_flesh.set_shader_parameter(&"spectral", 1.0)
 	_flesh.set_shader_parameter(&"frays", 1.0)
 	_flesh.set_shader_parameter(&"fill", 0.38)

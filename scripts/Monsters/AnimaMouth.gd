@@ -103,14 +103,14 @@ const SHEATH_MODEL := "res://assets/monsters/mouth_sheath.glb"
 ## Where a face's jaw hangs from, its eyes and its gape are; how big each is; how far along the way out it goes,
 ## from under the skin to as far as it gets (m). How far its jaw drops (rad), and how hard the light in it burns.
 const FACE_HINGE := Vector3(0.0, -0.043, -0.042)
-const FACE_EYE := Vector3(0.044, 0.005, -0.094)
+const FACE_EYE := Vector3(0.044, 0.005, -0.088)
 const FACE_THROAT := Vector3(0.0, -0.085, -0.015)
 const FACE_SIZE := 1.3
 const HAND_SIZE := 0.72
 const FACE_OUT := Vector2(-0.24, 0.06)
 const HAND_OUT := Vector2(-0.13, 0.015)
 const JAW_DROPS := 0.8
-const LIGHT_IN_THEM := Color(0.74, 0.86, 0.42)
+const LightShader := preload("res://scripts/Monsters/mouth_light.gdshader")
 const LIGHT_SHOWS_FROM := 0.72
 const LEFT_BARE := "res://assets/monsters/anima_hands_left.glb"
 const RIGHT_BARE := "res://assets/monsters/anima_hands.glb"
@@ -205,7 +205,7 @@ var _earth_next := 0
 var _earth_look: ShaderMaterial
 var _mass_look: ShaderMaterial
 var _press_nodes: Array[Node3D] = []
-var _press_jaws: Array[MeshInstance3D] = []
+var _press_jaws: Array = []
 var _press_lights: Array = []
 var _held_jaw := -1.0
 var _press_stage: Array[int] = []
@@ -244,6 +244,8 @@ var _floor_y := 0.0
 ## Built on the body's flesh, and its bone: the same paint as the other forms.
 func _init(flesh: ShaderMaterial, bone: ShaderMaterial, height: float) -> void:
 	_flesh_look = flesh
+	var arm_look: ShaderMaterial = flesh.duplicate()
+	arm_look.set_shader_parameter(&"frays", 0.0)
 	_earth_look = flesh.duplicate()
 	_earth_look.set_shader_parameter(&"spectral", 0.0)
 	_earth_look.set_shader_parameter(&"frays", 0.0)
@@ -266,7 +268,7 @@ func _init(flesh: ShaderMaterial, bone: ShaderMaterial, height: float) -> void:
 		var hand: Node3D = (load(LEFT_MODEL if marker.position.x < 0.0 else ARM_MODEL) as PackedScene).instantiate()
 		marker.add_child(hand)
 		var mesh: MeshInstance3D = hand.find_children("*", "MeshInstance3D", true, false)[0]
-		mesh.set_surface_override_material(0, flesh)
+		mesh.set_surface_override_material(0, arm_look)
 		_hand_meshes.append(mesh)
 		_hands.append(hand.find_children("*", "Skeleton3D", true, false)[0])
 		_souls.append(hand)
@@ -485,9 +487,8 @@ func _build_presses() -> void:
 	made.free()
 	var skin: ShaderMaterial = _flesh_look.duplicate()
 	skin.set_shader_parameter(&"frays", 0.0)
-	var light := StandardMaterial3D.new()
-	light.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	light.albedo_color = LIGHT_IN_THEM
+	var light := ShaderMaterial.new()
+	light.shader = LightShader
 
 	for n in PRESSES:
 		var root := Node3D.new()
@@ -498,10 +499,11 @@ func _build_presses() -> void:
 		skinned.material_override = skin
 		skinned.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(skinned)
-		var jaw := MeshInstance3D.new()
+		var jaw: MeshInstance3D = null
 		var eyes: Array[MeshInstance3D] = []
 
 		if PRESS_KIND[n] == 0:
+			jaw = MeshInstance3D.new()
 			jaw.mesh = skin_jaw
 			jaw.material_override = skin
 			jaw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -511,9 +513,9 @@ func _build_presses() -> void:
 			for bit in [FACE_EYE * Vector3(-1.0, 1.0, 1.0), FACE_EYE, FACE_THROAT]:
 				var ember := MeshInstance3D.new()
 				var ball := SphereMesh.new()
-				ball.radial_segments = 8
-				ball.rings = 5
-				ball.radius = 0.018 if bit != FACE_THROAT else 0.02
+				ball.radial_segments = 12
+				ball.rings = 8
+				ball.radius = 0.016 if bit != FACE_THROAT else 0.02
 				ball.height = ball.radius * 2.0
 				ember.mesh = ball
 				ember.material_override = light
@@ -1209,16 +1211,18 @@ static func _earth_mesh() -> ArrayMesh:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 41
 
-	for n in 13:
-		var angle := TAU * float(n) / 13.0 + rng.randf_range(-0.25, 0.25)
-		var far := rng.randf_range(0.11, 0.2)
-		var wide := rng.randf_range(0.05, 0.095)
-		var at := Vector3(cos(angle) * far, wide * rng.randf_range(0.1, 0.5), sin(angle) * far)
-		var size := Vector3(wide * rng.randf_range(0.9, 1.25), wide * rng.randf_range(0.8, 1.2), wide * rng.randf_range(0.9, 1.25))
+	# A low heap of it first, then what is broken off lying on that, small and uneven.
+	_add_clod(tool, Vector3(0.0, 0.0, 0.0), Vector3(0.27, 0.05, 0.23), EARTH_DARK, rng)
+
+	for n in 22:
+		var angle := rng.randf() * TAU
+		var far := sqrt(rng.randf()) * 0.25
+		var wide := rng.randf_range(0.016, 0.05)
+		var at := Vector3(cos(angle) * far, 0.03 + wide * 0.4, sin(angle) * far)
+		var size := Vector3(wide * rng.randf_range(0.8, 1.4), wide * rng.randf_range(0.6, 1.0), wide * rng.randf_range(0.8, 1.4))
 		var tone := EARTH_DARK.lerp(EARTH_LIGHT, rng.randf())
 		_add_clod(tool, at, size, tone, rng)
 
-	tool.index()
 	tool.generate_normals()
 	_earth_shared = tool.commit()
 	return _earth_shared
