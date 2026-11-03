@@ -520,6 +520,7 @@ func throw_off(from: Vector3) -> void:
 	if form == &"torso":
 		move_and_collide(out * maxf(hit_radius() + THROWN_MOUTH_CLEARS - away.length(), 0.0))
 		body.come_back()
+		reset_physics_interpolation()
 
 	statuses.apply(&"exposed", THROWN_TIME)
 	_enter(State.THROWN)
