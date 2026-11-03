@@ -33,6 +33,7 @@ func _ready() -> void:
 	await _review_of_the_deaths()
 	await _stronger()
 	await _caged()
+	await _swallowed()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -637,6 +638,87 @@ func _heard() -> void:
 	var at_failing: int = p.death.heartbeats
 	await _until(func(): return not p.death.playing(), 2.0)
 	_check("H1 the heart races, and then it stops: no beat after it fails (%d, %d, %d)" % [by_then, at_failing, p.death.heartbeats], by_then >= 3 and p.death.heartbeats == at_failing)
+
+
+func _full_elite(at: Vector3, taken: int) -> CharacterBody3D:
+	var one: CharacterBody3D = AnimaScript.new()
+	one.form = &"torso"
+	one.elite = true
+	one.position = at
+	add_child(one)
+	await _frames(1)
+
+	for i in taken:
+		one.take_in(&"face" if i == 0 else &"hands")
+
+	return one
+
+
+## At three, if it gets you, that is the end of you.
+func _swallowed() -> void:
+	await _fresh()
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var aspect := size.x / size.y
+	var one: CharacterBody3D = await _full_elite(HOME + Vector3(0.8, -0.5, -0.8), 3)
+	var life_was: float = p.health
+	one._cut(p)
+	_check("Mo8 its swipe still only cuts", not p.is_dead and p.health < life_was)
+	one.put_on_you()
+	_check("Mo4 it has you: dead there and then", p.is_dead and p.death.kind == &"mouth")
+	var cage: Node3D = null
+	var shut_by := -1
+	var stayed_shut := true
+
+	for i in 150:
+		await get_tree().physics_frame
+		cage = p.leech_hands.cage()
+
+		if cage != null and cage.visible and cage.in_the_middle(aspect) != "":
+			if shut_by < 0:
+				shut_by = i
+		elif shut_by >= 0:
+			stayed_shut = false
+
+	_check("Mo6 its ribs shut within a second (%d frames), and stay shut" % shut_by, shut_by >= 0 and shut_by <= 62 and stayed_shut)
+	_check("Mo5 and nothing has let you go", p.is_dead and cage.visible)
+	await _until(func(): return p.death.since_end() >= 0.0, 4.0)
+	_check("Mo7 and your words come, as for the ánimas (%.1f s)" % p.death.since_end(), p.death.since_end() >= 0.0 and DeathQuotes.FOR[&"mouth"] == DeathQuotes.FOR[&"animas"])
+	one.free()
+	# Short of three.
+	await _fresh()
+	var two: CharacterBody3D = await _full_elite(HOME + Vector3(0.8, -0.5, -0.8), 2)
+	two.put_on_you()
+	await _frames(30)
+	_check("Mo9 short of three, it is the hold it always was", p.leech.slot_of(two) >= 0 and not p.is_dead)
+	two.free()
+	# Invulnerable.
+	await _fresh()
+	p.invulnerable = true
+	var held: CharacterBody3D = await _full_elite(HOME + Vector3(0.8, -0.5, -0.8), 3)
+	held.put_on_you()
+	await _frames(10)
+	_check("Mo10 invulnerable holds: no death", not p.is_dead)
+	held.free()
+	# You die to something else as it reaches.
+	await _fresh()
+	var hungry: CharacterBody3D = await _full_elite(HOME + Vector3(0.0, -0.5, -14.0), 0)
+	hungry.leap_chance = 0.0
+	var small: CharacterBody3D = AnimaScript.new()
+	small.form = &"hands"
+	small.leap_chance = 0.0
+	small.position = HOME + Vector3(5.0, -0.5, -14.0)
+	add_child(small)
+	small.process_mode = Node.PROCESS_MODE_DISABLED
+	await _frames(100)
+	hungry.health = 100.0
+	await _until(func(): return hungry.state == AnimaScript.State.REACH, 4.0)
+	var reached: bool = hungry.state == AnimaScript.State.REACH
+	p.health = 0.01
+	p.drain_life(50.0)
+	await _frames(3)
+	_check("E3d you die to something else as it reaches: it gives up", reached and hungry.state != AnimaScript.State.REACH and hungry.prey() == null)
+	hungry.free()
+	small.free()
 
 
 ## The mouth has you as you die: on its last gulp its ribs shut on you, and that is the last you see.

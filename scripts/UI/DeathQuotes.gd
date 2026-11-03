@@ -18,6 +18,7 @@ const ALL := [
 ## and faces coming apart for the eyes; no peace for both; the last act for a blow.
 const FOR := {
 	&"animas": [1, 0, 7],
+	&"mouth": [1, 0, 7],
 	&"eyes": [3, 4, 2],
 	&"both": [2, 0, 6, 7],
 	&"swipe": [4, 5, 1],

@@ -122,6 +122,7 @@ const PRESS_KIND: Array[int] = [0, 1, 0, 1, 0, 1]
 const PRESS_SIZE: Array[float] = [0.26, 0.34, 0.2]
 ## The elite: how many it can hold, how many of its candles are alight, how far out what it took stands (m).
 const MOST_TAKEN := 3
+const FULL_HUNGER := 0.65
 ## The arm it seizes with, how fast, and how far out it may be drawn.
 const SEIZING_ARM := 2
 const SEIZE_RATE := 22.0
@@ -1445,7 +1446,9 @@ func tick(delta: float, speed: float, going: Vector3, rake_to: float, digs: bool
 		arrive()
 
 	# Gathering at you, swollen, feeding: it blazes.
-	_hunger = move_toward(_hunger, clampf(HUNGER_LOW + swell * 1.1 + fed * 0.25, 0.0, 1.0), delta * HUNGER_RATE)
+	# (Full, it never sits down again: you can see what you are looking at.)
+	var hunger_least: float = FULL_HUNGER if _taken.size() >= MOST_TAKEN else HUNGER_LOW
+	_hunger = move_toward(_hunger, clampf(hunger_least + swell * 1.1 + fed * 0.25, 0.0, 1.0), delta * HUNGER_RATE)
 	_work_presses(delta, grab_at)
 	_work_bursts(delta)
 	_work_gait(delta, speed)

@@ -30,6 +30,7 @@ func _ready() -> void:
 	await _it_grows()
 	await _they_stay_near()
 	await _it_feeds()
+	await _at_three()
 	print("elite_mouth_test: %s" % ("all passed" if failed == 0 else "%d FAILED" % failed))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -104,6 +105,49 @@ func _they_stay_near() -> void:
 	await _frames(120)
 	_check("E2d with no elite, nothing has changed", alone.global_position.distance_to(p.global_position) < was - 2.0)
 	_free([alone])
+	await _frames(3)
+
+
+## At three you can see it, and it looks for no more.
+func _at_three() -> void:
+	await _clean()
+	var full := _elite(HOME + Vector3(0.0, -0.5, -3.0))
+	full.leap_chance = 0.0
+	var small := _anima(&"hands", HOME + Vector3(2.0, -0.5, -3.0))
+	small.leap_chance = 0.0
+	small.process_mode = Node.PROCESS_MODE_DISABLED
+	await _frames(2)
+
+	for kind in [&"face", &"hands", &"hands"]:
+		full.take_in(kind)
+
+	_check("E4a it knows it is full", full.is_full())
+	full.health = 40.0
+	await _frames(240)
+	var up := 0
+
+	for n in full.body.presses_held():
+		up += 1 if full.body.press_strength(n) > 0.4 else 0
+
+	_check("E4 you can see it: all of them straining (%d of %d), hunger high (%.2f)" % [up, full.body.presses_held(), full.body.hunger()], up >= full.body.presses_held() - 1 and full.body.hunger() >= 0.6)
+	_check("E4b full, it looks for no more", full.state != STATE.REACH and full.state != STATE.DRAG and full.prey() == null)
+	full.global_position = HOME + Vector3(0.0, -0.5, -3.6)
+	full.state = STATE.RUSH
+	full.leap_chance = 1.0
+	full._leap_in = 0.0
+	await _until(func(): return full.state == STATE.TELL, 2.0)
+	var told := 0
+
+	while full.state == STATE.TELL and told < 100:
+		await get_tree().physics_frame
+		told += 1
+
+	full.health = 240.0
+	full.state = STATE.TELL
+	full._state_t = 0.0
+	_hit(full, &"bullet", &"copal")
+	_check("E4c its tell is as long as ever (%d frames), and you can break it (state %d)" % [told, full.state], told >= 100 and full.state == STATE.THROWN)
+	_free([full, small])
 	await _frames(3)
 
 

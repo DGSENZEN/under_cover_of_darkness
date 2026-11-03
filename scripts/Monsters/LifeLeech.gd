@@ -184,6 +184,15 @@ func holds_face(slot: int) -> bool:
 	return who != null and who.get("form") == &"face"
 
 
+## The mouth, full: there's no getting out of that, and you are dead there and then.
+func swallowed_by(_who: Node3D) -> void:
+	if player == null or player.is_dead or player.invulnerable:
+		return
+
+	player.death.swallowed = true
+	player.drain_life(player.health + 1.0)
+
+
 ## Whether the one in `slot` is the mouth, closed on you (LeechCage.gd).
 func holds_mouth(slot: int) -> bool:
 	var who := who_in(slot)

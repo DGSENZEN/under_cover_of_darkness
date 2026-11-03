@@ -1264,7 +1264,7 @@ func _show_drain(delta: float) -> void:
 func _feel_sight_go(delta: float, leech: Node) -> void:
 	var death: Node = player.death
 
-	if death.kind == &"animas" or death.kind == &"both":
+	if death.kind == &"animas" or death.kind == &"both" or death.kind == &"mouth":
 		var lets_go: float = death.LETS_GO[death.kind]
 
 		if leech.gulp() > _drain_gulp_was:
@@ -1290,7 +1290,7 @@ func _tell_each_other(delta: float) -> void:
 		return
 
 	var held: int = leech.count() if not player.is_dead or player.death.holds_screen() else 0
-	var drunk: bool = held > 0 or player.death.kind == &"animas" or player.death.kind == &"both"
+	var drunk: bool = held > 0 or player.death.kind == &"animas" or player.death.kind == &"both" or player.death.kind == &"mouth"
 	var wanted: float = maxf(_drain_shown, 1.0 - _drain_magic) if drunk else 0.0
 	_drained_shown = move_toward(_drained_shown, wanted, delta * (DRAINED_COMES if wanted > _drained_shown else DRAINED_GOES))
 

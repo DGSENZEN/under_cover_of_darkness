@@ -15,7 +15,7 @@ const DeathQuotes := preload("res://scripts/UI/DeathQuotes.gd")
 const MARK := Vector3(-3.5, 1.05, -16.0)
 const AIM_RATE := 8.0
 
-const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "mouth_comes", "mouth_digs", "mouth_close", "mouth_rake", "mouth_bursts", "mouth_they_get_out", "mouth_last_haul", "mouth_on_you", "elite_stands", "elite_feeds", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
+const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "mouth_comes", "mouth_digs", "mouth_close", "mouth_rake", "mouth_bursts", "mouth_they_get_out", "mouth_last_haul", "mouth_on_you", "elite_stands", "elite_feeds", "elite_kills", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
 
 var gym: Node3D
 var p: CharacterBody3D
@@ -459,6 +459,27 @@ func _elite_feeds() -> void:
 	await _until(func(): return one.taken_count() >= 1, 8.0)
 	await _frames(70)
 	_expect("it fed (%d)" % one.taken_count(), one.taken_count() == 1)
+
+
+func _elite_kills() -> void:
+	await _stand(0.2)
+	p.invulnerable = false
+	p.reload_on_death = false
+	var one: CharacterBody3D = AnimaScript.new()
+	one.form = &"torso"
+	one.elite = true
+	one.leap_chance = 1.0
+	one.position = _ahead(0.0, 3.9, -0.5)
+	add_child(one)
+	target = one
+	await _frames(2)
+
+	for kind in [&"face", &"hands", &"face"]:
+		one.take_in(kind)
+
+	await _until(func(): return p.is_dead, 12.0)
+	await _frames(300)
+	_expect("full, it had you, and that was all", p.is_dead)
 
 
 func _mouth_rake() -> void:

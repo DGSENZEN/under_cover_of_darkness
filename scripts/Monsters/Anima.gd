@@ -315,6 +315,11 @@ func elite_near() -> Node3D:
 	return nearest
 
 
+## It has all it can hold: if it gets you now, that's the end of you.
+func is_full() -> bool:
+	return elite and _taken.size() >= int(_form["elite"]["most_taken"])
+
+
 ## How many it has taken in.
 func taken_count() -> int:
 	return _taken.size()
@@ -423,6 +428,10 @@ func put_on_you() -> bool:
 	grip_left = int(_form["grip"])
 	ribs_cracked = false
 	_enter(State.ON)
+
+	if is_full():
+		leech.swallowed_by(self)
+
 	return true
 
 

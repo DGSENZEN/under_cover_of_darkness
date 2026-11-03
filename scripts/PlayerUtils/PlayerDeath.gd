@@ -15,13 +15,13 @@ signal page_due
 const FALL_TAKES := 2.0
 const QUOTE_TAKES := 3.4
 ## How long each takes (s).
-const LENGTHS := {&"eyes": 3.0, &"animas": 4.2, &"both": 4.6, &"swipe": 2.0}
+const LENGTHS := {&"eyes": 3.0, &"animas": 4.2, &"both": 4.6, &"swipe": 2.0, &"mouth": 2.6}
 ## An attack press ends it, after this long. The words come up over this much at the very end.
 const SKIP_AFTER := 1.0
 const WORDS_FROM_END := 0.5
 ## How long in what has you goes on holding you (s): its gulps slowing to this many times as long,
 ## and a last long one taking this long.
-const LETS_GO := {&"animas": 3.2, &"both": 3.6, &"swipe": 0.4}
+const LETS_GO := {&"animas": 3.2, &"both": 3.6, &"swipe": 0.4, &"mouth": 2.4}
 const GULPS_SLOW_TO := 3.0
 const LAST_GULP_TAKES := 1.0
 ## What has you hauls you down: buckled at once, a lurch with each gulp, the floor with the last;
@@ -42,13 +42,15 @@ const KNEELS := 0.7
 const HEAD_DROPS := 0.5
 const KNEELS_TAKES := 1.6
 const SWIPE_DOWN_TAKES := 0.7
+## Swallowed by the mouth, full: how long its ribs take to shut on you.
+const SWALLOW_TAKES := 1.0
 
 ## The eyes' death: your heart, how long between beats at the start and at its fastest, and from
 ## how far through it stops (as the HUD's flesh fails: StealthHUD.EYES_FAIL_FROM).
 const HEART_GAPS := Vector2(0.55, 0.26)
 const HEART_STOPS_AT := 0.7
 ## When you hit the floor (s), for each; when the last eye tears open (share).
-const FLOORED := {&"eyes": 2.7, &"animas": 3.1, &"both": 3.5, &"swipe": 0.65}
+const FLOORED := {&"eyes": 2.7, &"animas": 3.1, &"both": 3.5, &"swipe": 0.65, &"mouth": 1.9}
 const EYE_TEARS_AT := 0.6
 
 ## How many beats of your heart it has played.
@@ -74,6 +76,10 @@ var _side := 1.0
 
 
 ## You are going. `last_blow` is what the blow says it kills as (`kills_as`), or nothing.
+## The full mouth had you: it was no ordinary death.
+var swallowed := false
+
+
 func begin(last_blow: StringName) -> void:
 	if kind != &"":
 		return
@@ -121,6 +127,8 @@ func camera_pose() -> Dictionary:
 			return _laid_down(clampf(_haul, 0.0, 1.05))
 		&"swipe":
 			return _laid_down(smoothstep(0.0, SWIPE_DOWN_TAKES, _at))
+		&"mouth":
+			return _laid_down(smoothstep(SWALLOW_TAKES * 0.5, SWALLOW_TAKES * 2.0, _at))
 
 	return {}
 
@@ -130,6 +138,9 @@ func _laid_down(how_far: float) -> Dictionary:
 
 
 func _which(last_blow: StringName) -> StringName:
+	if swallowed:
+		return &"mouth"
+
 	if player.leech.count() > 0:
 		return &"both" if player.statuses.has(&"evil_eye") else &"animas"
 
@@ -173,6 +184,9 @@ func gulps_slow() -> float:
 
 ## The last long gulp, 0 until it starts, then up to 1, and held.
 func last_gulp() -> float:
+	if kind == &"mouth":
+		return clampf(_at / SWALLOW_TAKES, 0.0, 1.0)
+
 	return clampf((_at - (float(LETS_GO.get(kind, INF)) - LAST_GULP_TAKES)) / LAST_GULP_TAKES, 0.0, 1.0)
 
 
@@ -191,7 +205,7 @@ func words_share() -> float:
 
 
 func _haul_down(delta: float) -> void:
-	if kind != &"animas" and kind != &"both":
+	if kind != &"animas" and kind != &"both" and kind != &"mouth":
 		return
 
 	# The last of it takes you to the floor.
@@ -220,7 +234,7 @@ func _sound(delta: float) -> void:
 		if not _eye_torn and share() >= EYE_TEARS_AT:
 			_eye_torn = true
 			Sfx.play_flat(self, &"flesh_heavy", 0.0, 0.7)
-	elif (kind == &"animas" or kind == &"both") and not _gulped_last and last_gulp() > 0.0:
+	elif (kind == &"animas" or kind == &"both" or kind == &"mouth") and not _gulped_last and last_gulp() > 0.0:
 		_gulped_last = true
 		player.juice.add_trauma(LAST_HITS)
 		TimeFx.hitstop(get_tree(), LAST_STOPS)
