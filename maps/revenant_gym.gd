@@ -17,6 +17,7 @@ func _kit() -> Array:
 		[&"copal", &"round", Color(1.0, 0.58, 0.12)],
 		[&"fire", &"round", Color(1.0, 0.36, 0.08)],
 		[&"egg", &"item", Color(0.9, 0.86, 0.76)],
+		[&"brazier", &"item", Color(0.3, 0.26, 0.24)],
 	]
 
 

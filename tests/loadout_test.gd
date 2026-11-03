@@ -139,8 +139,46 @@ func _ready() -> void:
 	_check("L12 save and load keep the pack, counts, owned and lock",
 		lo.rounds.has(&"copal") and lo.item_counts[&"egg"] == 1 and lo.owned[&"rounds"] > 0 and lo.locked and g.packed_rounds.has(&"copal"))
 
+	await _brazier_place()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
+
+
+## The brazier takes an item place, and it's a weapon, not something for V or B.
+func _brazier_place() -> void:
+	var lo: Node = p.loadout
+	var inv: Node = p.inventory
+	lo.unlock()
+
+	for id in lo.items.duplicate():
+		lo.unpack_item(id)
+
+	lo.pack_item(&"brazier")
+	lo.pack_item(&"egg")
+	lo.restock()
+	_check("Z8 it takes an item place; a third item is refused", lo.items == [&"brazier", &"egg"] and not lo.pack_item(&"copal_line"))
+	_check("Z8b it comes to the belt, not to your hand", inv.count_of(&"brazier") == 1 and inv.selected_item().get("id") == &"revolver")
+	_check("Z8c V and B pass over it (%s)" % lo.selected_item(), lo.selected_item() == &"egg" and not lo.next_item() and lo.selected_item() == &"egg")
+	_check("Z8d no count to spend, however it's restocked", not lo.item_counts.has(&"brazier") and not lo.use_item(0) and int(lo.owned.get(&"brazier", 0)) == 0)
+	_check("Z8e nothing to offer", not lo._answers(&"brazier"))
+	var saved: Dictionary = inv.save_state()
+	inv.load_state(saved)
+	_check("Z8f it comes back from a save with its mesh", inv.count_of(&"brazier") == 1 and _entry_mesh(inv, &"brazier") != null)
+	lo.unpack_item(&"egg")
+	_check("Z8g alone, nothing's chosen", lo.selected_item() == &"")
+	inv.select_by_id(&"brazier")
+	await _frames(2)
+	lo.unpack_item(&"brazier")
+	await _frames(2)
+	_check("Z8h put back in hand: you have the gun again", inv.count_of(&"brazier") == 0 and inv.selected_item().get("id") == &"revolver" and p.combat.gun_drawn())
+
+
+func _entry_mesh(inv: Node, id: StringName) -> Mesh:
+	for entry in inv.belt:
+		if entry["id"] == id:
+			return entry["mesh"]
+
+	return null
 
 
 func _press(action: String) -> void:

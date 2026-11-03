@@ -21,7 +21,7 @@ func _ready() -> void:
 	runs.append(CityState.run_id)
 	_check("G0 it loads: a room, a table, a yard", gym.kit_table != null and p != null)
 	var kit: Array = gym._kit().map(func(entry): return entry[0])
-	_check("G0b the table offers lead, copal, fire and the egg", kit == [&"lead", &"copal", &"fire", &"egg"])
+	_check("G0b the table offers lead, copal, fire, the egg and the brazier", kit == [&"lead", &"copal", &"fire", &"egg", &"brazier"])
 	p.loadout.pack_round(&"copal")
 	_check("G2 fire or copal on the table, one or the other", not p.loadout.pack_round(&"fire"))
 	p.loadout.unpack_round(&"copal")

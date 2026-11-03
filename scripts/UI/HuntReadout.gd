@@ -49,7 +49,9 @@ func snapshot() -> Dictionary:
 	var items := {}
 
 	for id in player.loadout.items:
-		items[id] = int(player.loadout.item_counts.get(id, 0))
+		# (A weapon has no count to show.)
+		if not PrepItems.info(id).get("weapon", false):
+			items[id] = int(player.loadout.item_counts.get(id, 0))
 
 	return {"barrel": gun.barrel, "round": gun.cylinder_round, "loaded": loaded_now, "chambers": chambers,
 		"shell": int(gun.loaded[&"shot"]), "reserve": int(player.inventory.ammo.get(gun.shell_stock_id() if gun.barrel == &"shot" else gun.stock_id(), 0)),

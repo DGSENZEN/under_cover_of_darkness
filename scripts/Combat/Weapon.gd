@@ -27,6 +27,10 @@ enum Kind {
 @export var strike_time := 0.22
 @export var recovery := 0.28
 @export var can_block := true
+## On a chain: the plain blow is a lash straight down your aim, landing where you aimed; held, it's the heavy blow, at once, no gathering (PlayerCombat).
+@export var chained := false
+## How far the heavy blow reaches, if not `reach`.
+@export var power_reach := 0.0
 ## Dagger: an unaware target struck from behind dies outright.
 @export var backstab_kills := false
 ## Any weapon: damage multiplier on an unaware target struck from behind.
@@ -81,7 +85,7 @@ static var _armoury := {}
 ## Returns the shared cached sword/dagger/bow Resource, or null for an unknown ID.
 static func find(weapon_id: StringName) -> Resource:
 	if _armoury.is_empty():
-		for weapon in [sword(), dagger(), bow(), revolver()]:
+		for weapon in [sword(), dagger(), bow(), revolver(), brazier()]:
 			_armoury[weapon.id] = weapon
 
 	return _armoury.get(weapon_id)
@@ -127,6 +131,43 @@ static func bow() -> Resource:
 	w.can_block = false
 	w.swing_db = 30.0
 	w.mesh = bow_mesh()
+	return w
+
+
+## What's in your hand of it: the iron grip the chain comes from. (The chain and its head hang from this: BrazierChain.gd.)
+static func brazier_grip_mesh() -> Mesh:
+	var grip := CylinderMesh.new()
+	grip.top_radius = 0.018
+	grip.bottom_radius = 0.022
+	grip.height = 0.16
+	grip.radial_segments = 8
+	var look := StandardMaterial3D.new()
+	look.albedo_color = Color(0.1, 0.09, 0.085)
+	look.roughness = 0.7
+	grip.material = look
+	return grip
+
+
+## A church censer on a chain, packed with coals: reach you can trust, and a commitment. What's on the drowned, Revenant.gd. Its charge_time is how long a press must be held to be the close hit.
+static func brazier() -> Resource:
+	var w := _new()
+	w.id = &"brazier"
+	# A stand-in name (words_needed.md).
+	w.display_name = "brazier"
+	w.damage = 45.0
+	w.power_damage = 70.0
+	w.charge_time = 0.2
+	w.reach = 5.0
+	w.power_reach = 2.4
+	w.arc_degrees = 70.0
+	w.windup = 0.45
+	w.strike_time = 0.16
+	w.recovery = 0.6
+	w.can_block = false
+	w.chained = true
+	w.swing_db = 44.0
+	w.hit_db = 56.0
+	w.mesh = brazier_grip_mesh()
 	return w
 
 

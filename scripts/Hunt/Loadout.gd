@@ -7,6 +7,7 @@ extends Node
 
 const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
 const PrepItems := preload("res://scripts/Hunt/PrepItems.gd")
+const Weapon := preload("res://scripts/Combat/Weapon.gd")
 const Rounds := preload("res://scripts/Combat/Rounds.gd")
 const SaveFields := preload("res://scripts/Save/SaveFields.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
@@ -115,6 +116,11 @@ func pack_item(id: StringName) -> bool:
 		return false
 
 	items.append(id)
+
+	if PrepItems.info(id).get("weapon", false):
+		player.inventory.add_belt_item(id, String(PrepItems.info(id)["prompt"]), Weapon.find(id).mesh)
+
+	_off_weapons()
 	changed.emit()
 	return true
 
@@ -125,6 +131,15 @@ func unpack_item(id: StringName) -> bool:
 
 	items.erase(id)
 	selected = mini(selected, maxi(items.size() - 1, 0))
+
+	if PrepItems.info(id).get("weapon", false):
+		var in_hand: bool = player.inventory.selected_item().get("id", &"") == id
+		player.inventory.take_one(id)
+
+		if in_hand:
+			player.inventory.select_by_id(&"revolver")
+
+	_off_weapons()
 	changed.emit()
 	return true
 
@@ -153,6 +168,10 @@ func restock() -> void:
 	_top_up(stocks)
 
 	for id in items:
+		# (A weapon has no count: it's on the belt.)
+		if PrepItems.info(id).get("weapon", false):
+			continue
+
 		var have := int(item_counts.get(id, 0))
 		var taken := mini(maxi(int(PrepItems.info(id)["carry"]) - have, 0), int(owned.get(id, 0)))
 		item_counts[id] = have + taken
@@ -195,7 +214,21 @@ func unlock() -> void:
 ## spent and done. False if not.
 ## What you have chosen to use next, or nothing.
 func selected_item() -> StringName:
-	return items[selected] if selected >= 0 and selected < items.size() else &""
+	if selected < 0 or selected >= items.size() or PrepItems.info(items[selected]).get("weapon", false):
+		return &""
+
+	return items[selected]
+
+
+## What's chosen is never a weapon: V and B go past it.
+func _off_weapons() -> void:
+	if selected < 0 or selected >= items.size() or not PrepItems.info(items[selected]).get("weapon", false):
+		return
+
+	for i in items.size():
+		if not PrepItems.info(items[i]).get("weapon", false):
+			selected = i
+			return
 
 
 ## On to the next of what you packed that you have any of. Not with one in your hand.

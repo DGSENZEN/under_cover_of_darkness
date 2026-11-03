@@ -8,6 +8,9 @@ const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
 const RevenantScript := preload("res://scripts/Monsters/Revenant.gd")
 const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
 const STATE: Dictionary = RevenantScript.State
+const EyeScript := preload("res://scripts/Monsters/FloatingEye.gd")
+const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
+const CombatScript := preload("res://scripts/Combat/PlayerCombat.gd")
 const HOME := Vector3(0, 1.05, 0)
 
 var p: CharacterBody3D
@@ -61,6 +64,9 @@ func _ready() -> void:
 
 	if only == "" or only == "water":
 		await _in_water()
+
+	if only == "" or only == "brazier":
+		await _the_brazier()
 
 	print("revenant_test: %s" % ("FAILED %d" % failed if failed > 0 else "passed"))
 	get_tree().quit(1 if failed > 0 else 0)
@@ -795,6 +801,242 @@ func _how_it_hangs(body: Node3D) -> Array:
 		standing += 1 if fall < -0.1 else 0
 
 	return [float(hanging) / maxf(counted, 1.0), float(standing) / maxf(counted, 1.0), strays]
+
+
+## Something to measure a blow's reach against: a thin wall that counts what lands on it.
+class Struck extends StaticBody3D:
+	var hits := 0
+
+	func take_hit(_damage: float, _by: Node3D, _kind: StringName, _at: Vector3, _way: Vector3) -> StringName:
+		hits += 1
+		return &"hit"
+
+
+func _struck_at(far: float) -> StaticBody3D:
+	var thing := Struck.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.6, 1.6, 0.1)
+	shape.shape = box
+	thing.add_child(shape)
+	# (Placed before it's in the world, or it's in you for a frame, and you're thrown off it.)
+	thing.position = p.combat.aim().origin + Vector3(0.0, 0.0, -(far + 0.05))
+	add_child(thing)
+	return thing
+
+
+func _until_idle() -> void:
+	await _until(func(): return p.combat.phase == CombatScript.Phase.IDLE, 3.0)
+	await _frames(2)
+
+
+func _lash() -> void:
+	await _press("throw")
+	await _until_idle()
+
+
+## Held: the close hit, on its own, as soon as it counts as held.
+func _close_hit() -> void:
+	Input.action_press("throw")
+	await _until(func(): return p.combat.phase == CombatScript.Phase.STRIKE, 1.0)
+	Input.action_release("throw")
+	await _until_idle()
+
+
+## The most it lost in one frame while `blow` was under way (what burns takes a frame's worth, not this).
+func _worst_drop(one: Node3D, blow: Callable) -> float:
+	var worst := [0.0]
+	var was := [float(one.health)]
+	var watching := [true]
+	var watch := func():
+		while watching[0] and is_instance_valid(one):
+			await get_tree().physics_frame
+
+			if is_instance_valid(one):
+				worst[0] = maxf(worst[0], float(was[0]) - float(one.health))
+				was[0] = float(one.health)
+
+				# (Not winding up at you: caught in a grasp's wind-up, fire's blow is worth three.)
+				if not one.dead and not one.is_down() and one.state != STATE.STAGGER and one.state != STATE.WALK:
+					one._enter(STATE.WALK)
+	watch.call()
+	await blow.call()
+	watching[0] = false
+	return worst[0]
+
+
+## Still, so what's being measured is only the blow.
+func _held_still(at: Vector3) -> CharacterBody3D:
+	var one := _revenant(at)
+	await _frames(2)
+	one._surge_in = 99.0
+	one._attack_in = 99.0
+	return one
+
+
+## The brazier: reach you can trust, and everything it does to the drowned.
+func _the_brazier() -> void:
+	await _clean()
+	p.combat.adrenaline = 0.0
+	var packed: bool = p.loadout.pack_item(&"brazier")
+	_check("Z0 it packs and comes to hand", packed and p.inventory.select_by_id(&"brazier"))
+	await _frames(5)
+	_check("Z0b it's the weapon in hand, the gun put away", p.combat.current_weapon() != null and p.combat.current_weapon().id == &"brazier" and not p.combat.gun_drawn())
+	var near := _struck_at(4.9)
+	await _lash()
+	var hit_at_5: bool = near.hits == 1
+	near.queue_free()
+	await _frames(2)
+	var far := _struck_at(5.4)
+	await _lash()
+	var missed_at_6: bool = far.hits == 0
+	var whiffed: bool = far.hits == 0
+	far.queue_free()
+	await _frames(2)
+	_check("Z1 a lash lands at 5 m, not past 5.3", hit_at_5 and missed_at_6)
+	var close_near := _struck_at(2.2)
+	await _close_hit()
+	var close_hit: bool = close_near.hits == 1
+	close_near.queue_free()
+	await _frames(2)
+	var close_far := _struck_at(2.8)
+	await _close_hit()
+	_check("Z1b the close hit reaches 2.4 m, not 2.8", close_hit and close_far.hits == 0)
+	close_far.queue_free()
+	await _frames(2)
+
+	# It comes quicker than the lash does.
+	var ticks := [0, 0]
+
+	for which in 2:
+		Input.action_press("throw")
+
+		if which == 0:
+			await _frames(2)
+			Input.action_release("throw")
+
+		while p.combat.phase != CombatScript.Phase.STRIKE and ticks[which] < 120:
+			ticks[which] += 1
+			await get_tree().physics_frame
+
+		Input.action_release("throw")
+		await _until_idle()
+
+	_check("Z1c the close hit lands well before the lash does (%d, %d frames)" % ticks, ticks[1] < ticks[0] - 6 and ticks[0] >= 22)
+
+	# A commitment if you miss.
+	await _press("throw")
+	await _until(func(): return p.combat.whiffed(), 1.5)
+	var swung_at: int = p.combat._serial
+	await _press("dodge")
+	await _press("kick")
+	await _frames(6)
+	_check("Z11 a miss holds you till it's back: no dodge, no boot", p.combat.whiffed() and not p.combat.is_dodging())
+	await _press("throw")
+	await _frames(4)
+	_check("Z11b nor another swing on the heels of it", p.combat._serial == swung_at and p.combat.whiffed())
+	await _until_idle()
+	await _frames(30)
+	p.combat.stamina = p.combat.stamina_max
+
+	# What it does to one of them.
+	var one := await _held_still(Vector3(0, 0, -3.5))
+	var lash_lost: float = await _worst_drop(one, _lash)
+	var burns: bool = one.statuses.has(&"burning")
+	var seared_after: bool = one.is_exposed()
+	one.global_position = Vector3(0, 0, -3.5)
+	var seared_lost: float = await _worst_drop(one, _lash)
+	await _clean()
+	p.combat.adrenaline = 0.0
+	var other := await _held_still(Vector3(0, 0, -2.0))
+	var close_lost: float = await _worst_drop(other, _close_hit)
+	other.global_position = Vector3(0, 0, -2.0)
+	p.combat.adrenaline = 0.0
+	var seared_close_lost: float = await _worst_drop(other, _close_hit)
+	_check("Z2 45 first, 90 seared; close 70, 140 seared (%.0f %.0f %.0f %.0f)" % [lash_lost, seared_lost, close_lost, seared_close_lost],
+		absf(lash_lost - 45.0) < 0.5 and absf(seared_lost - 90.0) < 0.5 and absf(close_lost - 70.0) < 0.5 and (absf(seared_close_lost - 140.0) < 0.5 or not is_instance_valid(other) or other.dead))
+	await _clean()
+	p.combat.adrenaline = 0.0
+
+	# Any wind-up, and walking too.
+	var broke := 0
+	var winds := [STATE.SWIPE_WIND, STATE.RAKE_WIND, STATE.BITE_WIND, STATE.GRASP_WIND, STATE.SURGE_TELL, STATE.SURGE, STATE.WALK]
+
+	for wind in winds:
+		var winding := await _held_still(Vector3(0, 0, -20))
+		winding._enter(wind)
+		winding.take_hit(1.0, p, &"brazier", winding.global_position, Vector3.FORWARD)
+		broke += 1 if winding.state == STATE.STAGGER else 0
+		winding.queue_free()
+		await _frames(2)
+
+	_check("Z3 any hit staggers it and breaks any wind-up (%d of %d)" % [broke, winds.size()], broke == winds.size())
+	var searing := await _held_still(Vector3(0, 0, -20))
+	searing.take_hit(1.0, p, &"brazier", searing.global_position, Vector3.FORWARD)
+	await _frames(int(2.0 * 60.0))
+	searing.take_hit(1.0, p, &"brazier", searing.global_position, Vector3.FORWARD)
+	await _frames(int(2.9 * 60.0))
+	var still_on: bool = searing.is_exposed()
+	await _frames(int(0.3 * 60.0))
+	_check("Z4 seared 3 s, a new hit starts it again", seared_after and still_on and not searing.is_exposed())
+	searing.queue_free()
+	await _frames(2)
+	var downed := await _held_still(Vector3(0, 0, -20))
+
+	while not downed.is_down():
+		downed.take_hit(55.0, p, &"bullet", downed.global_position, Vector3.BACK)
+
+	await _frames(50)
+	downed.take_hit(45.0, p, &"brazier", downed.global_position, Vector3.BACK)
+	_check("Z5 sets it burning; one on it down finishes it", burns and downed.dead)
+	await _clean()
+	p.combat.adrenaline = 0.0
+	var holder := await _grasper(Vector3(0, 0, -2.5))
+	await _grasp_lands(holder)
+	await _frames(5)
+	var was_held: bool = p.touch.holding()
+	await _lash()
+	_check("Z6 frees you from a hold", was_held and not p.touch.holding() and p.touch.on_you())
+	await _clean()
+	p.combat.adrenaline = 0.0
+	var eye: CharacterBody3D = EyeScript.new()
+	eye.seed_value = 7
+	eye.position = Vector3(0, 2, -30)
+	eye.start_turned = true
+	add_child(eye)
+	eye.next_swoop_in = 100.0
+	var hand: CharacterBody3D = AnimaScript.new()
+	hand.form = &"hands"
+	hand.position = Vector3(6, 1, -30)
+	add_child(hand)
+	await _frames(2)
+	var eye_was: float = eye.health
+	var hand_was: float = hand.health
+	var eye_result: StringName = eye.take_hit(10.0, p, &"brazier", eye.global_position, Vector3.FORWARD)
+	var hand_result: StringName = hand.take_hit(10.0, p, &"brazier", hand.global_position, Vector3.FORWARD)
+	_check("Z7 on an eye or a hand, an ordinary blow (%s, %s)" % [eye_result, hand_result], eye_result == &"hit" and hand_result == &"hit" and is_equal_approx(eye_was - eye.health, 10.0) and is_equal_approx(hand_was - hand.health, 10.0) and not eye.is_exposed() and not hand.is_exposed())
+	await _clean()
+
+	# With it out: the keys the blade has.
+	await _press("block")
+	Input.action_press("block")
+	await _frames(4)
+	var blocks: bool = p.combat.blocking
+	Input.action_release("block")
+	_check("Z10 it can't block", not blocks)
+	await _frames(40)
+	p.combat.stamina = p.combat.stamina_max
+	await _press("dodge")
+	var dodged: bool = p.combat.is_dodging() or p.combat.dodged_within(0.2)
+	await _until_idle()
+	await _frames(70)
+	p.caster._press_key(&"burst")
+	await _frames(2)
+	var gun_out: bool = p.combat.gun_drawn()
+	_check("Z9 a spell key takes the gun back out; a tapped Q dodges", gun_out and dodged)
+	p.caster._held_key = &""
+	p.loadout.unpack_item(&"brazier")
+	await _frames(2)
 
 
 ## Its legs carry what it does: braced and bent under the weight, not stilts; its feet go when a blow says.

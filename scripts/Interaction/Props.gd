@@ -308,7 +308,7 @@ static func belt_mesh(id: StringName, is_key := false) -> Mesh:
 			return tool_mesh("rod", Color(0.6, 0.6, 0.65))
 		&"arrows":
 			return WeaponScript.arrow_mesh()
-		&"sword", &"dagger", &"bow", &"revolver":
+		&"sword", &"dagger", &"bow", &"revolver", &"brazier":
 			return WeaponScript.find(id).mesh
 
 	# An item a character gives or takes (data/dialogue): its own look.

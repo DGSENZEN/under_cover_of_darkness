@@ -312,6 +312,8 @@ var _perfect_riposte := false
 var _dodge_direction := Vector3.ZERO
 ## How long the dodge under way lasts.
 var _dodge_length := 0.0
+## Where you aimed as the lash left.
+var _lash_aim := Transform3D.IDENTITY
 
 
 func _ready() -> void:
@@ -464,7 +466,7 @@ func _physics_process(delta: float) -> void:
 	var kick_ok := _kick_cooldown <= 0.0 and phase != Phase.STRIKE and phase != Phase.STAGGER and phase != Phase.DODGE
 
 	if phase == Phase.RECOVER:
-		kick_ok = kick_ok and (_outcome == &"hit" or _outcome == &"miss") and _t >= _recovery * 0.5
+		kick_ok = kick_ok and (_outcome == &"hit" or _outcome == &"miss") and _t >= _recovery * 0.5 and not _lash_coming_back()
 
 	# The revolver drawn and a man in arm's reach: its butt, not the boot.
 	if Input.is_action_just_pressed("kick") and kick_ok and not (gun and player.revolver != null and player.revolver.try_whip()):
@@ -494,6 +496,9 @@ func _physics_process(delta: float) -> void:
 
 			if block_pressed:
 				_feint()
+			# (Held, on a chain: the close hit, now. Quicker to land than the lash it would have been.)
+			elif weapon.chained and attack_held and _held_through and _t >= weapon.charge_time:
+				_start_strike(true)
 			elif _t >= _windup:
 				if attack_held and _held_through and not _riposte:
 					_enter(Phase.CHARGING)
@@ -599,6 +604,12 @@ func _begin_attack(chained: bool) -> void:
 ## Your weight as a blow begins: going away from him (backing off faster than
 ## a shuffle, up to a walk: `_backing`), or at a run into it (a running blow).
 func _weigh(chained: bool) -> void:
+	# (A chain doesn't care which way you're walking: it's the distance you keep.)
+	if weapon.chained:
+		_backing = 0.0
+		_running = false
+		return
+
 	var forward := -player.global_basis.z
 	forward.y = 0.0
 	forward = forward.normalized()
@@ -629,7 +640,7 @@ func _update_recover(delta: float, buffered: bool, block_held: bool) -> void:
 		return
 
 	# A click during the swing: the next one, as soon as this one allows.
-	if buffered and weapon != null and weapon.kind == WeaponScript.Kind.MELEE:
+	if buffered and weapon != null and weapon.kind == WeaponScript.Kind.MELEE and not weapon.chained:
 		var chain_at := -1.0
 
 		match _outcome:
@@ -845,6 +856,11 @@ func blow_poise() -> float:
 	return maxf(weight, running_poise) if _running else weight
 
 
+## A lash that missed, on its way back: you're held to it until it is.
+func _lash_coming_back() -> bool:
+	return phase == Phase.RECOVER and weapon != null and weapon.chained and not _power and _outcome == &"miss"
+
+
 ## Whether the blow under way is a running blow.
 func is_running_blow() -> bool:
 	return _running and (phase == Phase.WINDUP or phase == Phase.STRIKE or phase == Phase.RECOVER)
@@ -890,6 +906,7 @@ func _start_strike(power: bool) -> void:
 	player.juice.set_zoom(0.0)
 	_enter(Phase.STRIKE)
 	_strike_time = weapon.strike_time * float(_style()["strike"])
+	_lash_aim = aim()
 	_spend((cost_power if power else cost_quick) * float(_style()["cost"]))
 
 	player.juice.on_swing(_side_of(_direction), power, _direction)
@@ -962,6 +979,10 @@ func _swing_sound(at: Vector3) -> void:
 ## drives the point in. Still, a fresh blow is a forehand and a chained one
 ## comes back from the other side; during a windup it keeps what it was.
 func _swing_direction(fresh := false, chained := false) -> StringName:
+	# (A chain goes one way: its weight decides, not your wrist.)
+	if weapon != null and weapon.chained:
+		return &"left"
+
 	var motion := _look_motion
 
 	if motion.length() < swing_flick:
@@ -1006,6 +1027,19 @@ func _track_look(delta: float) -> void:
 
 
 func _update_strike(delta: float) -> void:
+	# A lash flies, and lands once, where you aimed as it left.
+	if weapon.chained and not _power:
+		_t += delta
+
+		if _t >= _strike_time:
+			_sweep(1.0)
+
+			if phase == Phase.STRIKE:
+				_recovery = weapon.recovery
+				_enter(Phase.RECOVER)
+
+		return
+
 	# Through a body the blade drags, then runs free again.
 	_t += delta * _cleave
 	_cleave = move_toward(_cleave, 1.0, delta / maxf(cleave_time, 0.01) * (1.0 - cleave_slow))
@@ -1031,14 +1065,15 @@ func _update_strike(delta: float) -> void:
 ## band as wide as a sword and not a line. A single ray passes anyone who is
 ## not dead centre.
 func _sweep(p: float) -> void:
-	var at := aim()
+	var lash: bool = weapon.chained and not _power
+	var at: Transform3D = _lash_aim if lash else aim()
 	var basis := at.basis
 	var forward := -basis.z
-	var reach: float = weapon.reach * float(_style()["reach"])
+	var reach: float = (weapon.power_reach if _power and weapon.power_reach > 0.0 else weapon.reach) * float(_style()["reach"])
 	var direction := forward
 	var half := deg_to_rad(weapon.arc_degrees * 0.5)
 
-	match _direction:
+	match &"" if lash else _direction:
 		&"left":
 			direction = forward.rotated(basis.y, lerpf(-half, half, p))
 		&"right":
@@ -1056,7 +1091,7 @@ func _sweep(p: float) -> void:
 	var hit := {}
 	var offsets: Array = [Vector3.ZERO, across * blade_half_width, -across * blade_half_width]
 
-	if _direction == &"thrust":
+	if _direction == &"thrust" or lash:
 		offsets.append(basis.y * -blade_half_width * 1.6)
 		offsets.append(basis.y * blade_half_width)
 
@@ -1146,6 +1181,11 @@ func _sweep(p: float) -> void:
 	var normal: Vector3 = hit.get("normal", -direction)
 	_strike_surface(collider, point, normal)
 	SoundBus.emit_sound(point, 50.0, player, &"clang")
+
+	# (A lash has nothing to stop in your hand: it comes back as it would.)
+	if lash:
+		return
+
 	deflected.emit(point)
 	TimeFx.hitstop(get_tree(), 0.045, 0.06)
 	player.juice.add_trauma(0.32)
@@ -1316,7 +1356,8 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 	if target.get("sever_hint") != null:
 		target.set("sever_hint", cut_off)
 
-	var result: StringName = target.take_hit(dealt, player, kind, point, direction)
+	# (The drowned know it for what it is. To anyone else it's a blow.)
+	var result: StringName = target.take_hit(dealt, player, &"brazier" if weapon.chained and target.is_in_group(&"monsters") else kind, point, direction)
 	var dagger: bool = weapon.id == &"dagger"
 
 	if is_instance_valid(target) and target.get("sever_hint") != null:
@@ -1489,7 +1530,7 @@ func _try_buffered_dodge() -> void:
 
 
 func _try_dodge() -> void:
-	if _dodge_cooldown > 0.0 or not player.is_on_floor() or stamina < 1.0:
+	if _dodge_cooldown > 0.0 or not player.is_on_floor() or stamina < 1.0 or _lash_coming_back():
 		return
 
 	if phase == Phase.STRIKE or phase == Phase.KICK or phase == Phase.DODGE or phase == Phase.STAGGER:

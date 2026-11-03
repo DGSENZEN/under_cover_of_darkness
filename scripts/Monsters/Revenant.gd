@@ -203,7 +203,7 @@ func _physics_process(delta: float) -> void:
 		body.lie_at(global_position.y)
 
 	var marked: bool = is_instance_valid(you) and you.get("touch") != null and you.touch.laid_by() == self
-	body.tick(delta, DOING[state], velocity, _face_of(you), 0.6 if statuses.has(&"burning") else 0.0, 0.0, 1.0 if marked else 0.0)
+	body.tick(delta, DOING[state], velocity, _face_of(you), 0.6 if statuses.has(&"burning") else 0.0, 1.0 if is_exposed() else 0.0, 1.0 if marked else 0.0)
 
 
 func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vector3, direction: Vector3) -> StringName:
@@ -241,6 +241,13 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 		statuses.apply(&"burning", float(_row["burn_time"]))
 
 		if was_gathering:
+			_enter(State.STAGGER)
+
+	# The brazier sears it: it staggers, whatever it was at, and takes double for a while.
+	if hit_kind == &"brazier":
+		statuses.apply(&"exposed", float(_row["seared_time"]))
+
+		if state != State.HOLD:
 			_enter(State.STAGGER)
 
 	# A whip or a boot or a blast: you get free of it. The touch stays.

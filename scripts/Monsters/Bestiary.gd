@@ -81,6 +81,8 @@ static func source_of(hit_kind: StringName, round_id: StringName) -> StringName:
 			return Rounds.info(round_id).get("source", &"lead")
 		&"shot", &"blast", &"fire":
 			return hit_kind
+		&"brazier":
+			return &"fire"
 		&"shard", &"burst":
 			return &"obsidian"
 
