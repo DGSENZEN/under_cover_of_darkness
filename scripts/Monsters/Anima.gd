@@ -60,6 +60,8 @@ const MISSED_TIME := 0.8
 ## Thrown off: how long it is stunned and exposed, how hard it is thrown.
 const THROWN_TIME := 1.5
 const THROW_SPEED := 9.0
+## How far past its own size a mouth comes back when thrown off you (m).
+const THROWN_MOUTH_CLEARS := 1.6
 ## Small ones and an elite: how far off it they know it; while you are how many of their leaps off they stay
 ## round it, how far out, and how fast.
 const WAITS_WITHIN := 14.0
@@ -511,7 +513,14 @@ func throw_off(from: Vector3) -> void:
 	_leave_you()
 	var away := global_position - from
 	away.y = 0.0
-	_push += (away.normalized() if away.length() > 0.01 else Vector3.BACK) * _weighs("throw_speed", THROW_SPEED)
+	var out: Vector3 = away.normalized() if away.length() > 0.01 else Vector3.BACK
+	_push += out * _weighs("throw_speed", THROW_SPEED)
+
+	# (The mouth had you in front of you, unseen: it comes back clear of you, not round your head.)
+	if form == &"torso":
+		move_and_collide(out * maxf(hit_radius() + THROWN_MOUTH_CLEARS - away.length(), 0.0))
+		body.come_back()
+
 	statuses.apply(&"exposed", THROWN_TIME)
 	_enter(State.THROWN)
 

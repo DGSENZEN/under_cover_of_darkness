@@ -974,6 +974,14 @@ func _mouth_on_you() -> void:
 	_hit(mouth, &"blow", &"blow")
 	await _frames(2)
 	_check("C4 the second throws it off", mouth.state == STATE.THROWN and not hands.cage_shown(slot) and mouth.body.visible)
+	var nearest_wrist := INF
+
+	for arm in 5:
+		nearest_wrist = minf(nearest_wrist, mouth.body.wrist(arm).distance_to(p.camera.global_position))
+
+	var thrown_to: float = mouth.global_position.distance_to(p.global_position)
+	_check("C4b it comes back clear of you, not round your head (%.1f m)" % thrown_to, thrown_to >= mouth.hit_radius() + 1.5)
+	_check("C4c and its hands aren't left at your face (%.1f m)" % nearest_wrist, nearest_wrist > 1.5)
 	await _frames(10)
 	mouth.put_on_you()
 	await _frames(25)

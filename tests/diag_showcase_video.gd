@@ -17,6 +17,9 @@ const AIM_RATE := 8.0
 
 const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "mouth_comes", "mouth_digs", "mouth_close", "mouth_rake", "mouth_bursts", "mouth_they_get_out", "mouth_last_haul", "mouth_on_you", "elite_stands", "elite_feeds", "elite_kills", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
 
+## The monsters' film: each, what it does and how to kill it, then a fight with all four (tools/showcase/cut.py).
+const MONSTER_FILM := ["swoop_bat", "eye_kill", "turn", "spit_bat", "swipe_hands", "latch_whip", "hands_kill", "swipe_face", "face_drinks", "face_kill", "mouth_comes", "mouth_digs", "mouth_close", "mouth_rake", "mouth_whips", "mouth_kill", "mouth_bursts", "elite_feeds", "elite_stopped", "elite_stands", "elite_kills", "fight_all_four"]
+
 var gym: Node3D
 var p: CharacterBody3D
 var target: Node3D
@@ -480,6 +483,211 @@ func _elite_kills() -> void:
 	await _until(func(): return p.is_dead, 12.0)
 	await _frames(300)
 	_expect("full, it had you, and that was all", p.is_dead)
+
+
+## An eye: hit it in its tell, and it's yours.
+func _eye_kill() -> void:
+	await _stand()
+	var eye := await _eye(_ahead(0.0, 6.5, 1.0), 6.5)
+	target = eye
+	await _frames(70)
+	eye.next_swoop_in = 0.0
+	var told: bool = await _until(func(): return eye.state == eye.State.TELL, 4.0)
+	await _shoot(eye, 1)
+	var broke: bool = eye.state != eye.State.SWOOP
+	await _shoot(eye, 6)
+	await _frames(100)
+	_expect("hit in its tell, it broke off, and died (%s)" % eye.dead, told and broke and eye.dead)
+
+
+## Hands: a copal round, as they come.
+func _hands_kill() -> void:
+	await _stand(0.3)
+	var one := await _anima(&"hands", _ahead(-1.0, 8.5, -0.5))
+	target = one
+	await _until(func(): return one.state == one.State.RUSH, 3.0)
+	await _frames(70)
+	await _shoot(one, 3)
+	await _frames(190)
+	_expect("copal burnt it", one.dead)
+
+
+## A face on you: copal in its mouth, and again.
+func _face_kill() -> void:
+	await _stand()
+	var one := await _anima(&"face", _ahead(0.8, 0.5, 0.3))
+	one.put_on_you()
+	await _gulps(2, 5.0)
+	target = one
+	await _shoot(one, 1)
+	var off: bool = p.leech.count() == 0
+	await _shoot(one, 4)
+	await _frames(190)
+	_expect("copal threw it off (%s), and burnt it (%s)" % [off, one.dead], off and one.dead)
+
+
+## The mouth has you: two whips.
+func _mouth_whips() -> void:
+	await _stand(0.2)
+	var one := await _anima(&"torso", _ahead(0.5, 1.2, -0.5))
+	one.put_on_you()
+	await _gulps(2, 5.0)
+	p.revolver.try_whip()
+	await _until(func(): return one.ribs_cracked, 1.5)
+	var cracked: bool = one.ribs_cracked
+	await _gulps(2, 5.0)
+	await _frames(20)
+	p.revolver.try_whip()
+	await _until(func(): return p.leech.count() == 0, 1.5)
+	await _frames(100)
+	_expect("the first broke its ribs, the second threw it", cracked and p.leech.count() == 0)
+
+
+## The mouth: hit it as it gathers. It stops, and it is open.
+func _mouth_kill() -> void:
+	await _stand(0.3)
+	var one := await _anima(&"torso", _ahead(0.0, 3.4, -0.5), 1.0)
+	target = one
+	var told: bool = await _until(func(): return one.state == one.State.TELL, 8.0)
+	await _frames(45)
+	await _shoot(one, 1)
+	var stopped: bool = one.state == one.State.THROWN or one.dead
+	await _shoot(one, 6)
+	await _frames(150)
+	_expect("hit gathering, it stopped (%s), and burnt (%s)" % [stopped, one.dead], told and stopped and one.dead)
+
+
+## The elite, feeding: hit it, and it lets go.
+func _elite_stopped() -> void:
+	await _stand(0.2)
+	var one: CharacterBody3D = AnimaScript.new()
+	one.form = &"torso"
+	one.elite = true
+	one.leap_chance = 0.0
+	one.position = _ahead(0.0, 7.2, -0.5)
+	gym.add_child(one)
+	target = one
+	var small := await _anima(&"face", _ahead(-2.2, 7.0, 0.3))
+	small.leap_chance = 0.0
+	await _frames(110)
+	one.health = 200.0
+	var seized: bool = await _until(func(): return one.state == one.State.DRAG, 8.0)
+	await _frames(22)
+	await _shoot(one, 1)
+	var let_go: bool = not small.is_seized() and not small.dead
+	await _frames(110)
+	_expect("seized (%s), and it let go, the small one alive (%s)" % [seized, let_go], seized and let_go and one.taken_count() == 0)
+
+
+## In the fight: how long between shots, how long before you answer what has you, how close you let them.
+const FIGHT_BETWEEN_SHOTS := 48
+const FIGHT_CATCHES := 70
+const FIGHT_LETS_COME := 5.0
+
+## All four, for real: nothing held off, nothing staged but where they start. Rounds kept up; you can't die of it,
+## so it can be seen through. What has you first; then an eye in its tell; a mouth gathering; what is closest; the rest.
+func _fight_all_four() -> void:
+	await _stand(0.2)
+	p.invulnerable = true
+	var mouth := await _anima(&"torso", _ahead(3.0, 7.5, -0.5), 0.45)
+	var face := await _anima(&"face", _ahead(-5.0, 10.0, 0.3), 0.45)
+	var hands := await _anima(&"hands", _ahead(1.0, 10.0, -0.5), 0.45)
+	var eye: CharacterBody3D = EyeScript.new()
+	eye.position = _ahead(-1.0, 8.0, 1.6)
+	gym.add_child(eye)
+	await _frames(1)
+	var all: Array[CharacterBody3D] = [mouth, face, hands, eye]
+	# (Its first swoop soon, or the fight is over before it has done anything.)
+	eye.next_swoop_in = 3.0
+	var left := 60 * 75
+	var used_burst := false
+
+	while left > 0 and all.any(func(one): return not one.dead):
+		left -= 1
+		p.revolver.loaded[&"cylinder"] = 6
+		p.health = p.max_health
+		var on_you: Array = p.leech.on_me()
+
+		# A hand on you comes off with a whip, once you've felt it.
+		if not on_you.is_empty() and on_you[0].form == &"hands" and _whip_ready():
+			await _frames(FIGHT_CATCHES)
+			p.revolver.try_whip()
+			await _frames(30)
+			left -= FIGHT_CATCHES + 30
+			continue
+
+		# A swoop, batted back as it arrives.
+		if not eye.dead and eye.state == eye.State.SWOOP and eye.global_position.distance_to(p.camera.global_position) < 3.0 and _whip_ready():
+			target = eye
+			p.revolver.try_whip()
+			await _frames(25)
+			left -= 25
+			continue
+
+		# Bunched and close, the Burst.
+		if not used_burst and all.filter(func(one): return not one.dead and one != eye and one.global_position.distance_to(p.global_position) < 4.0).size() >= 2:
+			used_burst = true
+			await _spell("spell_4", 40)
+			await _frames(40)
+			left -= 80
+			continue
+
+		var after: CharacterBody3D = _next_in_the_fight(all, on_you)
+		target = after
+
+		if after != null and p.revolver.ready_to_fire() and _on_target(after) and _worth_a_round(after, on_you):
+			await _press("throw")
+			await _frames(FIGHT_BETWEEN_SHOTS)
+			left -= FIGHT_BETWEEN_SHOTS
+		else:
+			await _frames(1)
+
+	target = null
+	look_point = _ahead(0.0, 8.0, 0.2)
+	await _frames(150)
+	_expect("all four dead, in %.0f s (%s)" % [float(60 * 75 - left) / 60.0, all.map(func(one): return one.dead)], all.all(func(one): return one.dead))
+
+
+## Rounds are few: on what has you, on what has opened itself, or on what has come close.
+func _worth_a_round(one: CharacterBody3D, on_you: Array) -> bool:
+	if on_you.has(one) or one._is_opening():
+		return true
+
+	return one.global_position.distance_to(p.global_position) < FIGHT_LETS_COME
+
+
+func _whip_ready() -> bool:
+	return p.revolver.weapon() != null and p.revolver._whip_t < 0.0
+
+
+func _next_in_the_fight(all: Array[CharacterBody3D], on_you: Array) -> CharacterBody3D:
+	if not on_you.is_empty():
+		return on_you[0]
+
+	var eye: CharacterBody3D = all[3]
+	var mouth: CharacterBody3D = all[0]
+
+	if not eye.dead and eye.state == eye.State.TELL:
+		return eye
+
+	if not mouth.dead and (mouth.state == mouth.State.TELL or mouth.state == mouth.State.WIND_UP):
+		return mouth
+
+	var best: CharacterBody3D = null
+	var nearest := 999.0
+
+	for one in all:
+		if one.dead or one == eye:
+			continue
+
+		# The small ones before the mouth, unless it is on top of you.
+		var off: float = one.global_position.distance_to(p.global_position) + (5.0 if one == mouth else 0.0)
+
+		if off < nearest:
+			nearest = off
+			best = one
+
+	return best if best != null else eye
 
 
 func _mouth_rake() -> void:

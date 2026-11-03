@@ -676,6 +676,12 @@ func _work_mouth(delta: float, doing: StringName, you: Node3D, moving: Vector3, 
 	_mouth.position = Vector3(0.0, _mouth.heave() + _reared * MOUTH_RISES, 0.0)
 
 
+## Seen again after being out of sight: the mouth's arms start from where it is now.
+func come_back() -> void:
+	if _mouth != null:
+		_mouth.arrive()
+
+
 func ribs_open() -> float:
 	return _mouth.ribs_open() if _mouth != null else 0.0
 

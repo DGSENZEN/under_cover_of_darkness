@@ -149,6 +149,7 @@ func _arms_move_well() -> void:
 	var worst_tip := 0.0
 	var at_lift := ""
 	var at_tip := ""
+	var was_seen := true
 
 	for i in 1500:
 		await get_tree().physics_frame
@@ -157,8 +158,11 @@ func _arms_move_well() -> void:
 		if one.state == STATE.ON:
 			p.leech.free_all()
 
-		var lifted: float = body._mouth.position.distance_to(mass_at) * 60.0
-		var tipped: float = (body._mouth.rotation - mass_tip).length() * 60.0
+		# (Out of sight on you, or the tick it comes back: nothing to see pop.)
+		var seen: bool = body.visible and was_seen
+		was_seen = body.visible
+		var lifted: float = body._mouth.position.distance_to(mass_at) * 60.0 if seen else 0.0
+		var tipped: float = (body._mouth.rotation - mass_tip).length() * 60.0 if seen else 0.0
 
 		if lifted > worst_lift:
 			worst_lift = lifted
@@ -175,9 +179,9 @@ func _arms_move_well() -> void:
 			var wrist_now: Vector3 = body.wrist(arm)
 			var elbow_now: Vector3 = body.elbow(arm)
 			var way_now: Vector3 = body.hand_way(arm)
-			var moved: float = wrist_now.distance_to(wrist_was[arm]) * 60.0
-			var bent: float = elbow_now.distance_to(elbow_was[arm]) * 60.0
-			var turned: float = way_now.angle_to(way_was[arm]) * 60.0
+			var moved: float = wrist_now.distance_to(wrist_was[arm]) * 60.0 if seen else 0.0
+			var bent: float = elbow_now.distance_to(elbow_was[arm]) * 60.0 if seen else 0.0
+			var turned: float = way_now.angle_to(way_was[arm]) * 60.0 if seen else 0.0
 
 			if moved > worst_wrist:
 				worst_wrist = moved

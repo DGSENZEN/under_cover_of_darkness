@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Cuts the recorded showcase shots into one film: each shot's load trimmed off, a short fade between.
-usage: cut.py <shots dir> <out.mp4>"""
+usage: cut.py <shots dir> <out.mp4> [the list in diag_showcase_video.gd, SHOTS if none]"""
 import json
 import re
 import subprocess
@@ -15,14 +15,15 @@ FADE = 0.2
 CLOSE = {"choose": "crop=720:405:1200:675,scale=1920:1080:flags=neighbor,setsar=1"}
 
 shots_dir, out = sys.argv[1:3]
+which = sys.argv[3] if len(sys.argv) > 3 else "SHOTS"
 source = open("tests/diag_showcase_video.gd").read()
-shots = re.findall(r'"(\w+)"', re.search(r"^const SHOTS := \[(.*)\]", source, re.M).group(1))
+shots = re.findall(r'"(\w+)"', re.search(rf"^const {which} := \[(.*)\]", source, re.M).group(1))
 inputs, parts, labels = [], [], ""
 
 for n, shot in enumerate(shots):
     path = f"{shots_dir}/{shot}.avi"
     length = float(json.loads(subprocess.check_output([FFPROBE, "-v", "error", "-select_streams", "v", "-show_entries", "stream=duration", "-of", "json", path]))["streams"][0]["duration"])
-    start = 0.0 if n == 0 else LOAD
+    start = 0.0 if n == 0 and which == "SHOTS" else LOAD
     span = length - start
     inputs += ["-i", path]
     close = CLOSE.get(shot, "")
