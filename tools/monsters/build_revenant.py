@@ -4,6 +4,10 @@ swollen and sagging with water; a real skull with flesh hung on it, its teeth it
 on one shoulder, milagros nailed into it, what it wore rotted into it, and a rig of its own. The stance is its rest
 pose: it stands hunched, arms hanging past its knees, and that is what its skin is built for.
 
+It never left the lake. Its hair, the roots grown on its crust and its rags drift up off it as if it were still under
+water (UV x: how far along each it is, for revenant_flesh.gdshader; UV y: its own phase), and the seep that raised it
+lights a split down its chest and the cracks round what holds it (colour alpha: under 0.85 how much seep; above, its eyes).
+
 Blender --background --factory-startup --python tools/monsters/build_revenant.py -- <repo root>
 With REVENANT_PICTURES set, renders each view there.
 """
@@ -32,6 +36,7 @@ VOXEL_LAST = 0.0068
 TRIS = 26000
 HEART = 22
 HEAD_SCALE = 1.22
+HEAD_TILT = 0.42
 ## The jaw hangs open this far (rad) in its rest: the mouth is there to open further.
 JAW_HANGS = 0.3
 
@@ -74,8 +79,12 @@ PALE_COLD = (0.25, 0.3, 0.28)
 BRUISE = (0.2, 0.2, 0.25)
 SILT = (0.045, 0.05, 0.042)
 ROT = (0.26, 0.2, 0.13)
-WOOL = (0.075, 0.065, 0.06)
-WOOL_LIT = (0.17, 0.14, 0.12)
+WOOL = (0.17, 0.145, 0.12)
+WOOL_LIT = (0.3, 0.25, 0.2)
+HAIR = (0.018, 0.022, 0.024)
+HAIR_TIP = (0.05, 0.07, 0.06)
+ROOT = (0.07, 0.05, 0.035)
+ROOT_TIP = (0.16, 0.14, 0.08)
 TEZONTLE = (0.2, 0.065, 0.05)
 LAKE_CRUST = (0.42, 0.39, 0.3)
 TIN = (0.6, 0.58, 0.47)
@@ -295,7 +304,7 @@ def head_on(joints):
     for obj in made:
         bpy.data.objects.remove(obj)
 
-    tilt = Matrix.Rotation(0.42, 4, "X")
+    tilt = Matrix.Rotation(HEAD_TILT, 4, "X")
     box = [v.co for v in pieces["Skull"].vertices]
     base = Vector((0.0, min(c.y for c in box) + 0.09, min(c.z for c in box) + 0.05))
     place = Matrix.Translation(joints["neck_end"]) @ tilt @ Matrix.Scale(HEAD_SCALE, 4) @ Matrix.Translation(-base)
@@ -304,6 +313,8 @@ def head_on(joints):
     skull_parts = islands_of(pieces["Skull"])
     jaw_parts = islands_of(pieces["Jaw"])
     skull = skull_parts[0]
+    # In the socket, a little out from its floor, so it shows and the socket stays dark round it.
+    sockets = [place @ (pit + Vector((0.0, 0.016, 0.0))) for pit in pits_of(skull)]
     skull.transform(place)
     # (The jaw's flesh is its two biggest: bone and gum.)
     jaw_flesh = jaw_parts[:2]
@@ -318,7 +329,6 @@ def head_on(joints):
 
     pieces["Gullet"].transform(place)
     pieces["Tongue"].transform(jaw_place)
-    sockets = [place @ Vector((x, 0.098, 0.03)) for x in (-0.047, 0.047)]
     print("HEAD", [round(c, 3) for c in (place @ Vector((0.0, max(c.y for c in box), 0.0)))], "HINGE", [round(c, 3) for c in hinge_at], "TEETH", len(skull_teeth), len(jaw_teeth))
     return skull, joined(jaw_flesh), skull_teeth, jaw_teeth, [pieces["Gullet"]], [pieces["Tongue"]], hinge_at, sockets
 
@@ -465,7 +475,24 @@ def jowls(c, hinge):
     return move
 
 
-def stone_and_cloth(obj, lookup, crust_at, cloth_of, hinge):
+def split_wanders(z):
+    return noise.noise(Vector((z * 3.4, 4.0, 1.0))) * 0.17 + noise.noise(Vector((z * 13.0, 9.0, 1.0))) * 0.035
+
+
+def split_at(c, normal_y, row, top, bottom):
+    """How near the split down its chest this is: 1 in it, 0 clear of it."""
+    trunk = row.get("chest", 0.0) + row.get("spine", 0.0) + row.get("hips", 0.0) * 0.5
+
+    if trunk < 0.3 or normal_y < -0.1 or c.z > top or c.z < bottom:
+        return 0.0
+
+    ends = smooth(top, top - 0.22, c.z) * smooth(bottom, bottom + 0.2, c.z)
+    # (Wider and narrower as it goes, closing up altogether in places.)
+    wide = 0.05 + max(noise.noise(Vector((c.z * 6.0, 2.0, 5.0))), -0.03) * 0.09
+    return smooth(wide * 1.5, wide * 0.25, abs(c.x - split_wanders(c.z))) * ends
+
+
+def stone_and_cloth(obj, lookup, crust_at, cloth_of, hinge, split_top, split_bottom):
     """Done on the finest skin, so it stays sharp: the crust's crags, and the lip of what it wore."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
@@ -491,6 +518,9 @@ def stone_and_cloth(obj, lookup, crust_at, cloth_of, hinge):
         # Skin: mottled, slack, folded where it gathers at a joint. Over the skull, lumps of what's left.
         slack = noise.noise(c * 9.0) * 0.006 + max(1.0 - abs(noise.noise(c * Vector((5.0, 5.0, 16.0)))) * 7.0, 0.0) * -0.006
         out = rag * 0.012 + slack * (1.0 - rag * 0.5) * (1.0 - face * 0.6)
+        # The split: sunk in, its lips standing.
+        split = split_at(c, v.normal.y, row, split_top, split_bottom)
+        out += smooth(0.1, 0.55, split) * 0.016 * (1.0 - smooth(0.55, 0.95, split)) - smooth(0.55, 0.95, split) * 0.075
         move = v.normal * out
 
         if face > 0.0:
@@ -591,6 +621,182 @@ def milagro(bm_out, at, normal, rng, marks):
     bmesh.ops.recalc_face_normals(bm_out, faces=faces + nail_faces)
 
 
+def strand(bm, roots, marks, kind, root, way, length, radius, flat, rng, uv_layer, attach_layer):
+    """One thing drifting off it: a closed taper, or a flat rag, rising and curling as it would under water."""
+    rows = 11
+    sides = 4 if flat else 6
+    phase = rng.random()
+    seed = rng.uniform(0.0, 50.0)
+    at = root - way * radius
+    heading = way.copy()
+    rings = []
+    roots.append(root.copy())
+    index = len(roots)
+
+    for i in range(rows):
+        t = i / float(rows - 1)
+        across = heading.cross(Vector((0.13, 0.27, 0.95))).normalized()
+        other = heading.cross(across).normalized()
+        wide = (radius * (1.0 - t * 0.92) if not flat else radius * (1.0 - t * 0.88))
+        ring = []
+
+        for k in range(sides):
+            a = (k + 0.5) / sides * math.tau
+            offset = across * math.cos(a) * wide + other * math.sin(a) * (wide * (0.09 if flat else 1.0))
+            ring.append(bm.verts.new(at + offset))
+
+        rings.append((ring, t))
+        # Mostly back, and only a little up: it's being carried by something slow.
+        heading = (heading + Vector((0.0, -0.16, 0.05)) + Vector((noise.noise(Vector((seed, t * 2.4, 0.0))), noise.noise(Vector((seed, t * 2.4, 7.0))), noise.noise(Vector((seed, t * 2.4, 13.0))) * 0.6)) * 0.42).normalized()
+        at += heading * length / (rows - 1)
+
+    faces = [bm.faces.new([v for v in reversed(rings[0][0])]), bm.faces.new(rings[-1][0])]
+
+    for i in range(rows - 1):
+        a, b = rings[i][0], rings[i + 1][0]
+
+        for k in range(sides):
+            j = (k + 1) % sides
+            faces.append(bm.faces.new((a[k], a[j], b[j], b[k])))
+
+    for ring, t in rings:
+        for v in ring:
+            v[attach_layer] = index
+
+    place_t = {v: t for ring, t in rings for v in ring}
+
+    for f in faces:
+        marks[f] = kind
+        f.smooth = True
+
+        for loop in f.loops:
+            loop[uv_layer].uv = (place_t[loop.vert], phase)
+
+
+def strands_on(bm, tree, marks, lookup, cloth_of, crust_at, sockets, rng):
+    """Its hair, the lake's roots grown on its crust, and its rags. Returns where each is fixed, for its weights."""
+    uv_layer = bm.loops.layers.uv.get("UVMap") or bm.loops.layers.uv.new("UVMap")
+    attach_layer = bm.verts.layers.int.new("Attach")
+    roots = []
+    crown = sockets[0].lerp(sockets[1], 0.5) + Vector((0.0, -0.12, 0.05))
+    hair = roots_made = rags = 0
+
+    for _attempt in range(400):
+        if hair >= 30:
+            break
+
+        way = Vector((rng.gauss(0.0, 0.8), rng.uniform(-1.0, -0.1), rng.uniform(-0.1, 0.8))).normalized()
+        hit, normal, _i, _d = tree.ray_cast(crown + way * 0.8, -way, 0.8)
+
+        if hit is None or normal.dot(way) < 0.25:
+            continue
+
+        strand(bm, roots, marks, "hair", hit, (way + Vector((0.0, -0.5, 0.1))).normalized(), rng.uniform(0.4, 0.95), rng.uniform(0.014, 0.024), False, rng, uv_layer, attach_layer)
+        hair += 1
+
+    for _attempt in range(400):
+        if roots_made >= 16:
+            break
+
+        at, size = crust_at[rng.randrange(len(crust_at))]
+        way = Vector((rng.gauss(0.0, 1.0), rng.gauss(0.0, 1.0), rng.gauss(0.2, 0.8))).normalized()
+        hit, normal, _i, _d = tree.ray_cast(at + way * 1.0, -way, 1.2)
+
+        if hit is None or normal.dot(way) < 0.2 or (hit - at).length > size:
+            continue
+
+        strand(bm, roots, marks, "root", hit, (normal + Vector((0.0, -0.3, -0.2))).normalized(), rng.uniform(0.2, 0.5), rng.uniform(0.012, 0.02), False, rng, uv_layer, attach_layer)
+        roots_made += 1
+
+    for _attempt in range(1500):
+        if rags >= 30:
+            break
+
+        at = Vector((rng.uniform(-0.9, 0.9), rng.uniform(-0.6, 0.9), rng.uniform(0.5, 1.9)))
+        way = Vector((rng.gauss(0.0, 1.0), rng.gauss(0.0, 1.0), rng.gauss(-0.1, 0.5))).normalized()
+        hit, normal, _i, _d = tree.ray_cast(at + way * 1.5, -way, 2.0)
+
+        if hit is None or normal.dot(way) < 0.25:
+            continue
+
+        here = cloth_of(lookup(hit), hit)
+
+        # (From where it has torn: its edge, not the middle of it.)
+        if here < 0.05 or here > 0.95:
+            continue
+
+        strand(bm, roots, marks, "rag", hit, (normal * 0.8 + Vector((0.0, -0.3, 0.15))).normalized(), rng.uniform(0.2, 0.46), rng.uniform(0.025, 0.05), True, rng, uv_layer, attach_layer)
+        rags += 1
+
+    print("DRIFTING", hair, roots_made, rags)
+    return roots
+
+
+def pits_of(skull):
+    """Where its eyes go: the deepest of each socket, measured on the skull alone, in its own space. A ray counts only with bone
+    round it, so nothing past its cheek can pass for a socket. The skull isn't the same on both sides."""
+    bm = bmesh.new()
+    bm.from_mesh(skull)
+    tree = BVHTree.FromBMesh(bm)
+    ys = [v.co.y for v in bm.verts]
+    front = max(ys) + 0.05
+    step = 0.006
+    depth = {}
+
+    for i in range(-22, 23):
+        for k in range(-12, 24):
+            hit, _normal, _index, _distance = tree.ray_cast(Vector((i * step, front, k * step)), Vector((0.0, -1.0, 0.0)), 1.0)
+            depth[(i, k)] = (front - hit.y) if hit is not None else None
+
+    pits = []
+
+    for side in (-1, 1):
+        best = None
+        most = -1.0
+
+        for (i, k), d in depth.items():
+            if d is None or i * side < 4 or k < 2:
+                continue
+
+            # Rim: shallower bone, this far out, every way round.
+            rim = [depth.get((i + a, k + b)) for a, b in ((7, 0), (-7, 0), (0, 6), (0, -6), (5, 5), (-5, 5), (5, -5), (-5, -5))]
+
+            if any(r is None or r > d - 0.012 for r in rim):
+                continue
+
+            if d > most:
+                most = d
+                best = (i, k)
+
+        if best is None:
+            raise RuntimeError("no socket found on side %d" % side)
+
+        at = Vector((best[0] * step, front - most, best[1] * step))
+        pits.append(at)
+        print("PIT", side, [round(c, 3) for c in at], "deep", round(most, 3))
+
+    bm.free()
+    return pits
+
+
+def in_their_sockets(bm, eyes, ahead):
+    """Refuses an eye with no skull round it: left, right, above, below, and nothing in front."""
+    tree = BVHTree.FromBMesh(bm)
+    up = ahead.cross(Vector((1.0, 0.0, 0.0))).normalized() * -1.0
+
+    for eye in eyes:
+        for way in (Vector((1.0, 0.0, 0.0)), Vector((-1.0, 0.0, 0.0)), up, -up):
+            hit, _normal, _index, _distance = tree.ray_cast(eye, way, 0.09)
+
+            if hit is None:
+                raise RuntimeError("an eye at %s has no skull round it, %s" % (eye, way))
+
+        hit, _normal, _index, _distance = tree.ray_cast(eye + ahead * 0.024, ahead, 0.5)
+
+        if hit is not None:
+            raise RuntimeError("an eye at %s is covered" % eye)
+
+
 def nail_them_on(obj, lookup, rng):
     """Into its chest, its hump, its arms, by the dozen: the living did this to keep it down."""
     bm = bmesh.new()
@@ -623,7 +829,7 @@ def nail_them_on(obj, lookup, rng):
     return bm, marks
 
 
-def paint(bm, marks, lookup, crust_at, cloth_of, nails):
+def paint(bm, marks, lookup, crust_at, cloth_of, nails, nailed, split_top, split_bottom):
     """Pale and cold, silt in its folds, veins dark under stretched skin, what it wore rotted into it, stone on its shoulder."""
     bm.verts.ensure_lookup_table()
     bm.normal_update()
@@ -664,8 +870,16 @@ def paint(bm, marks, lookup, crust_at, cloth_of, nails):
             elif kind == "gullet":
                 tone = (0.04, 0.012, 0.012)
             elif kind == "eye":
-                tone = (0.9, 0.8, 0.5)
+                tone = (0.9, 1.0, 0.8)
                 alpha = 1.0
+            elif kind in ("hair", "root", "rag"):
+                t = loop[bm.loops.layers.uv["UVMap"]].uv.x
+                if kind == "hair":
+                    tone = mix(HAIR, HAIR_TIP, smooth(0.5, 1.0, t))
+                elif kind == "root":
+                    tone = mix(ROOT, ROOT_TIP, smooth(0.3, 1.0, t))
+                else:
+                    tone = mix(WOOL, WOOL_LIT, smooth(0.0, 0.3, noise.noise(c * 40.0)))
             else:
                 row = lookup(c)
                 face = row.get("head", 0.0) + row.get("jaw", 0.0)
@@ -692,6 +906,14 @@ def paint(bm, marks, lookup, crust_at, cloth_of, nails):
                     if (c - tip).length < 0.12:
                         tone = mix(tone, (0.03, 0.025, 0.02), smooth(-0.025, 0.0, (c - tip).dot(way)))
                 grown = crust_of(c, crust_at)
+                # Round what's nailed to it, the skin has gone black and split: what holds it down, and what comes up round that.
+                near_nail = max((smooth(0.075, 0.02, (c - at).length) for at in nailed if abs(c.z - at.z) < 0.09), default=0.0)
+                tone = mix(tone, SILT, near_nail * 0.8)
+                split = split_at(c, v.normal.y, row, split_top, split_bottom)
+                tone = mix(tone, (0.015, 0.012, 0.012), smooth(0.45, 0.8, split))
+                # How much seep lies under the skin here: most in the split, then round the nails and the crust's edge, and a little all over.
+                alpha = 0.04 + smooth(0.0, 0.5, split) * 0.3 + smooth(0.45, 0.98, split) * 0.5 + near_nail * 0.3 + smooth(0.0, 0.25, grown) * (1.0 - smooth(0.25, 0.7, grown)) * 0.3
+                alpha = min(alpha, 0.84) * (1.0 - face)
 
                 if grown > 0.0:
                     rock = mix(TEZONTLE, (0.27, 0.25, 0.2), smooth(0.0, 0.3, noise.noise(c * 9.0)))
@@ -708,7 +930,7 @@ def paint(bm, marks, lookup, crust_at, cloth_of, nails):
     return layer
 
 
-def rig_it(joints, hinge):
+def rig_it(joints, hinge, sockets):
     data = bpy.data.armatures.new("Revenant")
     rig = bpy.data.objects.new("RevenantRig", data)
     bpy.context.collection.objects.link(rig)
@@ -738,6 +960,8 @@ def rig_it(joints, hinge):
     bone("neck_2", neck_mid, joints["neck_end"], "neck_1")
     bone("head", joints["neck_end"], joints["neck_end"] + Vector((0.0, 0.2, 0.2)), "neck_2")
     bone("jaw", hinge, hinge + Vector((0.0, 0.2, -0.08)), "head")
+    bone("eye_l", sockets[0], sockets[0] + Vector((0.0, 0.06, 0.0)), "head")
+    bone("eye_r", sockets[1], sockets[1] + Vector((0.0, 0.06, 0.0)), "head")
 
     for side in ("_l", "_r"):
         bone("clavicle" + side, joints["clavicle" + side], joints["clavicle_end" + side], "chest")
@@ -757,12 +981,13 @@ def rig_it(joints, hinge):
     return rig
 
 
-def skin_it(obj, rig, lookup, islands):
+def skin_it(obj, rig, lookup, attach_points):
     """Each vertex takes its nearest flesh's weights, softened, its four most. What is nailed on goes with what it's nailed to."""
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bm.verts.ensure_lookup_table()
-    rows = [lookup(v.co) for v in bm.verts]
+    attach = bm.verts.layers.int.get("Attach")
+    rows = [lookup(attach_points[v[attach] - 1]) if v[attach] > 0 else lookup(v.co) for v in bm.verts]
 
     for _ in range(2):
         soft = []
@@ -894,9 +1119,12 @@ def main():
     obj.name = "Revenant"
     remesh(obj, VOXEL_LAST)
     apply(obj, "SMOOTH", factor=0.5, iterations=1)
-    stone_and_cloth(obj, looked_up, crust_at, cloth_of, hinge)
+    split_top = joints["chest_end"].z - 0.02
+    split_bottom = joints["spine"].z - 0.3
+    stone_and_cloth(obj, looked_up, crust_at, cloth_of, hinge, split_top, split_bottom)
     closed_and_cut(obj)
     bm, marks = nail_them_on(obj, looked_up, rng)
+    bm.loops.layers.uv.new("UVMap")
     # Its own teeth, what hangs in its mouth, and its eyes, far back in their sockets.
     for kind, parts in (("tooth", skull_teeth + jaw_teeth), ("gullet", tongue)):
         for part in parts:
@@ -906,6 +1134,8 @@ def main():
             for f in bm.faces:
                 if f not in before:
                     marks[f] = kind
+
+    in_their_sockets(bm, sockets, Matrix.Rotation(HEAD_TILT, 3, "X") @ Vector((0.0, 1.0, 0.0)))
 
     for socket in sockets:
         made = bmesh.ops.create_icosphere(bm, subdivisions=2, radius=0.021)
@@ -917,8 +1147,12 @@ def main():
             marks[f] = "eye"
 
     bmesh.ops.remove_doubles(bm, verts=list({v for f, k in marks.items() if k in ("tooth", "gullet") for v in f.verts}), dist=0.00002)
+    marks = {f: k for f, k in marks.items() if f.is_valid}
     bm.faces.ensure_lookup_table()
-    paint(bm, {f: k for f, k in marks.items() if f.is_valid}, looked_up, crust_at, cloth_of, nail_tree)
+    tree = BVHTree.FromBMesh(bm)
+    nailed = [sum((v.co for v in f.verts), Vector()) / len(f.verts) for f, k in marks.items() if k == "iron"]
+    attach_points = strands_on(bm, tree, marks, looked_up, cloth_of, crust_at, sockets, rng)
+    paint(bm, marks, looked_up, crust_at, cloth_of, nail_tree, nailed[::6], split_top, split_bottom)
     bad = sum(1 for e in bm.edges if not e.is_manifold)
     print("OPEN EDGES", bad)
 
@@ -930,8 +1164,12 @@ def main():
     obj.data.color_attributes.active_color_index = 0
     obj.data.color_attributes.render_color_index = 0
     print("STANDS", round(max(v.co.z for v in obj.data.vertices), 3), "WIDE", round(max(v.co.x for v in obj.data.vertices) - min(v.co.x for v in obj.data.vertices), 3), "TRIS", sum(len(p.vertices) - 2 for p in obj.data.polygons))
-    rig = rig_it(joints, hinge)
-    skin_it(obj, rig, looked_up, marks)
+    rig = rig_it(joints, hinge, sockets)
+    skin_it(obj, rig, looked_up, attach_points)
+
+    if "Attach" in obj.data.attributes:
+        obj.data.attributes.remove(obj.data.attributes["Attach"])
+
     obj.select_set(True)
     rig.select_set(True)
     bpy.context.view_layer.objects.active = rig

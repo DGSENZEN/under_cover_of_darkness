@@ -24,6 +24,8 @@ Its cause in the world: the drowned of the old lakebed, raised by the seepage ([
 - "More vulnerable" means a brazier hit sears it: it staggers, its wind-up breaks, and it takes double from everything for a few seconds.
 - Fire shells take the round place copal uses, so you carry copal or fire. The brazier takes one of the two item places.
 
+**On the first body, the user:** "It's a good first start, but it needs glowy eyes, some more details that make it look more of a spectre or a supernatural being not just an undead, and the texture work and shading needs to be in tune with our aesthetic work". Claude's answer, for the user to judge: it never left the lake. Its eyes burn phosphor green, the colour of the seeped; the seep lights a split down its chest and the cracks round what holds it; the water's light crawls on it and black water runs up it; its hair, roots and rags drift as if under water; and it stands in a pool of black water that isn't on the floor. Fill and rim set as the ánimas' flesh is.
+
 ## Goals
 
 - It reads wrong from across a dark room, on shape alone.
