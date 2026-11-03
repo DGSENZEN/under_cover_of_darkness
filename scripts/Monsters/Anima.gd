@@ -60,6 +60,12 @@ const MISSED_TIME := 0.8
 ## Thrown off: how long it is stunned and exposed, how hard it is thrown.
 const THROWN_TIME := 1.5
 const THROW_SPEED := 9.0
+## Small ones and an elite: how far off it they know it; while you are how many of their leaps off they stay
+## round it, how far out, and how fast.
+const WAITS_WITHIN := 14.0
+const WAITS_WHILE_YOU_ARE := 2.0
+const WAITS_ROUND := 2.2
+const WAITS_PACE := 0.55
 ## What weighs anything: how much of its speed it starts a leap with; coming down, how much it
 ## carries on with, how much you feel it, and from how far (m).
 const LEAP_STARTS_AT := 0.12
@@ -162,6 +168,24 @@ func hit_radius() -> float:
 ## One of this one's numbers, as it stands now.
 func form_number(what: String) -> float:
 	return float(_form[what])
+
+
+## The elite these small ones are drawn to, if there is one about: not itself, nor another mouth.
+func elite_near() -> Node3D:
+	if form == &"torso":
+		return null
+
+	var nearest: Node3D = null
+	var best := WAITS_WITHIN
+
+	for other in get_tree().get_nodes_in_group(&"elite_mouths"):
+		var off: float = other.global_position.distance_to(global_position)
+
+		if not other.dead and not other.asleep and off < best:
+			best = off
+			nearest = other
+
+	return nearest
 
 
 ## How many it has taken in.
@@ -449,6 +473,13 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 			var leech: Node = _leech()
 			var far: float = _chest_distance(you)
 			var line_clear: bool = CopalLine.crossing(get_tree(), global_position, _chest(you)) == null
+			var waits_by := elite_near()
+
+			# With you far off, the small ones stay round what they will feed.
+			if waits_by != null and far > reach * WAITS_WHILE_YOU_ARE:
+				var spot: Vector3 = waits_by.global_position + Vector3(cos(_spread_turn), 0.0, sin(_spread_turn)) * WAITS_ROUND
+				var to_spot: Vector3 = (spot - global_position) * Vector3(1.0, 0.0, 1.0)
+				return _hold_height(_feel_round(to_spot.limit_length(1.0), delta) * float(_form["speed"]) * WAITS_PACE * _slowed(), delta)
 
 			if far <= close:
 				if _swipe_in <= 0.0 and line_clear:
