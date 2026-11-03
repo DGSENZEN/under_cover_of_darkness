@@ -137,6 +137,7 @@ and painted over by `tools/textures/eclipse_atlas.py`:
 - **The living words' Latin atlas** (`textures/painted/library/glyphs_latin.png`, baked by
   `tools/textures/library_glyphs.py`): Roboto Bold by **Christian Robertson** (Google), Apache License 2.0,
   already in `examples_dd3d/`.
+- The ribs of the mouth (`assets/monsters/anima_mouth.glb`, `assets/monsters/source/mouth_ribs_base.glb`), cut from "Free low-poly PBR / BSDF textured human skeleton" by AaronJOlson ([Sketchfab](https://sketchfab.com/3d-models/free-low-poly-pbr-bsdf-textured-human-skeleton-d0c9919aec004fd39d65ce7a7960969b)), [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/). Changed: only the ribs are used; split, reshaped, and drawn into teeth.
 
 ## Fonts
 

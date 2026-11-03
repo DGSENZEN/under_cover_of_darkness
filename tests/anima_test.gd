@@ -31,6 +31,7 @@ func _ready() -> void:
 	await _face_model()
 	await _face_life()
 	await _hands_life()
+	await _mouth_model()
 	await _forms()
 	await _round_cover()
 	await _swipes()
@@ -171,6 +172,40 @@ func _round_cover() -> void:
 		one.free()
 		block.free()
 		await _frames(2)
+
+
+func _mouth_model() -> void:
+	var model: PackedScene = load("res://assets/monsters/anima_mouth.glb") if ResourceLoader.exists("res://assets/monsters/anima_mouth.glb") else null
+	_check("O0 the mouth's model is there", model != null)
+
+	if model == null:
+		_check("O1 the mouth's parts", false)
+		_check("O2 within budget", false)
+		return
+
+	var made: Node = model.instantiate()
+	var parts_all_there := true
+
+	for part in ["Mass", "RibsLeft", "RibsRight", "Gullet", "Candles"]:
+		parts_all_there = parts_all_there and made.find_child(part, true, false) != null
+
+	var arms := 0
+	var faces := 0
+
+	for i in range(1, 9):
+		arms += 1 if made.find_child("Arm_%d" % i, true, false) != null else 0
+		faces += 1 if made.find_child("Face_%d" % i, true, false) != null else 0
+
+	var tris := 0
+
+	for mesh in made.find_children("*", "MeshInstance3D", true, false):
+		for surface in mesh.mesh.get_surface_count():
+			var arrays: Array = mesh.mesh.surface_get_arrays(surface)
+			tris += (arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3
+
+	_check("O1 the mouth's parts (%d arms, %d faces)" % [arms, faces], parts_all_there and arms == 5 and faces == 3)
+	_check("O2 within budget (%d)" % tris, tris > 0 and tris < 30000)
+	made.free()
 
 
 func _forms() -> void:
