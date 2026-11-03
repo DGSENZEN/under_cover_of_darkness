@@ -40,6 +40,9 @@ func _ready() -> void:
 	if only == "" or only == "life":
 		await _life()
 
+	if only == "presses":
+		await _press_stills()
+
 	if only == "" or only == "mouth":
 		await _mouth()
 
@@ -544,6 +547,46 @@ func _mouth_stills() -> void:
 
 		one.free()
 		await _frames(3)
+
+
+## What presses out from under the mouth's skin, held, close to, from the side you see it from.
+func _press_stills() -> void:
+	var at := Vector3(0, 1.05, -2.7)
+	var facing := Basis(Vector3.UP, PI)
+	p.teleport(Transform3D(facing, at))
+	await _frames(6)
+	var ahead: Vector3 = -facing.z
+	var one: CharacterBody3D = AnimaScript.new()
+	one.form = &"torso"
+	one.leap_chance = 0.0
+	one.position = at + ahead * 2.0 + Vector3(0.0, -0.55, 0.0)
+	add_child(one)
+	await _frames(3)
+	one.state = one.State.REST
+	var pin: Vector3 = one.global_position
+	var eye: Vector3 = p.camera.global_position
+
+	for shot in [["front", 0.0, 0.0], ["front_scream", 0.0, 1.0], ["quarter", 0.75, 1.0], ["side", 1.5, 0.5], ["top", 0.4, 1.0]]:
+		for n in one.body.presses_held():
+			one.body.press_held_off(n)
+
+		one.body.global_basis = Basis.looking_at(-ahead, Vector3.UP) * Basis(Vector3.UP, shot[1])
+		one.body.hold_press(0, eye, shot[2])
+		one.body.hold_press(1, eye, shot[2])
+		one.body.hold_press(2, eye + Vector3(0.0, 1.0, 0.0), shot[2])
+
+		for i in 70:
+			one.global_position = pin
+			one.state = one.State.REST
+			one.body.global_basis = Basis.looking_at(-ahead, Vector3.UP) * Basis(Vector3.UP, shot[1])
+			var way: Vector3 = (pin + Vector3(0.0, 0.25, 0.0) - p.camera.global_position).normalized()
+			p.rotation.y = atan2(-way.x, -way.z)
+			p.neck.rotation.x = asin(way.y)
+			await get_tree().physics_frame
+
+		await _shot("press_" + shot[0])
+
+	one.free()
 
 
 ## A death, as it plays, one a run (it can't be taken back): --only=die_eyes|animas|both|swipe,

@@ -39,6 +39,7 @@ func _ready() -> void:
 	await _mouth_swells()
 	await _mouth_arrives_whole()
 	await _mouth_spectral()
+	await _mouth_gait()
 	await _forms()
 	await _round_cover()
 	await _swipes()
@@ -474,35 +475,168 @@ func _mouth_spectral() -> void:
 	await _frames(2)
 	_check("Sp4 the other forms' skin is as it was", not others.body._flesh.get_shader_parameter(&"spectral"))
 	others.free()
-	_check("Sp5 souls in it, straining out (%d)" % body.souls_held(), body.souls_held() >= 6)
-	var furthest := 0.0
-	var most_out := 0
-	var yanked := false
+	_check("Sp5 nothing floats off it: they are in it", body.find_child("Soul", true, false) == null)
+	_check("Sp6 they press out from under its skin (%d)" % body.presses_held(), body.presses_held() >= 6 and int(look.get_shader_parameter(&"press_count")) >= 6)
+	var on_skin: bool = range(body.presses_held()).all(func(n): return body.press_on_skin(n))
+	_check("Sp7 where its skin is, and not in its mouth", on_skin)
+	var kinds := {}
+	var strongest := 0.0
+	var most_at_once := 0
+	var deepest := 0.0
+	var jaw_low := 9.0
+	var jaw_high := -9.0
+	var fastest_back := 0.0
+	var all_shown := true
+	var was: Array[float] = []
+	was.resize(body.presses_held())
 
-	for i in 480:
+	for i in 600:
 		await get_tree().physics_frame
-		furthest = maxf(furthest, body.soul_reach())
-		most_out = maxi(most_out, body.souls_out())
-		yanked = yanked or body.soul_yanked()
+		var at_once := 0
 
-	_check("Sp6 a long way out of it (%.2f m)" % furthest, furthest > 0.6)
-	_check("Sp7 and it hauls them back (%d out at most)" % most_out, yanked and most_out >= 2)
-	_check("Sp8 quiet enough, crawling (%.2f)" % body.hunger(), body.hunger() < 0.3)
+		for n in body.presses_held():
+			var strength: float = body.press_strength(n)
+			strongest = maxf(strongest, strength)
+			deepest = minf(deepest, strength)
+			at_once += 1 if strength > 0.4 else 0
+			fastest_back = maxf(fastest_back, (was[n] - strength) * 60.0)
+			was[n] = strength
+
+			if strength > 0.4:
+				kinds[body.press_kind(n)] = true
+				all_shown = all_shown and body.press_shown(n)
+
+				if body.press_kind(n) == 0:
+					jaw_low = minf(jaw_low, body.press_jaw(n))
+					jaw_high = maxf(jaw_high, body.press_jaw(n))
+
+		most_at_once = maxi(most_at_once, at_once)
+
+	_check("Sp8 faces and hands both (%s)" % str(kinds.keys()), kinds.has(0) and kinds.has(1))
+	_check("Sp8b each shows, up out of its skin", all_shown)
+	_check("Sp9 several at once, hard (%d, %.2f)" % [most_at_once, strongest], most_at_once >= 2 and strongest > 0.8)
+	_check("Sp10 the faces scream under it (%.2f..%.2f)" % [jaw_low, jaw_high], jaw_high - jaw_low > 0.4)
+	_check("Sp11 hauled back in, sharply (%.1f a second), and the skin goes in after (%.2f)" % [fastest_back, deepest], fastest_back > 4.0 and deepest < -0.15)
+	_check("Sp12 quiet enough, crawling (%.2f)" % body.hunger(), body.hunger() < 0.3)
+	var out_low := 9.0
+	var out_high := -9.0
+
+	for i in 240:
+		await get_tree().physics_frame
+
+		for n in 3:
+			out_low = minf(out_low, body.skull_out(n))
+			out_high = maxf(out_high, body.skull_out(n))
+
+	_check("Sp13 its heads try to get out of it too (%.2f..%.2f)" % [out_low, out_high], out_high - out_low > 0.15)
+	# Now and then one gets a hand out, a real one, and it is hauled back.
+	var furthest := -9.0
+	var torn := 0.0
+	var hidden_after := false
+
+	for i in 1500:
+		await get_tree().physics_frame
+		furthest = maxf(furthest, body.burst_out())
+		torn = maxf(torn, body.tear_open())
+		hidden_after = hidden_after or (furthest > 0.2 and not body.burst_shown())
+
+	_check("Sp14 a hand tears out of it (%.2f m)" % furthest, furthest > 0.3)
+	_check("Sp15 the skin torn where it came (%.2f)" % torn, torn > 0.6)
+	_check("Sp16 and it is hauled back in", hidden_after)
 	one.free()
 	await _frames(2)
 	var teller := _anima(&"torso", HOME + Vector3(0.0, -0.5, -3.2))
 	teller.leap_chance = 1.0
 	await _until(func(): return teller.state == STATE.TELL, 10.0)
 	await _frames(100)
-	var lean_toward := 0.0
+	var most_gathered := 0
+	var lean_toward := -1.0
 
-	for i in 10:
+	for i in 40:
 		await get_tree().physics_frame
-		lean_toward = maxf(lean_toward, teller.body.souls_toward(p.global_position))
+		var at_once := 0
 
-	_check("Sp9 gathering, it blazes (%.2f)" % teller.body.hunger(), teller.body.hunger() > 0.6)
-	_check("Sp10 and they all strain at you (%d out, %.2f)" % [teller.body.souls_out(), lean_toward], teller.body.souls_out() >= 5 and lean_toward > 0.6)
+		for n in teller.body.presses_held():
+			at_once += 1 if teller.body.press_strength(n) > 0.4 else 0
+			lean_toward = maxf(lean_toward, teller.body.press_toward(n, p.global_position))
+
+		most_gathered = maxi(most_gathered, at_once)
+
+	_check("Sp17 gathering, it blazes (%.2f)" % teller.body.hunger(), teller.body.hunger() > 0.6)
+	_check("Sp18 and they all press at you (%d, %.2f)" % [most_gathered, lean_toward], most_gathered >= 4 and lean_toward > 0.4)
 	teller.free()
+	await _frames(2)
+
+
+## Its limbs go as an animal's do: in an order, each its own, no two steps alike.
+func _mouth_gait() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(10)
+	var one := _anima(&"torso", HOME + Vector3(0.3, -0.5, -16.0))
+	one.leap_chance = 0.0
+	await _frames(30)
+	var body: Node3D = one.body
+	var order: Array[int] = []
+	var was_up := [false, false, false, false]
+	var both_up := 0
+	var lifts: Array = [[], [], [], []]
+	var high := [0.0, 0.0, 0.0, 0.0]
+	var steps_took: Array = [[], [], [], []]
+	var since := [0, 0, 0, 0]
+	var hovered := 0
+
+	for frame in 900:
+		await get_tree().physics_frame
+
+		for arm in 4:
+			var up: bool = not body.arm_dug_in(arm)
+
+			if up and not was_up[arm]:
+				order.append(arm)
+				since[arm] = 0
+				high[arm] = 0.0
+
+			if up:
+				since[arm] += 1
+				high[arm] = maxf(high[arm], body.wrist(arm).y - body.dug_floor(arm))
+				hovered += 1 if body.arm_hovering(arm) else 0
+
+			if was_up[arm] and not up:
+				lifts[arm].append(high[arm])
+				steps_took[arm].append(since[arm])
+
+			was_up[arm] = up
+
+		if not body.arm_dug_in(0) and not body.arm_dug_in(1):
+			both_up += 1
+
+	var in_order := 0
+
+	for i in range(1, order.size()):
+		var next_arm: int = [3, 2, 0, 1][order[i - 1]]
+		in_order += 1 if order[i] == next_arm else 0
+
+	_check("An1 it steps in an order, as an animal does (%d of %d)" % [in_order, order.size() - 1], order.size() >= 10 and in_order >= (order.size() - 1) * 0.7)
+	_check("An2 its two front limbs are hardly ever up together (%d of 900)" % both_up, both_up < 130)
+	var lift_spread := 0.0
+	var time_spread := 0
+	var means: Array[float] = []
+
+	for arm in 4:
+		if lifts[arm].size() >= 2:
+			lift_spread = maxf(lift_spread, lifts[arm].max() - lifts[arm].min())
+			time_spread = maxi(time_spread, steps_took[arm].max() - steps_took[arm].min())
+			means.append(lifts[arm].reduce(func(a, b): return a + b) / float(lifts[arm].size()))
+
+	_check("An3 no two steps alike: how high (%.2f)" % lift_spread, lift_spread > 0.08)
+	_check("An4 how long (%d frames)" % time_spread, time_spread > 8)
+	_check("An5 each limb its own (%.2f..%.2f)" % [means.min(), means.max()], means.size() == 4 and means.max() - means.min() > 0.12)
+	_check("An6 it feels for the ground before it strikes (%d frames)" % hovered, hovered > 30)
+	var left_way: Vector3 = (body.wrist(0) - one.global_position) * Vector3(1.0, 0.0, 1.0)
+	var right_way: Vector3 = (body.wrist(1) - one.global_position) * Vector3(1.0, 0.0, 1.0)
+	_check("An7 not mirrored (%.2f, %.2f m out)" % [left_way.length(), right_way.length()], absf(body.arm_reach_of(0) - body.arm_reach_of(1)) > 0.05)
+	one.free()
 	await _frames(2)
 
 

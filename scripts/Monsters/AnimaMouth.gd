@@ -31,19 +31,37 @@ const DRAWN_OUT_MOST := 1.25
 ## Which arms dig: the two that haul it, then the two that brace and haul a little.
 const DIGGERS := 4
 const HAULERS := 2
-## How long each stays dug in as it hauls (s), none in step; how long it takes to come up and over.
-const HAUL_TAKES: Array[float] = [1.75, 2.15, 2.6, 3.05]
-const REACH_TAKES := 0.85
-const REACH_LIFT := 0.42
-## Where it digs in, from its shoulder (m), ahead and out to its side; how far up its wrist stays.
-const DIGS_AHEAD: Array[float] = [0.62, 0.62, 0.3, 0.3]
-const DIGS_OUT: Array[float] = [0.62, 0.62, 0.85, 0.85]
-const WRIST_UP := 0.36
-## How steeply its hand drives down into the earth; how shut its fingers are, dug in.
+## The order its limbs go in, as an animal's do: a front, the far rear, the other front, its rear. How long
+## after one starts the next does, with it moving (s).
+const GAIT: Array[int] = [0, 3, 1, 2]
+const GAIT_GAP := Vector2(0.34, 0.86)
+## The four are not a set: what each did to end up in it. How long each takes to come over, how high it
+## lifts, where it digs in from its shoulder (m), ahead and out; how high it holds its wrist; how far its
+## elbow stands out. The first reaches far and eager, the second is short and high, the third a splayed
+## brace, the last drags, it hardly lifts.
+const REACH_TAKES: Array[float] = [0.8, 1.05, 0.72, 1.25]
+const REACH_LIFT: Array[float] = [0.5, 0.42, 0.3, 0.13]
+const DIGS_AHEAD: Array[float] = [0.72, 0.4, 0.34, 0.16]
+const DIGS_OUT: Array[float] = [0.56, 0.62, 0.96, 0.62]
+const WRIST_UP: Array[float] = [0.38, 0.32, 0.42, 0.25]
+const ELBOW_OUT: Array[float] = [0.7, 1.1, 0.35, 1.25]
+## How much any one step differs from the last of that limb's, each way.
+const STEP_VARIES := 0.28
+## How long the haul with a limb takes to come and go (s): it surges when one has dug in.
+const HAUL_TAKES: Array[float] = [1.5, 1.7, 1.9, 2.1]
+## A step: how much of it is lifting out and over; where it hovers, feeling for the ground, and how high; how
+## often it stops to, and how much slower it goes then. It strikes from there.
+const STEP_OVER := 0.68
+const STEP_HOVER_ENDS := 0.86
+const HOVER_HIGH := 0.13
+const HOVER_CHANCE := 0.45
+const HOVER_SLOWS := 0.28
+## How its hand drives into the earth, and how shut its fingers are, dug in; how far a step can turn it.
 const DRIVES_DOWN := 1.5
 const DUG_SHUT := 0.62
+const STEP_TURNS := 0.45
 ## How far it lets a dug hand trail before it has to let go (m).
-const TRAILS_MOST := 1.05
+const TRAILS_MOST := 1.18
 ## It goes as it hauls: how fast, of its speed, with nothing hauling, and hauling flat out; what the
 ## braces add; how far it heaves up with a haul (m), rolls side to side and rocks onto its front (rad).
 const LURCH_LEAST := 0.18
@@ -52,6 +70,8 @@ const BRACES_ADD := 0.25
 const HEAVES := 0.13
 const ROLLS := 0.14
 const ROCKS := 0.12
+## How far it leans off a limb that is up (rad).
+const LEANS_OFF := 0.07
 ## An arm that isn't digging, out from its shoulder (m), hanging; how fast it gets where it is going.
 const FREE_OUT := 0.62
 const FREE_HANGS := 0.3
@@ -75,28 +95,63 @@ const CURLS := 0.32
 const JAW_REST := 0.34
 const JAW_WORKS := 0.3
 const FLOOR_MASK := 1
-const SOUL_MODEL := "res://assets/monsters/mouth_soul.glb"
-const SoulShader := preload("res://scripts/Monsters/mouth_soul.gdshader")
-## Those in it, straining out: where they come from on it (as built), how far they get, how long it takes
-## them, how long it lets them, how sharply it hauls them back, and how long until they try again (s).
-const SOUL_FROM: Array[Vector3] = [
-	Vector3(0.0, 0.95, 0.35), Vector3(0.42, 0.72, 0.5), Vector3(-0.42, 0.65, 0.55), Vector3(0.5, 0.25, 0.65),
-	Vector3(-0.5, 0.3, 0.6), Vector3(0.2, 0.55, 1.05), Vector3(-0.22, 0.85, 0.85), Vector3(0.0, 0.3, 1.2),
-]
-const SOUL_REACH := Vector2(0.75, 1.25)
-const SOUL_RISES := Vector2(0.9, 1.7)
-const SOUL_STRAINS := Vector2(0.3, 0.9)
-const SOUL_HAULED_IN := 0.16
-const SOUL_RESTS := Vector2(0.5, 2.6)
-## With its hunger up, how much further, and how much of the way they lean at you.
-const SOUL_HUNGER_REACH := 0.5
-const SOUL_LEANS := 0.9
-const SOUL_HUNGRY_FROM := 0.55
 ## How much of its hunger it has crawling along, and how fast it comes up and goes.
 const HUNGER_LOW := 0.08
 const HUNGER_RATE := 2.0
-## Their heads, of as built.
-const SOUL_HEAD := 1.35
+## Those in it, with its skin drawn over them, pushing up out of it (tools/monsters/build_mouth_sheaths.py).
+const SHEATH_MODEL := "res://assets/monsters/mouth_sheath.glb"
+## Where a face's jaw hangs from, its eyes and its gape are; how big each is; how far along the way out it goes,
+## from under the skin to as far as it gets (m). How far its jaw drops (rad), and how hard the light in it burns.
+const FACE_HINGE := Vector3(0.0, -0.043, -0.042)
+const FACE_EYE := Vector3(0.044, 0.005, -0.094)
+const FACE_THROAT := Vector3(0.0, -0.085, -0.015)
+const FACE_SIZE := 1.3
+const HAND_SIZE := 0.72
+const FACE_OUT := Vector2(-0.24, 0.06)
+const HAND_OUT := Vector2(-0.13, 0.015)
+const JAW_DROPS := 0.8
+const LIGHT_IN_THEM := Color(0.74, 0.86, 0.42)
+const LIGHT_SHOWS_FROM := 0.72
+const LEFT_BARE := "res://assets/monsters/anima_hands_left.glb"
+const RIGHT_BARE := "res://assets/monsters/anima_hands.glb"
+## How many; what each is, 0 a face, 1 a hand; how big each kind is, half across (m); where they can be.
+const PRESSES := 6
+const PRESS_KIND: Array[int] = [0, 1, 0, 1, 0, 1]
+const PRESS_SIZE: Array[float] = [0.26, 0.34, 0.2]
+const PRESS_PICKS := 4
+const SPOT_TRIES := 140
+const SPOT_CLEAR := 0.16
+const SPOT_APART := 0.13
+const SPOT_ABOVE := 0.2
+const MOUTH_ENDS_Z := 0.32
+const MOUTH_WIDE := 0.34
+## How long each part of it takes (s); how far in the skin goes after it; how far a face turns to you; how
+## many are the wrong way up.
+const PRESS_RISES := Vector2(0.5, 1.2)
+const PRESS_HOLDS := Vector2(0.6, 2.0)
+const PRESS_HAULED := 0.12
+const PRESS_RECOILS := 0.45
+const PRESS_RESTS := Vector2(0.2, 1.6)
+const PRESS_DENT := -0.4
+const PRESS_LEANS := 0.45
+const PRESS_UPSIDE_DOWN := 0.2
+const PRESS_HUNGRY_FROM := 0.55
+## The real hands that get out: how many; how long until the first (s), each part of it; where its wrist is,
+## along the way out from its skin, hidden and out (m); how far past its wrist its fingers go.
+const BURSTS := 2
+const BURST_FIRST := 2.0
+const BURST_SWELLS := 0.7
+const BURST_COMES := 0.16
+const BURST_CLAWS := Vector2(0.9, 2.2)
+const BURST_HAULED := 0.14
+const BURST_RESTS := Vector2(3.0, 8.0)
+const BURST_HIDDEN := -0.8
+const BURST_OUT := -0.1
+const BURST_TIPS := 0.68
+## Its heads straining out of it, from how far in to how far out (m), and how fast they go back (s).
+const SKULL_IN := -0.08
+const SKULL_OUT := 0.14
+const SKULL_HAULED := 0.12
 ## The earth it throws up round each hand: how many are out at once, how long one stays, how long it takes
 ## to rise, and to sink back; its paint.
 const EARTHS := 12
@@ -132,21 +187,54 @@ var _reach_t: Array[float] = []
 var _came_from: Array[Vector3] = []
 var _shut: Array[float] = []
 var _stretch: Array[float] = []
+## This step of each limb: how long, how high, how far on, how far out, how high its wrist, how turned; whether it hovers.
+var _step_takes: Array[float] = []
+var _step_lift: Array[float] = []
+var _step_ahead: Array[float] = []
+var _step_out: Array[float] = []
+var _step_wrist: Array[float] = []
+var _step_turn: Array[float] = []
+var _step_hovers: Array[bool] = []
+var _gait_at := 0
+var _gait_in := 0.0
+var _leaning := 0.0
 var _flesh_look: ShaderMaterial
 var _earths: Array[MeshInstance3D] = []
 var _earth_age: Array[float] = []
 var _earth_next := 0
 var _earth_look: ShaderMaterial
-var _soul_nodes: Array[MeshInstance3D] = []
-## Each soul: what it is doing (0 rests, 1 rises, 2 strains, 3 hauled in); how far into that; how long it takes;
-## how far it is out of it, 0..1; where it is going, from where; how far.
-var _soul_stage: Array[int] = []
-var _soul_t: Array[float] = []
-var _soul_takes: Array[float] = []
-var _soul_out: Array[float] = []
-var _soul_way: Array[Vector3] = []
-var _soul_far: Array[float] = []
-var _soul_was_yanked := false
+var _mass_look: ShaderMaterial
+var _press_nodes: Array[Node3D] = []
+var _press_jaws: Array[MeshInstance3D] = []
+var _press_lights: Array = []
+var _held_jaw := -1.0
+var _press_stage: Array[int] = []
+var _press_t: Array[float] = []
+var _press_takes: Array[float] = []
+var _press_strength: Array[float] = []
+var _press_jaw: Array[float] = []
+var _press_spot: Array[int] = []
+var _press_at: Array[Vector3] = []
+var _press_way: Array[Vector3] = []
+var _press_up: Array[Vector3] = []
+var _press_roll: Array[float] = []
+var _press_slide: Array[Vector3] = []
+var _uniform_at := PackedVector4Array([Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4()])
+var _uniform_way := PackedVector4Array([Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4()])
+var _uniform_up := PackedVector4Array([Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4(), Vector4()])
+var _uniform_size := PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+var _burst_nodes: Array[Node3D] = []
+var _burst_skeletons: Array[Skeleton3D] = []
+var _burst_stage: Array[int] = []
+var _burst_t: Array[float] = []
+var _burst_takes: Array[float] = []
+var _burst_at: Array[float] = []
+var _burst_spot: Array[int] = []
+var _tear: Array[float] = []
+var _skull_stage: Array[int] = []
+var _skull_t: Array[float] = []
+var _skull_takes: Array[float] = []
+var _skull_out: Array[float] = []
 var _hunger := 0.0
 var _rng := RandomNumberGenerator.new()
 var _placed := false
@@ -190,6 +278,14 @@ func _init(flesh: ShaderMaterial, bone: ShaderMaterial, height: float) -> void:
 		_came_from.append(Vector3.ZERO)
 		_shut.append(CURL)
 		_stretch.append(1.0)
+		var limb := mini(_markers.size() - 1, DIGGERS - 1)
+		_step_takes.append(REACH_TAKES[limb])
+		_step_lift.append(REACH_LIFT[limb])
+		_step_ahead.append(DIGS_AHEAD[limb])
+		_step_out.append(DIGS_OUT[limb])
+		_step_wrist.append(WRIST_UP[limb])
+		_step_turn.append(0.0)
+		_step_hovers.append(false)
 
 	for id in FACES:
 		var marker: Node3D = _made.find_child(id, true, false)
@@ -200,7 +296,8 @@ func _init(flesh: ShaderMaterial, bone: ShaderMaterial, height: float) -> void:
 		_souls.append(skull)
 		_rest[skull] = skull.transform
 
-	_build_souls()
+	_build_presses()
+	_build_bursts()
 
 
 func _ready() -> void:
@@ -219,7 +316,8 @@ func arrive() -> void:
 		if i < DIGGERS:
 			_reach_t[i] = 0.0
 			var shoulder_at := _world_shoulder(i)
-			var to := _clear_of_walls(shoulder_at, shoulder_at - global_basis.z * DIGS_AHEAD[i] * 0.5 + global_basis.x * signf(_markers[i].position.x) * DIGS_OUT[i])
+			_vary_step(i)
+			var to := _clear_of_walls(shoulder_at, shoulder_at - global_basis.z * _step_ahead[i] * 0.5 + global_basis.x * signf(_markers[i].position.x) * _step_out[i])
 			_dig_in(i, to, true)
 			_haul_t[i] = HAUL_TAKES[i] * fposmod(float(i) * 0.37 + 0.11, 1.0)
 			_shut[i] = DUG_SHUT
@@ -231,124 +329,528 @@ func _ensure_rng() -> void:
 	_rng.seed = hash(global_position)
 
 
-func _build_souls() -> void:
-	var made: Node3D = (load(SOUL_MODEL) as PackedScene).instantiate()
-	var mesh: Mesh = (made.find_children("*", "MeshInstance3D", true, false)[0] as MeshInstance3D).mesh
-	made.free()
-	var look := ShaderMaterial.new()
-	look.shader = SoulShader
-	look.set_shader_parameter(&"noise", MeshVfx.noise())
-
-	for n in SOUL_FROM.size():
-		var soul := MeshInstance3D.new()
-		soul.name = "Soul"
-		soul.mesh = mesh
-		soul.material_override = look
-		soul.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		soul.visible = false
-		soul.set_instance_shader_parameter(&"seed", float(n) * 2.7)
-		add_child(soul)
-		_soul_nodes.append(soul)
-		_soul_stage.append(0)
-		_soul_t.append(0.0)
-		_soul_takes.append(0.4 + float(n) * 0.45)
-		_soul_out.append(0.0)
-		_soul_way.append(Vector3.UP)
-		_soul_far.append(1.0)
+## This limb's next step: its own, and not its last.
+func _vary_step(i: int) -> void:
+	var by := func() -> float: return 1.0 + _rng.randf_range(-STEP_VARIES, STEP_VARIES)
+	_step_takes[i] = REACH_TAKES[i] * by.call()
+	_step_lift[i] = REACH_LIFT[i] * by.call()
+	_step_ahead[i] = DIGS_AHEAD[i] * by.call()
+	_step_out[i] = DIGS_OUT[i] * by.call()
+	_step_wrist[i] = WRIST_UP[i] * lerpf(1.0, by.call(), 0.6)
+	_step_turn[i] = _rng.randf_range(-STEP_TURNS, STEP_TURNS)
+	_step_hovers[i] = _rng.randf() < HOVER_CHANCE
 
 
-## How many it holds, how many are out of it now, how far the furthest has got (m).
-func souls_held() -> int:
-	return _soul_nodes.size()
+## With it moving, the next limb in the order comes up.
+func _work_gait(delta: float, speed: float) -> void:
+	if speed <= 0.05:
+		return
+
+	_gait_in -= delta
+
+	if _gait_in > 0.0:
+		return
+
+	var limb: int = GAIT[_gait_at]
+
+	# It won't have both its front limbs off the earth: it would go on its face.
+	if limb < HAULERS and not _dug[HAULERS - 1 - limb]:
+		return
+
+	if _dug[limb]:
+		_let_go(limb)
+
+	_gait_at = (_gait_at + 1) % GAIT.size()
+	_gait_in = _rng.randf_range(GAIT_GAP.x, GAIT_GAP.y)
 
 
-func souls_out() -> int:
-	return _soul_out.filter(func(out): return out > 0.3).size()
+func _let_go(i: int) -> void:
+	_dug[i] = false
+	_reach_t[i] = 0.0
+	_came_from[i] = _wrist[i]
+	_vary_step(i)
 
 
-func soul_reach() -> float:
-	var furthest := 0.0
-
-	for n in _soul_nodes.size():
-		furthest = maxf(furthest, _soul_far[n] * _soul_out[n])
-
-	return furthest
+## Whether that one shows, out of its skin.
+func press_shown(n: int) -> bool:
+	return _press_nodes[n].visible
 
 
-## Whether it has hauled any back in, yet.
-func soul_yanked() -> bool:
-	return _soul_was_yanked
+## How many press out from under its skin, and what each is doing.
+func presses_held() -> int:
+	return PRESSES
 
 
-## How much those out of it are going at `at`, the most: 1 straight at it.
-func souls_toward(at: Vector3) -> float:
-	var most := -1.0
+func press_strength(n: int) -> float:
+	return _press_strength[n]
 
-	for n in _soul_nodes.size():
-		if _soul_out[n] > 0.3:
-			var from: Vector3 = _soul_nodes[n].global_position
-			most = maxf(most, (-_soul_nodes[n].global_basis.z).normalized().dot((at - from).normalized()))
+
+func press_kind(n: int) -> int:
+	return PRESS_KIND[n]
+
+
+func press_jaw(n: int) -> float:
+	return _press_jaw[n]
+
+
+## Whether that one starts where its skin is.
+func press_on_skin(n: int) -> bool:
+	return _spot_ok(_press_spot[n])
+
+
+## How much that one is turned to `at`, in the world: 1 straight at it.
+func press_toward(n: int, at: Vector3) -> float:
+	if _press_strength[n] < 0.3:
+		return -1.0
+
+	var mass := part(&"Mass")
+	var from: Vector3 = mass.global_transform * _press_at[n]
+	return (mass.global_basis * _press_way[n]).normalized().dot((at - from).normalized())
+
+
+## For a picture: that one held out as hard as it goes, on the spot most toward `at`, its jaw so.
+func hold_press(n: int, at: Vector3, jaw: float) -> void:
+	var spots := _skin_spots()
+	var mass := part(&"Mass")
+	var to_at: Vector3 = (mass.global_basis.inverse() * (at - mass.global_position)).normalized()
+	var best := -9.0
+
+	for k in spots.size():
+		var used := false
+
+		for m in PRESSES:
+			used = used or (m != n and _press_stage[m] == 2 and _press_spot[m] == k)
+
+		var how_much: float = (spots[k][1] as Vector3).dot(to_at)
+
+		if not used and how_much > best:
+			best = how_much
+			_press_spot[n] = k
+
+	_press_stage[n] = 2
+	_press_t[n] = 0.0
+	_press_takes[n] = 9999.0
+	_press_roll[n] = 0.0
+	_press_slide[n] = Vector3.ZERO
+	_held_jaw = jaw
+
+
+## For a picture: that one gone, and staying gone.
+func press_held_off(n: int) -> void:
+	_press_stage[n] = 0
+	_press_t[n] = 0.0
+	_press_takes[n] = 9999.0
+
+
+## How far one of its heads has got out of it.
+func skull_out(n: int) -> float:
+	return _skull_out[n]
+
+
+## How far the furthest hand has got out through its skin (m), whether any is out, how torn it is.
+func burst_out() -> float:
+	var most := -9.0
+
+	for b in BURSTS:
+		if _burst_stage[b] != 0:
+			most = maxf(most, _burst_at[b] + BURST_TIPS)
 
 	return most
+
+
+func burst_shown() -> bool:
+	return _burst_nodes.any(func(node): return node.visible)
+
+
+func tear_open() -> float:
+	var most := 0.0
+
+	for b in BURSTS:
+		most = maxf(most, _tear[b])
+
+	return most
+
+
+func _build_presses() -> void:
+	var look: ShaderMaterial = _flesh_look.duplicate()
+	look.set_shader_parameter(&"burn_noise", MeshVfx.noise())
+	look.set_shader_parameter(&"press_count", PRESSES + BURSTS)
+	part(&"Mass").set_surface_override_material(0, look)
+	_mass_look = look
+	var spots := _skin_spots()
+	var made: Node3D = (load(SHEATH_MODEL) as PackedScene).instantiate()
+	var skin_skull: Mesh = (made.find_child("SkinSkull", true, false) as MeshInstance3D).mesh
+	var skin_jaw: Mesh = (made.find_child("SkinJaw", true, false) as MeshInstance3D).mesh
+	var skin_hand: Mesh = (made.find_child("SkinHand", true, false) as MeshInstance3D).mesh
+	made.free()
+	var skin: ShaderMaterial = _flesh_look.duplicate()
+	skin.set_shader_parameter(&"frays", 0.0)
+	var light := StandardMaterial3D.new()
+	light.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	light.albedo_color = LIGHT_IN_THEM
+
+	for n in PRESSES:
+		var root := Node3D.new()
+		root.visible = false
+		_made.add_child(root)
+		var skinned := MeshInstance3D.new()
+		skinned.mesh = skin_hand if PRESS_KIND[n] == 1 else skin_skull
+		skinned.material_override = skin
+		skinned.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(skinned)
+		var jaw := MeshInstance3D.new()
+		var eyes: Array[MeshInstance3D] = []
+
+		if PRESS_KIND[n] == 0:
+			jaw.mesh = skin_jaw
+			jaw.material_override = skin
+			jaw.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			jaw.position = FACE_HINGE
+			root.add_child(jaw)
+
+			for bit in [FACE_EYE * Vector3(-1.0, 1.0, 1.0), FACE_EYE, FACE_THROAT]:
+				var ember := MeshInstance3D.new()
+				var ball := SphereMesh.new()
+				ball.radial_segments = 8
+				ball.rings = 5
+				ball.radius = 0.018 if bit != FACE_THROAT else 0.02
+				ball.height = ball.radius * 2.0
+				ember.mesh = ball
+				ember.material_override = light
+				ember.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				ember.position = bit
+				root.add_child(ember)
+				eyes.append(ember)
+
+		_press_nodes.append(root)
+		_press_jaws.append(jaw)
+		_press_lights.append(eyes)
+		_press_stage.append(0)
+		_press_t.append(0.0)
+		_press_takes.append(0.3 + float(n) * 0.55)
+		_press_strength.append(0.0)
+		_press_jaw.append(0.0)
+		_press_spot.append(n % spots.size())
+		_press_at.append(Vector3.ZERO)
+		_press_way.append(Vector3.UP)
+		_press_up.append(Vector3.UP)
+		_press_roll.append(0.0)
+		_press_slide.append(Vector3.ZERO)
+
+	for n in 3:
+		_skull_stage.append(0)
+		_skull_t.append(float(n) * 1.1)
+		_skull_takes.append(1.5 + float(n) * 1.3)
+		_skull_out.append(0.0)
+
+
+static var _spots_shared: Array = []
+
+
+## Where on it they can press: spots on its skin, facing out from it, clear of its mouth and of what already
+## pushes out of it. Each a position and the way out, as the mesh has them. Shared: it is one mesh.
+func _skin_spots() -> Array:
+	if not _spots_shared.is_empty():
+		return _spots_shared
+
+	var arrays: Array = part(&"Mass").mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var middle := Vector3(0.0, 0.55, 0.55)
+	var stride := maxi(verts.size() / SPOT_TRIES, 1)
+	var coarse := maxi(verts.size() / 1000, 1)
+
+	for k in range(0, verts.size(), stride):
+		var at := verts[k]
+		var way := Vector3.ZERO
+
+		# Its skin's way out, about here, not the wrinkle's.
+		for m in range(0, verts.size(), coarse):
+			if verts[m].distance_squared_to(at) < 0.03:
+				way += normals[m]
+
+		if way.length() < 0.01:
+			continue
+
+		way = way.normalized()
+		var from_middle := (at - middle).normalized()
+
+		if way.dot(from_middle) < 0.5 or (at.z < MOUTH_ENDS_Z and absf(at.x) < MOUTH_WIDE) or at.y < SPOT_ABOVE:
+			continue
+
+		var clear := true
+
+		for marker in _markers:
+			clear = clear and marker.position.distance_to(at) > SPOT_CLEAR
+
+		for id in FACES:
+			clear = clear and (_made.find_child(id, true, false) as Node3D).position.distance_to(at) > SPOT_CLEAR
+
+		for other in _spots_shared:
+			clear = clear and other[0].distance_to(at) > SPOT_APART
+
+		if clear:
+			_spots_shared.append([at, way])
+
+	return _spots_shared
+
+
+func _spot_ok(index: int) -> bool:
+	var spots := _skin_spots()
+
+	if index < 0 or index >= spots.size():
+		return false
+
+	var at: Vector3 = spots[index][0]
+	return at.z >= MOUTH_ENDS_Z or absf(at.x) >= MOUTH_WIDE
+
+
+## They strain at it from inside: up, and held, faces screaming, hands dragging at the skin; hauled back in, and
+## the skin goes in after them.
+func _work_presses(delta: float, grab_at: Vector3) -> void:
+	var spots := _skin_spots()
+	var mass := part(&"Mass")
+	var to_you: Vector3 = (mass.global_basis.inverse() * (grab_at - mass.global_position)).normalized()
+	var hungry := _hunger > PRESS_HUNGRY_FROM
+
+	for n in PRESSES:
+		_press_t[n] += delta
+		var takes: float = _press_takes[n] * (0.08 if hungry and _press_stage[n] == 0 else 1.0)
+
+		if _press_t[n] >= takes and not (hungry and _press_stage[n] == 2):
+			_press_t[n] = 0.0
+			_press_stage[n] = (_press_stage[n] + 1) % 5
+
+			match _press_stage[n]:
+				1:
+					_press_takes[n] = _rng.randf_range(PRESS_RISES.x, PRESS_RISES.y)
+					_press_choose(n, spots, to_you)
+				2:
+					_press_takes[n] = _rng.randf_range(PRESS_HOLDS.x, PRESS_HOLDS.y)
+				3:
+					_press_takes[n] = PRESS_HAULED
+				4:
+					_press_takes[n] = PRESS_RECOILS
+				0:
+					_press_takes[n] = _rng.randf_range(PRESS_RESTS.x, PRESS_RESTS.y)
+
+		var u: float = clampf(_press_t[n] / maxf(takes, 0.01), 0.0, 1.0)
+		var strain := sin(_clock * (9.0 + float(n) * 1.7) + float(n)) * 0.06 + sin(_clock * (23.0 + float(n) * 2.3)) * 0.03
+		var strength: float
+
+		match _press_stage[n]:
+			1:
+				strength = u * u * (3.0 - 2.0 * u) + strain * u
+			2:
+				strength = 1.0 + strain * 1.5 + _hunger * 0.15
+			3:
+				strength = lerpf(1.0, PRESS_DENT, u * u)
+			4:
+				strength = lerpf(PRESS_DENT, 0.0, u) * cos(u * PI * 3.0)
+			_:
+				strength = 0.0
+
+		_press_strength[n] = strength
+		_press_jaw[n] = _held_jaw if _held_jaw >= 0.0 else clampf(0.5 + sin(_clock * (2.3 + float(n) * 0.9)) * 0.7 + sin(_clock * 11.0 + float(n)) * 0.15, 0.0, 1.0) if _press_stage[n] != 0 else 0.0
+		var spot: Array = spots[_press_spot[n]]
+		# Dragging along under it, a hand; a face turning to find you.
+		var slid: Vector3 = _press_slide[n] * (float(_press_stage[n] == 2) * clampf(_press_t[n] / 1.5, 0.0, 1.0) + float(_press_stage[n] > 2))
+		_press_at[n] = spot[0] + slid
+		var leans := PRESS_LEANS * (0.4 + _hunger * 0.6) if PRESS_KIND[n] == 0 else _hunger * 0.3
+		_press_way[n] = (spot[1] as Vector3).lerp(to_you, leans).normalized()
+		var up_was := Vector3.UP if absf(_press_way[n].y) < 0.9 else Vector3.BACK
+		var up := (up_was - _press_way[n] * up_was.dot(_press_way[n])).normalized()
+		_press_up[n] = up.rotated(_press_way[n], _press_roll[n])
+
+	# The uniforms: the faces and hands, then where a real one has torn it.
+	for n in PRESSES:
+		_uniform_at[n] = Vector4(_press_at[n].x, _press_at[n].y, _press_at[n].z, _press_strength[n])
+		_uniform_way[n] = Vector4(_press_way[n].x, _press_way[n].y, _press_way[n].z, 0.0)
+		_show_press(n)
+		_uniform_up[n] = Vector4(_press_up[n].x, _press_up[n].y, _press_up[n].z, _press_jaw[n])
+		_uniform_size[n] = PRESS_SIZE[PRESS_KIND[n]]
+
+	_mass_look.set_shader_parameter(&"press_at", _uniform_at)
+	_mass_look.set_shader_parameter(&"press_way", _uniform_way)
+	_mass_look.set_shader_parameter(&"press_up", _uniform_up)
+	_mass_look.set_shader_parameter(&"press_size", _uniform_size)
+
+
+## That one, out of its skin as far as it has got: a face turned on you, a hand flat under it, dragging.
+func _show_press(n: int) -> void:
+	var root := _press_nodes[n]
+	var strength := _press_strength[n]
+	root.visible = strength > 0.03
+
+	if not root.visible:
+		return
+
+	var way := _press_way[n]
+	var up := _press_up[n]
+	var shake := Vector3(sin(_clock * 19.0 + float(n)), sin(_clock * 23.0 + float(n) * 2.0), 0.0) * 0.006 * strength
+
+	if PRESS_KIND[n] == 0:
+		var out := lerpf(FACE_OUT.x, FACE_OUT.y, clampf(strength, 0.0, 1.15))
+		root.transform = Transform3D(Basis.looking_at(way, up).scaled(Vector3.ONE * FACE_SIZE), _press_at[n] + way * out + shake)
+		_press_jaws[n].rotation.x = -_press_jaw[n] * JAW_DROPS
+		# It burns behind what it is looking with: more the harder it goes at you.
+		# (Only once it is up: below that they'd show through what it hasn't come out of.)
+		for ember in _press_lights[n]:
+			ember.visible = strength > LIGHT_SHOWS_FROM
+			ember.scale = Vector3.ONE * (0.8 + _hunger * 0.35 + sin(_clock * 13.0 + float(n)) * 0.08)
+	else:
+		var across := way.cross(up).normalized()
+		var flat := Basis(across, way, -up)
+		var out := lerpf(HAND_OUT.x, HAND_OUT.y, clampf(strength, 0.0, 1.15))
+		var twist := Basis(way, sin(_clock * 3.1 + float(n)) * 0.12)
+		root.transform = Transform3D((twist * flat).scaled(Vector3.ONE * HAND_SIZE), _press_at[n] + way * out - up * 0.26 * HAND_SIZE + shake)
+
+
+## A new place for it, and a new way up: they are not all the way up, and one in so many is upside down.
+func _press_choose(n: int, spots: Array, to_you: Vector3) -> void:
+	var index: int = _rng.randi() % spots.size()
+	var best := -9.0
+
+	# Of a few, the one most toward you: it is you they are trying to get to.
+	for t in PRESS_PICKS:
+		var maybe: int = _rng.randi() % spots.size()
+		var free := true
+
+		for m in PRESSES:
+			free = free and (m == n or _press_stage[m] == 0 or _press_spot[m] != maybe)
+
+		var how_much: float = (spots[maybe][1] as Vector3).dot(to_you)
+
+		if free and how_much > best:
+			best = how_much
+			index = maybe
+
+	_press_spot[n] = index
+	_press_roll[n] = PI if _rng.randf() < PRESS_UPSIDE_DOWN else _rng.randf_range(-0.7, 0.7)
+	var way: Vector3 = spots[index][1]
+	var across := way.cross(Vector3.UP)
+	_press_slide[n] = (across.normalized() if across.length() > 0.01 else Vector3.RIGHT) * _rng.randf_range(-0.2, 0.2) if PRESS_KIND[n] == 1 else Vector3.ZERO
+
+
+func _build_bursts() -> void:
+	var left := false
+
+	for b in BURSTS:
+		var hand: Node3D = (load(LEFT_BARE if left else RIGHT_BARE) as PackedScene).instantiate()
+		left = not left
+		hand.visible = false
+		_made.add_child(hand)
+		var mesh: MeshInstance3D = hand.find_children("*", "MeshInstance3D", true, false)[0]
+		mesh.set_surface_override_material(0, _flesh_look)
+		_burst_nodes.append(hand)
+		_burst_skeletons.append(hand.find_children("*", "Skeleton3D", true, false)[0])
+		_burst_stage.append(0)
+		_burst_t.append(0.0)
+		_burst_takes.append(BURST_FIRST + float(b) * 3.5)
+		_burst_at.append(BURST_HIDDEN)
+		_burst_spot.append(0)
+		_tear.append(0.0)
+
+
+## Now and then one of them gets an arm out, a real one, through its skin: tears it, claws at it, and is hauled back.
+func _work_bursts(delta: float) -> void:
+	var spots := _skin_spots()
+
+	for b in BURSTS:
+		_burst_t[b] += delta
+		var hungry_by := 1.0 - _hunger * 0.6
+
+		if _burst_t[b] >= _burst_takes[b] * (hungry_by if _burst_stage[b] == 0 else 1.0):
+			_burst_t[b] = 0.0
+			_burst_stage[b] = (_burst_stage[b] + 1) % 5
+
+			match _burst_stage[b]:
+				1:
+					_burst_takes[b] = BURST_SWELLS
+					_burst_spot[b] = _rng.randi() % spots.size()
+				2:
+					_burst_takes[b] = BURST_COMES
+				3:
+					_burst_takes[b] = _rng.randf_range(BURST_CLAWS.x, BURST_CLAWS.y)
+					var spot_way: Vector3 = spots[_burst_spot[b]][1]
+					Fx.blood(self, _burst_nodes[b].global_transform * Vector3.ZERO, _made.global_basis * spot_way, 0.3)
+				4:
+					_burst_takes[b] = BURST_HAULED
+				0:
+					_burst_takes[b] = _rng.randf_range(BURST_RESTS.x, BURST_RESTS.y)
+
+		var u: float = clampf(_burst_t[b] / maxf(_burst_takes[b], 0.01), 0.0, 1.0)
+		var spot: Array = spots[_burst_spot[b]]
+		var hand := _burst_nodes[b]
+		var shake := sin(_clock * 37.0 + float(b)) * 0.012
+		var tear_to := 0.0
+		var swell_to := 0.0
+
+		match _burst_stage[b]:
+			1:
+				_burst_at[b] = BURST_HIDDEN
+				swell_to = u
+			2:
+				_burst_at[b] = lerpf(BURST_HIDDEN, BURST_OUT, 1.0 - pow(1.0 - u, 3.0))
+				swell_to = 1.0
+				tear_to = 1.0
+			3:
+				_burst_at[b] = BURST_OUT + shake + sin(_clock * 2.9 + float(b)) * 0.05
+				swell_to = 0.7
+				tear_to = 1.0
+			4:
+				_burst_at[b] = lerpf(BURST_OUT, BURST_HIDDEN, u * u)
+				swell_to = lerpf(0.7, PRESS_DENT, u)
+				tear_to = 0.8
+			_:
+				_burst_at[b] = BURST_HIDDEN
+
+		_tear[b] = move_toward(_tear[b], tear_to, delta * (9.0 if tear_to > _tear[b] else 0.7))
+		hand.visible = _burst_stage[b] >= 2
+		var way: Vector3 = spot[1]
+
+		if hand.visible:
+			# It has hold of what it came out of: bent back over it, clawing, the fingers opening and shutting.
+			var bend := Basis(Vector3.RIGHT, -1.0 * smoothstep(0.0, 0.5, u) * float(_burst_stage[b] == 3) + sin(_clock * 8.0 + float(b)) * 0.14)
+			var up := Vector3.UP if absf(way.y) < 0.9 else Vector3.BACK
+			hand.transform = Transform3D(Basis.looking_at(way, up) * bend, (spot[0] as Vector3) + way * _burst_at[b])
+			_claw_at(_burst_skeletons[b], b)
+
+		var index := PRESSES + b
+		_uniform_at[index] = Vector4(spot[0].x, spot[0].y, spot[0].z, swell_to)
+		_uniform_way[index] = Vector4(way.x, way.y, way.z, 2.0)
+		var up_was := Vector3.UP if absf(way.y) < 0.9 else Vector3.BACK
+		var flat_up := (up_was - way * up_was.dot(way)).normalized()
+		_uniform_up[index] = Vector4(flat_up.x, flat_up.y, flat_up.z, _tear[b])
+		_uniform_size[index] = PRESS_SIZE[2]
+
+	# Its heads go at it too.
+	for n in _skulls.size():
+		_skull_t[n] += delta
+
+		if _skull_t[n] >= _skull_takes[n]:
+			_skull_t[n] = 0.0
+			_skull_stage[n] = (_skull_stage[n] + 1) % 4
+			_skull_takes[n] = [_rng.randf_range(1.0, 4.0), _rng.randf_range(0.5, 1.0), _rng.randf_range(0.4, 1.1), SKULL_HAULED][_skull_stage[n]]
+
+		var u: float = clampf(_skull_t[n] / maxf(_skull_takes[n], 0.01), 0.0, 1.0)
+		_skull_out[n] = [SKULL_IN, lerpf(SKULL_IN, SKULL_OUT, u * u * (3.0 - 2.0 * u)), SKULL_OUT + sin(_clock * 31.0 + float(n)) * 0.012, lerpf(SKULL_OUT, SKULL_IN, u * u)][_skull_stage[n]]
+
+
+func _claw_at(hand: Skeleton3D, which: int) -> void:
+	for f in FINGER_NAMES.size():
+		var seed := float(f) * 1.9 + float(which) * 4.1
+		var shut := 0.55 + sin(_clock * (6.0 + float(f)) + seed) * 0.5
+
+		for k in range(1, 4):
+			var bone := hand.find_bone("%s_%02d" % [FINGER_NAMES[f], k])
+			var rest: Basis = hand.get_bone_rest(bone).basis
+			hand.set_bone_pose_rotation(bone, (rest * Basis(Vector3.RIGHT, -shut * [0.7, 1.0, 1.25][k - 1])).get_rotation_quaternion())
 
 
 ## How hungry it is showing, 0..1.
 func hunger() -> float:
 	return _hunger
-
-
-func _work_souls(delta: float, grab_at: Vector3) -> void:
-	var to_you: Vector3 = global_transform.affine_inverse().basis * (grab_at - global_position)
-
-	for n in _soul_nodes.size():
-		_soul_t[n] += delta
-
-		# With its hunger up they don't rest, and it lets them strain.
-		var hungry := _hunger > SOUL_HUNGRY_FROM
-		var takes: float = _soul_takes[n] * (0.1 if hungry and _soul_stage[n] == 0 else 1.0)
-
-		if _soul_t[n] >= takes and not (hungry and _soul_stage[n] == 2):
-			_soul_t[n] = 0.0
-			_soul_stage[n] = (_soul_stage[n] + 1) % 4
-
-			match _soul_stage[n]:
-				1:
-					_soul_takes[n] = _rng.randf_range(SOUL_RISES.x, SOUL_RISES.y)
-					var from: Vector3 = _soul_from(n)
-					_soul_way[n] = (from - Vector3(0.0, 0.2, 0.55) + Vector3(_rng.randf_range(-0.5, 0.5), _rng.randf_range(0.0, 0.6), _rng.randf_range(-0.5, 0.5))).normalized()
-					_soul_far[n] = _rng.randf_range(SOUL_REACH.x, SOUL_REACH.y)
-				2:
-					_soul_takes[n] = _rng.randf_range(SOUL_STRAINS.x, SOUL_STRAINS.y)
-				3:
-					_soul_takes[n] = SOUL_HAULED_IN
-					_soul_was_yanked = true
-				0:
-					_soul_takes[n] = _rng.randf_range(SOUL_RESTS.x, SOUL_RESTS.y)
-
-		var u: float = clampf(_soul_t[n] / maxf(_soul_takes[n], 0.01), 0.0, 1.0)
-		var out: float = [0.0, 1.0 - pow(1.0 - u, 2.2), 1.0, 1.0 - u * u][_soul_stage[n]]
-		_soul_out[n] = out
-		var soul := _soul_nodes[n]
-		soul.visible = out > 0.01
-
-		if not soul.visible:
-			continue
-
-		var from_at: Vector3 = _soul_from(n)
-		var way: Vector3 = _soul_way[n].lerp(to_you.normalized(), _hunger * SOUL_LEANS).normalized()
-		var far: float = _soul_far[n] * out * (1.0 + _hunger * SOUL_HUNGER_REACH)
-		var up := Vector3.UP if absf(way.y) < 0.95 else Vector3.BACK
-		# Its head out there, its tail drawn out behind it to where it is held.
-		soul.transform = Transform3D(Basis.looking_at(way, up).scaled(Vector3.ONE * SOUL_HEAD), from_at + way * far)
-		soul.set_instance_shader_parameter(&"tail_long", maxf(far / SOUL_HEAD, 0.1))
-		soul.set_instance_shader_parameter(&"shown", out)
-		soul.set_instance_shader_parameter(&"strain", clampf(_hunger + (0.6 if _soul_stage[n] == 2 else 0.0) + (1.0 if _soul_stage[n] == 3 else 0.0), 0.0, 1.0))
-
-
-## Where on it that soul strains out of, in this node's space.
-func _soul_from(n: int) -> Vector3:
-	var built := SOUL_FROM[n]
-	return _made.transform * Vector3(built.x, built.y, built.z - 0.55)
 
 
 func part(id: StringName) -> MeshInstance3D:
@@ -378,8 +880,8 @@ func ribs_to(open: float) -> void:
 
 ## Where each hauling arm is in its going, -1..1.
 func arm_stride(which: int) -> float:
-	var round_takes: float = HAUL_TAKES[which] + REACH_TAKES
-	var into: float = _haul_t[which] if _dug[which] else HAUL_TAKES[which] + _reach_t[which] * REACH_TAKES
+	var round_takes: float = HAUL_TAKES[which] + _step_takes[which]
+	var into: float = minf(_haul_t[which], HAUL_TAKES[which]) if _dug[which] else HAUL_TAKES[which] + _reach_t[which] * _step_takes[which]
 	return sin(into / round_takes * TAU)
 
 
@@ -435,7 +937,7 @@ func heave() -> float:
 
 ## How far over it the mass has rolled with them (rad).
 func roll() -> float:
-	return (_hauling(0) - _hauling(1)) * ROLLS
+	return (_hauling(0) - _hauling(1)) * ROLLS + _leaning
 
 
 ## How far over onto its front the mass has rocked (rad): it pitches into each haul.
@@ -488,7 +990,9 @@ func tick(delta: float, speed: float, going: Vector3, rake_to: float, digs: bool
 
 	# Gathering at you, swollen, feeding: it blazes.
 	_hunger = move_toward(_hunger, clampf(HUNGER_LOW + swell * 1.1 + fed * 0.25, 0.0, 1.0), delta * HUNGER_RATE)
-	_work_souls(delta, grab_at)
+	_work_presses(delta, grab_at)
+	_work_bursts(delta)
+	_work_gait(delta, speed)
 
 	for i in _rake.size():
 		var w := minf(TAU * RAKE_RATE, 0.8 / delta)
@@ -524,6 +1028,14 @@ func tick(delta: float, speed: float, going: Vector3, rake_to: float, digs: bool
 			heaved = maxf(heaved, _hauling(i))
 
 	_heave = heaved * HEAVES
+	# Off whichever is up.
+	var leans_to := 0.0
+
+	for i in DIGGERS:
+		if not _dug[i] and digs:
+			leans_to -= signf(_markers[i].position.x) * sin(_reach_t[i] * PI) * LEANS_OFF
+
+	_leaning = lerpf(_leaning, leans_to, 1.0 - exp(-4.0 * delta))
 	_settle_earth(delta)
 
 	for i in _skulls.size():
@@ -531,9 +1043,9 @@ func tick(delta: float, speed: float, going: Vector3, rake_to: float, digs: bool
 		var skull := _skulls[i]
 		var rest: Transform3D = _rest[skull]
 		var sway := Basis.from_euler(Vector3(sin(_clock * (0.9 + float(i) * 0.13) + seed), sin(_clock * (0.7 + float(i) * 0.09) + seed * 1.7), 0.0) * HEAD_SWAY)
-		skull.transform = Transform3D(sway * rest.basis, rest.origin)
-		# (Stretched with the rest of it, they gape.)
-		skull.open_to(clampf(JAW_REST + sin(_clock * (2.1 + float(i) * 0.7) + seed) * JAW_WORKS + swell * 0.5, 0.0, 1.0), 0.3)
+		skull.transform = Transform3D(sway * rest.basis, rest.origin + Vector3(0.0, 0.0, -_skull_out[i]))
+		# (Stretched with the rest of it, or trying to get out of it, they gape.)
+		skull.open_to(clampf(JAW_REST + sin(_clock * (2.1 + float(i) * 0.7) + seed) * JAW_WORKS + swell * 0.5 + maxf(_skull_out[i], 0.0) * 5.0, 0.0, 1.0), 0.3)
 		skull.paint(fed, hurt, smoulder)
 
 	for id in MESHES:
@@ -556,34 +1068,45 @@ func _dig(i: int, delta: float, speed: float, going: Vector3) -> float:
 	var shoulder_at := _world_shoulder(i)
 
 	if _dug[i]:
-		# Standing still, it holds on. It lets go when it has hauled what it can, or it is left behind.
+		# Standing still, it holds on. It lets go when the gait says, or when it is left behind.
 		if speed > 0.05:
 			_haul_t[i] += delta
 
-		var left_behind := (_wrist[i] - shoulder_at).length() > TRAILS_MOST
-
-		if _haul_t[i] >= HAUL_TAKES[i] or left_behind:
-			_dug[i] = false
-			_reach_t[i] = 0.0
-			_came_from[i] = _wrist[i]
+		if (_wrist[i] - shoulder_at).length() > TRAILS_MOST:
+			_let_go(i)
 
 		return DUG_SHUT + sin(_clock * 3.0 + float(i)) * 0.03
 
-	_reach_t[i] = minf(_reach_t[i] + delta / REACH_TAKES, 1.0)
+	var u0 := _reach_t[i]
+	var slow := HOVER_SLOWS if _step_hovers[i] and u0 > STEP_OVER and u0 < STEP_HOVER_ENDS else 1.0
+	_reach_t[i] = minf(u0 + delta / _step_takes[i] * slow, 1.0)
 	var u := _reach_t[i]
 	var heading := Vector3(going.x, 0.0, going.z)
 	var ahead: Vector3 = heading.normalized() if heading.length() > 0.08 else -global_basis.z
 	var out: Vector3 = global_basis.x * signf(_markers[i].position.x)
-	var to: Vector3 = _clear_of_walls(shoulder_at, shoulder_at + ahead * DIGS_AHEAD[i] + out * DIGS_OUT[i])
-	to.y = _floor_y + WRIST_UP
-	# Slow up and over, and it falls the last of the way.
-	var along := u * u * (3.0 - 2.0 * u)
-	_wrist[i] = _came_from[i].lerp(to, along) + Vector3.UP * sin(pow(u, 0.8) * PI) * REACH_LIFT
+	var to: Vector3 = _clear_of_walls(shoulder_at, shoulder_at + ahead * _step_ahead[i] + out * _step_out[i])
+	to.y = _floor_y + _step_wrist[i]
+	# Out of the earth and over, the most of the way; then the last of it, down, hard.
+	var across := smoothstep(0.08, STEP_OVER, u) * 0.93 + smoothstep(STEP_HOVER_ENDS, 1.0, u) * 0.07
+	var over := sin(minf(u / STEP_OVER, 1.0) * PI * 0.5 + maxf(0.0, u - 0.34) / 0.34 * PI * 0.25)
+	var high := lerpf(_step_lift[i] * clampf(over, 0.0, 1.0), HOVER_HIGH * (1.0 - smoothstep(STEP_HOVER_ENDS, 1.0, u)), smoothstep(STEP_OVER * 0.75, STEP_OVER, u))
+	_wrist[i] = _came_from[i].lerp(to, across) + Vector3.UP * high
 
 	if u >= 1.0:
 		_dig_in(i, to)
 
-	return lerpf(CURL, -0.15, sin(u * PI))
+	# Limp coming up, spread feeling for the ground, and it shuts as it goes in.
+	return lerpf(lerpf(0.95, -0.15, smoothstep(0.1, STEP_OVER, u)), DUG_SHUT, smoothstep(STEP_HOVER_ENDS, 1.0, u))
+
+
+## Whether that limb is up there feeling for the ground.
+func arm_hovering(which: int) -> bool:
+	return not _dug[which] and which < DIGGERS and _reach_t[which] > STEP_OVER and _reach_t[which] < STEP_HOVER_ENDS
+
+
+## How far this limb means to go, ahead and out.
+func arm_reach_of(which: int) -> float:
+	return (DIGS_AHEAD[which] * DIGS_AHEAD[which] + DIGS_OUT[which] * DIGS_OUT[which]) ** 0.5
 
 
 ## Where it means to dig, kept on its own side of what is in the way.
@@ -608,7 +1131,7 @@ func _dig_in(i: int, to: Vector3, quietly := false) -> void:
 	if not hit.is_empty():
 		_floor_y = float(hit["position"].y)
 
-	var at := Vector3(to.x, _floor_y + WRIST_UP, to.z)
+	var at := Vector3(to.x, _floor_y + _step_wrist[i], to.z)
 	_wrist[i] = at
 	_dug[i] = true
 	_dug_floor[i] = _floor_y
@@ -760,8 +1283,13 @@ func _solve_arm(i: int, grab: float, grab_at: Vector3) -> void:
 	var world_way: Vector3 = (_wrist[i] - _world_shoulder(i))
 	world_way.y = 0.0
 	world_way = world_way.normalized() if world_way.length() > 0.01 else -global_basis.z
-	var low := 1.0 if _dug[i] else (sin(_reach_t[i] * PI * 0.5) if i < DIGGERS and _reach_t[i] > 0.0 else 0.0)
-	var pointing: Vector3 = (world_way + Vector3.DOWN * DRIVES_DOWN * low).normalized()
+	world_way = world_way.rotated(Vector3.UP, _step_turn[i]) if i < DIGGERS else world_way
+	var low := 1.0 if _dug[i] else (1.0 if i < DIGGERS and _reach_t[i] > 0.0 else 0.0)
+	var u := _reach_t[i]
+	# In the earth: driven down. Coming up: hanging off its wrist, trailing. Over: out ahead, flat, feeling. Then down.
+	var drives: float = 1.0 if _dug[i] else lerpf(lerpf(1.6, 0.25, smoothstep(0.1, STEP_OVER, u)), 1.0, smoothstep(STEP_HOVER_ENDS, 1.0, u))
+	var trails: float = 0.0 if _dug[i] else (1.0 - smoothstep(0.05, 0.45, u)) * 0.7
+	var pointing: Vector3 = (world_way * (1.0 - trails * 1.4) + Vector3.DOWN * DRIVES_DOWN * low * drives).normalized()
 
 	if not _dug[i] and low <= 0.0:
 		var from_shoulder: Vector3 = (_wrist[i] - _world_shoulder(i)).normalized()
@@ -787,7 +1315,7 @@ func _solve_arm(i: int, grab: float, grab_at: Vector3) -> void:
 	_stretch[i] = stretch
 	var bone := BONE_LENGTH * stretch
 	var along_span: Vector3 = span / maxf(far, 0.001)
-	var elbow_way: Vector3 = (into.basis * (Vector3.UP + global_basis.x * side * 0.7)).normalized()
+	var elbow_way: Vector3 = (into.basis * (Vector3.UP + global_basis.x * side * ELBOW_OUT[mini(i, DIGGERS - 1)])).normalized()
 	elbow_way = (elbow_way - along_span * elbow_way.dot(along_span)).normalized()
 	var elbow := wrist_at + span * 0.5 + elbow_way * sqrt(maxf(bone * bone - far * far * 0.25, 0.0))
 	var arm_1 := hand.find_bone("arm_1")
@@ -808,7 +1336,9 @@ func _curl_fingers(hand: Skeleton3D, which: int) -> void:
 	for f in FINGER_NAMES.size():
 		var seed := float(f) * 1.9 + float(which) * 2.3
 		var palsy := sin(_clock * 3.0 + seed) * 0.6 + sin(_clock * 7.7 + seed * 2.0) * 0.4
-		var shut := _shut[which] + palsy * CURLS * (0.15 if _dug[which] else 1.0)
+		# (No two the same, on any hand; dug in, some are further in than others.)
+		var own := sin(float(f) * 2.4 + float(which) * 1.3) * (0.3 if _dug[which] else 0.12)
+		var shut := _shut[which] + own + palsy * CURLS * (0.15 if _dug[which] else 1.0)
 
 		for k in range(1, 4):
 			var bone := hand.find_bone("%s_%02d" % [FINGER_NAMES[f], k])

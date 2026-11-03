@@ -15,7 +15,7 @@ const DeathQuotes := preload("res://scripts/UI/DeathQuotes.gd")
 const MARK := Vector3(-3.5, 1.05, -16.0)
 const AIM_RATE := 8.0
 
-const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "mouth_comes", "mouth_digs", "mouth_rake", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
+const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "mouth_comes", "mouth_digs", "mouth_close", "mouth_rake", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
 
 var gym: Node3D
 var p: CharacterBody3D
@@ -369,6 +369,22 @@ func _mouth_digs() -> void:
 	await _until(func(): return one.body.hauls_done() >= from + 12, 12.0)
 	await _frames(60)
 	_expect("it dug in and hauled itself on (%d)" % (one.body.hauls_done() - from), one.body.hauls_done() >= from + 12)
+
+
+func _mouth_close() -> void:
+	await _stand(0.2)
+	# Near, held off, so you see what is trying to get out of it.
+	var one := await _anima(&"torso", _ahead(0.0, 2.6, -0.5))
+	one.leap_chance = 0.0
+	target = one
+	await _frames(20)
+	var eye: Vector3 = p.camera.global_position
+
+	for n in 3:
+		one.body.hold_press(n, eye + Vector3(float(n) - 1.0, float(n) * 0.5, 0.0), 0.2 + float(n) * 0.4)
+
+	await _frames(300)
+	_expect("those in it are pressing out of it", one.body.press_shown(0) and one.body.press_shown(2))
 
 
 func _mouth_rake() -> void:

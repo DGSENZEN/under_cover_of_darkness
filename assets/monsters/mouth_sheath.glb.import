@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://bnij45dco3j70"
-path="res://.godot/imported/mouth_soul.glb-a66ed9c2179d5917bfedab2dbd81f93c.scn"
+uid="uid://breosrmjhf00k"
+path="res://.godot/imported/mouth_sheath.glb-6d81ff97d0e60b2fe129a9c38120cdfd.scn"
 
 [deps]
 
-source_file="res://assets/monsters/mouth_soul.glb"
-dest_files=["res://.godot/imported/mouth_soul.glb-a66ed9c2179d5917bfedab2dbd81f93c.scn"]
+source_file="res://assets/monsters/mouth_sheath.glb"
+dest_files=["res://.godot/imported/mouth_sheath.glb-6d81ff97d0e60b2fe129a9c38120cdfd.scn"]
 
 [params]
 

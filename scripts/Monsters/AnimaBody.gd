@@ -433,24 +433,64 @@ func arms_raking() -> int:
 ## Too many arms hauling one mass: it heaves and rolls with them. It rears up with its ribs apart
 ## before it comes, and they snap shut on the swing.
 ## Those in it (tests/anima_test.gd).
-func souls_held() -> int:
-	return _mouth.souls_held()
+func presses_held() -> int:
+	return _mouth.presses_held()
 
 
-func souls_out() -> int:
-	return _mouth.souls_out()
+func press_held_off(n: int) -> void:
+	_mouth.press_held_off(n)
 
 
-func soul_reach() -> float:
-	return _mouth.soul_reach()
+func hold_press(n: int, at: Vector3, jaw: float) -> void:
+	_mouth.hold_press(n, at, jaw)
 
 
-func soul_yanked() -> bool:
-	return _mouth.soul_yanked()
+func press_shown(n: int) -> bool:
+	return _mouth.press_shown(n)
 
 
-func souls_toward(at: Vector3) -> float:
-	return _mouth.souls_toward(at)
+func press_strength(n: int) -> float:
+	return _mouth.press_strength(n)
+
+
+func press_kind(n: int) -> int:
+	return _mouth.press_kind(n)
+
+
+func press_jaw(n: int) -> float:
+	return _mouth.press_jaw(n)
+
+
+func press_on_skin(n: int) -> bool:
+	return _mouth.press_on_skin(n)
+
+
+func press_toward(n: int, at: Vector3) -> float:
+	return _mouth.press_toward(n, at)
+
+
+func skull_out(n: int) -> float:
+	return _mouth.skull_out(n)
+
+
+func burst_out() -> float:
+	return _mouth.burst_out()
+
+
+func burst_shown() -> bool:
+	return _mouth.burst_shown()
+
+
+func tear_open() -> float:
+	return _mouth.tear_open()
+
+
+func arm_hovering(which: int) -> bool:
+	return _mouth.arm_hovering(which)
+
+
+func arm_reach_of(which: int) -> float:
+	return _mouth.arm_reach_of(which)
 
 
 func hunger() -> float:
