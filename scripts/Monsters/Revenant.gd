@@ -137,6 +137,25 @@ func _sounds_for(next: State) -> void:
 			Sfx.play(self, &"anima_moan", global_position, -6.0, 0.38)
 
 
+func save_state() -> Dictionary:
+	var kept := super.save_state()
+	kept["state"] = int(state)
+	kept["state_t"] = _state_t
+	return kept
+
+
+func load_state(kept: Dictionary) -> void:
+	super.load_state(kept)
+	state = int(kept.get("state", State.WALK)) as State
+	_state_t = float(kept.get("state_t", 0.0))
+	_stand_tall(LIES_TALL if is_down() else STANDS_TALL)
+	_fore.position = FORE_AT * Vector3(1.0, 0.5, 1.1) if is_down() else FORE_AT
+
+	# Its limbs start from where it is.
+	if body != null:
+		body.call_deferred(&"come_back")
+
+
 func hit_radius() -> float:
 	return float(Bestiary.info(&"revenant")["hit_radius"])
 

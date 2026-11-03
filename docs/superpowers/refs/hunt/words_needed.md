@@ -15,3 +15,10 @@ Every word here is a stand-in. Replace the text, keep the ids.
 - The new spell, stand-in id `burst`: its name.
 - The copal line, stand-in id `copal_line`: its name, and the HUD's "Line".
 - `data/jobs/anima_gym.job`: the curandera's note on the hungry ones, and the pencil note.
+
+## The revenant
+
+- What the fire shell is called, on the table and the readout (`fire` for now).
+- What the brazier is called (`Brazier` for now, in `PrepItems`).
+- A clue for its gym's room, as the others have: it has none until you write one.
+- Which quotes possession draws (`DeathQuotes.FOR[&"possessed"]`, the ánimas' for now).

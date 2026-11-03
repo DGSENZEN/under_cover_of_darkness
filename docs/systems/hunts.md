@@ -96,6 +96,14 @@ Each round reads at a glance, from `Rounds.TABLE`: its colour on the readout's c
 - **The elite mouth:** the torso with `Anima.elite` set before it enters the tree; numbers in `Bestiary` (`forms.torso.elite`, tune there), `elite_form(taken)`. Below `hungry_below` it picks a hand or face not on you and clear to it (`REACH`), seizes it (`DRAG`), and `take_in` heals and grows it. A hit from anything but lead in either state is a full opening. Small ones wait round it (`elite_near`). At `most_taken`, `LifeLeech.swallowed_by` kills you: `PlayerDeath` kind `&"mouth"`. Tests: `elite_mouth_test`.
 - **Play:** `maps/anima_gym.tscn`, `maps/mixed_gym.tscn`: the elite is the last wave. Tests: `anima_test`, `burst_spell_test`, `copal_line_test`, `anima_gym_test`; stills `diag_anima_stills`.
 
+## The revenant
+
+- **What it is:** `Revenant.gd` (brain, rules), `RevenantBody.gd` (timed key poses and solved limbs, on its own rig), `RevenantLook.gd` (flesh, eye halos, pool), `revenant_flesh.gdshader`, `RevenantTrail.gd` (the smear behind a blow). Numbers in `Bestiary` (`&"revenant"`). Built by `tools/monsters/build_revenant.py`, which refuses an open edge or an eye outside its socket.
+- **Going down:** anything can put it down. It rises with 40% of its health, as often as you let it. Only fire keeps it dead (`_goes_down`, `_finish`): a fire shell (`Rounds.TABLE[&"fire"]`, takes copal's place, goes in the shot barrel: `Revolver.shot_round`) or, when built, the brazier.
+- **What it does:** swipe, rake, bite, grasp, surge. A swipe, rake or bite leaves you soaked (`_recover`, `stamina_regen_scale`). A first grasp leaves its touch on you (`RevenantTouch.gd`) until the one that laid it burns; a second, from any of them, is possession (`PlayerDeath` kind `&"possessed"`).
+- **On your sight:** `revenant_touch_view.gdshader` (`StealthHUD._show_revenant`).
+- **Play:** `maps/revenant_gym.tscn`. Tests: `revenant_test`, `revenant_model_test`, `revenant_gym_test`; film `diag_revenant_walk`, stills `diag_revenant_stills`.
+
 ## Eyes and ánimas together
 
 - **Swipes (`Anima.gd`, `Bestiary` forms' `swipe_damage`, `swipe_reach`, `swipe_wind`):** up close they mostly cut, then back off; the leap is the rarer, mid-range move. A swipe's wind-up is an opening, a dodge avoids it, the Ward does not stop it. It hurts your life only and opens the claw marks (`StealthHUD.claw_at`).

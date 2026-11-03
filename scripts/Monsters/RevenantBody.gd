@@ -223,13 +223,27 @@ const FIRE_LIGHT := Color(1.0, 0.45, 0.14)
 const FIRE_LIGHT_ENERGY := 1.5
 const FIRE_LIGHT_REACH := 4.0
 const FIRE_COMES := 2.5
-const SIDES := ["_l", "_r"]
-const FINGERS := ["thumb", "finger_1", "finger_2", "finger_3", "finger_4"]
+## (Bones by side, ready-made: it would otherwise build these names every tick, for every arm.)
+const CLAVICLE: Array[StringName] = [&"clavicle_l", &"clavicle_r"]
+const ARM_1: Array[StringName] = [&"arm_1_l", &"arm_1_r"]
+const ARM_2: Array[StringName] = [&"arm_2_l", &"arm_2_r"]
+const HAND: Array[StringName] = [&"hand_l", &"hand_r"]
+const LEG_1: Array[StringName] = [&"leg_1_l", &"leg_1_r"]
+const LEG_2: Array[StringName] = [&"leg_2_l", &"leg_2_r"]
+const FOOT: Array[StringName] = [&"foot_l", &"foot_r"]
+const FINGER_BONES: Array = [
+	[[&"thumb_l", &"thumb_b_l"], [&"finger_1_l", &"finger_1_b_l"], [&"finger_2_l", &"finger_2_b_l"], [&"finger_3_l", &"finger_3_b_l"], [&"finger_4_l", &"finger_4_b_l"]],
+	[[&"thumb_r", &"thumb_b_r"], [&"finger_1_r", &"finger_1_b_r"], [&"finger_2_r", &"finger_2_b_r"], [&"finger_3_r", &"finger_3_b_r"], [&"finger_4_r", &"finger_4_b_r"]],
+]
+const STRIKE_OF: Array[StringName] = [&"strike_l", &"strike_r"]
+## Each clip's keys, whole, what each leaves out filled in: worked out once (the first that asks), not each tick.
+static var _whole_keys := {}
 
 var _model: Node3D
 var _bones: Skeleton3D
 var _mesh: MeshInstance3D
 var _rest := {}
+var _index := {}
 var _parent := {}
 var _now := {}
 var _springs := {}
@@ -308,6 +322,7 @@ func _ready() -> void:
 
 	for i in _bones.get_bone_count():
 		var name_of := StringName(_bones.get_bone_name(i))
+		_index[name_of] = i
 		_rest[name_of] = _bones.get_bone_global_rest(i)
 		var up := _bones.get_bone_parent(i)
 		_parent[name_of] = StringName(_bones.get_bone_name(up)) if up >= 0 else &""
@@ -315,7 +330,7 @@ func _ready() -> void:
 	_ankle_up = (_rest[&"foot_l"] as Transform3D).origin.y
 
 	for side in 2:
-		_foot_out[side] = (_rest[StringName("foot" + SIDES[side])] as Transform3D).origin.x
+		_foot_out[side] = (_rest[FOOT[side]] as Transform3D).origin.x
 
 	_rng.seed = hash(name) + 7
 	_now = _rest.duplicate()
@@ -373,7 +388,7 @@ func come_back() -> void:
 	var ahead: Vector3 = -global_basis.z
 
 	for side in 2:
-		_foot_at[side] = _world_of((_rest[StringName("foot" + SIDES[side])] as Transform3D).origin)
+		_foot_at[side] = _world_of((_rest[FOOT[side]] as Transform3D).origin)
 		_foot_at[side].y = _floor_y + _ankle_up
 		_step_t[side] = -1.0
 		_foot_yaw[side] = global_rotation.y
@@ -518,7 +533,8 @@ func _work_flames(delta: float, burn: float) -> void:
 
 
 func _now_at(stem: StringName, side: int) -> Vector3:
-	return (_now[StringName(String(stem) + SIDES[side])] as Transform3D).origin
+	var table: Array[StringName] = HAND if stem == &"hand" else (ARM_2 if stem == &"arm_2" else FOOT)
+	return (_now[table[side]] as Transform3D).origin
 
 
 func _world_of(at: Vector3) -> Vector3:
@@ -541,26 +557,42 @@ func _no_faster(id: StringName, value: float, most: float, delta: float) -> floa
 	return _limited[id]
 
 
-## The values at `t` through timed keys: each eased from the one before.
-func _keys_at(keys: Array, t: float) -> Dictionary:
-	var from: Dictionary = NEUTRAL.duplicate()
-	from["l"] = AT_REST
-	from["r"] = AT_REST
-	var from_t := 0.0
+## A clip's keys with all each leaves out carried from the one before.
+static func _whole(keys: Array) -> Array:
+	if _whole_keys.has(keys):
+		return _whole_keys[keys]
+
+	var out: Array = []
+	var carried: Dictionary = NEUTRAL.duplicate()
+	carried["l"] = AT_REST
+	carried["r"] = AT_REST
+	var from_start: Dictionary = carried.duplicate()
+	out.append([0.0, from_start])
 
 	for key in keys:
-		var to: Dictionary = key[1]
+		carried = carried.duplicate()
+		carried.merge(key[1], true)
+		out.append([float(key[0]), carried])
 
-		if float(key[0]) > t:
-			var share := clampf((t - from_t) / maxf(float(key[0]) - from_t, 0.001), 0.0, 1.0)
-			return _between(from, to, share * share * (3.0 - 2.0 * share))
+	_whole_keys[keys] = out
+	return out
 
-		var carried := from.duplicate()
-		carried.merge(to, true)
-		from = carried
-		from_t = float(key[0])
 
-	return from
+## The values at `t` through timed keys, eased from one to the next.
+func _keys_at(keys: Array, t: float) -> Dictionary:
+	var whole := _whole(keys)
+	var from: Array = whole[0]
+
+	for i in range(1, whole.size()):
+		var to: Array = whole[i]
+
+		if float(to[0]) > t:
+			var share := clampf((t - float(from[0])) / maxf(float(to[0]) - float(from[0]), 0.001), 0.0, 1.0)
+			return _between(from[1], to[1], share * share * (3.0 - 2.0 * share))
+
+		from = to
+
+	return from[1]
 
 
 func _between(from: Dictionary, to: Dictionary, share: float) -> Dictionary:
@@ -568,8 +600,7 @@ func _between(from: Dictionary, to: Dictionary, share: float) -> Dictionary:
 
 	for name_of in from:
 		var a: Variant = from[name_of]
-		var b: Variant = to.get(name_of, a)
-		out[name_of] = (a as Vector3).lerp(b as Vector3, share) if a is Vector3 else lerpf(float(a), float(b), share)
+		out[name_of] = (a as Vector3).lerp(to[name_of] as Vector3, share) if a is Vector3 else lerpf(float(a), float(to[name_of]), share)
 
 	return out
 
@@ -795,7 +826,7 @@ func _foot_wants(side: int, going: Vector3, speed: float, takes: float) -> Vecto
 
 ## Out ahead of its shoulder and a little outside it, where its shoulder will have got to.
 func _hand_wants(side: int, going: Vector3, speed: float, takes: float) -> Vector3:
-	var shoulder: Vector3 = (_now[StringName("arm_1" + SIDES[side])] as Transform3D).origin
+	var shoulder: Vector3 = (_now[ARM_1[side]] as Transform3D).origin
 	var out_way: float = -1.0 if side == 0 else 1.0
 	var at := _world_of(shoulder) + global_basis.x * out_way * HAND_LANDS_OUT - global_basis.z * 0.12
 	at += going * (HAND_LANDS_AHEAD + speed * takes) * (1.0 if speed > 0.1 else 0.0)
@@ -901,7 +932,7 @@ func _set_local_turn(bone: StringName, turned: Quaternion) -> void:
 
 
 func _apply(bone: StringName, now: Transform3D) -> void:
-	var i := _bones.find_bone(bone)
+	var i: int = _index[bone]
 	var up: StringName = _parent[bone]
 	var local: Transform3D = (_now[up] as Transform3D).affine_inverse() * now if up != &"" else now
 	_bones.set_bone_pose_position(i, local.origin)
@@ -923,11 +954,10 @@ func _along(bone: StringName, way: Vector3, drawn := 0.0) -> void:
 
 
 func _pose_arm(delta: float, side: int, off: Vector3, reach: float, limp: float, shut: float, you_at: Vector3, fastest: float, stiff: float) -> void:
-	var tag: String = SIDES[side]
-	var clavicle := StringName("clavicle" + tag)
-	var arm_1 := StringName("arm_1" + tag)
-	var arm_2 := StringName("arm_2" + tag)
-	var hand := StringName("hand" + tag)
+	var clavicle: StringName = CLAVICLE[side]
+	var arm_1: StringName = ARM_1[side]
+	var arm_2: StringName = ARM_2[side]
+	var hand: StringName = HAND[side]
 	var into := _bones.global_transform.affine_inverse()
 	var chest_turn: Quaternion = ((_now[&"chest"] as Transform3D).basis * (_rest[&"chest"] as Transform3D).basis.inverse()).get_rotation_quaternion()
 	# Its shoulder blade goes with the arm: it reaches from the back, not from a socket.
@@ -980,7 +1010,7 @@ func _pose_arm(delta: float, side: int, off: Vector3, reach: float, limp: float,
 	var span := wrist_at - shoulder
 	var whole := upper + lower
 	# (It keeps a bend, unless it wants you, or the floor is under it.)
-	var strike := _spring(StringName("strike" + tag), 1.0 if fastest >= STRIKES_AT else 0.0, 6.0, 1.0, delta)
+	var strike := _spring(STRIKE_OF[side], 1.0 if fastest >= STRIKES_AT else 0.0, 6.0, 1.0, delta)
 	var bent := lerpf(lerpf(ARM_KEEPS_BENT, ARM_STRIKE_BENT, clampf(strike, 0.0, 1.0)), 1.0, clampf(planted, 0.0, 1.0))
 	var longest := whole * lerpf(bent, 1.0 + ARM_DRAWS * 2.0 / whole, clampf(reach, 0.0, 1.0))
 	_longest[side] = longest if _longest[side] < 0.0 else move_toward(_longest[side], longest, LONGEST_CHANGES * delta)
@@ -1021,19 +1051,19 @@ func _pose_arm(delta: float, side: int, off: Vector3, reach: float, limp: float,
 	_along(hand, _hand_way[side], drawn * 0.5)
 
 	# (They go on their own, each at its own time, whatever the hand is doing.)
-	for f in FINGERS.size():
-		var finger: String = FINGERS[f]
+	var fingers: Array = FINGER_BONES[side]
+
+	for f in 5:
 		var own: float = sin(_clock * (1.7 + float(f) * 0.9 + float(side) * 0.4) + float(f) * 2.1) * FINGERS_GO
-		var curl := Quaternion(Vector3.RIGHT, (shut + own) * (0.6 if finger == "thumb" else 1.0))
-		_set_local_turn(StringName(finger + tag), curl)
-		_set_local_turn(StringName(finger + "_b" + tag), curl)
+		var curl := Quaternion(Vector3.RIGHT, (shut + own) * (0.6 if f == 0 else 1.0))
+		_set_local_turn(fingers[f][0], curl)
+		_set_local_turn(fingers[f][1], curl)
 
 
 func _pose_leg(delta: float, side: int) -> void:
-	var tag: String = SIDES[side]
-	var leg_1 := StringName("leg_1" + tag)
-	var leg_2 := StringName("leg_2" + tag)
-	var foot_bone := StringName("foot" + tag)
+	var leg_1: StringName = LEG_1[side]
+	var leg_2: StringName = LEG_2[side]
+	var foot_bone: StringName = FOOT[side]
 	var into := _bones.global_transform.affine_inverse()
 	var hip: Vector3 = (_now[&"hips"] as Transform3D) * ((_rest[&"hips"] as Transform3D).affine_inverse() * (_rest[leg_1] as Transform3D).origin)
 	var ankle: Vector3 = into * _foot_at[side]

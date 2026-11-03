@@ -155,3 +155,19 @@ Name each file as in the **File** column. Tell me where they are and I'll trim, 
 - **Too big and cinematic:** add `small, close, intimate, no bass drop, no riser`.
 - **Too long a tail:** add `tight, cuts off quickly`.
 - **Comes back as a voice or words:** swap "scream" or "moan" for `airy vocal texture, no words, not human speech`.
+
+## The revenant
+
+| Name | Length | Prompt |
+|---|---|---|
+| `revenant_step` | 0.8 s | Very heavy wet bare foot coming down on old stone, slow drag at the end, recorded foley, dry room |
+| `revenant_hand` | 0.6 s | Huge wet knuckles and a palm slapping down on stone, recorded foley, close |
+| `revenant_surge` | 1.2 s | A big wet body scrabbling suddenly on hands and feet over stone, galloping, recorded foley |
+| `revenant_breath` | 3 s | Slow wet breath with water in the throat, airy vocal texture, no words, not human speech |
+| `revenant_gape` | 1 s | A jaw hinge cracking open too far, wet cartilage, close, recorded foley |
+| `revenant_bite` | 0.4 s | Big teeth snapping shut hard on nothing, close, tight, cuts off quickly |
+| `revenant_grasp` | 0.5 s | Long wet fingers closing fast round something, cold grip, recorded foley |
+| `revenant_slam` | 1 s | A very heavy wet body coming down on a stone floor, low thud felt more than heard, small, no bass drop |
+| `revenant_fall` | 1.2 s | A huge wet body collapsing on stone, bones knocking, recorded foley |
+| `revenant_rise` | 2 s | Something very heavy hauling itself up off stone, water running off it, a low strained breath, no words |
+| `revenant_burn` | 2 s | Wet flesh catching fire and spitting, recorded foley, no music |

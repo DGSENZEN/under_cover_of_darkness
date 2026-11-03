@@ -4334,6 +4334,9 @@ func save_state() -> Dictionary:
 	if statuses != null:
 		state["statuses"] = statuses.save_state()
 
+	if touch != null:
+		state["touch"] = touch.save_state()
+
 	if loadout != null:
 		state["loadout"] = loadout.save_state()
 
@@ -4372,6 +4375,9 @@ func load_state(state: Dictionary) -> void:
 
 	if caster != null and state.has("caster"):
 		caster.load_state(state["caster"])
+
+	if touch != null and state.has("touch"):
+		touch.load_state(state["touch"])
 
 	if statuses != null and state.has("statuses"):
 		statuses.load_state(state["statuses"])

@@ -188,7 +188,9 @@ func _room() -> void:
 	lamp.shadow_enabled = true
 	add_child(lamp)
 	lamp.global_position = Vector3(0, 3.0, 1.0)
-	Props.readable(self, Transform3D(Basis.IDENTITY, Vector3(2.6, 1.6, -ROOM.z)), &"notice", _clue())
+	# (A gym with no words yet has nothing pinned: the words are the user's.)
+	if _clue() != "":
+		Props.readable(self, Transform3D(Basis.IDENTITY, Vector3(2.6, 1.6, -ROOM.z)), &"notice", _clue())
 
 
 func _yard() -> void:

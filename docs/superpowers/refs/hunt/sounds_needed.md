@@ -60,3 +60,22 @@ Stand-ins from the existing library until the user chooses real ones.
 | The last breath out (`death_breath_out`) | not yet played | |
 | A match, a candle catching, very quiet (`death_candle_lit`) | `DeathQuote.after` | `ignite`, quiet |
 
+
+## The revenant
+
+All stand-ins for now, from the approved packs (`Revenant._sounds_for`).
+
+| Wanted | What it is |
+|---|---|
+| `revenant_step` | A very heavy wet foot on stone, slow, dragging on the left |
+| `revenant_hand` | Huge knuckles and a wet palm coming down on stone |
+| `revenant_surge` | A sudden wet scrabbling gallop on hands and feet |
+| `revenant_breath` | Slow, wet, water in it, no words |
+| `revenant_gape` | A jaw hinge going further than it should, wet, cracking |
+| `revenant_bite` | Teeth snapping shut, hard, close |
+| `revenant_grasp` | Long fingers closing, wet cold grip |
+| `revenant_slam` | All its weight coming down, felt in the floor |
+| `revenant_fall` | A huge wet body collapsing, bones |
+| `revenant_rise` | Hauling itself up, water running off it |
+| `revenant_burn` | Wet flesh catching and spitting in fire |
+| `possession` | Your own breath taken from you, then nothing human |

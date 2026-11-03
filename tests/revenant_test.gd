@@ -53,6 +53,9 @@ func _ready() -> void:
 	if only == "" or only == "mouth":
 		await _its_mouth()
 
+	if only == "" or only == "saves":
+		await _its_saves()
+
 	print("revenant_test: %s" % ("FAILED %d" % failed if failed > 0 else "passed"))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -592,6 +595,69 @@ func _its_mouth() -> void:
 	body.queue_free()
 	await _frames(2)
 	p.invulnerable = true
+	await _clean()
+
+
+## Off a save, it is as it was.
+func _its_saves() -> void:
+	await _clean()
+	var down := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	down._surge_in = 99.0
+	down._attack_in = 99.0
+
+	while not down.is_down():
+		down.take_hit(55.0, p, &"bullet", down.global_position, Vector3.BACK)
+
+	await _frames(120)
+	var kept: Dictionary = down.save_state()
+	var had_time: float = down._state_t
+	down.queue_free()
+	await _frames(2)
+	var back := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	back.load_state(kept)
+	await _frames(2)
+	_check("S1 saved down, it comes back down, with the time it had left (%.2f, %.2f)" % [had_time, back._state_t], back.is_down() and absf(back._state_t - had_time) < 0.2 and back.health == 0.0)
+	await _clean()
+	var burning := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	burning._surge_in = 99.0
+	burning._attack_in = 99.0
+	burning.take_hit(5.0, p, &"fire", burning.global_position, Vector3.BACK)
+	var burnt: Dictionary = burning.save_state()
+	burning.queue_free()
+	await _frames(2)
+	var still := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	still.load_state(burnt)
+	await _frames(2)
+	_check("S2 saved burning, it burns on", still.statuses.has(&"burning"))
+	await _clean()
+	var dead_one := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	dead_one.health = 1.0
+	dead_one.take_hit(5.0, p, &"fire", dead_one.global_position, Vector3.BACK)
+	var gone: Dictionary = dead_one.save_state()
+	dead_one.queue_free()
+	await _frames(2)
+	var stays_gone := _revenant(Vector3(0, 0, -40))
+	await _frames(2)
+	stays_gone.load_state(gone)
+	await _frames(2)
+	_check("S2b dead for good stays dead, and hidden", stays_gone.dead and not stays_gone.visible)
+	await _clean()
+	var layer := _revenant(Vector3(0, 0, -40))
+	layer.name = "TheOne"
+	await _frames(2)
+	layer._surge_in = 99.0
+	layer._attack_in = 99.0
+	p.touch.lay(layer, 0.0, 0.0)
+	var whole: Dictionary = p.save_state()
+	p.touch.clear()
+	p.load_state(whole)
+	await _frames(2)
+	_check("S3 the touch and who laid it survive a save", p.touch.on_you() and p.touch.laid_by() == layer)
 	await _clean()
 
 
