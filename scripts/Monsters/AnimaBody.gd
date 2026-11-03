@@ -90,7 +90,7 @@ const DEATHS: Dictionary = AnimaDeathsScript.TABLE
 ## Dead: how fast it falls (m/s²), how high the body lies off the floor, by form; how far over
 ## it lies; how fast a shot's push dies.
 const FALLS := 11.0
-const LIES_AT := {&"hands": 0.25, &"face": 0.16}
+const LIES_AT := {&"hands": 0.25, &"face": 0.16, &"torso": 0.5}
 const PUSH_DIES := 3.5
 const DEAD_HIGH := 0.075
 ## The hands, dying: how far up it rears (m, and the turn of it), how far a finger draws in, how
@@ -109,7 +109,9 @@ const HAND_DYING := {"low": 1.0, "rear": 0.0, "flip": 0.0, "up": 0.0, "roll": 0.
 const HEAT_SHUTS := 0.5
 const HEAT_GAPES := 0.18
 ## The size of what burns, by form, against what AnimaBurn.gd makes.
-const BURNS_SIZE := {&"hands": 1.0, &"face": 1.2}
+const BURNS_SIZE := {&"hands": 1.0, &"face": 1.2, &"torso": 1.7}
+## The mouth's last moments, before the beats have said anything.
+const MOUTH_DYING := {"ribs": 0.3, "rear": 0.0, "swell": 0.0, "slump": 0.0, "digs": true, "grab": 0.0, "drag": 0.0, "snap": 3.0, "falls": true}
 ## How long the parts of the face outlast its hands, burning.
 const SKULL_LATE := 0.26
 const JAW_LATE := 0.14
@@ -386,6 +388,8 @@ func _build_mouth() -> void:
 	# (No lilac from the moon in its edges: only what is its own.)
 	_flesh.set_shader_parameter(&"rim_colour", Color(0.42, 0.46, 0.34))
 	bone.set_shader_parameter(&"rim_colour", Color(0.42, 0.46, 0.34))
+	_flesh.set_shader_parameter(&"burn_tile", 3.2)
+	bone.set_shader_parameter(&"burn_tile", 3.2)
 	_flesh.set_shader_parameter(&"spectral", 1.0)
 	_flesh.set_shader_parameter(&"frays", 1.0)
 	# (Less fill than the others: what it is made of is in its shadows, and they should stay shadows.)
@@ -439,6 +443,23 @@ func arms_raking() -> int:
 
 ## Too many arms hauling one mass: it heaves and rolls with them. It rears up with its ribs apart
 ## before it comes, and they snap shut on the swing.
+## How it has come apart (tests/anima_test.gd).
+func ribs_flung() -> float:
+	return _mouth.ribs_flung()
+
+
+func souls_apart() -> int:
+	return _mouth.souls_apart()
+
+
+func souls_spread() -> float:
+	return _mouth.souls_spread()
+
+
+func tears_open() -> int:
+	return _mouth.tears_open()
+
+
 ## Those in it (tests/anima_test.gd).
 func presses_held() -> int:
 	return _mouth.presses_held()
@@ -1120,6 +1141,9 @@ func burn_away(world: Node, push: Vector3, you: Node3D = null, kind := -1) -> vo
 		meshes.append([part(&"Hand"), 0.0])
 		embers.append(part(&"Ember"))
 		from = _skeleton.global_transform * _skeleton.get_bone_global_pose(_skeleton.find_bone("hand")).origin
+	elif form == &"torso":
+		meshes = _mouth.start_dying(_rng.randi())
+		from = _mouth.global_position
 	else:
 		for mesh in _face_hands:
 			meshes.append([mesh, 0.0])
@@ -1166,7 +1190,7 @@ func _physics_process(delta: float) -> void:
 		if said != null:
 			Sfx.play(self, said[0], global_position, said[1], said[2])
 
-	var pose := _dying_pose(POSES[&"dead"] if form == &"face" else HAND_DYING)
+	var pose := _dying_pose(POSES[&"dead"] if form == &"face" else (MOUTH_DYING if form == &"torso" else HAND_DYING))
 
 	# While there is anything in it, it trembles. After that, nothing moves it of itself.
 	if float(pose.get("shake", 0.0)) > 0.0 or float(pose.get("chatter", 0.0)) > 0.0 or float(pose.get("walk", 0.0)) > 0.0:
@@ -1174,15 +1198,33 @@ func _physics_process(delta: float) -> void:
 
 	_fall(delta, pose)
 
-	if not pose.get("limp", false):
+	if not pose.get("limp", false) and form != &"torso":
 		_face_you(delta)
 
 	if form == &"hands":
 		_die_hand(delta, pose)
+	elif form == &"torso":
+		_die_mouth(delta, pose)
 	else:
 		_work_face(delta, &"dead", 0.0, fed_shown)
 
 	_ember_flare = _burn.flare()
+
+
+## The mouth in its last moments: told by the beats, what it does is its own (AnimaMouth.gd).
+func _die_mouth(delta: float, pose: Dictionary) -> void:
+	var snap: float = float(pose.get("snap", 3.0))
+	_mouth.ribs_to(clampf(_spring(&"mouth_ribs", float(pose["ribs"]), snap, 0.8, delta), 0.0, 1.15))
+	_reared = maxf(_spring(&"mouth_rear", float(pose["rear"]), snap, 0.7, delta), 0.0)
+	var swell: float = _spring(&"mouth_swell", float(pose["swell"]), snap, 0.75, delta)
+	var slump: float = clampf(_spring(&"mouth_slump", float(pose["slump"]), snap, 1.0, delta), 0.0, 1.0)
+	var grab: float = clampf(_spring(&"mouth_grab", float(pose["grab"]), 3.0, 0.9, delta), 0.0, 1.0)
+	var grab_at: Vector3 = _you.global_position + Vector3.UP * 0.15 if is_instance_valid(_you) else global_position
+	var dragged := float(pose.get("drag", 0.0))
+	var going: Vector3 = (grab_at - global_position) * Vector3(1.0, 0.0, 1.0)
+	_mouth.tick_dying(delta, dragged, going.normalized() * dragged if going.length() > 0.01 else Vector3.ZERO, bool(pose["digs"]), grab, grab_at, swell, slump, pose, _floor_at, _burn.flare())
+	_mouth.rotation = Vector3(_reared * MOUTH_REARS - _mouth.rock(), 0.0, _mouth.roll())
+	_mouth.position = Vector3(0.0, _mouth.heave() + _reared * MOUTH_RISES, 0.0)
 
 
 func _face_you(delta: float) -> void:
@@ -1301,6 +1343,9 @@ func _find_floor() -> float:
 ## Where its flames stand, listed: [a skeleton, its bone, how far along it, how tall], or [a
 ## place on its skull, how tall].
 func _flame_spots() -> Array:
+	if form == &"torso":
+		return _mouth.flame_spots(FINGER_FLAME)
+
 	var spots: Array = []
 	var hands: Array = [_skeleton] if form == &"hands" else [_right_hand, _left_hand]
 
@@ -1319,6 +1364,10 @@ func _flame_spots() -> Array:
 
 ## Where that flame stands, this moment, in the world.
 func _flame_place(spot: Array) -> Vector3:
+	# (On the mouth, or on what has got out of it, wherever that has gone.)
+	if spot.size() == 3:
+		return spot[0].global_transform * Vector3(spot[1]) if is_instance_valid(spot[0]) else global_position
+
 	if spot.size() == 2:
 		return _rig.skull().global_transform * Vector3(spot[0])
 

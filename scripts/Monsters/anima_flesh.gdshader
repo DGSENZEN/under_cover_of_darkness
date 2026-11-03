@@ -25,6 +25,8 @@ uniform vec4 press_way[8];
 uniform vec4 press_up[8];
 uniform float press_size[8];
 uniform sampler2D burn_noise : filter_linear_mipmap, repeat_enable;
+// How fine the burn runs over it: big shapes want it finer, or it is patches.
+uniform float burn_tile = 1.0;
 
 // x: how far the skin stands out here (m), y: how torn, z: how taut.
 vec3 press_read(vec3 p, int i) {
@@ -173,7 +175,8 @@ void fragment() {
 	skin = mix(skin, vec3(0.62, 0.02, 0.015), hurt * 0.75);
 	// Where the fire has been. (Read always, out here: inside a branch it picks the wrong mip
 	// at the branch's edge, and draws a line.) Sooner the nearer to where it caught.
-	float burn_at = texture(burn_noise, paint_at.xz * 1.1 + paint_at.yy * 0.4).r * 0.7 + texture(burn_noise, paint_at.zy * 2.3).r * 0.3;
+	vec3 burnt_at = paint_at * burn_tile;
+	float burn_at = texture(burn_noise, burnt_at.xz * 1.1 + burnt_at.yy * 0.4).r * 0.7 + texture(burn_noise, burnt_at.zy * 2.3).r * 0.3;
 	burn_at = smoothstep(0.3, 0.72, burn_at);
 
 	if (burn_reach > 0.0) {

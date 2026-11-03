@@ -261,10 +261,19 @@ func _process(delta: float) -> void:
 		_pose(slot, anchor, float(who.fed), maxf(player.leech.gulp(), last), player.leech.coming() * (1.0 - last))
 
 		if player.leech.holds_face(slot):
-			_face_for(slot).drink(delta, player.leech.gulp(), player.leech.coming(), _arrive[slot], clampf(float(who.fed) / FULL, 0.0, 1.0), player.leech.face_offset(slot), float(slot) * 0.09, player.leech.last_gulp())
+			_face_for(slot).drink(delta, player.leech.gulp(), player.leech.coming(), _arrive[slot], clampf(float(who.fed) / FULL, 0.0, 1.0), player.leech.face_offset(slot), float(slot) * 0.09, 0.0 if _mouth_has_you() else player.leech.last_gulp())
 
 	_second_hand(taken, delta)
 	_work_cage(delta)
+
+
+## Whether the mouth is one of those on you. The last gulp is its, then: it shuts on you, and on anything else on you.
+func _mouth_has_you() -> bool:
+	for slot in 3:
+		if player.leech.holds_mouth(slot):
+			return true
+
+	return false
 
 
 ## The mouth's ribs, closed on you. Gone at once when it is thrown: the one in the world is there. As you die, it

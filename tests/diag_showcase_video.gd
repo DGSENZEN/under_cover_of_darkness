@@ -15,7 +15,7 @@ const DeathQuotes := preload("res://scripts/UI/DeathQuotes.gd")
 const MARK := Vector3(-3.5, 1.05, -16.0)
 const AIM_RATE := 8.0
 
-const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "mouth_comes", "mouth_digs", "mouth_close", "mouth_rake", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
+const SHOTS := ["pack", "choose", "swipe_hands", "swipe_face", "latch_whip", "face_drinks", "burst", "shard", "ward", "empower", "blink", "weak_kill", "mouth_comes", "mouth_digs", "mouth_close", "mouth_rake", "mouth_bursts", "mouth_they_get_out", "mouth_last_haul", "mouth_on_you", "swoop_bat", "turn", "spit_bat", "spit_curse", "egg", "line", "one_body", "die_eyes", "die_animas", "die_hands", "die_swipe", "die_both"]
 
 var gym: Node3D
 var p: CharacterBody3D
@@ -385,6 +385,43 @@ func _mouth_close() -> void:
 
 	await _frames(300)
 	_expect("those in it are pressing out of it", one.body.press_shown(0) and one.body.press_shown(2))
+
+
+func _mouth_dying(kind: int) -> void:
+	await _stand(0.2)
+	var one := await _anima(&"torso", _ahead(0.0, 4.2, -0.5))
+	one.leap_chance = 0.0
+	one.death_kind = kind
+	target = one
+	await _frames(40)
+	var body: Node3D = one.body
+	one.health = 1.0
+	# (Not with copal: its smoke would hide it.)
+	one.round_hint = &"shot"
+	one.take_hit(50.0, p, &"bullet", one.global_position, Vector3.FORWARD)
+	await _frames(330)
+	_expect("it died its own way, and came apart (%d)" % body.souls_apart(), body.souls_apart() >= 3)
+
+
+func _mouth_bursts() -> void:
+	await _mouth_dying(0)
+
+
+func _mouth_they_get_out() -> void:
+	await _mouth_dying(1)
+
+
+func _mouth_last_haul() -> void:
+	await _mouth_dying(2)
+
+
+func _mouth_on_you() -> void:
+	await _stand(0.2)
+	var one := await _anima(&"torso", _ahead(0.0, 3.0, -0.5), 1.0)
+	target = one
+	await _until(func(): return one.state == one.State.ON, 12.0)
+	await _frames(260)
+	_expect("it closed on you", one.state == one.State.ON)
 
 
 func _mouth_rake() -> void:

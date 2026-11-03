@@ -32,6 +32,7 @@ func _ready() -> void:
 	await _quotes()
 	await _review_of_the_deaths()
 	await _stronger()
+	await _caged()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -636,6 +637,67 @@ func _heard() -> void:
 	var at_failing: int = p.death.heartbeats
 	await _until(func(): return not p.death.playing(), 2.0)
 	_check("H1 the heart races, and then it stops: no beat after it fails (%d, %d, %d)" % [by_then, at_failing, p.death.heartbeats], by_then >= 3 and p.death.heartbeats == at_failing)
+
+
+## The mouth has you as you die: on its last gulp its ribs shut on you, and that is the last you see.
+func _caged() -> void:
+	await _fresh()
+	var mouth: CharacterBody3D = AnimaScript.new()
+	mouth.form = &"torso"
+	mouth.position = HOME + Vector3(0.8, 0.3, -0.3)
+	add_child(mouth)
+	await _frames(1)
+	mouth.put_on_you()
+	await _frames(40)
+	var cage: Node3D = p.leech_hands.cage()
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var aspect := size.x / size.y
+	_check("Mo1 alive, the ribs leave you the middle of your view", cage.in_the_middle(aspect) == "")
+	p.health = 0.01
+	p.drain_life(50.0)
+	var shut := false
+	var closed_most := 0.0
+
+	for i in 420:
+		await get_tree().physics_frame
+		closed_most = maxf(closed_most, cage.closed())
+		shut = shut or (cage.visible and cage.in_the_middle(aspect) != "")
+
+	_check("Mo2 you die to it: its ribs shut over your view (%.2f)" % closed_most, shut and closed_most > 1.0)
+	mouth.free()
+	await _fresh()
+	# Beside a face: one last gulp, and it is the ribs'.
+	var with_it: CharacterBody3D = AnimaScript.new()
+	with_it.form = &"torso"
+	with_it.position = HOME + Vector3(0.8, 0.3, -0.3)
+	add_child(with_it)
+	var face: CharacterBody3D = AnimaScript.new()
+	face.form = &"face"
+	face.position = HOME + Vector3(-0.8, 0.3, -0.3)
+	add_child(face)
+	await _frames(1)
+	with_it.put_on_you()
+	face.put_on_you()
+	await _frames(40)
+	var slot: int = p.leech.slot_of(face)
+	p.health = 0.01
+	p.drain_life(50.0)
+	var nearest_face := -9.0
+	var ribs_shut := false
+	var cage_now: Node3D = p.leech_hands.cage()
+
+	for i in 420:
+		await get_tree().physics_frame
+
+		if p.leech.slot_of(face) >= 0:
+			nearest_face = maxf(nearest_face, p.leech_hands.face_near(slot))
+
+		ribs_shut = ribs_shut or (cage_now.visible and cage_now.in_the_middle(aspect) != "")
+
+	_check("Mo3 beside a face, one last gulp, and the ribs win (%.2f)" % nearest_face, ribs_shut and nearest_face < 0.3)
+	for one in [with_it, face]:
+		if is_instance_valid(one):
+			one.free()
 
 
 func _on_you_now() -> CharacterBody3D:

@@ -7,7 +7,9 @@ extends RefCounted
 ## lift, back, yaw, roll, jaw, chatter, hand or hand_l/hand_r, pitch or pitch_l/pitch_r, shut
 ## or shut_l/shut_r, fan, inward, shake, throat, falls, drag, snap. `limp` means nothing is
 ## left in it, and the heat alone moves it now. `say`: a sound, how loud, how high.
-## `ignites`: when its fire catches. `crumbles`: when the ash begins to fall apart.
+## `ignites`: when its fire catches. `crumbles`: when the ash begins to fall apart. The mouth is told: ribs, rear,
+## swell, slump (how far it has gone down, 0..1), strain (those in it, all at once), frees (how long between each getting
+## out; 0, all together), bursts (its ribs fly off, this hard), digs, grab, drag, snap, limp, falls.
 
 const TABLE := {
 	&"hands": [
@@ -33,6 +35,29 @@ const TABLE := {
 			{"at": 0.8, "shake": 0.45, "curl": 0.12},
 			{"at": 1.3, "curl": 0.98, "shake": 0.14, "snap": 6.0},
 			{"at": 1.75, "rear": 0.0, "low": 1.0, "roll": 0.72, "curl": 0.56, "open": 0.0, "shake": 0.0, "snap": 3.4, "limp": true},
+		]},
+	],
+	&"torso": [
+		# It bursts: it rears, swells past what it can hold, and its ribs go, and all of them with it.
+		{"name": &"bursts", "ignites": 0.55, "crumbles": 3.4, "beats": [
+			{"at": 0.0, "ribs": 1.15, "rear": 1.0, "swell": 1.0, "strain": 1.0, "digs": true, "snap": 3.0, "say": [&"anima_moan", -3.0, 0.5]},
+			{"at": 0.62, "bursts": 3.6, "frees": 0.0, "rear": 0.3, "swell": 0.15, "slump": 0.35, "snap": 8.0, "say": [&"flesh", 0.0, 0.42]},
+			{"at": 1.05, "rear": 0.0, "swell": 0.0, "slump": 1.0, "snap": 1.6, "limp": true, "digs": false},
+		]},
+		# They get out of it: all straining at once, and then one and another tears free and goes, and what is left
+		# has less and less in it. Its ribs have nothing to hold up, and drop.
+		{"name": &"they_get_out", "ignites": 1.3, "crumbles": 4.0, "beats": [
+			{"at": 0.0, "ribs": 0.5, "rear": 0.15, "swell": 0.35, "strain": 1.0, "digs": true, "snap": 2.0, "say": [&"anima_moan", -5.0, 0.75]},
+			{"at": 0.55, "frees": 0.2},
+			{"at": 1.2, "slump": 0.45, "swell": 0.0, "rear": 0.0, "snap": 1.2},
+			{"at": 2.0, "bursts": 0.9, "slump": 1.0, "snap": 0.9, "limp": true, "digs": false, "say": [&"flesh", -6.0, 0.5]},
+		]},
+		# It won't stop: it goes on hauling itself at you, and rears, and every arm it has comes for you; and all of
+		# that weight goes over, and they come out of it where it falls.
+		{"name": &"last_haul", "ignites": 0.9, "crumbles": 3.8, "beats": [
+			{"at": 0.0, "ribs": 0.3, "rear": 0.1, "drag": 0.7, "digs": true, "snap": 2.0, "say": [&"anima_voice", -5.0, 0.6]},
+			{"at": 1.15, "ribs": 1.1, "rear": 0.9, "swell": 0.7, "drag": 0.0, "digs": false, "grab": 1.0, "snap": 2.6, "say": [&"anima_moan", -4.0, 0.55]},
+			{"at": 1.85, "rear": 0.0, "swell": 0.0, "grab": 0.0, "slump": 1.0, "frees": 0.07, "bursts": 1.4, "snap": 3.0, "limp": true, "say": [&"flesh", 0.0, 0.42]},
 		]},
 	],
 	&"face": [

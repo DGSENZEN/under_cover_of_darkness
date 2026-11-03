@@ -78,6 +78,8 @@ const FREE_HANGS := 0.3
 const FREE_RATE := 7.0
 const GRAB_RATE := 3.2
 const GRAB_SPREAD := 0.28
+## How far from its shoulder any arm can get, however hard it goes (m).
+const ARM_GETS := 1.45
 ## The rake: how far back each arm draws, how far over it comes (rad), a little after the last.
 const RAKE_BACK := 0.75
 const RAKE_OVER := 1.15
@@ -152,6 +154,18 @@ const BURST_TIPS := 0.68
 const SKULL_IN := -0.08
 const SKULL_OUT := 0.14
 const SKULL_HAULED := 0.12
+## Coming apart: how fast those in it get out of it (m/s), how far up they go; how much they keep of a bounce; what they
+## lie at on the floor (m); how far a flame stands on it.
+const FREED_SPEED := Vector2(1.6, 3.2)
+const FREED_UP := Vector2(1.4, 2.8)
+const FREED_BOUNCE := 0.28
+const FREED_LIES := 0.1
+const RIBS_LIE := 0.28
+const FLAME_ON_IT := 0.42
+const FLAME_ON_THEM := 0.3
+const SLUMP_DOWN := 0.66
+const SLUMP_OUT := 0.3
+const LIMP_WRIST_UP := 0.1
 ## The earth it throws up round each hand: how many are out at once, how long one stays, how long it takes
 ## to rise, and to sink back; its paint.
 const EARTHS := 12
@@ -236,6 +250,14 @@ var _skull_t: Array[float] = []
 var _skull_takes: Array[float] = []
 var _skull_out: Array[float] = []
 var _hunger := 0.0
+## Coming apart: what has yet to get out; what has, flying or lying; where its ribs started from; how soon the next goes.
+var _dying := false
+var _still_in: Array[int] = []
+var _freed: Array[Dictionary] = []
+var _ribs_gone := false
+var _ribs_from: Array[Vector3] = []
+var _frees_in := 0.0
+var _tear_at: Array[int] = []
 var _rng := RandomNumberGenerator.new()
 var _placed := false
 var _floor_y := 0.0
@@ -850,6 +872,307 @@ func _claw_at(hand: Skeleton3D, which: int) -> void:
 			hand.set_bone_pose_rotation(bone, (rest * Basis(Vector3.RIGHT, -shut * [0.7, 1.0, 1.25][k - 1])).get_rotation_quaternion())
 
 
+## Dying: everything of it that burns, and how late; with all of those in it brought up under its skin, ready.
+func start_dying(seed_of: int) -> Array:
+	_dying = true
+	_rng.seed = seed_of
+	_placed = true
+	var spots := _skin_spots()
+	var to_you := Vector3.FORWARD
+	_still_in.clear()
+
+	for n in PRESSES:
+		if _press_stage[n] == 0 or _press_strength[n] < 0.05:
+			_press_choose(n, spots, to_you)
+
+		_press_stage[n] = 2
+		_still_in.append(n)
+
+	# Then the real ones it has: its heads, and the hands that were on their way out.
+	for n in _skulls.size():
+		_still_in.append(PRESSES + n)
+
+	# Not in order.
+	for k in range(_still_in.size() - 1, 0, -1):
+		var other: int = _rng.randi() % (k + 1)
+		var was: int = _still_in[k]
+		_still_in[k] = _still_in[other]
+		_still_in[other] = was
+
+	var meshes: Array = []
+
+	for id in MESHES:
+		meshes.append([part(id), 0.5 if id == &"RibsLeft" or id == &"RibsRight" else 0.0])
+
+	for mesh in _hand_meshes:
+		meshes.append([mesh, 0.15])
+
+	for n in PRESSES:
+		for piece in _press_nodes[n].find_children("*", "MeshInstance3D", false, false):
+			if not _press_lights[n].has(piece):
+				meshes.append([piece, _rng.randf_range(0.0, 0.4)])
+
+	for skull in _skulls:
+		for piece in skull.find_children("*", "MeshInstance3D", true, false):
+			meshes.append([piece, 0.3])
+
+	for b in BURSTS:
+		_burst_nodes[b].visible = false
+
+	return meshes
+
+
+## Where its flames stand as it burns: on its skin, on each arm, and on each of those that gets out of it.
+func flame_spots(finger_flame: float) -> Array:
+	var spots: Array = []
+	var skin := _skin_spots()
+	var mass := part(&"Mass")
+
+	for k in range(0, skin.size(), maxi(skin.size() / 14, 1)):
+		spots.append([mass, skin[k][0], FLAME_ON_IT])
+
+	for hand in _hands:
+		for name_of in FINGER_NAMES:
+			spots.append([hand, "%s_02" % name_of, 0.0, finger_flame])
+
+		spots.append([hand, "arm_1", 0.2, FLAME_ON_THEM])
+
+	for n in PRESSES:
+		spots.append([_press_nodes[n], Vector3.ZERO, FLAME_ON_THEM])
+
+	for skull in _skulls:
+		spots.append([skull, Vector3.ZERO, FLAME_ON_THEM])
+
+	return spots
+
+
+## One of them tears free and goes its own way: `which`, a pressed one, then its heads.
+func _tear_free(which: int, floor_y: float) -> void:
+	var node: Node3D
+	var way: Vector3
+
+	if which < PRESSES:
+		node = _press_nodes[which]
+		node.visible = true
+		way = part(&"Mass").global_basis * _press_way[which]
+		_press_strength[which] = 0.0
+		_tear_at.append(which)
+	else:
+		node = _skulls[which - PRESSES]
+		way = -node.global_basis.z
+
+	_fling(node, way, _rng.randf_range(FREED_SPEED.x, FREED_SPEED.y), _rng.randf_range(FREED_UP.x, FREED_UP.y), FREED_LIES, false)
+	Fx.blood(self, node.global_position, way, 0.25)
+	Fx.dust(self, Vector3(node.global_position.x, floor_y, node.global_position.z), Vector3.UP, 0.25, "dirt")
+
+
+func _fling(node: Node3D, way: Vector3, speed: float, up: float, lies: float, is_ribs: bool) -> void:
+	var where := node.global_transform
+	node.top_level = true
+	node.global_transform = where
+	way.y = 0.0
+	var flat := way.normalized() if way.length() > 0.01 else global_basis.x
+	# Each its own way: nudged off what it would have done.
+	flat = flat.rotated(Vector3.UP, _rng.randf_range(-0.5, 0.5))
+	# How it comes to lie: a face up at nothing, as they do, so you see what it was; ribs as they fall.
+	var size: Vector3 = where.basis.get_scale()
+	var lands := Basis.looking_at((Vector3.UP + flat * 0.35).normalized(), flat).scaled(size)
+	_freed.append({"node": node, "velocity": flat * speed + Vector3.UP * up, "spin": Vector3(_rng.randf_range(-5.0, 5.0), _rng.randf_range(-3.0, 3.0), _rng.randf_range(-5.0, 5.0)), "lies": lies, "ribs": is_ribs, "rest": false, "lands": lands})
+
+
+## All that has got out: thrown, falling, coming to rest on the floor, where it burns on.
+func _work_freed(delta: float, floor_y: float) -> void:
+	for item in _freed:
+		if item["rest"]:
+			continue
+
+		var node: Node3D = item["node"]
+
+		if not is_instance_valid(node):
+			continue
+
+		var velocity: Vector3 = item["velocity"]
+		velocity.y -= 9.0 * delta
+		var at := node.global_position
+		var next := at + velocity * delta
+		var hit := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.05, next + Vector3.UP * 0.05, FLOOR_MASK))
+
+		if not hit.is_empty() and absf(float(hit["normal"].y)) < 0.5:
+			velocity = velocity.bounce(hit["normal"]) * FREED_BOUNCE
+			next = at
+
+		if next.y <= floor_y + float(item["lies"]):
+			next.y = floor_y + float(item["lies"])
+			var hard := -velocity.y
+			velocity = Vector3(velocity.x * 0.5, hard * FREED_BOUNCE, velocity.z * 0.5)
+			item["spin"] = item["spin"] * 0.45
+
+			if hard < 1.0:
+				item["rest"] = true
+
+		var spin: Vector3 = item["spin"]
+		var turned := node.global_basis
+
+		if spin.length() > 0.01:
+			turned = Basis(spin.normalized(), spin.length() * delta) * turned
+
+		# Coming down, it comes round to how it will lie.
+		if not item["ribs"] and next.y < floor_y + float(item["lies"]) + 0.7:
+			var scale_was: Vector3 = turned.get_scale()
+			var lands: Basis = item["lands"]
+			turned = turned.orthonormalized().slerp(lands.orthonormalized(), 1.0 - exp(-7.0 * delta)).scaled(scale_was)
+
+		node.global_transform = Transform3D(turned, next)
+		item["velocity"] = velocity
+
+
+## Dying. As `tick`, told by the beats.
+func tick_dying(delta: float, speed: float, going: Vector3, digs: bool, grab: float, grab_at: Vector3, swell: float, slump: float, pose: Dictionary, floor_y: float, flare: float) -> void:
+	_clock += delta
+	_swell = swell
+	_floor_y = floor_y
+	var limp: bool = pose.get("limp", false)
+	_made.scale = Vector3(1.0 + SWELLS.x * swell + SLUMP_OUT * slump, 1.0 + SWELLS.y * swell - SLUMP_DOWN * slump, 1.0 + SWELLS.z * swell + SLUMP_OUT * slump * 0.5) * SIZE
+	_made.position = _made_at + Vector3(0.0, 0.0, -SWELLS_ON * swell)
+	_hunger = lerpf(_hunger, 0.0 if limp else 1.0, 1.0 - exp(-3.0 * delta))
+	_work_gait(delta, speed)
+
+	# Its ribs go.
+	if pose.has("bursts") and not _ribs_gone:
+		_ribs_gone = true
+		var hard: float = float(pose["bursts"])
+		_ribs_from = [part(&"RibsLeft").global_position, part(&"RibsRight").global_position]
+		_fling(part(&"RibsLeft"), -global_basis.x - global_basis.z * 0.6, hard, hard * 0.75, RIBS_LIE, true)
+		_fling(part(&"RibsRight"), global_basis.x - global_basis.z * 0.6, hard, hard * 0.75, RIBS_LIE, true)
+
+	# And those in it.
+	if pose.has("frees"):
+		_frees_in -= delta
+
+		while _frees_in <= 0.0 and not _still_in.is_empty():
+			_tear_free(_still_in.pop_back(), floor_y)
+			_frees_in += float(pose["frees"])
+
+			if float(pose["frees"]) <= 0.0:
+				_frees_in = 0.0
+
+	_work_freed(delta, floor_y)
+	var heaved := 0.0
+
+	for i in _hands.size():
+		var on_earth: bool = digs and i < DIGGERS and not limp
+		var shut_to: float
+
+		if on_earth:
+			shut_to = _dig(i, delta, speed, going)
+			heaved = maxf(heaved, _hauling(i) if i < HAULERS else 0.0)
+		else:
+			_dug[i] = false
+			_reach_t[i] = 0.0
+			_came_from[i] = _wrist[i]
+			var wanted: Vector3
+
+			if limp:
+				# Nothing in them: they drop, and lie where they drop.
+				wanted = Vector3(_wrist[i].x, floor_y + LIMP_WRIST_UP, _wrist[i].z)
+			else:
+				wanted = _within_reach(i, _free_wrist(i, grab).lerp(_grab_point(i, grab_at), grab))
+
+			_wrist[i] = _wrist[i].lerp(wanted, 1.0 - exp(-lerpf(FREE_RATE, GRAB_RATE, grab) * delta * (0.7 if limp else 1.0)))
+			shut_to = 0.25 if limp else lerpf(CURL, -0.1, grab)
+
+		_shut[i] = lerpf(_shut[i], shut_to, 1.0 - exp(-8.0 * delta))
+		_solve_arm(i, grab, grab_at)
+		_curl_fingers(_hands[i], i)
+		_hand_meshes[i].set_instance_shader_parameter(&"hunger", _hunger)
+
+	_heave = heaved * HEAVES
+	_work_dying_presses(delta, pose)
+
+	# Their lights last as long as there is anything of them.
+	for lights in _press_lights:
+		for ember in lights:
+			ember.visible = not limp or flare > 0.3
+
+	for i in _skulls.size():
+		if _still_in.has(PRESSES + i):
+			var rest: Transform3D = _rest[_skulls[i]]
+			_skull_out[i] = lerpf(_skull_out[i], SKULL_OUT, 1.0 - exp(-4.0 * delta))
+			_skulls[i].transform = Transform3D(rest.basis, rest.origin + Vector3(0.0, 0.0, -_skull_out[i]))
+
+		_skulls[i].open_to(1.0 if not limp else 0.6, 0.3)
+
+	for id in [&"Mass", &"RibsLeft", &"RibsRight", &"Bones"]:
+		part(id).set_instance_shader_parameter(&"hunger", _hunger)
+
+	part(&"Mass").set_instance_shader_parameter(&"swell", maxf(swell, 0.0))
+	part(&"Gullet").set_instance_shader_parameter(&"hunger", _hunger)
+
+
+## All of them at it, under its skin, until each gets out; and where each got out it is torn.
+func _work_dying_presses(delta: float, pose: Dictionary) -> void:
+	var strains: bool = pose.has("strain")
+
+	for n in PRESSES:
+		if _still_in.has(n):
+			_press_strength[n] = move_toward(_press_strength[n], 1.0 if strains else 0.5, delta * 3.0) + sin(_clock * (21.0 + float(n) * 3.0)) * 0.03
+			_press_jaw[n] = clampf(0.65 + sin(_clock * (7.0 + float(n))) * 0.35, 0.0, 1.0)
+			_uniform_at[n] = Vector4(_press_at[n].x, _press_at[n].y, _press_at[n].z, _press_strength[n])
+			_uniform_way[n] = Vector4(_press_way[n].x, _press_way[n].y, _press_way[n].z, 0.0)
+			_uniform_up[n] = Vector4(_press_up[n].x, _press_up[n].y, _press_up[n].z, 0.0)
+			_uniform_size[n] = PRESS_SIZE[PRESS_KIND[n]]
+			_show_press(n)
+		elif _tear_at.has(n):
+			_uniform_at[n] = Vector4(_press_at[n].x, _press_at[n].y, _press_at[n].z, 0.8)
+			_uniform_way[n] = Vector4(_press_way[n].x, _press_way[n].y, _press_way[n].z, 2.0)
+			_uniform_up[n] = Vector4(_press_up[n].x, _press_up[n].y, _press_up[n].z, 1.0)
+			_uniform_size[n] = PRESS_SIZE[2] * 1.4
+
+	for b in BURSTS:
+		_uniform_at[PRESSES + b].w = 0.0
+
+	_mass_look.set_shader_parameter(&"press_at", _uniform_at)
+	_mass_look.set_shader_parameter(&"press_way", _uniform_way)
+	_mass_look.set_shader_parameter(&"press_up", _uniform_up)
+	_mass_look.set_shader_parameter(&"press_size", _uniform_size)
+
+
+## How far its ribs have gone from where they were, the less of the two.
+func ribs_flung() -> float:
+	if _ribs_from.is_empty():
+		return 0.0
+
+	return minf(part(&"RibsLeft").global_position.distance_to(_ribs_from[0]), part(&"RibsRight").global_position.distance_to(_ribs_from[1]))
+
+
+## How many have got well clear of it.
+func souls_apart() -> int:
+	var clear := 0
+
+	for item in _freed:
+		if not item["ribs"] and is_instance_valid(item["node"]) and (item["node"] as Node3D).global_position.distance_to(global_position) > 0.5:
+			clear += 1
+
+	return clear
+
+
+## How far apart those that got out have gone: the most between any two.
+func souls_spread() -> float:
+	var most := 0.0
+
+	for a in _freed:
+		for b in _freed:
+			if not a["ribs"] and not b["ribs"] and is_instance_valid(a["node"]) and is_instance_valid(b["node"]):
+				most = maxf(most, (a["node"] as Node3D).global_position.distance_to((b["node"] as Node3D).global_position))
+
+	return most
+
+
+## How many places it is torn open where they got out.
+func tears_open() -> int:
+	return _tear_at.size()
+
+
 ## How hungry it is showing, 0..1.
 func hunger() -> float:
 	return _hunger
@@ -1015,7 +1338,7 @@ func tick(delta: float, speed: float, going: Vector3, rake_to: float, digs: bool
 			_dug[i] = false
 			_reach_t[i] = 0.0
 			_came_from[i] = _wrist[i]
-			var wanted := _free_wrist(i, grab).lerp(_grab_point(i, grab_at), grab)
+			var wanted := _within_reach(i, _free_wrist(i, grab).lerp(_grab_point(i, grab_at), grab))
 			_wrist[i] = _wrist[i].lerp(wanted, 1.0 - exp(-lerpf(FREE_RATE, GRAB_RATE, grab) * delta))
 			shut_to = lerpf(CURL, -0.1, grab)
 
@@ -1265,6 +1588,13 @@ func _free_wrist(i: int, _grab: float) -> Vector3:
 func _grab_point(i: int, grab_at: Vector3) -> Vector3:
 	var angle := float(i) * TAU / float(_hands.size()) + 0.6
 	return grab_at + (global_basis.x * cos(angle) + Vector3.UP * sin(angle)) * GRAB_SPREAD
+
+
+## That wrist, no further from its shoulder than an arm goes.
+func _within_reach(i: int, wanted: Vector3) -> Vector3:
+	var shoulder_at := _world_shoulder(i)
+	var off := wanted - shoulder_at
+	return shoulder_at + off.limit_length(ARM_GETS)
 
 
 ## The shoulder, in the arm's own space: sunk in the flesh, behind where it comes out.

@@ -41,6 +41,7 @@ func _ready() -> void:
 	await _mouth_spectral()
 	await _mouth_gait()
 	await _mouth_on_you()
+	await _mouth_dies()
 	await _forms()
 	await _round_cover()
 	await _swipes()
@@ -830,6 +831,91 @@ func _mouth_is_heavy() -> void:
 	_check("Wt9b near you, it never turns from you, whatever it is carrying (%.2f)" % worst_after, worst_after > 0.5)
 	raker.free()
 	await _frames(2)
+
+
+## It comes apart, three ways; each of them goes its own way, and nothing it leaves can hurt you.
+func _mouth_dies() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(10)
+	var script: GDScript = AnimaScript.AnimaBody
+	_check("Dm0 three deaths, each its own", script.DEATHS[&"torso"].size() == 3 and script.DEATHS[&"torso"].map(func(d): return d["name"]).all(func(n): return script.DEATHS[&"torso"].filter(func(d): return d["name"] == n).size() == 1))
+	var orphans_before: float = Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
+	# It bursts.
+	var burst: Array = await _killed(&"torso", 0, HOME + Vector3(0.0, -0.5, -5.0))
+	var body: Node3D = burst[1]
+	var life_was: float = p.health
+	await _frames(20)
+	var reared: float = body.reared()
+	await _frames(70)
+	_check("Dm1 it rears (%.2f), its ribs burst (%.2f m)" % [reared, body.ribs_flung()], reared > 0.3 and body.ribs_flung() > 0.5)
+	_check("Dm2 and those in it go their own ways (%d, %.2f apart)" % [body.souls_apart(), body.souls_spread()], body.souls_apart() >= 4 and body.souls_spread() > 0.8)
+	await _frames(60)
+	_check("Dm3 what is left has gone down (%.2f)" % body.mouth_size().y, body.mouth_size().y < 0.9)
+	_check("Dm4 torn where they came out", body.tears_open() >= 3)
+	await _until(func(): return not is_instance_valid(body), 20.0)
+	_check("Dm5 all of it burns away", not is_instance_valid(body))
+	_check("Dm6 nothing it left can hurt you", p.health >= life_was)
+	_free([burst[0]])
+	await _frames(3)
+	_check("Dm7 and it leaves nothing behind", Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT) - orphans_before == 0.0)
+	# They get out of it, one after another.
+	var out: Array = await _killed(&"torso", 1, HOME + Vector3(0.0, -0.5, -5.0))
+	var leaving: Node3D = out[1]
+	await _frames(45)
+	var first_count: int = leaving.souls_apart()
+	var strain_high := 0.0
+
+	for n in leaving.presses_held():
+		strain_high = maxf(strain_high, leaving.press_strength(n))
+
+	await _frames(100)
+	_check("Dm8 first they all strain at it (%.2f), then they get out, one by one (%d, then %d)" % [strain_high, first_count, leaving.souls_apart()], strain_high > 0.7 and leaving.souls_apart() >= first_count + 3)
+	_free([out[0]])
+	if is_instance_valid(leaving):
+		leaving.queue_free()
+	await _frames(3)
+	# It hauls itself at you, one last time.
+	var from_at := HOME + Vector3(0.0, -0.5, -5.0)
+	var last: Array = await _killed(&"torso", 2, from_at)
+	var hauling: Node3D = last[1]
+	var was_at: float = hauling.global_position.distance_to(p.global_position)
+	await _frames(50)
+	var came: float = was_at - hauling.global_position.distance_to(p.global_position)
+	var digging: bool = hauling.arm_dug_in(0) or hauling.arm_dug_in(1)
+	await _frames(35)
+	var nearest := 99.0
+
+	for i in 30:
+		await get_tree().physics_frame
+
+		for arm in 5:
+			nearest = minf(nearest, hauling.wrist(arm).distance_to(p.global_position))
+
+	_check("Dm9 still hauling at you (%.2f m nearer, dug in)" % came, came > 0.15 and digging)
+	var body_off: float = hauling.global_position.distance_to(p.global_position)
+	_check("Dm10 and every arm it has still goes for you (%.2f m, it is %.2f off)" % [nearest, body_off], nearest < body_off - 0.8)
+	_check("Dm10b and no further than an arm goes (%.2f)" % hauling.arm_stretch(2), hauling.arm_stretch(2) < 1.45)
+	_free([last[0]])
+	if is_instance_valid(hauling):
+		hauling.queue_free()
+	await _frames(3)
+	# Killed while it has you.
+	var on_you := _anima(&"torso", p.global_position + Vector3(0.9, -0.5, -1.0))
+	on_you.death_kind = 0
+	await _frames(1)
+	on_you.put_on_you()
+	await _frames(30)
+	var dying_body: Node3D = on_you.body
+	on_you.health = 1.0
+	_hit(on_you, &"bullet", &"copal")
+	await _frames(2)
+	var ahead: Vector3 = -p.camera.global_basis.z
+	_check("Dm11 killed on you, it lets go of you, and bursts in front of you", p.leech.count() == 0 and not p.leech_hands.cage().visible and dying_body.visible and ahead.dot((dying_body.global_position - p.camera.global_position).normalized()) > 0.7)
+	_free([on_you])
+	if is_instance_valid(dying_body):
+		dying_body.queue_free()
+	await _frames(3)
 
 
 const MonsterKind := preload("res://scripts/Monsters/Monster.gd")
