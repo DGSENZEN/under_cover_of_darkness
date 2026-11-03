@@ -43,7 +43,7 @@ The user's: the mouth, a conglomeration of several ánimas. The rest is Claude's
 
 The user's, from Claude's picks ("Yes, both"):
 
-- **The ribcage:** edited from a CC0 anatomical ribcage model, as the face was from a CC0 skull. The candidate and its license are shown to the user before anything is downloaded. Credited in `CREDITS.md`.
+- **The ribcage:** edited from Aaron Olson's "Free low-poly PBR / BSDF textured human skeleton" (https://sketchfab.com/3d-models/free-low-poly-pbr-bsdf-textured-human-skeleton-d0c9919aec004fd39d65ce7a7960969b), CC BY 4.0, credited in `CREDITS.md`. No confirmed CC0 ribcage was found, and the user accepted a credit ("Yes, credit it"). The user downloads it. Its ribs are cut out and reduced from 466k triangles; that they are separate shapes is to be checked first.
 - **Size and stance:** a heaped mass about waist high that crawls low and rears to chest height when the ribs open. Its height and hit radius in `Bestiary` change to match, so shots land where you see flesh; the checks that pin them change with them.
 - **The dead candles** stay on its back: the candles nobody tended, answering the one lit for you on the death screen (`death_veil.gdshader`).
 
