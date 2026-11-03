@@ -56,6 +56,12 @@ func _ready() -> void:
 	if only == "" or only == "saves":
 		await _its_saves()
 
+	if only == "" or only == "legs":
+		await _its_legs()
+
+	if only == "" or only == "water":
+		await _in_water()
+
 	print("revenant_test: %s" % ("FAILED %d" % failed if failed > 0 else "passed"))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -659,6 +665,116 @@ func _its_saves() -> void:
 	await _frames(2)
 	_check("S3 the touch and who laid it survive a save", p.touch.on_you() and p.touch.laid_by() == layer)
 	await _clean()
+
+
+## It goes as if it were under water: steady, slow in its limbs, what is on it floating; the water marks where it goes.
+func _in_water() -> void:
+	var body: Node3D = BodyScript.new()
+	add_child(body)
+	body.position = Vector3(-60, 0, -10)
+	await _frames(1)
+	var you := Vector3(-60, 1.6, -60)
+	var going := Vector3(0, 0, -1.6)
+
+	for i in 120:
+		await get_tree().physics_frame
+		body.position += going * body.lurch() / 60.0
+		body.tick(1.0 / 60.0, &"walk", going, you, 0.0, 0.0, 0.0)
+
+	var least := Vector3.INF
+	var most := -Vector3.INF
+	var pace_low := 9.0
+	var pace_high := -9.0
+	var longest := 0
+	var going_for := [0, 0]
+	var rings_most := 0
+	var silt_most := 0
+
+	for i in 300:
+		await get_tree().physics_frame
+		body.position += going * body.lurch() / 60.0
+		body.tick(1.0 / 60.0, &"walk", going, you, 0.0, 0.0, 0.0)
+		var chest: Vector3 = body.to_local(body.chest_at())
+		least = Vector3(minf(least.x, chest.x), minf(least.y, chest.y), minf(least.z, chest.z))
+		most = Vector3(maxf(most.x, chest.x), maxf(most.y, chest.y), maxf(most.z, chest.z))
+		pace_low = minf(pace_low, body.lurch())
+		pace_high = maxf(pace_high, body.lurch())
+		rings_most = maxi(rings_most, body.rings_now())
+		silt_most = maxi(silt_most, body.silt_now())
+
+		for side in 2:
+			going_for[side] = going_for[side] + 1 if not body.foot_planted(side) else 0
+			longest = maxi(longest, going_for[side])
+
+	_check("W1 it doesn't wobble: its chest stays over itself (%.2f across, %.2f up)" % [most.x - least.x, most.y - least.y], most.x - least.x < 0.16 and most.y - least.y < 0.12)
+	_check("W2 its pace is steady, not lurching (%.2f..%.2f)" % [pace_low, pace_high], pace_high - pace_low < 0.4)
+	_check("W3 its steps are slow, through something (%.2f s)" % (float(longest) / 60.0), float(longest) / 60.0 >= 0.62)
+	_check("W4 the water rings out from where it steps (%d)" % rings_most, rings_most >= 2)
+	_check("W5 silt comes up where it treads (%d)" % silt_most, silt_most >= 2)
+	_check("W6 bubbles go up off it", body.bubbles_rising())
+	var mesh: MeshInstance3D = body._mesh
+	var arrays: Array = mesh.mesh.surface_get_arrays(0)
+	var far_along := 0
+
+	for uv: Vector2 in arrays[Mesh.ARRAY_TEX_UV]:
+		far_along += 1 if uv.x > 0.8 else 0
+
+	_check("W7 seaweed: a lot of it (%d)" % far_along, far_along > 1400)
+	body.queue_free()
+	await _frames(2)
+
+
+## Its legs carry what it does: braced and bent under the weight, not stilts; its feet go when a blow says.
+func _its_legs() -> void:
+	var body: Node3D = BodyScript.new()
+	add_child(body)
+	body.position = Vector3(-40, 0, -30)
+	await _frames(1)
+	var you := Vector3(-40, 1.6, -27.5)
+
+	var run := func(doing: StringName, seconds: float) -> Dictionary:
+		var most := 0.0
+		var steps := 0
+		var down := [body.foot_planted(0), body.foot_planted(1)]
+		var apart := 0.0
+
+		for i in int(seconds * 60.0):
+			await get_tree().physics_frame
+			body.tick(1.0 / 60.0, doing, Vector3.ZERO, you, 0.0, 0.0, 0.0)
+			most = maxf(most, maxf(body.leg_straight(0), body.leg_straight(1)))
+			apart = maxf(apart, body.foot(0).distance_to(body.foot(1)))
+
+			for side in 2:
+				if down[side] and not body.foot_planted(side):
+					steps += 1
+
+				down[side] = body.foot_planted(side)
+
+		return {"straight": most, "steps": steps, "apart": apart}
+
+	await run.call(&"walk", 2.0)
+	var rest: Dictionary = await run.call(&"walk", 1.0)
+	_check("L0 standing, its feet are planted wide (%.2f m)" % rest["apart"], rest["apart"] > 0.75)
+
+	for what in [[&"swipe_wind", 1.0, &"swipe", 0.45, 1], [&"rake_wind", 1.35, &"rake", 0.6, 1], [&"grasp_wind", 1.4, &"grasp", 0.5, 0], [&"bite_wind", 0.85, &"bite", 0.4, 0]]:
+		var winding: Dictionary = await run.call(what[0], what[1])
+		_check("L1 %s: its legs stay bent under it (%.2f of their length)" % [what[0], winding["straight"]], winding["straight"] < 0.9)
+		_check("L2 %s: its feet go when the blow says, no shuffling (%d)" % [what[0], winding["steps"]], winding["steps"] <= int(what[4]))
+		var striking: Dictionary = await run.call(what[2], what[3])
+		_check("L3 %s: it stamps into it, one foot or two (%d), and braces (%.2f m apart)" % [what[2], striking["steps"], striking["apart"]], striking["steps"] >= 1 and striking["steps"] <= 2 and striking["apart"] > 0.8 and striking["apart"] < 1.95)
+		await run.call(&"walk", 1.2)
+
+	var hips_low: Vector3 = body.hips_at()
+	await run.call(&"rake_wind", 0.5)
+	var coiled: Vector3 = body.hips_at()
+	_check("L4 gathering, its hips go down (%.2f, %.2f)" % [hips_low.y, coiled.y], coiled.y < hips_low.y - 0.12)
+	await run.call(&"walk", 1.5)
+	var balanced_low := body.to_local(body.hips_at()).z
+	await run.call(&"rake_wind", 1.35)
+	var balanced_up := body.to_local(body.hips_at()).z
+	_check("L5 its hips counter its chest: back as it leans, under it as it rears (%.2f, %.2f)" % [balanced_low, balanced_up], balanced_low > balanced_up + 0.1)
+	body.queue_free()
+	await _frames(2)
 
 
 func _press(action: String) -> void:

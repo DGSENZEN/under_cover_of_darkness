@@ -28,6 +28,8 @@ Its cause in the world: the drowned of the old lakebed, raised by the seepage ([
 
 **On how it moves, the user:** "The rigging and the animations are just not there ... you did some really good work with the other enemies", then, of Claude's answer, on four limbs, hauling itself on its arms, galloping when it surges, rearing up to attack: "it's better, it should also use it's mouth, and the algae like hairs should move with the creature". So: it bites, its head diving on its long neck; and what drifts on it drags behind whatever it does.
 
+**And:** "I really don't like how the legs act when it attacks"; so it braces, wide and low, knees bowed out, its feet going when a blow says. "make it look as if it were walking in water with his seaweed hair and generally, adds to the unnatural feeling, also, it's wobbling too much too."
+
 ## Goals
 
 - It reads wrong from across a dark room, on shape alone.
