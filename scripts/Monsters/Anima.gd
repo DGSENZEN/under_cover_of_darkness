@@ -177,6 +177,26 @@ func form_number(what: String) -> float:
 	return float(_form[what])
 
 
+## Stand-ins for the mouth's own (docs/superpowers/refs/hunt/sounds_needed.md).
+func _sounds_for(next: int) -> void:
+	if form != &"torso":
+		return
+
+	match next:
+		State.TELL, State.WIND_UP:
+			Sfx.play(self, &"bone_crack", global_position, -10.0, 0.55)
+			Sfx.play(self, &"flesh", global_position, -8.0, 0.5)
+		State.SWIPE:
+			Sfx.play(self, &"flesh", global_position, -4.0, 0.62)
+			Sfx.play(self, &"bone_crack", global_position, -8.0, 0.9)
+		State.ON:
+			Sfx.play(self, &"flesh_heavy", global_position, -2.0, 0.6)
+			Sfx.play(self, &"anima_moan", global_position, -6.0, 0.5)
+		State.DRAG:
+			Sfx.play(self, &"whoosh_light", global_position, -6.0, 0.7)
+			Sfx.play(self, &"flesh", global_position, -6.0, 0.8)
+
+
 ## What it is feeding on, if anything.
 func prey() -> Node3D:
 	return _prey if is_instance_valid(_prey) else null
@@ -368,6 +388,11 @@ func take_in(kind: StringName) -> void:
 	_form = Bestiary.elite_form(_taken.size())
 	health = minf(health + float(row["health"]) * float(row["heals"]), float(row["health"]))
 	body.has_taken(kind, float(_form["size"]))
+	Sfx.play(self, &"flesh_heavy", global_position, -3.0, 0.5)
+
+	# It has all it can hold, and you hear that.
+	if is_full():
+		Sfx.play(self, &"anima_moan", global_position, 0.0, 0.42)
 
 
 ## A crawler's body rests on the floor, whatever reach its hands have.
@@ -874,6 +899,7 @@ func _enter(next: int) -> void:
 
 	state = next
 	_state_t = 0.0
+	_sounds_for(next)
 
 
 ## Which way to go to get at you: along the navmesh if there is one, spread out to
@@ -961,3 +987,4 @@ func _on_struck(result: StringName, source: StringName) -> void:
 			else:
 				# It holds on, what it holds you with broken.
 				ribs_cracked = true
+				Sfx.play(self, &"bone_crack", global_position, 0.0, 0.8)

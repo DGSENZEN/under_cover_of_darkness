@@ -135,6 +135,20 @@ Name each file as in the **File** column. Tell me where they are and I'll trim, 
 | `death_candle_lit` | 1.5 s | In total silence, a single match struck and a small candle wick catching, very quiet and very close, a soft flutter of flame |
 | `death_breath_out` | 1.5 s | A man's long last breath out, weak and rattling, fading to nothing, no voice |
 
+## The mouth
+
+| Name | Length | Prompt |
+|---|---|---|
+| `mouth_drag_loop` | 1 s | Fingers driven into packed earth and a great wet weight hauled forward a little way, heavy, slow, close |
+| `mouth_ribs_open` | 1.2 s | A huge old ribcage slowly creaking open, dry bone and stretching wet sinew, heavy and close, no voice |
+| `mouth_snap` | 0.5 s | A huge ribcage snapping shut, bone on bone, wet, sudden |
+| `mouth_close_on_you` | 1 s | Huge bones closing around the listener, wet flesh pressing in on all sides, many faint breaths, very close |
+| `mouth_ribs_crack` | 0.6 s | Thick old ribs breaking under a blow, sharp dry crack, then a wet give |
+| `mouth_burst` | 1.5 s | A huge rotten ribcage bursting open from inside, bone fragments and wet flesh flying, dry and wet at once |
+| `mouth_seize` | 0.5 s | A long wet limb lashing out and snapping shut on something, a wet grip, a stifled airy gasp, no words |
+| `mouth_takes_in` | 1.5 s | Something thrashing being dragged wetly into thick flesh, swallowed, skin closing over it, many faint airy moans under it, no words |
+| `mouth_full` | 2 s | Many starved airy voices rising together inside one huge body, low, then held, no words, not human speech |
+
 ## If a take is wrong
 
 - **Too clean or synthetic:** add `organic, physical, recorded foley`.

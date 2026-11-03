@@ -27,6 +27,20 @@ Stand-ins from the existing library until the user chooses real ones.
 | An ánima's swing and cut (`anima_swipe`, `anima_rake_hit`) | `Anima._cut` | `whoosh_light` + `flesh` |
 | An ánima's wind-up (`anima_swipe_windup`) | `Anima._wish` | `anima_voice`, high and quiet |
 
+## The mouth
+
+| Sound | Where | Stand-in |
+|---|---|---|
+| Each haul: a hand into the earth, all of it dragged on (`mouth_drag_loop`) | `Anima._pace` | `flesh`, low |
+| Its ribs opening, gathering or drawing back (`mouth_ribs_open`) | `Anima._sounds_for` | `bone_crack` + `flesh`, low |
+| Its ribs and arms coming over (`mouth_snap`) | `Anima._sounds_for` | `flesh` + `bone_crack` |
+| It closes on you (`mouth_close_on_you`) | `Anima._sounds_for` | `flesh_heavy` + `anima_moan`, low |
+| The first whip breaks its ribs (`mouth_ribs_crack`) | `Anima._on_struck` | `bone_crack` |
+| It dies: its ribs burst (`mouth_burst`) | `AnimaMouth.tick_dying` | `bone_crack`, `flesh`, low |
+| The elite seizes one (`mouth_seize`) | `Anima._sounds_for` | `whoosh_light` + `flesh` |
+| It takes one in (`mouth_takes_in`) | `Anima.take_in` | `flesh_heavy`, low |
+| It has all it can hold (`mouth_full`) | `Anima.take_in` | `anima_moan`, very low |
+
 ## The turned eye
 
 | Sound | Where | Stand-in |

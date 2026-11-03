@@ -7,6 +7,7 @@ const Props := preload("res://scripts/Interaction/Props.gd")
 const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
 const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
 const CopalLine := preload("res://scripts/Hunt/CopalLine.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const STATE: Dictionary = AnimaScript.State
 const HOME := Vector3(0, 1.05, 0)
 
@@ -32,6 +33,7 @@ func _ready() -> void:
 	await _it_feeds()
 	await _at_three()
 	await _in_the_world()
+	await _heard_it()
 	print("elite_mouth_test: %s" % ("all passed" if failed == 0 else "%d FAILED" % failed))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -106,6 +108,41 @@ func _they_stay_near() -> void:
 	await _frames(120)
 	_check("E2d with no elite, nothing has changed", alone.global_position.distance_to(p.global_position) < was - 2.0)
 	_free([alone])
+	await _frames(3)
+
+
+## What you hear of it, at the moment it happens: the mouth's, and the elite's.
+func _heard_it() -> void:
+	await _clean()
+	var one := _elite(HOME + Vector3(0.0, -0.5, -6.0))
+	one.leap_chance = 0.0
+	await _frames(5)
+	Sfx.recording = true
+	var heard := func(what: Callable, sound: StringName) -> bool:
+		Sfx.recorded.clear()
+		what.call()
+		return Sfx.recorded.any(func(entry): return entry[0] == sound)
+	_check("E6 its ribs opening, for a lunge", heard.call(func(): one._enter(STATE.TELL), &"bone_crack"))
+	_check("E6b or a rake", heard.call(func(): one._enter(STATE.WIND_UP), &"bone_crack"))
+	_check("E6c snapping shut", heard.call(func(): one._enter(STATE.SWIPE), &"flesh"))
+	_check("E6d closing on you", heard.call(func(): one.put_on_you(), &"flesh_heavy"))
+	_check("E6e its ribs breaking", heard.call(func(): _hit(one, &"blow", &"blow"), &"bone_crack"))
+	p.leech.free_all()
+	_check("E6f seizing", heard.call(func(): one._enter(STATE.DRAG), &"whoosh_light"))
+	_check("E6g taking one in", heard.call(func(): one.take_in(&"face"), &"flesh_heavy"))
+	one.take_in(&"hands")
+	_check("E6h full: you hear it", heard.call(func(): one.take_in(&"face"), &"anima_moan"))
+	Sfx.recorded.clear()
+	var dying: Node3D = one.body
+	one.death_kind = 0
+	one.health = 1.0
+	_hit(one, &"bullet", &"copal")
+	await _frames(60)
+	_check("E6i its ribs bursting", Sfx.recorded.any(func(entry): return entry[0] == &"bone_crack"))
+	Sfx.recording = false
+	_free([one])
+	if is_instance_valid(dying):
+		dying.queue_free()
 	await _frames(3)
 
 

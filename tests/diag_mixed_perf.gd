@@ -20,6 +20,31 @@ func _ready() -> void:
 	p.invulnerable = true
 	p.teleport(Transform3D(Basis.IDENTITY, Vector3(0, 1.05, -16)))
 	await _measure("empty yard", 120)
+	# The elite's wave, it having taken three; then it burning, all of it out.
+	gym.wave(4)
+	await _frames_here(30)
+	var the_elite: Node3D = null
+
+	for one in get_tree().get_nodes_in_group(&"elite_mouths"):
+		the_elite = one
+
+	for kind in [&"face", &"hands", &"face"]:
+		the_elite.take_in(kind)
+
+	the_elite.global_position = p.global_position + Vector3(0.0, -0.5, -6.0)
+	the_elite.leap_chance = 0.0
+	await _measure("the last wave, the elite full", 240)
+	the_elite.death_kind = 0
+	the_elite.health = 1.0
+	the_elite.round_hint = &"lead"
+	the_elite.take_hit(50.0, p, &"bullet", the_elite.global_position, Vector3.FORWARD)
+	await _measure("the elite burning, all of it out", 240)
+
+	for one in get_tree().get_nodes_in_group(&"monsters"):
+		if not one.dead:
+			one.sleep()
+
+	await _frames_here(10)
 	gym.wave(3)
 
 	for one in get_tree().get_nodes_in_group(&"monsters"):
@@ -48,6 +73,11 @@ func _ready() -> void:
 	await _measure("dying with all of it on you", 200)
 	SaveFiles.delete_run(CityState.run_id)
 	get_tree().quit()
+
+
+func _frames_here(count: int) -> void:
+	for i in count:
+		await get_tree().physics_frame
 
 
 func _measure(label: String, frames: int) -> void:

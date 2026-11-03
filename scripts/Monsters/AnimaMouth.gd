@@ -10,6 +10,7 @@ const ARM_MODEL := "res://assets/monsters/anima_mouth_arm.glb"
 const LEFT_MODEL := "res://assets/monsters/anima_mouth_arm_left.glb"
 const AnimaSkullScript := preload("res://scripts/Monsters/AnimaSkull.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const FINGER_NAMES := ["index", "middle", "ring", "pinky", "thumb"]
 const ARMS := [&"Arm_1", &"Arm_2", &"Arm_3", &"Arm_4", &"Arm_5"]
 const FACES := [&"Face_1", &"Face_2", &"Face_3"]
@@ -1194,6 +1195,7 @@ func tick_dying(delta: float, speed: float, going: Vector3, digs: bool, grab: fl
 		_ribs_gone = true
 		var hard: float = float(pose["bursts"])
 		_ribs_from = [part(&"RibsLeft").global_position, part(&"RibsRight").global_position]
+		Sfx.play(self, &"bone_crack", global_position, -1.0, 0.6)
 		_fling(part(&"RibsLeft"), -global_basis.x - global_basis.z * 0.6, hard, hard * 0.75, RIBS_LIE, true)
 		_fling(part(&"RibsRight"), global_basis.x - global_basis.z * 0.6, hard, hard * 0.75, RIBS_LIE, true)
 
