@@ -23,7 +23,9 @@ const TABLE := {
 		"forms": {
 			&"hands": {"swipe_damage": 6.0, "swipe_reach": 1.7, "swipe_wind": 0.32, "health": 40.0, "power_drain": 5.0, "life_drain": 1.5, "grip": 1, "speed": 2.6, "tell": 0.55, "leap_reach": 2.6, "leap_speed": 8.0, "hit_radius": 0.4, "height": 0.25, "floats": false},
 			&"face": {"swipe_damage": 10.0, "swipe_reach": 2.0, "swipe_wind": 0.42, "health": 70.0, "power_drain": 8.0, "life_drain": 2.5, "grip": 1, "speed": 2.1, "tell": 0.7, "leap_reach": 3.4, "leap_speed": 7.5, "hit_radius": 0.4, "height": 1.3, "floats": true},
-			&"torso": {"swipe_damage": 14.0, "swipe_reach": 2.2, "swipe_wind": 0.6, "health": 130.0, "power_drain": 12.0, "life_drain": 4.0, "grip": 2, "speed": 1.4, "tell": 0.95, "leap_reach": 5.0, "leap_speed": 8.5, "hit_radius": 0.95, "height": 0.5, "floats": false},
+			&"torso": {"swipe_damage": 14.0, "swipe_reach": 2.2, "swipe_wind": 0.95, "health": 130.0, "power_drain": 12.0, "life_drain": 4.0, "grip": 2, "speed": 0.85, "tell": 1.5, "leap_reach": 3.6, "leap_speed": 4.8, "hit_radius": 0.95, "height": 0.5, "floats": false,
+				# It is a great many dragged along as one: all of this is how heavy that is (Anima.gd).
+				"hauls": true, "inertia": 3.0, "leap_gathers": 0.45, "rise_time": 1.0, "wake_time": 1.0, "missed_time": 1.7, "swipe_time": 0.34, "swipe_lunge": 1.2, "back_off_time": 1.1, "back_off_speed": 1.05, "circle_speed": 0.8, "edges_round": 0.5, "throw_speed": 5.0},
 		},
 	},
 }

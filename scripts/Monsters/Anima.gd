@@ -60,6 +60,12 @@ const MISSED_TIME := 0.8
 ## Thrown off: how long it is stunned and exposed, how hard it is thrown.
 const THROWN_TIME := 1.5
 const THROW_SPEED := 9.0
+## What weighs anything: how much of its speed it starts a leap with; coming down, how much it
+## carries on with, how much you feel it, and from how far (m).
+const LEAP_STARTS_AT := 0.12
+const COMES_DOWN_CARRIES := 0.4
+const COMES_DOWN_SHAKES := 0.3
+const COMES_DOWN_FELT := 8.0
 ## Flung up by the Burst: how hard, how fast that dies.
 const FLUNG_UP := 6.5
 const FLUNG_DIES := 10.0
@@ -115,6 +121,8 @@ var whip_reach := 1.6
 var fed := 0.0
 ## Whips it can still take before it is thrown off (from its form).
 var grip_left := 1
+## What it is still carrying, if it has the weight to carry anything.
+var _carried := Vector3.ZERO
 
 var _form := {}
 var _state_t := 0.0
@@ -230,7 +238,7 @@ func throw_off(from: Vector3) -> void:
 	_leave_you()
 	var away := global_position - from
 	away.y = 0.0
-	_push += away.normalized() * THROW_SPEED if away.length() > 0.01 else Vector3.BACK * THROW_SPEED
+	_push += (away.normalized() if away.length() > 0.01 else Vector3.BACK) * _weighs("throw_speed", THROW_SPEED)
 	statuses.apply(&"exposed", THROWN_TIME)
 	_enter(State.THROWN)
 
@@ -386,13 +394,13 @@ func lose_interest() -> void:
 func _wish(you: Node3D, delta: float) -> Vector3:
 	match state:
 		State.RISE:
-			if _state_t >= RISE_TIME:
+			if _state_t >= _weighs("rise_time", RISE_TIME):
 				_enter(State.REST if rests else State.RUSH)
 		State.REST:
 			if _state_t >= REST_LONGEST or _chest_distance(you) <= notice:
 				rouse()
 		State.WAKE:
-			if _state_t >= WAKE_TIME:
+			if _state_t >= _weighs("wake_time", WAKE_TIME):
 				_enter(State.RUSH)
 		State.RUSH:
 			var reach: float = float(_form["leap_reach"])
@@ -405,7 +413,7 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 				if _swipe_in <= 0.0 and line_clear:
 					_enter(State.WIND_UP)
 				else:
-					return _hold_height(_round_you(you) * EDGES_ROUND, delta)
+					return _hold_height(_round_you(you) * _weighs("edges_round", EDGES_ROUND), delta)
 			elif leech != null and not leech.has_room() and far <= CIRCLE_AT and _swipe_in > 0.0:
 				_enter(State.CIRCLE)
 			elif far <= reach and (leech == null or leech.has_room()) and line_clear and _leap_in <= 0.0:
@@ -414,7 +422,7 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 				if randf() < leap_chance:
 					_enter(State.TELL)
 			else:
-				return _hold_height(_feel_round(_toward(you), delta) * float(_form["speed"]) * _hunger() * _slowed(), delta)
+				return _hold_height(_feel_round(_toward(you), delta) * float(_form["speed"]) * _pace() * _slowed(), delta)
 		State.CIRCLE:
 			var leech: Node = _leech()
 
@@ -426,44 +434,50 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 				round_you.y = 0.0
 				var side := Vector3(-round_you.z, 0.0, round_you.x).normalized()
 				var in_out := round_you.normalized() * (CIRCLE_AT - round_you.length())
-				return _hold_height(side * CIRCLE_SPEED + in_out, delta)
+				return _hold_height(side * _weighs("circle_speed", CIRCLE_SPEED) + in_out, delta)
 		State.WIND_UP:
 			if _state_t >= float(_form["swipe_wind"]):
 				_swung = false
 				Sfx.play(self, &"anima_voice", global_position, -11.0, randf_range(1.0, 1.25))
 				_enter(State.SWIPE)
 		State.SWIPE:
-			if not _swung and _state_t >= SWIPE_TIME * 0.5:
+			var swing_takes := _weighs("swipe_time", SWIPE_TIME)
+
+			if not _swung and _state_t >= swing_takes * 0.5:
 				_swung = true
 				_cut(you)
 
-			if _state_t >= SWIPE_TIME:
+			if _state_t >= swing_takes:
 				_swung = false
-				_swipe_in = BACK_OFF_TIME + randf_range(SWIPE_EVERY.x, SWIPE_EVERY.y)
+				_swipe_in = _weighs("back_off_time", BACK_OFF_TIME) + randf_range(SWIPE_EVERY.x, SWIPE_EVERY.y)
 				_back_way = ((global_position - you.global_position) * Vector3(1.0, 0.0, 1.0)).normalized() + _round_you(you) * 0.6
 				_enter(State.BACK_OFF)
 			else:
-				return _hold_height(_toward(you) * SWIPE_LUNGE, delta)
+				return _hold_height(_toward(you) * _weighs("swipe_lunge", SWIPE_LUNGE), delta)
 		State.BACK_OFF:
-			if _state_t >= BACK_OFF_TIME:
+			if _state_t >= _weighs("back_off_time", BACK_OFF_TIME):
 				_enter(State.RUSH)
 			else:
-				return _hold_height(_back_way * BACK_OFF_SPEED * _slowed(), delta)
+				return _hold_height(_back_way * _weighs("back_off_speed", BACK_OFF_SPEED) * _slowed(), delta)
 		State.TELL:
 			if _state_t >= float(_form["tell"]):
 				_leap_way = (_chest(you) - global_position).normalized()
 				_enter(State.LEAP)
 		State.LEAP:
-			var takes: float = float(_form["leap_reach"]) / float(_form["leap_speed"])
+			var gathers := _weighs("leap_gathers", 0.0)
+			var takes: float = float(_form["leap_reach"]) / float(_form["leap_speed"]) + gathers * 0.5
 
 			if _chest_distance(you) <= LATCH_REACH and _lands_on(you):
 				_enter(State.ON)
 				return Vector3.ZERO
 
 			if _state_t >= takes:
+				_comes_down()
 				_enter(State.MISSED)
 			else:
-				return _leap_way * float(_form["leap_speed"])
+				# (What weighs anything gets going slowly: it goes over, rather than springs.)
+				var going := clampf(_state_t / gathers, LEAP_STARTS_AT, 1.0) if gathers > 0.0 else 1.0
+				return _leap_way * float(_form["leap_speed"]) * going
 		State.ON:
 			var leech: Node = _leech()
 
@@ -474,7 +488,7 @@ func _wish(you: Node3D, delta: float) -> Vector3:
 				_push = Vector3.ZERO
 				return Vector3.ZERO
 		State.MISSED:
-			if _state_t >= MISSED_TIME:
+			if _state_t >= _weighs("missed_time", MISSED_TIME):
 				_enter(State.RUSH)
 		State.THROWN:
 			if _state_t >= THROWN_TIME:
@@ -527,6 +541,30 @@ func _chest_distance(you: Node3D) -> float:
 
 ## It doesn't run at you: it creeps, shaking, slow enough to hit, and then the hunger
 ## takes it and it surges a little way, and creeps again. Its own rhythm, not the others'.
+## How fast it goes for now, of its speed. What hauls itself goes as its arms do; the rest in surges.
+func _pace() -> float:
+	return float(body.lurch()) if _form.get("hauls", false) and body != null else _hunger()
+
+
+## What this form's weight says, if it says, or what they all do.
+func _weighs(what: String, otherwise: float) -> float:
+	return float(_form.get(what, otherwise))
+
+
+## All that weight, come down: it carries on a little, and you feel it through the floor if you're near.
+func _comes_down() -> void:
+	if not _form.has("inertia"):
+		return
+
+	_carried = Vector3(velocity.x, 0.0, velocity.z) * COMES_DOWN_CARRIES
+	Sfx.play(self, &"flesh", global_position, -2.0, 0.45)
+	var you: Node3D = target()
+	var juice: Variant = you.get("juice") if you != null else null
+
+	if juice != null:
+		juice.add_trauma(COMES_DOWN_SHAKES * (1.0 - smoothstep(1.0, COMES_DOWN_FELT, global_position.distance_to(you.global_position))))
+
+
 func _hunger() -> float:
 	_surge_in -= get_physics_process_delta_time()
 
@@ -592,6 +630,13 @@ func _toward(you: Node3D) -> Vector3:
 
 ## Crawlers fall to the floor; a face holds its height. Either can be flung up off it.
 func _hold_height(wanted: Vector3, delta: float) -> Vector3:
+	var inertia := _weighs("inertia", 0.0)
+
+	if inertia > 0.0:
+		_carried = _carried.move_toward(Vector3(wanted.x, 0.0, wanted.z), inertia * delta)
+		wanted.x = _carried.x
+		wanted.z = _carried.z
+
 	if bool(_form["floats"]):
 		wanted.y = (float(_form["height"]) - global_position.y) * FLOAT_RATE * (1.0 if _lift <= 0.0 else 0.0) + _lift
 		return wanted

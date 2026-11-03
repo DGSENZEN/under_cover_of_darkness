@@ -34,6 +34,7 @@ func _ready() -> void:
 	await _mouth_model()
 	await _mouth_on_its_body()
 	await _mouth_moves()
+	await _mouth_is_heavy()
 	await _forms()
 	await _round_cover()
 	await _swipes()
@@ -324,6 +325,215 @@ func _mouth_moves() -> void:
 	_check("T8 the Burst and the Shard move it (%.2f up, %.2f tipped), and its limbs stay on it" % [went_up, tipped], went_up > 0.05 and tipped > 0.1 and limbs_on)
 	struck_one.free()
 	await _frames(2)
+
+
+## It is a great many of them dragged along as one: it has to read as a weight, everywhere it goes.
+func _mouth_is_heavy() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(10)
+	# Its crawl: slow, and in hauls.
+	var one := _anima(&"torso", HOME + Vector3(0.0, -0.5, -16.0))
+	one.leap_chance = 0.0
+	await _until(func(): return one.state == STATE.RUSH, 3.0)
+	await _frames(60)
+	var from: Vector3 = one.global_position
+	var fastest := 0.0
+	var slowest := 99.0
+	var frames := 360
+
+	for i in frames:
+		await get_tree().physics_frame
+		var pace: float = (one.velocity * Vector3(1.0, 0.0, 1.0)).length()
+		fastest = maxf(fastest, pace)
+		slowest = minf(slowest, pace)
+
+	var mean: float = (one.global_position - from).length() / (float(frames) / 60.0)
+	_check("Wt1 it crawls, under a metre a second (%.2f)" % mean, mean > 0.5 and mean < 1.0)
+	_check("Wt2 it comes in hauls, not at a glide (%.2f..%.2f)" % [slowest, fastest], fastest > slowest * 2.0 and fastest < 1.7)
+	one.free()
+	await _frames(2)
+	# Its lunge: a long time gathering, then the weight of it goes over.
+	var lunger := _anima(&"torso", HOME + Vector3(0.0, -0.5, -3.2))
+	lunger.leap_chance = 1.0
+	await _until(func(): return lunger.state == STATE.TELL, 8.0)
+	var told := 0
+
+	while lunger.state == STATE.TELL:
+		await get_tree().physics_frame
+		told += 1
+
+	_check("Wt3 it takes well over a second to gather (%.2f s)" % (float(told) / 60.0), told >= 84)
+	var early: Vector3 = lunger.global_position
+	var fastest_lunge := 0.0
+	var steps := 0
+
+	while lunger.state == STATE.LEAP:
+		if steps == 12:
+			_check("Wt4 it gets going slowly (%.2f m in 0.2 s)" % lunger.global_position.distance_to(early), lunger.global_position.distance_to(early) < 0.6)
+
+		await get_tree().physics_frame
+		steps += 1
+		fastest_lunge = maxf(fastest_lunge, lunger.velocity.length())
+
+	_check("Wt5 at its fastest it is no leap (%.1f m/s)" % fastest_lunge, fastest_lunge < 5.5)
+	lunger.free()
+	p.leech.free_all()
+	await _frames(2)
+	# Missing, it lies where it fell.
+	var missed := _anima(&"torso", HOME + Vector3(0.0, -0.5, -3.2))
+	missed.leap_chance = 1.0
+	await _until(func(): return missed.state == STATE.LEAP, 8.0)
+	missed.global_position += Vector3(4.0, 0.0, 0.0)
+	var shaken_from: float = p.juice.trauma()
+	await _until(func(): return missed.state == STATE.MISSED, 3.0)
+	_check("Wt6b it comes down, and you feel it (%.2f)" % (p.juice.trauma() - shaken_from), p.juice.trauma() > shaken_from + 0.03)
+	var lay := 0
+
+	while missed.state == STATE.MISSED:
+		await get_tree().physics_frame
+		lay += 1
+
+	_check("Wt6 missing, it takes a long time to gather itself (%.2f s)" % (float(lay) / 60.0), lay >= 72)
+	missed.free()
+	await _frames(2)
+	# Up close.
+	var raker := _anima(&"torso", HOME + Vector3(0.0, -0.5, -2.6))
+	raker.leap_chance = 0.0
+	raker.health = 500.0
+	await _until(func(): return raker.state == STATE.WIND_UP, 8.0)
+	var drew := 0
+
+	while raker.state == STATE.WIND_UP:
+		await get_tree().physics_frame
+		drew += 1
+
+	_check("Wt7 it draws back slowly for a rake (%.2f s)" % (float(drew) / 60.0), drew >= 50)
+	var back_fastest := 0.0
+	var turned_fastest := 0.0
+	await _until(func(): return raker.state == STATE.BACK_OFF, 2.0)
+	var last_facing: Vector3 = -raker.body.global_basis.z
+
+	var worst_after := 1.0
+
+	# Backing off, and on after it, with what it is still carrying.
+	for i in 150:
+		var backing: bool = raker.state == STATE.BACK_OFF
+		await get_tree().physics_frame
+
+		if backing:
+			back_fastest = maxf(back_fastest, (raker.velocity * Vector3(1.0, 0.0, 1.0)).length())
+
+		var facing: Vector3 = -raker.body.global_basis.z
+		turned_fastest = maxf(turned_fastest, last_facing.angle_to(facing) * 60.0)
+		last_facing = facing
+		var to_you: Vector3 = ((p.global_position - raker.global_position) * Vector3(1.0, 0.0, 1.0)).normalized()
+		worst_after = minf(worst_after, facing.dot(to_you))
+
+	_check("Wt8 it backs off at its own pace (%.2f m/s)" % back_fastest, back_fastest < 1.3)
+	_check("Wt9 it doesn't whip round (%.2f rad/s)" % turned_fastest, turned_fastest < 2.0)
+	_check("Wt9b near you, it never turns from you, whatever it is carrying (%.2f)" % worst_after, worst_after > 0.5)
+	raker.free()
+	await _frames(2)
+
+
+func _mouth_on_you() -> void:
+	await _place_player(HOME)
+	_clear_all()
+	await _frames(40)
+	var hands: Node = p.leech_hands
+	var hud: Node = p.hud
+	var mouth := _anima(&"torso", p.global_position + Vector3(0.9, -0.5, -1.0))
+	mouth.leap_chance = 0.0
+	mouth.health = 900.0
+	await _frames(1)
+	mouth.put_on_you()
+	await _frames(30)
+	var slot: int = p.leech.slot_of(mouth)
+	_check("C1 on you, the ribs come in round your view, with faces and hands", hands.cage_shown(slot) and hands.shown(slot) and hands.other_hand_shown() and hands.cage().faces_shown() >= 2)
+	_check("C1b the one in the world is not (you would see two)", not mouth.body.visible)
+	p.rotation.y += 1.4
+	await _frames(3)
+	var ahead: Vector3 = -p.camera.global_basis.z
+	var from: Vector3 = p.camera.global_position
+	_check("C2 you hit it where you see it", mouth.on_line(from, from + ahead * 6.0) and ahead.dot((mouth.global_position - from).normalized()) > 0.95)
+	# It beats with the gulps, and its ribs keep out of the middle.
+	var size: Vector2 = get_viewport().get_visible_rect().size
+	var aspect := size.x / size.y
+	var cage: Node3D = hands.cage()
+	var low := 9.0
+	var high := -9.0
+	var all_clear := true
+	p.power.power = 100.0
+
+	for i in 120:
+		await get_tree().physics_frame
+		low = minf(low, cage.closed())
+		high = maxf(high, cage.closed())
+
+		if i % 6 == 0:
+			all_clear = all_clear and cage.keeps_clear_of_middle(aspect)
+
+	_check("C1c they beat with the gulps (%.2f..%.2f)" % [low, high], high - low > 0.15)
+	_check("C7 the drain runs into its mouth", hud.drain_state()["threads"] == 1 and hud.drain_target(0).distance_to(cage.mouth_on_screen(aspect)) < 0.02)
+	_check("C7b which is low in your view, out of the middle (%.2f)" % cage.mouth_on_screen(aspect).y, cage.mouth_on_screen(aspect).y > 2.0 / 3.0)
+	_check("C8 over all of that, the cage is out of the middle third", all_clear)
+	# Two whips.
+	_hit(mouth, &"blow", &"blow")
+	await _frames(2)
+	_check("C3 the first whip cracks them, and it still has you", mouth.grip_left == 1 and mouth.ribs_cracked and mouth.state == STATE.ON)
+	await _frames(20)
+	_check("C3b you see it", cage.cracked_shown())
+	_check("C3c and they stay clear of the middle, cracked", cage.keeps_clear_of_middle(aspect))
+	_hit(mouth, &"blow", &"blow")
+	await _frames(2)
+	_check("C4 the second throws it off", mouth.state == STATE.THROWN and not hands.cage_shown(slot) and mouth.body.visible)
+	await _frames(10)
+	mouth.put_on_you()
+	await _frames(25)
+	_check("C5 back on you, whole again", hands.cage_shown(p.leech.slot_of(mouth)) and not mouth.ribs_cracked and not cage.cracked_shown() and mouth.grip_left == 2)
+	# Everything that takes the others off takes it.
+	var gone_each := true
+	p.leech.tear_free()
+	await _frames(2)
+	gone_each = gone_each and not cage.visible
+	mouth.put_on_you()
+	await _frames(10)
+	_hit(mouth, &"bullet", &"copal")
+	await _frames(2)
+	gone_each = gone_each and not cage.visible
+	mouth.put_on_you()
+	await _frames(10)
+	p.leech.free_all()
+	await _frames(2)
+	gone_each = gone_each and not cage.visible
+	_check("C6 a blink, the line or the Burst take the cage too", gone_each)
+	# With the others and the curse.
+	mouth.put_on_you()
+	var face := _anima(&"face", p.global_position + Vector3(-0.9, -0.5, -0.2))
+	var clawing := _anima(&"hands", p.global_position + Vector3(0.0, -0.5, 1.0))
+	await _frames(1)
+	face.put_on_you()
+	clawing.put_on_you()
+	p.statuses.apply(&"evil_eye", 10.0)
+	await _frames(40)
+	_check("C8b with a face, hands and the curse on you too, the middle is clear", hud.middle_kept_clear())
+	p.statuses.clear(&"evil_eye")
+	# Each whip goes where it's aimed: at the one you've turned to, or else into what's all round you.
+	p.leech.tear_free()
+	await _frames(2)
+	_free([face])
+	await _frames(1)
+	mouth.put_on_you()
+	clawing.put_on_you()
+	await _frames(20)
+	var arm: Node = p.revolver
+	var eyes: Transform3D = p.camera.global_transform
+	_check("C9 whipping, not looking at the other, it goes into the mouth", arm._whip_at_on_you(eyes) == mouth)
+	var other_way: Vector3 = (clawing.global_position - eyes.origin).normalized()
+	_check("C9b turned to the other, it goes there", arm._whip_at_on_you(Transform3D(Basis.looking_at(other_way, Vector3.UP), eyes.origin)) == clawing)
+	_free([mouth, clawing])
+	await _frames(3)
 
 
 func _mouth_on_its_body() -> void:

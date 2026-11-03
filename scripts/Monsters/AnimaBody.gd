@@ -138,23 +138,24 @@ const Bestiary := preload("res://scripts/Monsters/Bestiary.gd")
 ## tips (rad), how far up it comes (m). Knocked: how far over it goes (rad).
 const MOUTH_POSES := {
 	&"rest": {"ribs": 0.03, "rear": 0.0, "snap": 2.0},
-	&"wake": {"ribs": 0.6, "rear": 0.4, "snap": 8.0, "rears": 5.0},
-	&"rise": {"ribs": 0.3, "rear": 0.1},
-	&"rush": {"ribs": 0.12, "rear": 0.0, "snap": 3.0},
-	&"circle": {"ribs": 0.22, "rear": 0.1, "snap": 3.0},
-	&"tell": {"ribs": 1.0, "rear": 1.0, "snap": 3.0, "rears": 2.2, "rake": -0.6},
-	&"leap": {"ribs": 1.0, "rear": 0.45, "snap": 9.0, "rears": 6.0, "rake": 0.5},
-	&"missed": {"ribs": 0.08, "rear": 0.0, "snap": 12.0, "rears": 6.0, "rake": 0.9},
-	&"thrown": {"ribs": 0.7, "rear": 0.2, "snap": 9.0},
-	&"wind_up": {"ribs": 0.85, "rear": 0.65, "snap": 6.0, "rears": 4.0, "rake": -1.0},
-	&"swipe": {"ribs": 0.0, "rear": 0.3, "snap": 22.0, "rears": 9.0, "rake": 1.0},
-	&"back_off": {"ribs": 0.12, "rear": 0.1, "snap": 5.0},
-	&"crowd": {"ribs": 0.85, "rear": 0.9, "snap": 3.0, "rears": 2.5, "rake": -0.3},
-	&"leave": {"ribs": 0.05, "rear": 0.0, "snap": 2.0, "rears": 2.0},
+	&"wake": {"ribs": 0.6, "rear": 0.4, "snap": 3.0, "rears": 1.8},
+	&"rise": {"ribs": 0.3, "rear": 0.1, "snap": 2.5, "rears": 1.5},
+	&"rush": {"ribs": 0.12, "rear": 0.0, "snap": 2.0, "rears": 1.5},
+	&"circle": {"ribs": 0.22, "rear": 0.1, "snap": 2.0, "rears": 1.5},
+	&"tell": {"ribs": 1.0, "rear": 1.0, "snap": 1.4, "rears": 1.1, "rake": -0.6},
+	&"leap": {"ribs": 1.0, "rear": 0.45, "snap": 3.0, "rears": 1.8, "rake": 0.5},
+	&"missed": {"ribs": 0.08, "rear": 0.0, "snap": 7.0, "rears": 4.0, "rake": 0.9},
+	&"thrown": {"ribs": 0.7, "rear": 0.2, "snap": 4.0, "rears": 2.0},
+	&"wind_up": {"ribs": 0.85, "rear": 0.65, "snap": 2.2, "rears": 1.6, "rake": -1.0},
+	&"swipe": {"ribs": 0.0, "rear": 0.3, "snap": 10.0, "rears": 4.0, "rake": 1.0},
+	&"back_off": {"ribs": 0.12, "rear": 0.1, "snap": 2.2, "rears": 1.5},
+	&"crowd": {"ribs": 0.85, "rear": 0.9, "snap": 1.6, "rears": 1.3, "rake": -0.3},
+	&"leave": {"ribs": 0.05, "rear": 0.0, "snap": 1.5, "rears": 1.2},
 	&"on": {"ribs": 0.6, "rear": 0.5, "snap": 5.0},
 }
-## Too heavy to spin: it comes round slowly.
-const MOUTH_TURNS := 5.0
+## How fast it can come round (rad/s); how near you it keeps you in its mouth, whichever way it is going (m).
+const MOUTH_TURNS := 1.5
+const MOUTH_KEEPS_ON_YOU := 4.5
 const MOUTH_REARS := 0.5
 const MOUTH_RISES := 0.28
 const MOUTH_TUMBLES := 1.1
@@ -425,9 +426,18 @@ func arms_raking() -> int:
 
 ## Too many arms hauling one mass: it heaves and rolls with them. It rears up with its ribs apart
 ## before it comes, and they snap shut on the swing.
+## How it goes, of its speed: with its arms' hauls.
+func lurch() -> float:
+	return _mouth.lurch() if _mouth != null else 1.0
+
+
 ## Backing off or going round you, the mouth keeps you in it: it doesn't turn its back and walk.
-func _mouth_stays_on_you(doing: StringName) -> bool:
-	return form == &"torso" and (doing == &"back_off" or doing == &"circle")
+func _mouth_stays_on_you(doing: StringName, you: Node3D) -> bool:
+	if form != &"torso":
+		return false
+
+	var near := global_position.distance_to(you.global_position) < MOUTH_KEEPS_ON_YOU
+	return doing == &"back_off" or doing == &"circle" or (doing == &"rush" and near)
 
 
 func _work_mouth(delta: float, doing: StringName, speed: float, fed: float) -> void:
@@ -470,7 +480,7 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 	smoulder = move_toward(smoulder, 1.0 if smoked else 0.0, delta * (6.0 if smoked else 3.0))
 	var flat := Vector3(moving.x, 0.0, moving.z)
 
-	if you != null and doing != &"rest" and (flat.length() < 0.2 or doing == &"tell" or doing == &"on" or doing == &"wind_up" or doing == &"swipe" or _mouth_stays_on_you(doing)):
+	if you != null and doing != &"rest" and (flat.length() < 0.2 or doing == &"tell" or doing == &"on" or doing == &"wind_up" or doing == &"swipe" or _mouth_stays_on_you(doing, you)):
 		var way := you.global_position - global_position
 		way.y = 0.0
 
@@ -479,7 +489,14 @@ func tick(delta: float, doing: StringName, you: Node3D, moving: Vector3, fed: fl
 
 	if flat.length() > 0.01 and doing != &"thrown":
 		var wanted := Basis.looking_at(flat.normalized(), Vector3.UP)
-		global_basis = global_basis.orthonormalized().slerp(wanted, 1.0 - exp(-(MOUTH_TURNS if form == &"torso" else 12.0) * delta))
+		var now := global_basis.orthonormalized()
+
+		if form == &"torso":
+			# Too heavy to spin: it comes round at the rate it can, however far it has to.
+			var off := now.get_rotation_quaternion().angle_to(wanted.get_rotation_quaternion())
+			global_basis = now.slerp(wanted, minf(MOUTH_TURNS * delta / maxf(off, 0.001), 1.0))
+		else:
+			global_basis = now.slerp(wanted, 1.0 - exp(-12.0 * delta))
 
 	if form == &"hands":
 		_walk_hand(delta, doing, Vector3(moving.x, 0.0, moving.z).length(), fed, exposed)

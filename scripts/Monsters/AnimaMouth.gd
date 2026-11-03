@@ -25,13 +25,18 @@ const RIBS_SWING := 0.42
 ## hauls (rad). How far it heaves with them (m), and rolls (rad).
 const STRIDES := [2.1, 2.75]
 const STRIDE_REACH := 0.6
+## (However slow the last haul left it, its arms go on reaching for the next.)
+const STRIDE_LEAST := 0.55
 const HEAVES := 0.09
 const ROLLS := 0.11
 ## The rake: how far back each arm draws, how far over it comes (rad), a little after the last.
+const LURCH_LEAST := 0.3
+const LURCH_MOST := 1.6
 const RAKE_BACK := 0.75
 const RAKE_OVER := 1.15
 const RAKE_LAGS := 0.035
 const RAKING_PAST := 0.35
+const RAKE_RATE := 3.5
 ## The life in what pushes out of it: how far an arm sways (rad), a finger's curl about what, how far.
 const SWAY := 0.14
 const CURL := 0.42
@@ -126,6 +131,12 @@ func roll() -> float:
 	return (sin(_stride[0]) - sin(_stride[1])) * ROLLS * minf(_haul, 1.0)
 
 
+## How it goes for now, of its speed: lurching on with each haul, and all but stopping between.
+func lurch() -> float:
+	var hauling := (absf(sin(_stride[0])) + absf(sin(_stride[1]))) * 0.5
+	return LURCH_LEAST + hauling * hauling * LURCH_MOST
+
+
 ## How many arms are coming over in a rake.
 func arms_raking() -> int:
 	var count := 0
@@ -143,13 +154,13 @@ func tick(delta: float, speed: float, rake_to: float, fed: float, hurt: float, s
 	_haul = move_toward(_haul, minf(speed, 1.5), delta * 3.0)
 
 	for i in _stride.size():
-		_stride[i] += delta * STRIDES[i] * speed
+		_stride[i] += delta * STRIDES[i] * maxf(speed, STRIDE_LEAST if speed > 0.05 else 0.0)
 
 	# Each haul lifts it and lets it drop.
 	_heave = (absf(sin(_stride[0])) + absf(sin(_stride[1]))) * 0.5 * HEAVES * minf(_haul, 1.0)
 
 	for i in _rake.size():
-		var w := minf(TAU * 7.0, 0.8 / delta)
+		var w := minf(TAU * RAKE_RATE, 0.8 / delta)
 		var late := clampf(float(i) * RAKE_LAGS, 0.0, 0.2)
 		_rake_speed[i] += (w * w * (rake_to - _rake[i]) - 2.0 * 0.75 * w * _rake_speed[i]) * delta * (1.0 - late)
 		_rake[i] += _rake_speed[i] * delta

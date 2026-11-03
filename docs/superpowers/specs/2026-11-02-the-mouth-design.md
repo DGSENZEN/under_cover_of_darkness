@@ -18,7 +18,7 @@ It stays the `torso` form in code (`Bestiary`, `Anima.form`). Nothing on screen 
 
 ## Non-goals
 
-- Changing its fight numbers: health 130, grip 2 (two whips), power drain 12, life drain 4, swipe 14 damage at 2.2 m with a 0.6 s wind-up, speed 1.4, or how the Bestiary rates rounds against it.
+- Changing what it deals and takes: health 130, grip 2 (two whips), power drain 12, life drain 4, swipe 14 damage at 2.2 m, or how the Bestiary rates rounds against it. Its pace was frozen here too, until the user played it: "It moves too quick and lunges in too quick, it's movements should be heavier since it is an amalgam." So it crawls at 0.85 in hauls, gathers for 1.5 s, lunges 3.6 m at up to 4.8 m/s, and winds up a rake for 0.95 s (`Bestiary`).
 - New enemies from its death. It comes apart visibly; nothing it leaves can hurt you (Claude's call; a split can come later).
 - A new spell or item against it.
 
