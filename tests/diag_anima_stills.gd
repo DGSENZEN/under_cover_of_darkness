@@ -43,6 +43,9 @@ func _ready() -> void:
 	if only == "presses":
 		await _press_stills()
 
+	if only == "cage":
+		await _cage_stills()
+
 	if only == "" or only == "mouth":
 		await _mouth()
 
@@ -547,6 +550,50 @@ func _mouth_stills() -> void:
 
 		one.free()
 		await _frames(3)
+
+
+## The mouth closed on you: coming, between gulps, winding up, on a gulp, broken, with the curse.
+func _cage_stills() -> void:
+	var at := Vector3(0, 1.05, -2.7) if place == "room" else Vector3(-3.5, 1.05, -16.0)
+	p.teleport(Transform3D(Basis(Vector3.UP, PI) if place == "room" else Basis.IDENTITY, at))
+	await _frames(40)
+	var one := _feeder(&"torso", p.global_position + Vector3(0.9, -0.5, -1.0))
+	await _frames(2)
+	one.put_on_you()
+	await _frames(4)
+	await _shot("cage_coming")
+	await _frames(40)
+	await _shot("cage_between")
+	var leech: Node = p.leech
+	p.power.power = 100.0
+
+	for i in 200:
+		await get_tree().physics_frame
+
+		if leech.gulp() <= 0.0 and leech.coming() > 0.93:
+			break
+
+	await _shot("cage_winding")
+
+	for i in 200:
+		await get_tree().physics_frame
+
+		if leech.gulp() > 0.8:
+			break
+
+	await _frames(2)
+	await _shot("cage_gulp")
+	one.round_hint = &"blow"
+	one.take_hit(10.0, p, &"blow", one.global_position, Vector3.FORWARD)
+	await _frames(45)
+	await _shot("cage_broken")
+	p.statuses.apply(&"evil_eye", 30.0)
+
+	for i in 3:
+		p.curse.deepen()
+
+	await _frames(50)
+	await _shot("cage_curse")
 
 
 ## What presses out from under the mouth's skin, held, close to, from the side you see it from.

@@ -13,6 +13,7 @@ const BRUSH := preload("res://textures/painted/eclipse/brush.png")
 const HANDS_MODEL := "res://assets/monsters/anima_hands.glb"
 const AnimaFire := preload("res://scripts/Monsters/AnimaFire.gd")
 const LeechFaceScript := preload("res://scripts/Monsters/LeechFace.gd")
+const LeechCageScript := preload("res://scripts/Monsters/LeechCage.gd")
 
 const VIEWMODEL_LAYER := 1 << 18
 const FINGER_NAMES := ["index", "middle", "ring", "pinky", "thumb"]
@@ -73,6 +74,7 @@ var _fed: Array[float] = [0.0, 0.0, 0.0, 0.0]
 var _splay_low: Array[float] = [9.0, 9.0, 9.0, 9.0]
 var _splay_high: Array[float] = [-9.0, -9.0, -9.0, -9.0]
 var _clock := 0.0
+var _cage: Node3D = null
 var _faces: Array = [null, null, null]
 ## The side of your view a face took, when it got hold.
 var _face_anchor: Array[int] = [-1, -1, -1]
@@ -148,6 +150,16 @@ func face_shown(slot: int) -> bool:
 	return _faces[slot] != null and _faces[slot].visible
 
 
+## The mouth, closed on you, if it ever has been.
+func cage() -> Node3D:
+	return _cage
+
+
+## Whether the one in `slot` has you in its ribs.
+func cage_shown(slot: int) -> bool:
+	return _cage != null and _cage.visible and player.leech.holds_mouth(slot)
+
+
 ## Whether a face has its second hand on you.
 func other_hand_shown() -> bool:
 	return _hands[OTHER_HAND].visible
@@ -155,10 +167,14 @@ func other_hand_shown() -> bool:
 
 ## Where the mouth of the face in `slot` is on the screen, 0..1.
 func mouth_on_screen(slot: int) -> Vector2:
+	var size := get_viewport().get_visible_rect().size
+
+	if cage_shown(slot):
+		return _cage.mouth_on_screen(size.x / maxf(size.y, 1.0))
+
 	if _faces[slot] == null:
 		return Vector2(0.5, 0.5)
 
-	var size := get_viewport().get_visible_rect().size
 	return _faces[slot].mouth_on_screen(size.x / maxf(size.y, 1.0))
 
 
@@ -248,6 +264,34 @@ func _process(delta: float) -> void:
 			_face_for(slot).drink(delta, player.leech.gulp(), player.leech.coming(), _arrive[slot], clampf(float(who.fed) / FULL, 0.0, 1.0), player.leech.face_offset(slot), float(slot) * 0.09, player.leech.last_gulp())
 
 	_second_hand(taken, delta)
+	_work_cage(delta)
+
+
+## The mouth's ribs, closed on you. Gone at once when it is thrown: the one in the world is there. As you die, it
+## has what it came for, and stays shut.
+func _work_cage(delta: float) -> void:
+	var arrived := -1.0
+	var cracked := false
+
+	for slot in 3:
+		if player.leech.holds_mouth(slot):
+			arrived = maxf(arrived, _arrive[slot])
+			cracked = cracked or bool(player.leech.who_in(slot).get("ribs_cracked"))
+
+	if arrived < 0.0:
+		if _cage != null and _cage.visible:
+			if player.is_dead:
+				_cage.close_in(delta, 0.0, 0.0, 1.0, 1.0, _cage.cracked_shown())
+			else:
+				_cage.let_go()
+
+		return
+
+	if _cage == null:
+		_cage = LeechCageScript.new(VIEWMODEL_LAYER, ViewArmsScript.Z_CLIP, ViewArmsScript.VIEW_FOV)
+		add_child(_cage)
+
+	_cage.close_in(delta, player.leech.gulp(), player.leech.coming(), arrived, player.leech.last_gulp(), cracked)
 
 
 ## A face has two hands. The second goes where there is room.
@@ -255,7 +299,7 @@ func _second_hand(taken: Array[int], delta: float) -> void:
 	var face := -1
 
 	for slot in 3:
-		if player.leech.holds_face(slot):
+		if player.leech.holds_before_you(slot):
 			face = slot
 			break
 
@@ -296,7 +340,7 @@ func _covering() -> float:
 		return 0.0
 
 	for slot in 3:
-		if player.leech.holds_face(slot):
+		if player.leech.holds_before_you(slot):
 			return 0.0
 
 	return smoothstep(0.0, 0.6, float(player.leech.last_gulp()))
@@ -314,7 +358,7 @@ func _face_for(slot: int) -> Node3D:
 ## The side of your view it is on; low, if that side is taken. A face keeps the side it took
 ## when it got hold: it isn't anywhere on you but your face.
 func _anchor_for(slot: int, taken: Array[int]) -> int:
-	if _face_anchor[slot] >= 0 and not taken.has(_face_anchor[slot]) and player.leech.holds_face(slot):
+	if _face_anchor[slot] >= 0 and not taken.has(_face_anchor[slot]) and player.leech.holds_before_you(slot):
 		return _face_anchor[slot]
 
 	var camera := get_parent() as Node3D
@@ -327,7 +371,7 @@ func _anchor_for(slot: int, taken: Array[int]) -> int:
 	elif not taken.has(2):
 		anchor = 2
 
-	if player.leech.holds_face(slot):
+	if player.leech.holds_before_you(slot):
 		_face_anchor[slot] = anchor
 
 	return anchor

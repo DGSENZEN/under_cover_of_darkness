@@ -124,6 +124,8 @@ var whip_reach := 1.6
 var fed := 0.0
 ## Whips it can still take before it is thrown off (from its form).
 var grip_left := 1
+## The mouth's ribs, broken by a whip, as long as it goes on holding you.
+var ribs_cracked := false
 ## What it is still carrying, if it has the weight to carry anything.
 var _carried := Vector3.ZERO
 var _hauls_heard := 0
@@ -233,6 +235,7 @@ func put_on_you() -> bool:
 		return false
 
 	grip_left = int(_form["grip"])
+	ribs_cracked = false
 	_enter(State.ON)
 	return true
 
@@ -703,3 +706,6 @@ func _on_struck(result: StringName, source: StringName) -> void:
 
 			if grip_left <= 0:
 				throw_off(target().global_position)
+			else:
+				# It holds on, what it holds you with broken.
+				ribs_cracked = true

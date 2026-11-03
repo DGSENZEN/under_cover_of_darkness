@@ -192,6 +192,8 @@ var _gate_shown := 0.0
 var _flip_shown := 0.0
 var _sprint_shown := 0.0
 var _boot_shown := 0.0
+const WHIP_MOUTH_AT_MOST := 0.82
+
 var _whip_shown := 0.0
 ## Seconds into a pistol-whip; -1 when none.
 var _whip_t := -1.0
@@ -423,6 +425,10 @@ func _whip_at_on_you(at: Transform3D) -> Node3D:
 
 	for who in player.leech.on_me():
 		var how_near: float = (who.global_position - at.origin).normalized().dot(-at.basis.z)
+
+		# The mouth is all round you, so it is always ahead of you: turned on another, that's where it goes.
+		if who.get("form") == &"torso":
+			how_near = minf(how_near, WHIP_MOUTH_AT_MOST)
 
 		if how_near > closest:
 			closest = how_near

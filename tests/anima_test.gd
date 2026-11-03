@@ -40,6 +40,7 @@ func _ready() -> void:
 	await _mouth_arrives_whole()
 	await _mouth_spectral()
 	await _mouth_gait()
+	await _mouth_on_you()
 	await _forms()
 	await _round_cover()
 	await _swipes()
@@ -831,6 +832,9 @@ func _mouth_is_heavy() -> void:
 	await _frames(2)
 
 
+const MonsterKind := preload("res://scripts/Monsters/Monster.gd")
+
+
 func _mouth_on_you() -> void:
 	await _place_player(HOME)
 	_clear_all()
@@ -850,7 +854,7 @@ func _mouth_on_you() -> void:
 	await _frames(3)
 	var ahead: Vector3 = -p.camera.global_basis.z
 	var from: Vector3 = p.camera.global_position
-	_check("C2 you hit it where you see it", mouth.on_line(from, from + ahead * 6.0) and ahead.dot((mouth.global_position - from).normalized()) > 0.95)
+	_check("C2 you hit it where you see it", MonsterKind.on_line(get_tree(), from, from + ahead * 6.0, 0.05, 0.0, []).get("monster") == mouth and ahead.dot((mouth.global_position - from).normalized()) > 0.95)
 	# It beats with the gulps, and its ribs keep out of the middle.
 	var size: Vector2 = get_viewport().get_visible_rect().size
 	var aspect := size.x / size.y
@@ -858,6 +862,7 @@ func _mouth_on_you() -> void:
 	var low := 9.0
 	var high := -9.0
 	var all_clear := true
+	var in_it := ""
 	p.power.power = 100.0
 
 	for i in 120:
@@ -865,13 +870,14 @@ func _mouth_on_you() -> void:
 		low = minf(low, cage.closed())
 		high = maxf(high, cage.closed())
 
-		if i % 6 == 0:
-			all_clear = all_clear and cage.keeps_clear_of_middle(aspect)
+		if i % 6 == 0 and all_clear:
+			in_it = cage.in_the_middle(aspect)
+			all_clear = in_it == ""
 
 	_check("C1c they beat with the gulps (%.2f..%.2f)" % [low, high], high - low > 0.15)
 	_check("C7 the drain runs into its mouth", hud.drain_state()["threads"] == 1 and hud.drain_target(0).distance_to(cage.mouth_on_screen(aspect)) < 0.02)
 	_check("C7b which is low in your view, out of the middle (%.2f)" % cage.mouth_on_screen(aspect).y, cage.mouth_on_screen(aspect).y > 2.0 / 3.0)
-	_check("C8 over all of that, the cage is out of the middle third", all_clear)
+	_check("C8 over all of that, the cage is out of the middle third (%s)" % in_it, all_clear)
 	# Two whips.
 	_hit(mouth, &"blow", &"blow")
 	await _frames(2)
@@ -911,7 +917,7 @@ func _mouth_on_you() -> void:
 	clawing.put_on_you()
 	p.statuses.apply(&"evil_eye", 10.0)
 	await _frames(40)
-	_check("C8b with a face, hands and the curse on you too, the middle is clear", hud.middle_kept_clear())
+	_check("C8b with a face, hands and the curse on you too, the middle is clear (%s)" % cage.in_the_middle(aspect), hud.middle_kept_clear())
 	p.statuses.clear(&"evil_eye")
 	# Each whip goes where it's aimed: at the one you've turned to, or else into what's all round you.
 	p.leech.tear_free()

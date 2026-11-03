@@ -45,6 +45,8 @@ RIB_WANDER = 0.012
 RIB_VOXEL = 0.0065
 RIB_THICKER = 0.0015
 RIB_TRIS = 3000
+## Broken by the first whip: how many of them.
+BROKEN_SHARE = 0.7
 ## The fang each rib is drawn out into: which ribs (their size in the skeleton), how long, how thick.
 FANG_FROM = 110
 FANG_LONG = (0.15, 0.3)
@@ -333,7 +335,8 @@ def build_loose_bones(rng):
     return bones
 
 
-def build_ribs():
+def build_ribs(broken=False):
+    """`broken`: as the first whip leaves them, a good many snapped off along their length, raw at the break."""
     bpy.ops.import_scene.gltf(filepath=BASE)
     source = next(o for o in bpy.data.objects if o.type == "MESH")
     bpy.context.view_layer.update()
@@ -345,6 +348,8 @@ def build_ribs():
     dropped = 0
     fangs = 0
     fang_rng = random.Random(7)
+    break_rng = random.Random(13)
+    breaks = []
 
     for number, group in enumerate(groups):
         middle = sum((v.co for v in group), Vector()) / len(group)
@@ -360,7 +365,17 @@ def build_ribs():
         for v in group:
             made[v] = side.verts.new(into_mouth(v.co, 1.3))
 
-        if len(group) >= FANG_FROM:
+        cut = None
+
+        if broken and len(group) >= FANG_FROM and break_rng.random() < BROKEN_SHARE:
+            along = [m.co.y for m in made.values()]
+            cut = min(along) + (max(along) - min(along)) * break_rng.uniform(0.42, 0.8)
+            close_to = [m.co for m in made.values() if abs(m.co.y - cut) < 0.025]
+
+            if close_to:
+                breaks.append(sum(close_to, Vector()) / len(close_to))
+
+        if len(group) >= FANG_FROM and cut is None:
             grow_fang(side, max(made.values(), key=lambda m: m.co.y).co.copy(), fang_rng)
             fangs += 1
 
@@ -370,6 +385,10 @@ def build_ribs():
             faces.update(v.link_faces)
 
         for f in faces:
+            # (Unevenly: it is snapped, not sawn.)
+            if cut is not None and max(made[v].co.y for v in f.verts) > cut + break_rng.uniform(-0.025, 0.025):
+                continue
+
             try:
                 side.faces.new([made[v] for v in f.verts])
             except ValueError:
@@ -398,14 +417,14 @@ def build_ribs():
         thicken.to_mesh(obj.data)
         thicken.free()
         reduce(obj, RIB_TRIS)
-        paint_bone(obj)
+        paint_bone(obj, breaks)
         closed(obj)
         made_objects.append(obj)
 
     return made_objects
 
 
-def paint_bone(obj):
+def paint_bone(obj, breaks=()):
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bm.normal_update()
@@ -430,6 +449,10 @@ def paint_bone(obj):
             tone = mix(tone, INK, smooth(-0.0004, -0.003, stands[loop.vert]) * 0.9)
             blood = noise.noise(c * 6.0 + Vector((5.0, 1.0, 0.0))) * 0.5 + 0.5
             tone = mix(tone, RAW, smooth(0.66, 0.76, blood) * 0.5)
+
+            if breaks:
+                near = min((c - at).length for at in breaks)
+                tone = mix(tone, INSIDE_WET, smooth(0.07, 0.015, near))
             loop[layer] = paint_value(tone)
 
     bm.to_mesh(obj.data)
@@ -917,4 +940,19 @@ def pictures(ribs, mass):
     shot("j_close_candles", Vector((0.5, -1.3, 1.6)), Vector((0.0, -0.65, 0.95)))
 
 
+def build_broken():
+    """The ribs as the first whip leaves them: a file of their own, for the cage."""
+    clear_scene()
+    ribs = build_ribs(True)
+
+    for obj in ribs:
+        to_hinge(obj)
+
+    bpy.ops.object.select_all(action="SELECT")
+    out = GLB.replace("anima_mouth.glb", "anima_mouth_ribs_broken.glb")
+    bpy.ops.export_scene.gltf(filepath=out, export_format="GLB", export_yup=True, export_materials="NONE", export_normals=True, export_apply=False, export_vertex_color="ACTIVE", export_all_vertex_colors=False)
+    print("WROTE", out)
+
+
 main()
+build_broken()

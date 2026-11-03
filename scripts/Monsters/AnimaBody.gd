@@ -584,6 +584,8 @@ func _work_mouth(delta: float, doing: StringName, you: Node3D, moving: Vector3, 
 
 		_mouth.arrive()
 
+	# On you, it is all round you: LeechCage.gd is what you see.
+	visible = doing != &"on"
 	var pose: Dictionary = MOUTH_POSES.get(doing, MOUTH_POSES[&"rush"])
 	var snap: float = float(pose.get("snap", 5.0))
 	_mouth.ribs_to(clampf(_spring(&"mouth_ribs", float(pose["ribs"]), snap, 0.8, delta), 0.0, 1.15))

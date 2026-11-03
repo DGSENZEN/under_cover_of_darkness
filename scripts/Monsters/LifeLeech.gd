@@ -22,6 +22,8 @@ const CHEST := 0.15
 ## from another. You hit it where you see it (LeechFace.gd).
 const FACE_OUT := 0.8
 const FACE_APART := 0.34
+## The mouth is all round you: it is this far ahead of your eyes, wherever you look.
+const MOUTH_OUT := 0.9
 
 ## The gulps: slower as your will goes, as your heart does, sharper the more are on
 ## you. How long each is felt, what it does to your view, how hard it hauls at you.
@@ -182,6 +184,17 @@ func holds_face(slot: int) -> bool:
 	return who != null and who.get("form") == &"face"
 
 
+## Whether the one in `slot` is the mouth, closed on you (LeechCage.gd).
+func holds_mouth(slot: int) -> bool:
+	var who := who_in(slot)
+	return who != null and who.get("form") == &"torso"
+
+
+## Whether the one in `slot` isn't on any side of you, but before your eyes wherever you look.
+func holds_before_you(slot: int) -> bool:
+	return holds_face(slot) or holds_mouth(slot)
+
+
 ## How far to the side of your view the face in `slot` is, in metres, if there are others.
 func face_offset(slot: int) -> float:
 	var faces: Array[int] = []
@@ -198,6 +211,10 @@ func slot_position(slot: int) -> Vector3:
 	if holds_face(slot):
 		var eyes: Transform3D = player.camera.global_transform
 		return eyes.origin - eyes.basis.z * FACE_OUT + eyes.basis.x * face_offset(slot)
+
+	if holds_mouth(slot):
+		var eyes: Transform3D = player.camera.global_transform
+		return eyes.origin - eyes.basis.z * MOUTH_OUT
 
 	return player.global_position + Vector3.UP * CHEST + _sides[slot] * HOLD_OUT
 

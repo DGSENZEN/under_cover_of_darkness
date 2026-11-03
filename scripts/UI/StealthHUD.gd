@@ -1245,7 +1245,7 @@ func _show_drain(delta: float) -> void:
 			var hands: Node3D = player.leech_hands
 			# Into its mouth, if it is a face; into the palm of what has hold of you.
 			var palm: Vector2 = hands.on_screen(slot) + DRAIN_INTO_PALM
-			var on: Vector2 = hands.mouth_on_screen(slot) if hands.face_shown(slot) else palm
+			var on: Vector2 = hands.mouth_on_screen(slot) if hands.face_shown(slot) or hands.cage_shown(slot) else palm
 			threads[_drain_threads] = Vector3(on.x, on.y, 1.0)
 			claws[_drain_threads] = Vector3(palm.x, palm.y, 1.0)
 			_drain_into[_drain_threads] = on
@@ -1360,7 +1360,10 @@ func middle_kept_clear() -> bool:
 	for gazer in _gazers.values():
 		gazers_clear = gazers_clear and gazer_keeps_clear(Vector2(gazer.x, gazer.y))
 
-	return flesh_clear and eyes_clear and gazers_clear and CLAWS_CLEAR_FROM >= sqrt(2.0) * THIRD
+	var size := get_viewport().get_visible_rect().size
+	var cage: Node3D = player.leech_hands.cage() if player != null and player.leech_hands != null else null
+	var ribs_clear: bool = cage == null or not cage.visible or cage.keeps_clear_of_middle(size.x / maxf(size.y, 1.0))
+	return flesh_clear and eyes_clear and gazers_clear and ribs_clear and CLAWS_CLEAR_FROM >= sqrt(2.0) * THIRD
 
 
 ## Whether a stare's patch of meat, there on the screen, stays out of the middle third.
