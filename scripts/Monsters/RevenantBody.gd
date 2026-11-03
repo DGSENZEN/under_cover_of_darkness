@@ -656,7 +656,8 @@ func _steps_wanted(going: Vector3, speed: float, run: float, moving: Vector3) ->
 		var lets_go: float = STEP_LETS_GO * _stride_of[side] * LEG_REACHES[side] * (1.0 if speed > 0.1 else 0.5)
 
 		# One at a time at a walk; galloping, they go together.
-		if feet_out[side] > lets_go and (_step_t[other] < 0.0 or run > 0.5):
+		# (Left far enough behind, it goes whatever the other is doing: it can't stand on that.)
+		if feet_out[side] > lets_go and (_step_t[other] < 0.0 or run > 0.5 or feet_out[side] > lets_go * 1.45):
 			var takes: float = lerpf(STEP_TAKES * LEG_TAKES[side], STEP_QUICKEST, run) * _rng.randf_range(0.92, 1.12)
 			_foot_from[side] = _foot_at[side]
 			_foot_to[side] = _ground_under(_foot_wants(side, going, speed, takes))
