@@ -43,6 +43,12 @@ const COAL_LIGHT_FANNED := 2.2
 const COAL_REACH := 3.6
 const COAL_COLOUR := Color(1.0, 0.46, 0.14)
 const FANS_PER := 0.09
+## How it swings from its ring as something heavy does: how long a whole swing takes (s), how much of it is left after each (a damping ratio), how far it goes at most (a share of straight out).
+const SWING_TAKES := 1.5
+const SWING_DAMP := 0.055
+const SWING_MOST := 0.3
+## How much of your hand's moves reach it: not all, it's heavy.
+const SWING_TAKES_OF_IT := 0.5
 ## Sparks and embers where it lands.
 const BURST_EMBERS := 26
 ## What it does to what it lands on: stays on it this long (s), then comes off it this fast (m/s). And what it does to its light.
@@ -86,6 +92,10 @@ var _floor_at := -INF
 var _fans := 0.0
 var _head_speed := 0.0
 var _up_way := Vector3.UP
+var _tilt := Vector3.ZERO
+var _tilt_going := Vector3.ZERO
+var _hand_was := Vector3.ZERO
+var _hand_speed := Vector3.ZERO
 var _bite_left := 0.0
 var _bite_on: Node3D = null
 var _bite_local := Vector3.ZERO
@@ -291,6 +301,10 @@ func take_up(hand: Vector3) -> void:
 	_light.visible = true
 	_smoke.emitting = true
 	_hand = hand
+	_hand_was = hand
+	_hand_speed = Vector3.ZERO
+	_tilt = Vector3.ZERO
+	_tilt_going = Vector3.ZERO
 	_long = HANGS
 	_mode = Mode.HANG
 	_at.resize(POINTS)
@@ -322,6 +336,11 @@ func coal_light() -> OmniLight3D:
 ## Out in the air, or on its way back.
 func busy() -> bool:
 	return _mode != Mode.HANG or _long > HANGS * 1.05
+
+
+## How far it's swinging from its ring, flat (a share of straight out): what your hand feels.
+func tilt_now() -> Vector3:
+	return _tilt
 
 
 ## How long it is now against how long it's let out: 1 is true to its length.
@@ -539,9 +558,23 @@ func work(delta: float, hand: Vector3) -> void:
 	_head_speed = _at[last].distance_to(_before[last]) / maxf(delta, 0.001)
 	_fans = move_toward(_fans, clampf(_head_speed * FANS_PER, 0.0, 1.0), delta * (6.0 if _head_speed * FANS_PER > _fans else 1.1))
 	_embers.emitting = _fans > 0.35
+	_work_swing(delta, hand)
 	_light_jump = move_toward(_light_jump, 0.0, delta * LIGHT_SETTLES)
 	_steam_left = maxf(_steam_left - delta, 0.0)
 	_work_coals(delta)
+
+
+## Its whole weight hangs below its ring, a good way down: your hand moves, and it answers late and slowly.
+func _work_swing(delta: float, hand: Vector3) -> void:
+	var speed := (hand - _hand_was) / maxf(delta, 0.001)
+	var push := (speed - _hand_speed) / maxf(delta, 0.001)
+	_hand_was = hand
+	_hand_speed = speed
+	var w := TAU / SWING_TAKES
+	push.y = 0.0
+	var going := _tilt_going + (-w * w * _tilt - 2.0 * SWING_DAMP * w * _tilt_going - push * (w * w / GRAVITY) * SWING_TAKES_OF_IT) * delta
+	_tilt_going = going
+	_tilt = (_tilt + _tilt_going * delta).limit_length(SWING_MOST)
 
 
 func _within(point: Vector3, of: Vector3, far: float) -> Vector3:
@@ -691,7 +724,13 @@ func _draw_head(shown: PackedVector3Array) -> void:
 	var from := shown[POINTS - 2]
 	var up := from - at
 	up = up.normalized() if up.length() > 0.0001 else _up_way
-	_up_way = up
+
+	# (Hanging: it swings from its ring by its own weight, not as the few links above it do.)
+	if not busy():
+		up = (Vector3.UP - _tilt).normalized()
+
+	_up_way = _up_way.slerp(up, 0.35).normalized() if _up_way.dot(up) > -0.9 else up
+	up = _up_way
 	var side := up.cross(Vector3(0.31, 0.27, 0.91)).normalized()
 	_head.global_transform = Transform3D(Basis(side, up, side.cross(up).normalized()), at)
 	var breath := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.0016) * sin(float(Time.get_ticks_msec()) * 0.0041 + 1.0)

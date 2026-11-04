@@ -11,10 +11,12 @@ const STATE: Dictionary = RevenantScript.State
 const EyeScript := preload("res://scripts/Monsters/FloatingEye.gd")
 const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
 const CombatScript := preload("res://scripts/Combat/PlayerCombat.gd")
+const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 const HOME := Vector3(0, 1.05, 0)
 
 var p: CharacterBody3D
 var failed := 0
+var arms_before_brazier := false
 
 
 func _ready() -> void:
@@ -881,6 +883,7 @@ func _the_brazier() -> void:
 	await _new_player()
 	await _frames(30)
 	p.combat.adrenaline = 0.0
+	arms_before_brazier = ViewArmsScript.new_arms
 	var packed: bool = p.loadout.pack_item(&"brazier")
 	_check("Z0 it packs and comes to hand", packed and p.inventory.select_by_id(&"brazier"))
 	await _frames(5)
@@ -1049,10 +1052,75 @@ func _the_brazier() -> void:
 	await _frames(5)
 	await _the_chain()
 	await _how_it_lands()
+	await _how_it_is_held()
 	p.loadout.unpack_item(&"brazier")
 	await _frames(2)
 	var kept: Node3D = p.combat.chain()
 	_check("C6 packed away, gone from sight", kept == null or not kept.visible)
+
+
+## How it's held: the chain comes out of your fist on screen, your own arms, your hand where the pose says; and the weight of it.
+func _how_it_is_held() -> void:
+	await _clean()
+	p.combat.stamina = p.combat.stamina_max
+	await _frames(60)
+	var chain: Node3D = p.combat.chain()
+	var hand: Node3D = p.hand
+	var cam: Camera3D = p.camera
+	_check("Hd1 your own arms are out with it", ViewArmsScript.new_arms)
+	# Where the fist's chain point is on screen, as the arms are drawn (at their own field of view), and where the chain's top is, as the world is.
+	var mini: Vector3 = cam.global_transform.affine_inverse() * (hand.gun_mesh().global_transform * p.combat.CHAIN_FROM)
+	var drawn := Vector2(mini.x, mini.y) / (-mini.z * tan(deg_to_rad(ViewArmsScript.VIEW_FOV) * 0.5))
+	var top: Vector3 = cam.global_transform.affine_inverse() * chain.hand_now()
+	var shown := Vector2(top.x, top.y) / (-top.z * tan(deg_to_rad(cam.fov) * 0.5))
+	_check("Hd2 the chain's top is on the fist, on screen (%.3f off)" % drawn.distance_to(shown), drawn.distance_to(shown) < 0.012)
+	var reach_at: Vector3 = hand.get("_arms").reach.targets[1].origin
+	_check("Hd3 your hand's sent to where the wrap is (%.3f)" % hand.get("_arms")._to_man(hand.get("_main").transform).origin.distance_to(reach_at), hand.get("_arms")._to_man(hand.get("_main").transform).origin.distance_to(reach_at) < 0.01)
+	var hold_at: Vector3 = cam.global_transform.affine_inverse() * hand.gun_mesh().global_position
+	# A step sideways, and stop: it goes on swinging, slowly.
+	Input.action_press("move_right")
+	await _frames(25)
+	Input.action_release("move_right")
+	var swung_at := -1
+	var last_sign := 0.0
+	var crossings: Array[int] = []
+	var most := 0.0
+
+	for i in 180:
+		await get_tree().physics_frame
+		var tilt: Vector3 = chain.tilt_now()
+		most = maxf(most, tilt.length())
+		var now_sign := signf(tilt.x)
+
+		if now_sign != 0.0 and last_sign != 0.0 and now_sign != last_sign:
+			crossings.append(i)
+
+		last_sign = now_sign if now_sign != 0.0 else last_sign
+		swung_at = i if tilt.length() > 0.02 else swung_at
+
+	var half_swing := float(crossings[1] - crossings[0]) / 60.0 if crossings.size() >= 2 else 0.0
+	_check("Hd4 it swings as something heavy does: slowly (half a swing %.2f s, %.2f out)" % [half_swing, most], most > 0.04 and half_swing > 0.4)
+	_check("Hd5 and goes on a while (%.1f s)" % (float(swung_at) / 60.0), swung_at > 90)
+	await _frames(40)
+	var hold_after: Vector3 = cam.global_transform.affine_inverse() * hand.gun_mesh().global_position
+	_check("Hd6 back at the hold (%.3f m)" % hold_after.distance_to(hold_at), hold_after.distance_to(hold_at) < 0.03)
+	# The fist goes where the poses say, and comes back.
+	Input.action_press("throw")
+	await _frames(2)
+	Input.action_release("throw")
+	await _until(func(): return p.combat.phase == CombatScript.Phase.STRIKE, 1.0)
+	var cocked: Vector3 = cam.global_transform.affine_inverse() * hand.gun_mesh().global_position
+	await _until(func(): return p.combat.phase == CombatScript.Phase.RECOVER, 1.0)
+	await _frames(1)
+	var out: Vector3 = cam.global_transform.affine_inverse() * hand.gun_mesh().global_position
+	_check("Hd7 drawn back for a lash, off to your right (%.2f, %.2f)" % [cocked.x, cocked.z], cocked.x > hold_at.x + 0.03 and cocked.z > hold_at.z + 0.08)
+	_check("Hd8 and driven out along your aim (%.2f deep, %.2f across)" % [out.z, out.x], out.z < hold_at.z - 0.02 and absf(out.x) < hold_at.x)
+	await _until_idle()
+	p.inventory.select_by_id(&"revolver")
+	await _frames(20)
+	_check("Hd9 the gun out: the arms you came with", ViewArmsScript.new_arms == arms_before_brazier)
+	p.inventory.select_by_id(&"brazier")
+	await _frames(20)
 
 
 ## How a hit lands: something you feel go in, and see where it went.

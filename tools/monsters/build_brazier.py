@@ -21,6 +21,8 @@ GLB = os.path.join(PROJECT, "assets/weapons/brazier.glb")
 PICTURES = os.environ.get("BRAZIER_PICTURES", "")
 
 SIDES = 48
+## How many links wrap the hand.
+WRAP_LINKS = 13
 ## How big it's made, once it's built: a church's would be smaller, and you have to see it hanging from your hand.
 HEAD_SCALE = 0.72
 ## How far its ring's top is above its foot, for hanging it from the origin (m).
@@ -268,7 +270,7 @@ def hammered(obj, amount=0.0014, scale=46.0):
         v.co += v.normal * noise.noise(v.co * scale) * amount
 
 
-def paint(obj, base=IRON, heat_inside=False):
+def paint(obj, base=IRON, heat_inside=False, solid=False):
     """Iron: worn on what sticks out, rust in what doesn't, soot over the holes; alpha is how hot it is, from the coals."""
     mesh = obj.data
     colours = mesh.color_attributes.new("Col", "FLOAT_COLOR", "CORNER")
@@ -293,7 +295,8 @@ def paint(obj, base=IRON, heat_inside=False):
                 tone = mix(tone, SOOT, smooth(0.0, 0.5, inward) * 0.9)
                 tone = mix(tone, SOOT, smooth(0.24, 0.42, c.z) * smooth(0.45, 0.8, fine + rough * 0.3) * 0.75)
 
-            colours.data[loop_index].color = (tone[0], tone[1], tone[2], heat)
+            # (`solid`: the viewmodel's material takes alpha for what it is, not for heat.)
+            colours.data[loop_index].color = (tone[0], tone[1], tone[2], 1.0 if solid else heat)
 
     mesh.color_attributes.active_color = colours
 
@@ -537,19 +540,32 @@ def build_link():
 
 
 def build_grip():
-    """What's in your fist: an iron bar wrapped in old leather, a ring the chain comes from at its foot. Up its length is y, as a blade's is; the fist is at the origin."""
-    bar = lathe("Bar", [(0.0, -0.075), (0.021, -0.075), (0.024, -0.068), (0.018, -0.06), (0.017, 0.06), (0.024, 0.066), (0.026, 0.08), (0.016, 0.092), (0.0, 0.095)], 12)
-    paint(bar, IRON)
-    wrap = lathe("Wrap", [(0.0, -0.058)] + [(0.0195 + (0.0035 if i % 2 else 0.0), -0.058 + i * 0.0065) for i in range(19)] + [(0.0, 0.0605)], 12)
-    paint(wrap, LEATHER)
-    ring = torus("GripRing", Vector((0.0, 0.0, -0.098)), Vector((0.0, 1.0, 0.0)), 0.021, 0.006)
-    paint(ring, IRON)
-    grip = joined("Grip", [bar, wrap, ring])
+    """What's on your hand of it: the chain wound once round the metacarpals, closed through a ring on the back of the hand, fitted to the fist in fp_arms_posing.blend. Measured in the hand bone's space (x back of the hand, y to the knuckles, z thumb side); stored so the export brings it out in those same axes."""
+    bone_to_export = Matrix(((1.0, 0.0, 0.0, 0.0), (0.0, 0.0, -1.0, 0.0), (0.0, 1.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)))
+    bm = bmesh.new()
+    cx, cz, rx, rz, y = -0.017, 0.002, 0.038, 0.053, 0.052
+    points = [Vector((cx + math.cos((i + 0.5) / WRAP_LINKS * math.tau) * rx, y + 0.006 * math.sin((i + 0.5) / WRAP_LINKS * math.tau * 2.0), cz + math.sin((i + 0.5) / WRAP_LINKS * math.tau) * rz)) for i in range(WRAP_LINKS)]
 
-    # (Blender's z up its length to the game's y: the export turns it back.)
-    for v in grip.data.vertices:
-        v.co = Vector((v.co.x, v.co.y, v.co.z))
+    for i, p in enumerate(points):
+        q = points[(i + 1) % WRAP_LINKS]
+        mid = (p + q) * 0.5
+        along = (q - p).normalized()
+        radial = Vector((mid.x - cx, 0.0, mid.z - cz)).normalized()
+        flat = Vector((0.0, 1.0, 0.0)) if i % 2 else radial
+        flat = (flat - along * flat.dot(along)).normalized()
+        out = flat.cross(along).normalized()
+        basis = Matrix(((flat.x, along.x, out.x, mid.x), (flat.y, along.y, out.y, mid.y), (flat.z, along.z, out.z, mid.z), (0.0, 0.0, 0.0, 1.0)))
+        link_bm(bm, 0.031, 0.018, 0.0042, bone_to_export @ basis, rows=10, around=5)
 
+    wrap = made("Wrap", bm)
+    ring_axis = Vector((0.25, 0.2, 0.95)).normalized()
+    ring = torus("GripRing", (bone_to_export @ Vector((0.03, 0.052, -0.014))), bone_to_export.to_3x3() @ ring_axis, 0.013, 0.0042)
+    # And what the long chain comes off, under the little finger.
+    eye = torus("GripEye", (bone_to_export @ Vector((-0.018, 0.052, -0.064))), bone_to_export.to_3x3() @ Vector((0.0, 1.0, 0.0)), 0.008, 0.0036)
+    paint(wrap, IRON, solid=True)
+    paint(ring, IRON, solid=True)
+    paint(eye, IRON, solid=True)
+    grip = joined("Grip", [wrap, ring, eye])
     closed(grip)
     return grip
 

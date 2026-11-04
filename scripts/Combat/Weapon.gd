@@ -134,7 +134,7 @@ static func bow() -> Resource:
 	return w
 
 
-## What's in your hand of it: the iron grip the chain comes from. (The chain and its head hang from this: BrazierChain.gd.)
+## What's on your hand of it: the chain wound round the fist (the hand bone's own space). What hangs from it: BrazierChain.gd.
 static func brazier_grip_mesh() -> Mesh:
 	var mesh := model_part(&"brazier", "Grip")
 
@@ -151,7 +151,7 @@ static func brazier_grip_mesh() -> Mesh:
 	look.metallic = 0.3
 	look.roughness = 0.65
 	mesh.surface_set_material(0, look)
-	# How it is held in your view (ViewPoses.gd): a stand-in, until it's posed with the user.
+	# How it is held in your view: posed with the user (BrazierPoses.gd).
 	mesh.set_meta(&"view_poses", &"brazier")
 	return mesh
 

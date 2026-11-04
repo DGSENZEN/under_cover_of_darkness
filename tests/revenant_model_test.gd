@@ -107,6 +107,8 @@ func _the_brazier_model() -> void:
 		var mesh: Mesh = (parts[part] as MeshInstance3D).mesh
 		tris += mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size() / 3
 
+	var grip_colours: PackedColorArray = (parts["Grip"] as MeshInstance3D).mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	_check("Bz6 the wrap on your hand is solid: nothing reads its colour as see-through (%.2f)" % grip_colours[0].a, grip_colours[0].a > 0.99)
 	_check("Bz5 within budget for what's closest to your eye (%d)" % tris, tris < 20000)
 	scene.free()
 

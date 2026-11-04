@@ -59,8 +59,22 @@ enum Phase {
 ## How the weapon is held and swung in your view: ViewPoses.gd, pose by pose.
 const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
 const BrazierChainScript := preload("res://scripts/Combat/BrazierChain.gd")
+const BrazierPoses := preload("res://scripts/Combat/BrazierPoses.gd")
+const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 ## Where the chain comes out of its grip (in the grip's own space), and where its head is drawn back to, for a lash and for a close hit (in your view).
-const CHAIN_FROM := Vector3(0.0, -0.098, 0.0)
+const CHAIN_FROM := Vector3(-0.018, 0.052, -0.064)
+## The chain's in the world and your hand's a miniature: it's put this much further along the line from your eye to your fist, so what hangs from it can be seen under it.
+const CHAIN_DEEPER := 2.4
+## What the censer's swing does to your hand (m per share of straight out), what the hand does anyway under the weight (m, Hz).
+const SWING_MOVES_HAND := 0.045
+const WEIGHT_BREATHES := 0.005
+const WEIGHT_BREATHES_AT := 0.14
+## The poses a blow goes through: [how far through it, the pose].
+const LASH_GOES := [[0.0, &"lash_cock"], [0.5, &"lash_drive"], [1.0, &"lash_out"]]
+const CLOSE_GOES := [[0.0, &"close_chamber"], [0.45, &"close_mid"], [1.0, &"close_through"]]
+## A lash coming back: it stays out this far through, it's yanked in by this far through, then it settles at the hold.
+const LASH_STAYS_OUT := 0.1
+const LASH_YANKED_BY := 0.42
 const LASH_DRAWN_TO := Vector3(0.7, 0.5, 0.3)
 const CLOSE_DRAWN_TO := Vector3(1.0, 0.1, -0.25)
 ## A lash pulled up short at the end of its chain goes back this fast (m/s); a lash that lands tugs you forward this hard (m/s).
@@ -923,7 +937,7 @@ func _work_chain(delta: float) -> void:
 
 
 func _chain_hand() -> Vector3:
-	return player.hand.gun_point_world(CHAIN_FROM) if player.hand != null else player.global_position
+	return player.hand.held_point_world(CHAIN_FROM, CHAIN_DEEPER) if player.hand != null else player.global_position
 
 
 ## Where a close hit's head is, at this far through it: out along the blow.
@@ -2493,6 +2507,10 @@ func _send_pose(delta: float) -> void:
 		_hand(&"set_bow_draw", [0.0, null])
 		return
 
+	if weapon.chained:
+		_send_chained_pose(delta)
+		return
+
 	var poses: Dictionary = ViewPoses.set_of(weapon.id)
 	var bow: bool = weapon.kind == WeaponScript.Kind.BOW
 	var sweeps: Dictionary = poses.get("sweeps", {})
@@ -2560,6 +2578,87 @@ func _send_pose(delta: float) -> void:
 	if hand != null and hand.has_method("set_bow_draw"):
 		var bow_up: bool = bow and arrow_count() > 0
 		hand.set_bow_draw(draw if phase == Phase.DRAWING else 0.0, WeaponScript.arrow_mesh() if bow_up else null)
+
+
+## A posed key: the hand's frame, its place put back in the world's lens (HandSlot puts it through the viewmodel's).
+static func _posed(key: StringName) -> Transform3D:
+	var pose: Dictionary = BrazierPoses.POSES[key]
+	var k := tan(deg_to_rad(ViewArmsScript.VIEW_FOV) * 0.5) / tan(deg_to_rad(75.0) * 0.5)
+	var at: Vector3 = pose["at"]
+	return Transform3D(Basis(pose["x"], pose["y"], pose["z"]), Vector3(at.x / k, at.y / k, at.z))
+
+
+## Along a list of [how far, pose], at `u`: where the hand is and which way the elbow goes.
+static func _along_poses(goes: Array, u: float) -> Array:
+	for i in goes.size() - 1:
+		var from: Array = goes[i]
+		var to: Array = goes[i + 1]
+
+		if u <= float(to[0]):
+			var t := clampf((u - float(from[0])) / maxf(float(to[0]) - float(from[0]), 0.001), 0.0, 1.0)
+			return [ViewPoses.blend(_posed(from[1]), _posed(to[1]), t), (BrazierPoses.POSES[from[1]]["elbow"] as Vector3).lerp(BrazierPoses.POSES[to[1]]["elbow"], t)]
+
+	return [_posed(goes[-1][1]), BrazierPoses.POSES[goes[-1][1]]["elbow"]]
+
+
+## The brazier's hand, from its poses: a fast gather to a held cock, driven out faster and faster, a moment out there, yanked in, and it settles under the weight. The censer's swing pulls it about.
+func _send_chained_pose(delta: float) -> void:
+	var settled := _posed(&"hold")
+	var elbow: Vector3 = BrazierPoses.POSES[&"hold"]["elbow"]
+	var target := settled
+	var exact := true
+	var holding_on: bool = _held_through and Input.is_action_pressed("throw")
+
+	match phase:
+		Phase.WINDUP, Phase.CHARGING:
+			var key: StringName = &"close_chamber" if holding_on else &"lash_cock"
+			var takes: float = weapon.charge_time if holding_on else _windup
+			target = ViewPoses.blend(_windup_from, _posed(key), _ease_out(clampf(_t / maxf(takes, 0.01), 0.0, 1.0)))
+			elbow = BrazierPoses.POSES[key]["elbow"]
+			exact = false
+		Phase.STRIKE:
+			var p := clampf(_t / maxf(_strike_time, 0.01), 0.0, 1.0)
+			var at: Array = _along_poses(CLOSE_GOES if _power else LASH_GOES, pow(p, 1.5))
+			target = at[0]
+			elbow = at[1]
+		Phase.RECOVER:
+			var r := clampf(_t / maxf(_recovery, 0.01), 0.0, 1.0)
+
+			if _power:
+				target = ViewPoses.blend(_recover_from, settled, _ease_in_out(r))
+				elbow = (BrazierPoses.POSES[&"close_through"]["elbow"] as Vector3).lerp(elbow, r)
+			elif r < LASH_STAYS_OUT:
+				target = _recover_from
+				elbow = BrazierPoses.POSES[&"lash_out"]["elbow"]
+			elif r < LASH_YANKED_BY:
+				var y := _ease_in_out((r - LASH_STAYS_OUT) / (LASH_YANKED_BY - LASH_STAYS_OUT))
+				target = ViewPoses.blend(_recover_from, _posed(&"lash_yank"), y)
+				elbow = (BrazierPoses.POSES[&"lash_out"]["elbow"] as Vector3).lerp(BrazierPoses.POSES[&"lash_yank"]["elbow"], y)
+			else:
+				var h := _ease_in_out((r - LASH_YANKED_BY) / (1.0 - LASH_YANKED_BY))
+				target = ViewPoses.blend(_posed(&"lash_yank"), settled, h)
+				elbow = (BrazierPoses.POSES[&"lash_yank"]["elbow"] as Vector3).lerp(elbow, h)
+
+			# Settling, it comes a little past, and back, under the weight.
+			target.origin += Vector3(0.0, -0.022, 0.0) * sin(PI * clampf((r - 0.7) / 0.3, 0.0, 1.0))
+		_:
+			exact = false
+
+	# The weight of it: the hand breathes under it, and is pulled about by its swing.
+	if _chain != null and _chain.visible and phase != Phase.STRIKE:
+		var swing: Vector3 = aim().basis.inverse() * (_chain.tilt_now() as Vector3)
+		target.origin += swing * SWING_MOVES_HAND + Vector3.UP * sin(_game_time * TAU * WEIGHT_BREATHES_AT) * WEIGHT_BREATHES
+		target.basis = Basis(Vector3.BACK, -swing.x * 0.22) * target.basis
+
+	if not exact:
+		var follow := 1.0 - exp(-16.0 * delta)
+		target = ViewPoses.blend(_shown, target, follow)
+
+	_shown = target
+	_hand(&"set_weapon_frame", [target])
+	_hand(&"set_brace", [0.0])
+	_hand(&"set_bow_draw", [0.0, null])
+	_hand(&"set_brazier_elbow", [elbow])
 
 
 ## Where the weapon settles when nothing is happening: its rest, carried

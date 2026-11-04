@@ -167,6 +167,24 @@ func _learn_fist() -> void:
 		_poses[&"Fist"] = fist
 
 
+## A pose of one's own: `from`, with these bones' turns from their rest in place of its own.
+func learn_pose(pose: StringName, from: StringName, turns: Dictionary) -> void:
+	var skeleton := get_skeleton()
+
+	if skeleton == null or not _poses.has(from):
+		return
+
+	var made: Dictionary = (_poses[from] as Dictionary).duplicate()
+
+	for bone in turns:
+		var index := skeleton.find_bone(bone)
+
+		if index >= 0:
+			made[bone] = skeleton.get_bone_rest(index).basis.get_rotation_quaternion() * (turns[bone] as Quaternion)
+
+	_poses[pose] = made
+
+
 ## Each finger bone's rotation in a one-frame pose clip.
 func _pose_rotations(skeleton: Skeleton3D, clip: Animation) -> Dictionary:
 	var out := {}

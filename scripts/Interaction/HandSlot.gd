@@ -16,6 +16,7 @@ const ViewPosesScript := preload("res://scripts/Combat/ViewPoses.gd")
 const HandContactsScript := preload("res://scripts/Interaction/HandContacts.gd")
 const HeldPageScript := preload("res://scripts/Interaction/HeldPage.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
+const BrazierPoses := preload("res://scripts/Combat/BrazierPoses.gd")
 const MagicFxScript := preload("res://scripts/Visual/MagicFx.gd")
 const LibraryGlyphsScript := preload("res://scripts/Visual/Library/LibraryGlyphs.gd")
 
@@ -192,6 +193,8 @@ var player: CharacterBody3D
 var _main: Node3D
 var _main_mesh: MeshInstance3D
 var _main_item: Mesh = null
+var _brazier_elbow := Vector3(0.3, -1.0, 0.0)
+var _arms_swapped := false
 var _pending_item: Mesh = null
 var _switching := false
 var _main_lower := 1.0
@@ -611,12 +614,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	):
 		# Compare the Prosecutor's own arms with the old (until they are
 		# signed off and replace them).
-		_arms.use_new_arms(not ViewArmsScript.new_arms)
-		_blood_overlay.set_shader_parameter("fov_override", ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
-
-		if _trail != null and _trail.has_method("set_view_fov"):
-			_trail.set_view_fov(ViewArmsScript.VIEW_FOV if ViewArmsScript.new_arms else 0.0)
-
+		_use_arms(not ViewArmsScript.new_arms)
 		get_viewport().set_input_as_handled()
 
 
@@ -716,6 +714,25 @@ func gate_world_position() -> Vector3:
 ## is grown back to full size.
 func gun_point_world(local: Vector3) -> Vector3:
 	return _to_world(_main_mesh.global_transform * local)
+
+
+## A point of what's in your hand (in its own space), put in the world so it stays on it on screen, though the hands are drawn at their own field of view: on the same line from your eye, `deeper` times as far.
+func held_point_world(local: Vector3, deeper := 1.0) -> Vector3:
+	var camera := get_parent_node_3d()
+
+	if camera == null:
+		return _main_mesh.global_transform * local
+
+	var in_view := camera.global_transform.affine_inverse() * (_main_mesh.global_transform * local)
+	var seen: Camera3D = player.get("camera") if player != null else null
+	var view: float = ViewArmsScript.view_fov_for(seen.fov) if seen != null else 0.0
+	var k := tan(deg_to_rad(view) * 0.5) / tan(deg_to_rad(seen.fov) * 0.5) if seen != null else 1.0
+	return camera.global_transform * (Vector3(in_view.x / k, in_view.y / k, in_view.z) / ViewArmsScript.SCALE * deeper)
+
+
+## The way the brazier's pose says the elbow goes.
+func set_brazier_elbow(way: Vector3) -> void:
+	_brazier_elbow = way
 
 
 ## The gun's mesh in your view (for what hangs off it: the muzzle flash).
@@ -1408,6 +1425,7 @@ func _update_main(delta: float) -> void:
 
 
 func _set_main_item(mesh: Mesh) -> void:
+	_arms_for(mesh.get_meta(&"view_poses", &"") if mesh != null else &"")
 	_main_item = mesh
 	_main_mesh.mesh = mesh
 	_apply_materials(_main_mesh, mesh)
@@ -2156,12 +2174,13 @@ func _place_hands() -> void:
 	# points; the arm says the rest.
 	if _view_id == &"revolver":
 		frame = frame.interpolate_with(_natural_gun(frame), 1.0 - _gun_aim)
-	elif _view_id != &"" and _view_id != &"bow":
+	elif _view_id != &"" and _view_id != &"bow" and _view_id != &"brazier":
 		frame = _natural(frame)
 
 	# (Drawn at the viewmodel's field of view: aimed where the world's camera
 	# would show it, so it keeps its place on screen and is drawn larger.)
-	_main.transform = Transform3D(frame.basis, _for_view_fov(frame.origin + VIEW_SHIFT_MAIN * _view_shift()) * ViewArmsScript.SCALE)
+	# (The brazier's were posed through this very lens: nothing to shift.)
+	_main.transform = Transform3D(frame.basis, _for_view_fov(frame.origin + VIEW_SHIFT_MAIN * (0.0 if _view_id == &"brazier" else _view_shift())) * ViewArmsScript.SCALE)
 
 	# The edge's smear, recorded in this node's space so it rides the view.
 	if _trail_on and _main.visible and _has_blade:
@@ -2481,6 +2500,38 @@ func _view_shift() -> float:
 	return 1.0 if ViewArmsScript.new_arms else 0.0
 
 
+## The fist round the chain, its thumb clamped over: taught to these arms the first time they need it.
+func _chain_grip() -> StringName:
+	if _arms == null or _arms.reach == null:
+		return &"Fist"
+
+	if not _arms.has_pose(&"ChainGrip"):
+		_arms.reach.learn_pose(&"ChainGrip", &"Fist", BrazierPoses.THUMB)
+
+	return &"ChainGrip" if _arms.has_pose(&"ChainGrip") else &"Fist"
+
+
+func _use_arms(new: bool) -> void:
+	_arms.use_new_arms(new)
+	_blood_overlay.set_shader_parameter("fov_override", ViewArmsScript.VIEW_FOV if new else 0.0)
+
+	if _trail != null and _trail.has_method("set_view_fov"):
+		_trail.set_view_fov(ViewArmsScript.VIEW_FOV if new else 0.0)
+
+
+## The brazier's posed on the Prosecutor's own arms: they're the ones out with it, whichever you came with.
+func _arms_for(view_id: StringName) -> void:
+	if _arms == null:
+		return
+
+	if view_id == &"brazier" and not ViewArmsScript.new_arms:
+		_arms_swapped = true
+		_use_arms(true)
+	elif view_id != &"brazier" and _arms_swapped:
+		_arms_swapped = false
+		_use_arms(false)
+
+
 ## `pose` if these arms have it, else a fist (the old arms).
 func _pose_if_had(pose: StringName) -> StringName:
 	return pose if _arms != null and _arms.has_pose(pose) else &"Fist"
@@ -2519,6 +2570,12 @@ func _place_arms() -> void:
 			if _nock_t < 1.0:
 				targets[1] = _fetching(targets[1])
 				curls[1] = 0.9
+		elif _view_id == &"brazier":
+			# The frame is the hand bone's own: the wrap's fitted to it.
+			targets[1] = _held_by(held, Transform3D.IDENTITY)
+			weights[1] = 1.0
+			curls[1] = 1.0
+			poses[1] = _chain_grip()
 		else:
 			targets[1] = _held_by(held, GUN_GRIP if _view_id == &"revolver" else HAND_GRIP)
 			weights[1] = 1.0
@@ -2706,6 +2763,10 @@ func _place_arms() -> void:
 			var resting := ViewArmsScript.new_arms and poses[side] == &"Relaxed"
 			# (Hanging or resting, the elbow drops: the forearm rises from below.)
 			_arms.reach.elbow_hints[side] = HANG_ELBOW[side] if hanging or resting else ArmReachScript.ELBOW_HINT[side]
+
+			# (Where it was posed.)
+			if side == 1 and _view_id == &"brazier" and weights[1] > 0.5:
+				_arms.reach.elbow_hints[1] = _brazier_elbow
 
 		if _arms.reach != null:
 			# Held hands in view are the true-size rig's; nothing is brought in
