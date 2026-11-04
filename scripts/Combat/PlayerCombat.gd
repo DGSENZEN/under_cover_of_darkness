@@ -82,13 +82,18 @@ const CLOSE_PULLS := 1.0
 const TUG_RATE := 2.2
 const TUG_DAMP := 0.5
 ## The way a lash's head is swung up and round in the wind-up, where you can see it, in your view: up out of its hang, over your right, and back past your shoulder.
-const LASH_WHIRLS := [Vector3(0.45, -0.75, -1.15), Vector3(1.05, -0.3, -1.25), Vector3(1.3, 0.45, -1.05), Vector3(0.95, 1.0, -0.55), Vector3(0.75, 0.8, 0.25)]
-const CLOSE_DRAWN_TO := Vector3(1.0, 0.1, -0.25)
+const LASH_WHIRLS := [Vector3(0.35, -0.75, -1.2), Vector3(1.15, -0.4, -1.4), Vector3(1.4, 0.4, -1.5), Vector3(0.8, 0.95, -1.5), Vector3(0.05, 1.45, -0.9), Vector3(-0.1, 1.3, 0.4)]
+const CLOSE_DRAWN_TO := Vector3(1.05, 0.8, -0.35)
+## From how high to how low a close hit's head comes down through it, from your eye (m).
+const CLOSE_HEAD_FROM := 0.7
+const CLOSE_HEAD_TO := -0.8
+## A lash pulled up short with nothing on it: it goes down, hard (m/s).
+const LASH_FALLS_SHORT := 4.2
+## How far the chain's pull moves your arm (m/s^2 for all of it).
+const CHAIN_PULLS_ARM := 6.5
 ## A lash pulled up short at the end of its chain goes back this fast (m/s); a lash that lands tugs you forward this hard (m/s).
 const LASH_SNAPS_BACK := 3.2
 const LASH_TUGS := 1.3
-## How low a close hit's head goes through, from your eye.
-const CLOSE_HEAD_LOW := 0.3
 
 ## Each kind of blow plays its own way (x the weapon's numbers): a thrust is
 ## quick, long and narrow and stops in the first man it meets; a side cut is
@@ -636,7 +641,11 @@ func _begin_attack(chained: bool) -> void:
 	_serial += 1
 	_enter(Phase.WINDUP)
 	# The head goes the other way first, then leads into the cut (on_swing).
-	player.juice.on_windup(_side_of(_direction), _direction, _riposte)
+	if weapon.chained:
+		player.juice.on_windup(-0.6, &"overhead", true)
+		Sfx.play_flat(player, &"rattle_chain", 0.0, 0.9)
+	else:
+		player.juice.on_windup(_side_of(_direction), _direction, _riposte)
 
 
 ## Your weight as a blow begins: going away from him (backing off faster than
@@ -717,7 +726,7 @@ func _enter(new_phase: int) -> void:
 			# The chain comes to its end, whatever it met: your fist's pulled on.
 			if not _power:
 				_tug_going += Vector3(0.0, -0.25, -1.0) * (LASH_PULLS_SHORT if short else LASH_PULLS)
-			_chain.bring_back(_recovery, (_lash_aim.basis.z * LASH_SNAPS_BACK + Vector3.UP * 0.6) if short else Vector3.ZERO)
+			_chain.bring_back(_recovery, (_lash_aim.basis.z * LASH_SNAPS_BACK + Vector3.DOWN * LASH_FALLS_SHORT) if short else Vector3.ZERO)
 			Sfx.play_flat(player, &"rattle_chain", -3.0, 0.8)
 
 			if short:
@@ -961,7 +970,8 @@ func _work_chain(delta: float) -> void:
 			if _held_through and Input.is_action_pressed("throw"):
 				_chain.hold_to(aim() * CLOSE_DRAWN_TO)
 			else:
-				var round_it := clampf(_t / maxf(_windup, 0.01), 0.0, 1.0) * (LASH_WHIRLS.size() - 1)
+				# (Heavy to start, and gathering.)
+				var round_it := pow(clampf(_t / maxf(_windup, 0.01), 0.0, 1.0), 1.25) * (LASH_WHIRLS.size() - 1)
 				var from_i := mini(int(round_it), LASH_WHIRLS.size() - 2)
 				_chain.hold_to(aim() * (LASH_WHIRLS[from_i] as Vector3).lerp(LASH_WHIRLS[from_i + 1], round_it - from_i))
 		Phase.STRIKE:
@@ -969,6 +979,8 @@ func _work_chain(delta: float) -> void:
 				_chain.hold_to(_close_head_at(clampf(_t / maxf(_strike_time, 0.01), 0.0, 1.0)))
 
 	_chain.work(delta, _chain_hand())
+	# Going round on the end of it, it's pulling your arm.
+	_tug_going += aim().basis.inverse() * (_chain.pull_now() as Vector3) * CHAIN_PULLS_ARM * delta
 
 
 func _chain_hand() -> Vector3:
@@ -983,7 +995,7 @@ func _chain_hand_now() -> Vector3:
 func _close_head_at(p: float) -> Vector3:
 	var at := aim()
 	var half := deg_to_rad(weapon.arc_degrees * 0.5)
-	return at.origin + (-at.basis.z).rotated(at.basis.y, lerpf(-half, half, p)) * weapon.power_reach * 0.85 - at.basis.y * CLOSE_HEAD_LOW
+	return at.origin + (-at.basis.z).rotated(at.basis.y, lerpf(-half, half, p)) * weapon.power_reach * 0.85 + at.basis.y * lerpf(CLOSE_HEAD_FROM, CLOSE_HEAD_TO, p)
 
 
 ## Where a lash leaving now would land.
@@ -1052,7 +1064,12 @@ func _start_strike(power: bool) -> void:
 		Sfx.play_flat(player, &"rattle_chain", 3.0, 1.15)
 	_spend((cost_power if power else cost_quick) * float(_style()["cost"]))
 
-	player.juice.on_swing(_side_of(_direction), power, _direction)
+	# (A chain's thrown with the whole of you: over and down, and across for the close hit.)
+	if weapon.chained:
+		player.juice.on_swing(1.0 if power else 0.3, true, &"overhead")
+		Sfx.play(player, &"whoosh_heavy", aim().origin, -1.0 if power else -3.0, 0.72)
+	else:
+		player.juice.on_swing(_side_of(_direction), power, _direction)
 
 	# A power blow is put into with the whole body, and heard.
 	if power and randf() < 0.45:
@@ -1066,7 +1083,7 @@ func _start_strike(power: bool) -> void:
 	swung.emit(power, _direction)
 
 	# A heavy blow carries you into it: a step forward. A running one, the run.
-	if (power or _running) and player.is_on_floor():
+	if (power or _running or weapon.chained) and player.is_on_floor():
 		var forward := -player.global_basis.z
 		forward.y = 0.0
 

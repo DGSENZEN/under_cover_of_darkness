@@ -170,8 +170,8 @@ static func brazier() -> Resource:
 	w.arc_degrees = 70.0
 	w.windup = 0.45
 	# (What the head takes to fly there.)
-	w.strike_time = 0.22
-	w.recovery = 0.6
+	w.strike_time = 0.26
+	w.recovery = 0.72
 	w.can_block = false
 	w.chained = true
 	w.swing_db = 44.0

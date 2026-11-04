@@ -11,6 +11,7 @@ const LUMP := preload("res://scripts/Combat/brazier_lump.gdshader")
 const BRUSH := preload("res://textures/painted/eclipse/brush.png")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
+const Sfx := preload("res://scripts/Audio/Sfx.gd")
 
 ## The points it's simulated at, and how long the chain hangs at rest (m). More is paid out as it flies.
 const POINTS := 14
@@ -27,7 +28,7 @@ const HOLDS := 14
 ## The head's share of a correction, against a link's 1: it is by far the heaviest thing here.
 const HEAD_GIVES := 0.08
 ## How fast it follows where it's held to, at most (m/s), and its share of the way there a tick: quick, and it has weight.
-const HELD_SPEED := 17.0
+const HELD_SPEED := 25.0
 ## The whip that runs along it when it's flung and when it lands: how far (m) at each, how fast it goes, and how many waves there are along it.
 const WHIP_FLUNG := 0.2
 const WHIP_LANDS := 0.12
@@ -38,11 +39,19 @@ const WHIP_WAVES := 2.6
 const RIDES := 0.11
 const SCRAPES := 0.8
 ## A thrown head gets up to speed: 1 is even, the whole way.
-const THROWN_EASE := 1.12
+const THROWN_EASE := 1.08
+## How far over the line it comes, for each m it's thrown: over the top, and down on what you aimed at.
+const THROWN_OVER := 0.2
+const THROWN_OVER_MOST := 1.1
+## Coming down on the floor: how hard for it to count (m/s), and how long before it can again (s).
+const THUDS_AT := 2.0
+const THUD_WAITS := 0.35
+## How hard its speed pulls on your arm, going round on the chain: a share per (m/s)^2 per m.
+const PULLS_PER := 0.012
 ## What the head keeps of its speed a tick while it's hauled: hand over hand, it doesn't fly on past your fist.
 const HAULED_KEEPS := 0.72
 ## Of a haul back in, how much is the drop before the pull.
-const DROPS_FOR := 0.16
+const DROPS_FOR := 0.42
 ## How long its coals are breathing over, how hot fanned by speed (per m/s), and what its light does with that.
 const COAL_LIGHT := 1.1
 const COAL_LIGHT_FANNED := 2.2
@@ -76,6 +85,8 @@ enum Mode { HANG, HELD, THROWN, DROPPING, HAULED }
 
 ## How many times it has thrown sparks.
 var bursts := 0
+## How many times it's come down on the floor.
+var floor_hits := 0
 
 var _at := PackedVector3Array()
 var _was := PackedVector3Array()
@@ -102,6 +113,8 @@ var _tilt := Vector3.ZERO
 var _tilt_going := Vector3.ZERO
 var _hand_was := Vector3.ZERO
 var _hand_speed := Vector3.ZERO
+var _thud_wait := 0.0
+var _pull := Vector3.ZERO
 var _whip := 0.0
 var _whip_clock := 0.0
 var _bite_left := 0.0
@@ -346,6 +359,11 @@ func busy() -> bool:
 	return _mode != Mode.HANG or _long > HANGS * 1.05
 
 
+## What the chain's pulling your hand with now, in the world (a share of its most).
+func pull_now() -> Vector3:
+	return _pull
+
+
 ## How far it's whipping along its length now (m).
 func whip_now() -> float:
 	return _whip
@@ -574,6 +592,9 @@ func work(delta: float, hand: Vector3) -> void:
 	_fans = move_toward(_fans, clampf(_head_speed * FANS_PER, 0.0, 1.0), delta * (6.0 if _head_speed * FANS_PER > _fans else 1.1))
 	_embers.emitting = _fans > 0.35
 	_work_swing(delta, hand)
+	_thud_wait = maxf(_thud_wait - delta, 0.0)
+	var to_head := _at[last] - hand
+	_pull = to_head.normalized() * clampf(_head_speed * _head_speed / maxf(_long, 0.5) * PULLS_PER, 0.0, 1.0) if _mode != Mode.THROWN and to_head.length() > 0.01 else Vector3.ZERO
 	_whip = move_toward(_whip, 0.0, delta * WHIP_GOES)
 	_whip_clock += delta
 	_light_jump = move_toward(_light_jump, 0.0, delta * LIGHT_SETTLES)
@@ -642,7 +663,9 @@ func _carry_head(delta: float) -> bool:
 		Mode.THROWN:
 			_going += delta
 			var u := clampf(_going / _takes, 0.0, 1.0)
-			var now := _thrown_from.lerp(_thrown_to, pow(u, THROWN_EASE))
+			var eased := pow(u, THROWN_EASE)
+			var over := minf(_thrown_from.distance_to(_thrown_to) * THROWN_OVER, THROWN_OVER_MOST)
+			var now := _thrown_from.lerp(_thrown_to, eased) + Vector3.UP * sin(eased * PI) * over
 			_at[last] = now
 			return true
 		Mode.DROPPING:
@@ -679,6 +702,17 @@ func _keep_off_floor() -> void:
 		var rides := RIDES if i == POINTS - 1 else 0.012
 
 		if _at[i].y < _floor_at + rides:
+			# (The head coming down: you know about it.)
+			if i == POINTS - 1 and _bite_left <= 0.0 and _thud_wait <= 0.0 and (_was[i].y - _at[i].y) * 60.0 > THUDS_AT:
+				_thud_wait = THUD_WAITS
+				floor_hits += 1
+				var on := Vector3(_at[i].x, _floor_at, _at[i].z)
+				Fx.sparks(self, on, Vector3.UP, 0.8, true)
+				Sfx.play(self, &"thud", on, 0.0, 0.7)
+				Sfx.play(self, &"coal_pop", on, -3.0, 0.8)
+				_throw_coals(on, Vector3.UP)
+				_light_jump = maxf(_light_jump, LIGHT_JUMPS * 0.6)
+
 			_at[i].y = _floor_at + rides
 			var slid := _at[i] - _was[i]
 			_was[i] = _at[i] - Vector3(slid.x, 0.0, slid.z) * SCRAPES

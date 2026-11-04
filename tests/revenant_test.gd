@@ -1053,6 +1053,7 @@ func _the_brazier() -> void:
 	await _the_chain()
 	await _how_it_lands()
 	await _how_it_is_held()
+	await _how_it_swings()
 	p.loadout.unpack_item(&"brazier")
 	await _frames(2)
 	var kept: Node3D = p.combat.chain()
@@ -1161,6 +1162,76 @@ func _how_it_is_held() -> void:
 	_check("Hd9 the gun out: the arms you came with", ViewArmsScript.new_arms == arms_before_brazier)
 	p.inventory.select_by_id(&"brazier")
 	await _frames(20)
+
+
+## How the swings move: over the top and down, its weight on your arm and your view going with it, and it isn't finished when it's hit.
+func _how_it_swings() -> void:
+	await _clean()
+	p.combat.adrenaline = 0.0
+	p.combat.stamina = p.combat.stamina_max
+	await _frames(60)
+	var chain: Node3D = p.combat.chain()
+	var cam: Camera3D = p.camera
+	var seen_ticks := 0
+	var tug_winding := 0.0
+	var view_back := 0.0
+	var view_forward := 0.0
+	var floor_was: int = chain.floor_hits
+	Input.action_press("throw")
+	await _frames(2)
+	Input.action_release("throw")
+
+	while p.combat.phase != CombatScript.Phase.STRIKE:
+		await get_tree().physics_frame
+		var head_view: Vector3 = cam.global_transform.affine_inverse() * chain.head_at()
+		var tall: float = tan(deg_to_rad(cam.fov) * 0.5)
+
+		if head_view.z < -0.3 and absf(head_view.y) < -head_view.z * tall and absf(head_view.x) < -head_view.z * tall * 1.78:
+			seen_ticks += 1
+
+		tug_winding = maxf(tug_winding, p.combat.chain_tug_now().length())
+		view_back = maxf(view_back, p.juice._pitch)
+
+	var from_at: Vector3 = chain.head_at()
+	var flight: Array[Vector3] = []
+
+	while p.combat.phase == CombatScript.Phase.STRIKE:
+		await get_tree().physics_frame
+		flight.append(chain.head_at())
+		view_forward = minf(view_forward, p.juice._pitch)
+
+	var to_at: Vector3 = chain.head_at()
+	var over_most := 0.0
+
+	for i in flight.size():
+		var u := float(i) / maxf(flight.size() - 1, 1.0)
+		over_most = maxf(over_most, flight[i].y - lerpf(from_at.y, to_at.y, u))
+
+	for i in 24:
+		await get_tree().physics_frame
+		view_forward = minf(view_forward, p.juice._pitch)
+
+	_check("Sw1 the censer's seen on its way round (%d ticks of the wind-up)" % seen_ticks, seen_ticks >= 10)
+	_check("Sw2 swinging it round pulls on your arm, before anything's hit (%.3f)" % tug_winding, tug_winding > 0.008)
+	_check("Sw3 your view draws back with it, and goes with the throw (%.3f, %.3f)" % [view_back, view_forward], view_back > 0.01 and view_forward < -0.01)
+	_check("Sw4 a lash comes over the top, not along a line (%.2f m above it)" % over_most, over_most > 0.45)
+	await _until_idle()
+	_check("Sw5 at nothing, it comes down on the floor, and you know it (%d)" % (chain.floor_hits - floor_was), chain.floor_hits > floor_was)
+	await _frames(40)
+	p.combat.stamina = p.combat.stamina_max
+	var eye_y: float = cam.global_position.y
+	Input.action_press("throw")
+	await _until(func(): return p.combat.phase == CombatScript.Phase.STRIKE, 1.0)
+	Input.action_release("throw")
+	var close_from: float = chain.head_at().y - eye_y
+	await _until(func(): return p.combat.phase == CombatScript.Phase.RECOVER, 1.0)
+	var close_to: float = chain.head_at().y - eye_y
+	var close_at: Vector3 = chain.head_at()
+	await _frames(10)
+	_check("Sw6 a close hit comes down through it (%.2f to %.2f from your eye)" % [close_from, close_to], close_from > 0.15 and close_to < -0.25)
+	# (In the world: your view's turning with it.)
+	_check("Sw7 and carries on past under its own weight (%.2f m on)" % close_at.distance_to(chain.head_at()), close_at.distance_to(chain.head_at()) > 0.6)
+	await _until_idle()
 
 
 ## How a hit lands: something you feel go in, and see where it went.
