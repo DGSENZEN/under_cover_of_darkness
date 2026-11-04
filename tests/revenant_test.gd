@@ -76,6 +76,9 @@ func _ready() -> void:
 	if only == "" or only == "splash":
 		await _it_splashes()
 
+	if only == "" or only == "review":
+		await _what_review_found()
+
 	print("revenant_test: %s" % ("FAILED %d" % failed if failed > 0 else "passed"))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -295,13 +298,15 @@ func _its_brain() -> void:
 	ramp.queue_free()
 	await _clean()
 	Props.block(self, Vector3(-40, 2, -10), Vector3(10, 4, 1))
-	var runner := _revenant(Vector3(-40, 0, -16))
+	var runner := _revenant(Vector3(-40, 0, -14))
 	p.teleport(Transform3D(Basis.IDENTITY, Vector3(-40, 1.05, 2)))
 	await _frames(20)
-	runner._surge_in = 0.0
-	await _until(func(): return runner.state == STATE.SURGE, 1.5)
+	runner._attack_in = 99.0
+	# (Told to, with the wall in its way: it wouldn't choose to, not seeing you.)
+	runner._enter(STATE.SURGE_TELL)
+	var ever_surged: bool = await _until(func(): return runner.state == STATE.SURGE, 1.5)
 	await _frames(70)
-	_check("M5 a surge stops at a wall (%.2f)" % runner.global_position.z, runner.global_position.z < -10.4)
+	_check("M5 a surge stops at a wall, and it did surge (%s, %.2f)" % [ever_surged, runner.global_position.z], ever_surged and runner.global_position.z < -10.4 and runner.global_position.z > -13.0)
 	await _clean()
 
 
@@ -1186,6 +1191,89 @@ func _blows_to_kill(damage: float, every: float) -> int:
 
 	await _clean()
 	return blows
+
+
+## What the branch's review found.
+func _what_review_found() -> void:
+	await _new_player()
+	await _frames(30)
+
+	# Nothing of it left to hit, out of play.
+	var sleeper := await _held_still(Vector3(30, 0, -30))
+	await _frames(2)
+	var chest_at: Vector3 = sleeper.global_transform * sleeper.FORE_AT
+	var hit_through := func() -> bool:
+		var from := chest_at + Vector3(0, 0, 3)
+		var query := PhysicsRayQueryParameters3D.create(from, chest_at + Vector3(0, 0, -3), 2)
+		return not get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+	var solid_awake: bool = hit_through.call()
+	sleeper.sleep()
+	await _frames(2)
+	var solid_asleep: bool = hit_through.call()
+	sleeper.wake()
+	await _frames(2)
+	_check("Rv1 asleep, nothing of it to hit; awake, all of it (%s, %s, %s)" % [solid_awake, solid_asleep, hit_through.call()], solid_awake and not solid_asleep and hit_through.call())
+	sleeper.queue_free()
+	await _clean()
+
+	# Held by one that goes down: it's let go of you.
+	p.invulnerable = false
+	var holder := await _grasper(Vector3(0, 0, -2.5))
+	await _grasp_lands(holder)
+	var was_held: bool = p.touch.holding()
+
+	while not holder.is_down():
+		holder.take_hit(55.0, p, &"bullet", holder.global_position, Vector3.FORWARD)
+
+	await _frames(2)
+	_check("Rv2 down, it isn't holding you (%s, then %s)" % [was_held, p.touch.holding()], was_held and not p.touch.holding() and p.touch.on_you())
+	p.invulnerable = true
+	await _clean()
+
+	# With the brazier: walls stop it, and it's only the monsters the coals are for.
+	await _new_player()
+	await _frames(30)
+	p.loadout.pack_item(&"brazier")
+	p.inventory.select_by_id(&"brazier")
+	await _frames(70)
+	p.combat.adrenaline = 0.0
+	p.teleport(Transform3D(Basis.IDENTITY, HOME + Vector3(60, 0, 0)))
+	await _frames(5)
+	var eye: Vector3 = p.combat.aim().origin
+	var wall := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	shape.shape = BoxShape3D.new()
+	(shape.shape as BoxShape3D).size = Vector3(8, 6, 0.3)
+	wall.add_child(shape)
+	wall.position = eye + Vector3(0, 0, -1.3)
+	add_child(wall)
+	var behind := await _held_still(Vector3(eye.x, 0, eye.z - 2.6))
+	behind.set_physics_process(false)
+	await _frames(3)
+	var behind_had: float = behind.health
+	await _close_hit()
+	_check("Rv3 a close hit doesn't reach through a wall (%.0f)" % (behind_had - behind.health), behind_had == behind.health)
+	await _frames(30)
+	await _lash()
+	_check("Rv4 nor does what splashes off it (%.0f)" % (behind_had - behind.health), behind_had == behind.health)
+	behind.queue_free()
+	wall.queue_free()
+	await _frames(40)
+	p.combat.adrenaline = 0.0
+	var struck := _struck_at(4.0)
+	var man := Struck.new()
+	man.collision_layer = 2
+	var man_shape := CollisionShape3D.new()
+	man_shape.shape = BoxShape3D.new()
+	man.add_child(man_shape)
+	man.position = p.combat.aim().origin + Vector3(1.4, -0.5, -4.0)
+	add_child(man)
+	await _frames(3)
+	await _lash()
+	_check("Rv5 the coals are for the monsters: a man by it isn't drawn in by a blow he wasn't aimed at (%d)" % man.hits, struck.hits == 1 and man.hits == 0)
+	struck.queue_free()
+	man.queue_free()
+	await _frames(3)
 
 
 func _hand_at(at: Vector3) -> CharacterBody3D:

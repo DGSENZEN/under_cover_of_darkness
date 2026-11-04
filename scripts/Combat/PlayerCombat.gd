@@ -952,6 +952,14 @@ func _work_chain(delta: float) -> void:
 			if player.is_dead:
 				_chain_falling_at += Vector3.DOWN * _chain_falls * delta
 				_chain_falls += 9.8 * delta
+				var under := PhysicsRayQueryParameters3D.create(_chain_falling_at + Vector3.UP * 3.0, _chain_falling_at + Vector3.DOWN * 3.0, 1, [player.get_rid()])
+				var floor_is := player.get_world_3d().direct_space_state.intersect_ray(under)
+
+				# (To the floor, and no further.)
+				if not floor_is.is_empty() and _chain_falling_at.y < (floor_is["position"] as Vector3).y + 0.05:
+					_chain_falling_at.y = (floor_is["position"] as Vector3).y + 0.05
+					_chain_falls = 0.0
+
 				_chain.work(delta, _chain_falling_at)
 			else:
 				_chain.put_away()
@@ -1024,7 +1032,8 @@ func _catch_in_arc(head: Vector3) -> void:
 		var who: Object = RagdollScript.owner_of(found.get("collider"))
 		who = who if who != null else found.get("collider")
 
-		if who != null and who.has_method("take_hit") and not _hit_this_swing.has(who) and _sees(head, (who as Node3D).global_position + Vector3.UP * 0.4):
+		# (Its head's where the blow says, not where a wall would let it get: it's you that has to be able to reach them.)
+		if who != null and who.has_method("take_hit") and not _hit_this_swing.has(who) and _sees(aim().origin, (who as Node3D).global_position + Vector3.UP * 0.4):
 			_hit_this_swing[who] = true
 			_men_hit_this_swing += 1
 			# (Flat: from your eye down to their feet would drive them into the floor, not back.)
@@ -1039,8 +1048,12 @@ func _sees(from: Vector3, to: Vector3) -> bool:
 	return player.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 
-## The coals going everywhere: all that's near where it landed gets some, less further off, and is thrown back; what's on you is knocked off; not through walls, and not what it struck. To the monsters it's fire; to anyone else a blow.
+## The coals going everywhere: all the monsters near where it landed get some, less further off, and are thrown back; what's on you is knocked off; not through walls, and not what it struck. (A man isn't drawn in by a blow he wasn't aimed at.)
 func _splash(at: Vector3, hurts: float, struck_already: Object = null) -> void:
+	# (Your death's your death: what's dropped from your hand doesn't go on fighting for you.)
+	if player.is_dead:
+		return
+
 	var sphere := SphereShape3D.new()
 	sphere.radius = SPLASH_REACH
 	var query := PhysicsShapeQueryParameters3D.new()
@@ -1055,7 +1068,7 @@ func _splash(at: Vector3, hurts: float, struck_already: Object = null) -> void:
 		var who: Object = RagdollScript.owner_of(found.get("collider"))
 		who = who if who != null else found.get("collider")
 
-		if who == null or who == struck_already or done.has(who) or _hit_this_swing.has(who) or not who.has_method("take_hit"):
+		if who == null or who == struck_already or done.has(who) or _hit_this_swing.has(who) or not who.has_method("take_hit") or not (who as Node).is_in_group(&"monsters"):
 			continue
 
 		done[who] = true
@@ -1069,7 +1082,7 @@ func _splash(at: Vector3, hurts: float, struck_already: Object = null) -> void:
 		way.y = 0.0
 		way = way.normalized() if way.length() > 0.01 else -player.global_basis.z
 		var share := 1.0 - 0.5 * clampf(at.distance_to(node.global_position) / SPLASH_REACH, 0.0, 1.0)
-		node.take_hit(hurts * share, player, &"splash" if node.is_in_group(&"monsters") else &"quick", middle, way)
+		node.take_hit(hurts * share, player, &"splash", middle, way)
 
 		if is_instance_valid(node) and node.has_method("is_on_you") and node.is_on_you():
 			node.throw_off(at)
@@ -1429,7 +1442,8 @@ func _sweep(p: float) -> void:
 		_chain.burst(point, normal)
 		_chain.bite(null, point, normal)
 		Sfx.play(player, &"coal_pop", point, 0.0, 0.8)
-		_splash(point, SPLASH_CLOSE if _power else SPLASH_LASH, collider)
+		# (From this side of it.)
+		_splash(point + normal * 0.15, SPLASH_CLOSE if _power else SPLASH_LASH, collider)
 
 	# (A lash has nothing to stop in your hand: it comes back as it would.)
 	if lash:

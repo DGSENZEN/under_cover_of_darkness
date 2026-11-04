@@ -140,8 +140,34 @@ func _ready() -> void:
 		lo.rounds.has(&"copal") and lo.item_counts[&"egg"] == 1 and lo.owned[&"rounds"] > 0 and lo.locked and g.packed_rounds.has(&"copal"))
 
 	await _brazier_place()
+	await _fire_through_a_load()
 	print("==== RESULTS ====")
 	get_tree().quit(1 if failed > 0 else 0)
+
+
+## Fire is only ever for the shot barrel, whatever's been saved and loaded; and there's always something for the cylinder.
+func _fire_through_a_load() -> void:
+	var lo: Node = p.loadout
+	var g: Node = p.revolver
+	lo.unlock()
+
+	for id in lo.rounds.duplicate():
+		if id != &"lead":
+			lo.unpack_round(id)
+
+	if not lo.rounds.has(&"lead"):
+		lo.pack_round(&"lead")
+
+	lo.pack_round(&"fire")
+	lo.restock()
+	lo.load_state(lo.save_state())
+	_check("F7f after a load, fire isn't one of the cylinder's rounds (%s)" % str(g.packed_rounds), not g.packed_rounds.has(&"fire"))
+	_check("F7g and T still can't put it there", not g.switch_round() and g.cylinder_round != &"fire")
+	_check("F7h and it's still packed for the shot barrel", lo.rounds.has(&"fire") and g.fire_packed)
+	_check("F7i lead can't be left off, leaving only fire: nothing for the cylinder", not lo.unpack_round(&"lead") and lo.rounds.has(&"lead"))
+	lo.unpack_round(&"fire")
+	lo.restock()
+	_check("F7j and fire can be", not lo.rounds.has(&"fire") and g.packed_rounds == [&"lead"])
 
 
 ## The brazier takes an item place, and it's a weapon, not something for V or B.

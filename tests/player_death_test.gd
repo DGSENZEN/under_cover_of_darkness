@@ -167,6 +167,7 @@ func _possessed_hands() -> void:
 	await _frames(40)
 	_check("P31 and your hand your own", p.hand.get("_main").visible and p.combat.gun_drawn())
 	await _possessed_with_brazier()
+	await _dying_with_brazier_out()
 
 
 ## With the brazier: it stays on your hand till your hand opens, then it falls and lies on the floor, still burning.
@@ -189,6 +190,40 @@ func _possessed_with_brazier() -> void:
 	_check("P33 then it falls and lies there (%.2f up)" % chain.head_at().y, fell and chain.coal_light().visible)
 	await _until_death_at(3.4)
 	await _frames(20)
+
+
+## Dead with it out, and something on you: it falls once, lies there, and what has you goes on having you.
+func _dying_with_brazier_out() -> void:
+	await _fresh()
+	Props.give_revolver(p, 24, 4)
+	p.inventory.select_by_id(&"revolver")
+	await _frames(20)
+	p.loadout.pack_item(&"brazier")
+	p.inventory.select_by_id(&"brazier")
+	await _frames(70)
+	var chain: Node3D = p.combat.chain()
+	var holder: CharacterBody3D = AnimaScript.new()
+	holder.form = &"hands"
+	holder.position = p.global_position + Vector3(0, 0, -1)
+	add_child(holder)
+	await _frames(2)
+	holder.wake()
+	holder.put_on_you()
+	await _frames(3)
+	var had: float = holder.health
+	var was_on: bool = holder.is_on_you()
+	var thuds_were: int = chain.floor_hits
+	p.drain_life(p.health + 1.0)
+	await _frames(int(2.2 * 60.0))
+	_check("P37 it falls once and lies there (%d thuds)" % (chain.floor_hits - thuds_were), chain.floor_hits - thuds_were <= 1)
+	_check("P38 its top lies on the floor, not going on down (%.2f)" % chain.hand_now().y, chain.hand_now().y > -0.2)
+	_check("P39 what has you goes on having you, and isn't burned by it", was_on and is_instance_valid(holder) and holder.is_on_you() and holder.health == had)
+	await _frames(int(2.5 * 60.0))
+
+	if is_instance_valid(holder):
+		holder.queue_free()
+
+	await _frames(2)
 
 
 func _dropped_things() -> int:

@@ -81,6 +81,17 @@ func _ready() -> void:
 	add_child(_fore)
 
 
+## (Its chest's a shape of its own: out of play, that goes as well.)
+func _put_out() -> void:
+	super._put_out()
+	_fore.set_deferred(&"disabled", true)
+
+
+func wake() -> void:
+	super.wake()
+	_fore.set_deferred(&"disabled", false)
+
+
 func _stepped(_side: int) -> void:
 	Sfx.play(self, &"flesh_heavy", global_position, -13.0, randf_range(0.42, 0.55))
 	_felt(STEP_TRAUMA)
@@ -239,6 +250,10 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 	# It gives a little, and shows it: you hit something.
 	if body != null:
 		body.flinch(signf(global_basis.x.dot(direction) + 0.001), clampf(damage / 30.0, 0.35, 1.0))
+
+	# (What's lying on the floor isn't holding anyone.)
+	if was_holding and is_down() and is_instance_valid(target()):
+		target().touch.let_go()
 
 	if dead or is_down():
 		return result

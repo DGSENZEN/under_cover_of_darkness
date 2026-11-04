@@ -570,7 +570,8 @@ func switch_round() -> bool:
 ## Comes round to what is packed (Loadout.restock): a round left off goes back
 ## in its pouch and the first packed takes its place, and the barrels are
 ## loaded, for nothing, from the pouches. At a table, with time.
-func take_up(packed: Array[StringName]) -> void:
+## What's for the cylinder and what's for the shot barrel, of what's packed. Only that: nothing's loaded or moved.
+func sort_packed(packed: Array[StringName]) -> void:
 	packed_rounds.clear()
 	fire_packed = false
 
@@ -580,6 +581,9 @@ func take_up(packed: Array[StringName]) -> void:
 		else:
 			packed_rounds.append(id)
 
+
+func take_up(packed: Array[StringName]) -> void:
+	sort_packed(packed)
 	_stop_loading()
 	var inv: Node = player.inventory
 	# (What's in the shot barrel goes back: it may not be what's wanted now.)

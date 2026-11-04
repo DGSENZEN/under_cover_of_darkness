@@ -106,6 +106,10 @@ func unpack_round(id: StringName) -> bool:
 	if locked or not rounds.has(id) or rounds.size() <= 1:
 		return false
 
+	# (A shell's no use to a cylinder: what's left must have something for it.)
+	if not rounds.any(func(other: StringName) -> bool: return other != id and not Rounds.info(other).get("shell", false)):
+		return false
+
 	rounds.erase(id)
 	changed.emit()
 	return true
@@ -483,5 +487,6 @@ func save_state() -> Dictionary:
 func load_state(state: Dictionary) -> void:
 	SaveFields.restore(self, state, SAVED)
 	_using = &""
-	player.revolver.packed_rounds = rounds.duplicate()
+	# (Shells are the shot barrel's: never the cylinder's, saved or not.)
+	player.revolver.sort_packed(rounds)
 	changed.emit()
