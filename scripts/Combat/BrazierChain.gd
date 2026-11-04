@@ -72,16 +72,19 @@ const COMES_OFF := 3.6
 const LIGHT_JUMPS := 2.4
 const LIGHT_SETTLES := 12.0
 ## Coals thrown out of its lid at each hit: how many there can be flying at once, how many a hit throws, how long they burn (s), how hard they're thrown (m/s), how they bounce.
-const MOST_COALS := 30
-const COALS_THROWN := 12
+const MOST_COALS := 44
+const COALS_THROWN := 18
 const COALS_BURN := 1.9
-const COALS_FLY := Vector2(1.6, 4.6)
+const COALS_FLY := Vector2(2.2, 6.0)
 const COALS_BOUNCE := 0.32
 const COAL_SIZE := Vector2(0.012, 0.028)
 ## Steam off wet flesh: how long it's coming (s).
 const STEAM_FOR := 0.75
 
 enum Mode { HANG, HELD, THROWN, DROPPING, HAULED }
+
+## It came down on the floor, here.
+signal thudded(at: Vector3)
 
 ## How many times it has thrown sparks.
 var bursts := 0
@@ -712,6 +715,7 @@ func _keep_off_floor() -> void:
 				Sfx.play(self, &"coal_pop", on, -3.0, 0.8)
 				_throw_coals(on, Vector3.UP)
 				_light_jump = maxf(_light_jump, LIGHT_JUMPS * 0.6)
+				thudded.emit(on)
 
 			_at[i].y = _floor_at + rides
 			var slid := _at[i] - _was[i]

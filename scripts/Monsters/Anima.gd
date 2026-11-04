@@ -508,6 +508,11 @@ func put_on_you() -> bool:
 	return true
 
 
+## Whether it's got hold of you.
+func is_on_you() -> bool:
+	return state == State.ON
+
+
 ## Knocked off you: thrown clear of `from`, stunned, and exposed.
 func throw_off(from: Vector3) -> void:
 	_leave_you()

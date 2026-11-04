@@ -37,6 +37,7 @@ const LIES_TALL := 1.15
 ## What can stand between it and a surge at you.
 const SIGHT_MASK := 1
 
+var _blow_of_brazier := false
 var state := State.WALK
 var kills_as := &"swipe"
 var _row := {}
@@ -231,6 +232,7 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 
 	var was_holding := state == State.HOLD
 	var was_gathering := state == State.GRASP_WIND
+	_blow_of_brazier = hit_kind == &"brazier" or hit_kind == &"splash"
 	_burner = attacker if source == &"fire" else _burner
 	var result: StringName = super.take_hit(damage, attacker, hit_kind, point, direction)
 
@@ -286,7 +288,8 @@ func _goes_down(_by: Node3D, source: StringName) -> bool:
 
 
 func _is_opening_to(source: StringName) -> bool:
-	return state == State.GRASP_WIND and source == &"fire"
+	# (The brazier breaks the grasp as well, but hits as it hits: seared, it's already double, and it's meant to take 5 or 6.)
+	return state == State.GRASP_WIND and source == &"fire" and not _blow_of_brazier
 
 
 ## Dead for good, in fire.

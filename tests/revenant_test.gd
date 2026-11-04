@@ -70,6 +70,12 @@ func _ready() -> void:
 	if only == "" or only == "brazier":
 		await _the_brazier()
 
+	if only == "" or only == "tough":
+		await _how_hard_to_kill()
+
+	if only == "" or only == "splash":
+		await _it_splashes()
+
 	print("revenant_test: %s" % ("FAILED %d" % failed if failed > 0 else "passed"))
 	get_tree().quit(1 if failed > 0 else 0)
 
@@ -195,11 +201,11 @@ func _its_brain() -> void:
 	one._surge_in = 99.0
 	var balls := 0
 
-	while not one.is_down() and balls < 30:
+	while not one.is_down() and balls < 60:
 		one.take_hit(55.0, p, &"bullet", one.global_position, Vector3.FORWARD)
 		balls += 1
 
-	_check("R1 eleven balls of lead put it down, not ten (%d)" % balls, balls == 11)
+	_check("R1 thirty-three balls of lead put it down, not thirty-two (%d)" % balls, balls == 33)
 	_check("R2 down, not dead", one.is_down() and not one.dead)
 	var before: float = one.health
 	one.take_hit(55.0, p, &"bullet", one.global_position, Vector3.FORWARD)
@@ -207,7 +213,7 @@ func _its_brain() -> void:
 	one.kick(Vector3(2, 0, 0), p)
 	_check("R3 hits do nothing while it's down", one.health == before and one.is_down())
 	var rose: bool = await _until(func(): return one.state == STATE.WALK, 7.2)
-	_check("R4 it gets up, after 5 s and 1.6 s, with 40%% (%.0f)" % one.health, rose and one._state_t < 0.5 and is_equal_approx(one.health, 72.0))
+	_check("R4 it gets up, after 5 s and 1.6 s, with 40%% (%.0f)" % one.health, rose and one._state_t < 0.5 and is_equal_approx(one.health, float(Bestiary.info(&"revenant")["health"]) * 0.4))
 	var times := 0
 
 	for i in 3:
@@ -310,10 +316,10 @@ func _fire() -> void:
 	for i in 9:
 		one.take_hit(5.0, p, &"fire", one.global_position, Vector3.BACK)
 
-	_check("F1 a fire shell's worth, close: burning, not dead (%.0f)" % one.health, one.statuses.has(&"burning") and is_equal_approx(one.health, 135.0))
+	_check("F1 a fire shell's worth, close: burning, not dead (%.0f)" % one.health, one.statuses.has(&"burning") and is_equal_approx(one.health, float(Bestiary.info(&"revenant")["health"]) - 45.0))
 	var from: Vector3 = one.global_position
 	await _frames(int(5.2 * 60.0))
-	_check("F2 burns 8 a second for 5 s, and it keeps coming (%.0f)" % one.health, absf(one.health - 95.0) < 1.5 and one.global_position.distance_to(from) > 4.0 and not one.statuses.has(&"burning"))
+	_check("F2 burns 8 a second for 5 s, and it keeps coming (%.0f)" % one.health, absf(one.health - (float(Bestiary.info(&"revenant")["health"]) - 85.0)) < 1.5 and one.global_position.distance_to(from) > 4.0 and not one.statuses.has(&"burning"))
 	await _clean()
 	var low := _revenant(Vector3(0, 0, -40))
 	await _frames(2)
@@ -1162,6 +1168,172 @@ func _how_it_is_held() -> void:
 	_check("Hd9 the gun out: the arms you came with", ViewArmsScript.new_arms == arms_before_brazier)
 	p.inventory.select_by_id(&"brazier")
 	await _frames(20)
+
+
+## Blows of `damage`, at the pace the brazier can land them, until it's dead: how many.
+func _blows_to_kill(damage: float, every: float) -> int:
+	var one := await _held_still(Vector3(0, 0, -40))
+	var blows := 0
+
+	while not one.dead and blows < 30:
+		one._surge_in = 99.0
+		one._attack_in = 99.0
+		one.take_hit(damage, p, &"brazier", one.global_position, Vector3.FORWARD)
+		blows += 1
+
+		if not one.dead:
+			await _frames(int(every * 60.0))
+
+	await _clean()
+	return blows
+
+
+func _hand_at(at: Vector3) -> CharacterBody3D:
+	var one: CharacterBody3D = AnimaScript.new()
+	one.form = &"hands"
+	one.position = at
+	add_child(one)
+	return one
+
+
+## It lands, and what's around where it landed gets it too: burned and thrown back. Not through walls. The close hit catches everyone along its arc.
+func _it_splashes() -> void:
+	await _new_player()
+	await _frames(30)
+	p.loadout.pack_item(&"brazier")
+	p.inventory.select_by_id(&"brazier")
+	await _frames(70)
+	p.combat.adrenaline = 0.0
+	await _clean()
+	var struck := _struck_at(4.0)
+	var aim_at: Vector3 = p.combat.aim().origin
+	var near := _hand_at(aim_at + Vector3(1.3, -1.5, -4.0))
+	var far := _hand_at(aim_at + Vector3(5.5, -1.5, -4.0))
+	var other := await _held_still(aim_at + Vector3(-1.6, -1.8, -4.0))
+	near.set_physics_process(false)
+	far.set_physics_process(false)
+	await _frames(3)
+	var near_had: float = near.health
+	var far_had: float = far.health
+	var near_at: Vector3 = near.global_position
+	var other_had: float = other.health
+	await _press("throw")
+	await _until(func(): return struck.hits > 0, 1.2)
+	await _frames(1)
+	_check("Sp1 what's around where it lands is burned too (%.0f)" % (near_had - near.health), near_had - near.health > 8.0)
+	_check("Sp2 what's far off isn't touched", far_had == far.health)
+	near.set_physics_process(true)
+	near.health = 500.0
+	await _frames(12)
+	_check("Sp3 it's thrown back (%.2f m)" % near.global_position.distance_to(near_at), near.global_position.distance_to(near_at) > 0.3)
+	_check("Sp4 a revenant caught in it burns, and isn't seared: that's for what's struck", other.statuses.has(&"burning") and other_had > other.health and not other.is_exposed())
+	await _until_idle()
+	struck.queue_free()
+	near.queue_free()
+	far.queue_free()
+	other.queue_free()
+	await _frames(3)
+
+	# Not through a wall.
+	var struck_again := _struck_at(4.0)
+	var aim_now: Vector3 = p.combat.aim().origin
+	var walled_off := _hand_at(aim_now + Vector3(1.6, -1.5, -4.0))
+	walled_off.set_physics_process(false)
+	Props.block(self, aim_now + Vector3(0.8, 0.0, -4.0), Vector3(0.2, 6.0, 3.0))
+	await _frames(3)
+	var walled_had: float = walled_off.health
+	await _press("throw")
+	await _until(func(): return struck_again.hits > 0, 1.2)
+	await _frames(1)
+	_check("Sp5 not through a wall", walled_had == walled_off.health)
+	await _until_idle()
+	struck_again.queue_free()
+	walled_off.queue_free()
+	await _frames(40)
+
+	# Up close, more than one in the arc of it.
+	p.teleport(Transform3D(Basis.IDENTITY, HOME + Vector3(30, 0, 0)))
+	await _frames(5)
+	p.combat.adrenaline = 0.0
+	var eye: Vector3 = p.combat.aim().origin
+	var left_one := _hand_at(eye + Vector3(-1.1, -1.5, -1.5))
+	var right_one := _hand_at(eye + Vector3(1.1, -1.5, -1.5))
+	left_one.health = 500.0
+	right_one.health = 500.0
+	left_one.set_physics_process(false)
+	right_one.set_physics_process(false)
+	await _frames(3)
+	await _close_hit()
+	_check("Sp6 a close hit catches everyone in its arc, in full (%.0f, %.0f)" % [500.0 - left_one.health, 500.0 - right_one.health], 500.0 - left_one.health >= 60.0 and 500.0 - right_one.health >= 60.0)
+	left_one.queue_free()
+	right_one.queue_free()
+	await _frames(40)
+
+	# A hand on you: a blow near you has it off.
+	var on_you := _hand_at(p.global_position + Vector3(0, 0, -1.0))
+	await _frames(2)
+	on_you.wake()
+	on_you.put_on_you()
+	await _frames(3)
+	var was_on: bool = on_you.is_on_you()
+	var wall_by := _struck_at(1.2)
+	await _press("throw")
+	await _until(func(): return wall_by.hits > 0, 1.2)
+	await _frames(2)
+	_check("Sp7 it throws off what's on you (was %s, now %s)" % [was_on, on_you.is_on_you()], was_on and not on_you.is_on_you())
+	wall_by.queue_free()
+	on_you.queue_free()
+	await _until_idle()
+
+	# It comes down on the floor, at nothing: that counts too.
+	await _frames(40)
+	var chain: Node3D = p.combat.chain()
+	p.teleport(Transform3D(Basis.IDENTITY, HOME + Vector3(-30, 0, 0)))
+	await _frames(5)
+	var floor_one := _hand_at(p.combat.aim().origin + Vector3(0, -1.5, -4.4))
+	floor_one.set_physics_process(false)
+	await _frames(2)
+	var floor_was: int = chain.floor_hits
+	var floor_had: float = floor_one.health
+	# (Level, so the lash itself goes over it.)
+	await _press("throw")
+	await _until(func(): return chain.floor_hits > floor_was, 1.8)
+	await _frames(1)
+	_check("Sp8 slamming the floor burns what's there (%d, %.0f)" % [chain.floor_hits - floor_was, floor_had - floor_one.health], chain.floor_hits > floor_was and floor_had > floor_one.health)
+	floor_one.queue_free()
+	await _until_idle()
+
+
+## With the brazier, 5 or 6 hits. Without it, a hell of a lot more, and it still gets up.
+func _how_hard_to_kill() -> void:
+	await _clean()
+	var lashes: int = await _blows_to_kill(45.0, 1.43)
+	var closes: int = await _blows_to_kill(70.0, 1.18)
+	_check("Kk1 5 or 6 lashes kill it (%d)" % lashes, lashes >= 5 and lashes <= 6)
+	_check("Kk2 5 or 6 close hits kill it (%d)" % closes, closes >= 5 and closes <= 6)
+
+	var gathering := await _held_still(Vector3(0, 0, -40))
+	gathering._enter(STATE.GRASP_WIND)
+	var gathering_had: float = gathering.health
+	gathering.take_hit(45.0, p, &"brazier", gathering.global_position, Vector3.FORWARD)
+	_check("Kk4 the brazier in a grasp's wind-up breaks it, for what a blow does and no more (%.0f)" % (gathering_had - gathering.health), is_equal_approx(gathering_had - gathering.health, 45.0) and gathering.state == STATE.STAGGER)
+	gathering.queue_free()
+	await _frames(2)
+
+	for round_id in [&"lead", &"copal"]:
+		var shot := await _held_still(Vector3(0, 0, -40))
+		shot.round_hint = round_id
+		var rounds := 0
+
+		while not shot.is_down() and rounds < 200:
+			shot._surge_in = 99.0
+			shot._attack_in = 99.0
+			shot.take_hit(55.0, p, &"bullet", shot.global_position, Vector3.FORWARD)
+			rounds += 1
+
+		_check("Kk3 %s: a hell of a lot to put it down (%d rounds), and that doesn't kill it" % [round_id, rounds], rounds >= 30 and not shot.dead)
+		shot.queue_free()
+		await _frames(2)
 
 
 ## How the swings move: over the top and down, its weight on your arm and your view going with it, and it isn't finished when it's hit.

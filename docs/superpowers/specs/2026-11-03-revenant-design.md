@@ -67,7 +67,7 @@ Numbers are Claude's first go, all in `Bestiary` under a new `&"revenant"` row, 
 
 **Surges.** Further from you than it can reach, every 4 to 7 s, it gathers for 0.5 s, a tell you can read, then throws itself forward at about 6 m/s for 0.9 s, long lurching strides, and can go straight from that into an attack. (You walk at 6.5 m/s, 4.55 aiming, 8.5 sprinting: you can get away from one, but not while you aim.) Through a wind-up its arm keeps reaching after you and it leans and steps with it, so backing away at a walk doesn't beat an attack: a dodge, a blink or a sprint does.
 
-**What hurts it** (health 180):
+**What hurts it** (health 540; the user, after playing: "a lot harder to kill, like 5-6 hits ... if we use copal or lead it takes hell of a ton more stuff"; so about 6 lashes or 5 close hits, and 33 balls just to put it down):
 
 | Source | Scale | Read |
 |---|---|---|
@@ -111,7 +111,7 @@ Claude's calls, as the blade is today: a spell key takes the gun back out at onc
 - **Long lash:** out along your aim to about 5 m, landing where you aimed, with a clear wind-up (about 0.45 s) and an open moment while it comes back. 45 damage. As Castlevania's whip does: reach you can trust, a commitment if you miss.
 - **Close hit:** a short, heavy swing, reach about 2.4 m, quicker to land, 70 damage. Claude's call: the lash is the plain attack and the close hit the heavy one, on the keys the blade uses for those.
 - **Both** count as fire to a revenant: they set it burning, and one on a downed revenant finishes it.
-- **Both sear it:** it staggers, any wind-up breaks, and for 3 s it takes double from everything, a new hit starting the 3 s again. That is the user's "more vulnerable": seared, a lash does 90 and a close hit 140, so a few hits put it down, and the one after finishes it. Seared shows on its flesh, hot and scored. (Claude's numbers.)
+- **Both sear it:** it staggers, any wind-up breaks, and for 3 s it takes double from everything, a new hit starting the 3 s again. That is the user's "more vulnerable": seared, a lash does 90 and a close hit 140, so 5 or 6 hits finish it. Seared shows on its flesh, hot and scored. (Claude's numbers.)
 - **On others:** an ordinary blow, no weakness. You still want the gun for the eye.
 - **Blocking:** it can't block (`can_block` false).
 

@@ -15,7 +15,7 @@ func _ready() -> void:
 	var drowned: Dictionary = Bestiary.info(&"revenant")
 	_check("B4 lead and copal hardly touch a revenant, a shell does half", is_equal_approx(Bestiary.scale_for(&"revenant", &"lead"), 0.3) and is_equal_approx(Bestiary.scale_for(&"revenant", &"copal"), 0.3) and is_equal_approx(Bestiary.scale_for(&"revenant", &"shot"), 0.5))
 	_check("B5 fire is neither its weakness nor resisted: what fire does to it is its own", not Bestiary.is_weak(&"revenant", &"fire") and not Bestiary.is_resisted(&"revenant", &"fire") and is_equal_approx(Bestiary.scale_for(&"revenant", &"fire"), 1.0))
-	_check("B6 180 health, 40%% back when it rises", float(drowned.get("health", 0.0)) == 180.0 and float(drowned.get("rises_with", 0.0)) == 0.4)
+	_check("B6 540 health, 40%% back when it rises", float(drowned.get("health", 0.0)) == 540.0 and float(drowned.get("rises_with", 0.0)) == 0.4)
 	_check("B3 anything else is a blow", Bestiary.source_of(&"whip", &"lead") == &"blow" and Bestiary.source_of(&"quick", &"copal") == &"blow")
 	_check("B4 an eye takes 0.3 from lead", is_equal_approx(Bestiary.scale_for(&"floating_eye", &"lead"), 0.3))
 	_check("B5 a source it has no word on is 1.0", is_equal_approx(Bestiary.scale_for(&"floating_eye", &"blow"), 1.0))

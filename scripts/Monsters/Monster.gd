@@ -31,7 +31,7 @@ const REFUND_GAP := 0.25
 ## What a copal round's smoke lasts.
 const STATUS_TIME := 4.0
 ## How hard each kind of hit throws it (m/s); how fast that dies away.
-const PUSH := {&"bullet": 3.0, &"shot": 1.0, &"blast": 9.0, &"shard": 3.0, &"burst": 9.0}
+const PUSH := {&"bullet": 3.0, &"shot": 1.0, &"blast": 9.0, &"shard": 3.0, &"burst": 9.0, &"splash": 7.0}
 const PUSH_DEFAULT := 2.0
 const PUSH_FADE := 12.0
 const KICK_DAMAGE := 20.0

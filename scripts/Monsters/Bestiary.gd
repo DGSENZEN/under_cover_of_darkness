@@ -15,7 +15,7 @@ const TABLE := {
 	},
 	# The drowned of the old lakebed, raised by the seepage: a body, so copal is only a ball to it. Fire is what keeps it dead (Revenant.gd).
 	&"revenant": {
-		"health": 180.0,
+		"health": 540.0,
 		"resist": {&"lead": 0.3, &"copal": 0.3, &"shot": 0.5},
 		"speed": 1.6, "hit_radius": 0.55, "height": 2.6, "turns": 1.7, "steps_winding": 0.55,
 		"surge_every": [4.0, 7.0], "surge_tell": 0.5, "surge_speed": 6.0, "surge_time": 0.9, "surge_from": 3.6,
@@ -81,7 +81,7 @@ static func source_of(hit_kind: StringName, round_id: StringName) -> StringName:
 			return Rounds.info(round_id).get("source", &"lead")
 		&"shot", &"blast", &"fire":
 			return hit_kind
-		&"brazier":
+		&"brazier", &"splash":
 			return &"fire"
 		&"shard", &"burst":
 			return &"obsidian"

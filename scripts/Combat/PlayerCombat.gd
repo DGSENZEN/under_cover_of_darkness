@@ -75,6 +75,13 @@ const CLOSE_GOES := [[0.0, &"close_chamber"], [0.45, &"close_mid"], [1.0, &"clos
 ## A lash coming back: it stays out this far through, it's yanked in by this far through, then it settles at the hold.
 const LASH_STAYS_OUT := 0.1
 const LASH_YANKED_BY := 0.42
+## The coals going everywhere where it lands: how far (m), what they do at the middle of it from a lash, a close hit and the floor (half that at its edge). How far a close hit's arc catches, either side of the head (m).
+const SPLASH_REACH := 2.8
+const SPLASH_LASH := 22.0
+const SPLASH_CLOSE := 30.0
+const SPLASH_SLAM := 16.0
+const CLOSE_ARC_CATCHES := 0.95
+const CLOSE_ARC_TALL := 3.2
 ## How hard the fist's pulled when a lash lands, when it's pulled up short with nothing on the end, and when a close hit lands (m/s); and how it comes back (Hz, damped).
 const LASH_PULLS := 0.9
 const LASH_PULLS_SHORT := 1.3
@@ -959,6 +966,7 @@ func _work_chain(delta: float) -> void:
 		_chain.name = "BrazierChain"
 		add_child(_chain)
 		_chain.hold_from(_chain_hand, player.get_rid())
+		_chain.thudded.connect(func(at: Vector3) -> void: _splash(at, SPLASH_SLAM))
 		_chain_falling_at = _chain_hand_now()
 
 	if not _chain.visible:
@@ -976,7 +984,9 @@ func _work_chain(delta: float) -> void:
 				_chain.hold_to(aim() * (LASH_WHIRLS[from_i] as Vector3).lerp(LASH_WHIRLS[from_i + 1], round_it - from_i))
 		Phase.STRIKE:
 			if _power:
-				_chain.hold_to(_close_head_at(clampf(_t / maxf(_strike_time, 0.01), 0.0, 1.0)))
+				var through := clampf(_t / maxf(_strike_time, 0.01), 0.0, 1.0)
+				_chain.hold_to(_close_head_at(through))
+				_catch_in_arc(_close_head_at(through))
 
 	_chain.work(delta, _chain_hand())
 	# Going round on the end of it, it's pulling your arm.
@@ -996,6 +1006,79 @@ func _close_head_at(p: float) -> Vector3:
 	var at := aim()
 	var half := deg_to_rad(weapon.arc_degrees * 0.5)
 	return at.origin + (-at.basis.z).rotated(at.basis.y, lerpf(-half, half, p)) * weapon.power_reach * 0.85 + at.basis.y * lerpf(CLOSE_HEAD_FROM, CLOSE_HEAD_TO, p)
+
+
+## Everyone the head's going through, up close: it hits them all, not only the first the blade-rays find.
+func _catch_in_arc(head: Vector3) -> void:
+	# (High or low: it's coming down through all of that. On the floor, or in your face.)
+	var column := CylinderShape3D.new()
+	column.radius = CLOSE_ARC_CATCHES
+	column.height = CLOSE_ARC_TALL
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = column
+	query.transform = Transform3D(Basis.IDENTITY, Vector3(head.x, aim().origin.y - 0.6, head.z))
+	query.collision_mask = 2 | 4
+	query.exclude = [player.get_rid()]
+
+	for found in player.get_world_3d().direct_space_state.intersect_shape(query, 16):
+		var who: Object = RagdollScript.owner_of(found.get("collider"))
+		who = who if who != null else found.get("collider")
+
+		if who != null and who.has_method("take_hit") and not _hit_this_swing.has(who) and _sees(head, (who as Node3D).global_position + Vector3.UP * 0.4):
+			_hit_this_swing[who] = true
+			_men_hit_this_swing += 1
+			# (Flat: from your eye down to their feet would drive them into the floor, not back.)
+			var away: Vector3 = (who as Node3D).global_position - aim().origin
+			away.y = 0.0
+			_strike_target(who as Node3D, (who as Node3D).global_position + Vector3.UP * 0.5, away.normalized() if away.length() > 0.01 else -aim().basis.z)
+
+
+## Nothing solid in the way from here to there.
+func _sees(from: Vector3, to: Vector3) -> bool:
+	var query := PhysicsRayQueryParameters3D.create(from, to, 1, [player.get_rid()])
+	return player.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+
+## The coals going everywhere: all that's near where it landed gets some, less further off, and is thrown back; what's on you is knocked off; not through walls, and not what it struck. To the monsters it's fire; to anyone else a blow.
+func _splash(at: Vector3, hurts: float, struck_already: Object = null) -> void:
+	var sphere := SphereShape3D.new()
+	sphere.radius = SPLASH_REACH
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = sphere
+	query.transform = Transform3D(Basis.IDENTITY, at)
+	query.collision_mask = 2 | 4
+	query.exclude = [player.get_rid()]
+	var from_above := at + Vector3.UP * 0.2
+	var done := {}
+
+	for found in player.get_world_3d().direct_space_state.intersect_shape(query, 24):
+		var who: Object = RagdollScript.owner_of(found.get("collider"))
+		who = who if who != null else found.get("collider")
+
+		if who == null or who == struck_already or done.has(who) or _hit_this_swing.has(who) or not who.has_method("take_hit"):
+			continue
+
+		done[who] = true
+		var node := who as Node3D
+		var middle := node.global_position + Vector3.UP * 0.4
+
+		if not _sees(from_above, middle):
+			continue
+
+		var way := node.global_position - at
+		way.y = 0.0
+		way = way.normalized() if way.length() > 0.01 else -player.global_basis.z
+		var share := 1.0 - 0.5 * clampf(at.distance_to(node.global_position) / SPLASH_REACH, 0.0, 1.0)
+		node.take_hit(hurts * share, player, &"splash" if node.is_in_group(&"monsters") else &"quick", middle, way)
+
+		if is_instance_valid(node) and node.has_method("is_on_you") and node.is_on_you():
+			node.throw_off(at)
+
+	# (What's on you isn't far off, wherever it landed: the jolt of the chain's enough to have it off.)
+	if _men_hit_this_swing > 0 or struck_already != null:
+		for monster in get_tree().get_nodes_in_group(&"monsters"):
+			if monster.has_method("is_on_you") and monster.is_on_you() and monster.target() == player:
+				monster.throw_off(player.global_position)
 
 
 ## Where a lash leaving now would land.
@@ -1346,6 +1429,7 @@ func _sweep(p: float) -> void:
 		_chain.burst(point, normal)
 		_chain.bite(null, point, normal)
 		Sfx.play(player, &"coal_pop", point, 0.0, 0.8)
+		_splash(point, SPLASH_CLOSE if _power else SPLASH_LASH, collider)
 
 	# (A lash has nothing to stop in your hand: it comes back as it would.)
 	if lash:
@@ -1674,6 +1758,8 @@ func _chain_lands(target: Node3D, point: Vector3, direction: Vector3) -> void:
 
 	if wet:
 		Sfx.play(player, &"pipe_hiss", point, 11.0, 1.35)
+
+	_splash(point, SPLASH_CLOSE if _power else SPLASH_LASH, target)
 
 	# (Nothing that's all the way out on a chain stops without pulling on what's holding it.)
 	if not _power and player.is_on_floor():
