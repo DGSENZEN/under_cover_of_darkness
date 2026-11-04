@@ -17,6 +17,12 @@ const HandContactsScript := preload("res://scripts/Interaction/HandContacts.gd")
 const HeldPageScript := preload("res://scripts/Interaction/HeldPage.gd")
 const WeaponScript := preload("res://scripts/Combat/Weapon.gd")
 const BrazierPoses := preload("res://scripts/Combat/BrazierPoses.gd")
+const PossessionPoses := preload("res://scripts/PlayerUtils/PossessionPoses.gd")
+## Possession: [by when, the pose], how long your hands are held to it; when the fingers open, when they let you go. Seconds into it.
+const POSSESSED_GOES := [[0.5, &"seized"], [1.0, &"seized"], [1.3, &"let_go"], [1.62, &"rise"], [2.0, &"looked_at"], [2.28, &"looked_at"], [2.55, &"closing"], [2.82, &"over_eyes"]]
+const POSSESSED_LETS_GO_OF_IT := 1.2
+const POSSESSED_HANDS_LOOSE := Vector2(3.0, 3.3)
+const POSSESSED_WRITHES := Vector2(1.45, 2.0)
 const MagicFxScript := preload("res://scripts/Visual/MagicFx.gd")
 const LibraryGlyphsScript := preload("res://scripts/Visual/Library/LibraryGlyphs.gd")
 
@@ -194,6 +200,11 @@ var _main: Node3D
 var _main_mesh: MeshInstance3D
 var _main_item: Mesh = null
 var _brazier_elbow := Vector3(0.3, -1.0, 0.0)
+var _possessing := false
+var _item_let_go := false
+var _possessed_from: Array = [Transform3D.IDENTITY, Transform3D.IDENTITY]
+var _possessed_at: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var _possessed_elbow: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var _arms_swapped := false
 var _pending_item: Mesh = null
 var _switching := false
@@ -1331,6 +1342,10 @@ func impact(kind: StringName) -> void:
 func _exit_tree() -> void:
 	if _main_mesh != null:
 		_main_mesh.material_overlay = null
+
+	# (Which arms is kept across scenes: what we only borrowed goes back.)
+	if _arms_swapped:
+		ViewArmsScript.new_arms = false
 
 
 ## Blood on the blade in hand. It builds up with each cut and dries off
@@ -2511,6 +2526,143 @@ func _chain_grip() -> StringName:
 	return &"ChainGrip" if _arms.has_pose(&"ChainGrip") else &"Fist"
 
 
+## Possession: your hands aren't yours. Held to the poses made for it, whatever they were doing: the thing in your hand's lifted and let go of, they come up in front of your face with their fingers working, and cover your eyes. Whether this is what's moving them.
+func _possessed_hands(targets: Array[Transform3D], weights: Array, curls: Array, poses: Array[StringName]) -> bool:
+	var death: Node = player.get("death") if player != null else null
+
+	if death == null or death.get("kind") != &"possessed" or not death.playing():
+		if _possessing and (death == null or player.get("is_dead") != true):
+			reset_after_death()
+
+		if _possessing and _arms.reach != null:
+			_arms.reach.writhe.fill(0.0)
+
+		return false
+
+	if not _possessing:
+		_possessing = true
+		_item_let_go = false
+		_arms_for(&"brazier")
+		var size := ViewArmsScript.SCALE
+		_possessed_from = [_possessed_hand(&"seized", "l"), Transform3D(_main.transform.basis.orthonormalized(), _main.transform.origin / size)]
+
+	if _arms.reach == null:
+		return false
+
+	if not _arms.has_pose(&"Claw"):
+		_arms.reach.learn_pose(&"Claw", &"Hook", PossessionPoses.CLAW)
+
+	var at: float = death.at()
+	var loose := smoothstep(POSSESSED_HANDS_LOOSE.x, POSSESSED_HANDS_LOOSE.y, at)
+	var was_at := 0.0
+	var was_key := &""
+	var fingers := &"Fist"
+
+	for key: Array in POSSESSED_GOES:
+		var by: float = key[0]
+		var share := clampf((at - was_at) / maxf(by - was_at, 0.001), 0.0, 1.0)
+
+		if at <= by or key == POSSESSED_GOES[-1]:
+			var eased := share * share * (3.0 - 2.0 * share)
+
+			for side in 2:
+				var hand_id := "l" if side == 0 else "r"
+				var from: Transform3D = _possessed_hand(was_key, hand_id) if was_key != &"" else _possessed_from[side]
+				var to := _possessed_hand(key[1], hand_id)
+				var now := from.interpolate_with(to, eased)
+				_possessed_at[side] = now.origin
+				targets[side] = Transform3D(now.basis.orthonormalized().scaled(Vector3.ONE * ViewArmsScript.SCALE), now.origin * ViewArmsScript.SCALE)
+				weights[side] = 1.0 - loose
+				curls[side] = 1.0
+				var old_elbow: Vector3 = PossessionPoses.POSES[was_key if was_key != &"" else key[1]][hand_id]["elbow"]
+				_possessed_elbow[side] = old_elbow.lerp(PossessionPoses.POSES[key[1]][hand_id]["elbow"], eased)
+
+			fingers = PossessionPoses.POSES[key[1]]["fingers"]
+			break
+
+		was_at = by
+		was_key = key[1]
+
+	poses[0] = fingers
+	poses[1] = fingers
+	# (It still has hold of what you were holding, till it doesn't: the fist closed on it.)
+	if at < POSSESSED_LETS_GO_OF_IT:
+		poses[0] = &"Relaxed"
+		poses[1] = &"Fist" if _view_id != &"revolver" else _pose_if_had(&"SwordGrip")
+		var grip: Transform3D = Transform3D.IDENTITY if _view_id == &"brazier" else (GUN_GRIP if _view_id == &"revolver" else HAND_GRIP)
+		var hold := targets[1]
+		_main.transform = Transform3D(hold.basis.orthonormalized() * grip.basis, hold.origin + hold.basis * grip.origin)
+	elif not _item_let_go:
+		_let_go_of_item()
+
+	# (A death lowers what you hold. Not this one: it does that itself.)
+	_main.visible = _main_item != null and at < POSSESSED_LETS_GO_OF_IT
+	var writhes := smoothstep(POSSESSED_WRITHES.x, POSSESSED_WRITHES.y, at) * (1.0 - loose)
+	_arms.reach.writhe.fill(writhes)
+	return true
+
+
+## A posed hand, in your view at full size.
+func _possessed_hand(key: StringName, hand_id: String) -> Transform3D:
+	var hand: Dictionary = PossessionPoses.POSES[key][hand_id]
+	return Transform3D(Basis(hand["x"], hand["y"], hand["z"]), hand["at"])
+
+
+## It opens, and what you were holding falls: a real thing, on the real floor.
+func _let_go_of_item() -> void:
+	_item_let_go = true
+
+	if _main_item == null or player == null:
+		return
+
+	var body := RigidBody3D.new()
+	body.add_to_group(&"let_go_of")
+	body.collision_layer = 0
+	body.collision_mask = 1
+	body.contact_monitor = true
+	body.max_contacts_reported = 1
+	var look := MeshInstance3D.new()
+	look.mesh = _main_item
+	body.add_child(look)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = _main_item.get_aabb().size.max(Vector3.ONE * 0.06)
+	shape.shape = box
+	body.add_child(shape)
+	player.get_parent().add_child(body)
+	body.global_position = _to_world(_main_mesh.global_position)
+	body.global_basis = _main.global_basis.orthonormalized()
+	body.linear_velocity = player.velocity * 0.5 + Vector3.DOWN * 0.3
+	body.angular_velocity = Vector3(1.6, 0.4, -1.1)
+	body.body_entered.connect(func(_on: Node) -> void: Sfx.play(body, &"clang", body.global_position, -7.0, 0.85), CONNECT_ONE_SHOT)
+
+
+## Possession has your hand, and it hasn't let go of what's in it yet.
+func still_held_by_it() -> bool:
+	return _possessing and not _item_let_go
+
+
+## Where possession has your hands now, in your view: left and right.
+func possessed_left_at() -> Vector3:
+	return _possessed_at[0]
+
+
+func possessed_right_at() -> Vector3:
+	return _possessed_at[1]
+
+
+## Past it: your hands your own, and the arms you came with.
+func reset_after_death() -> void:
+	_possessing = false
+	_item_let_go = false
+	_main.visible = true
+
+	if _arms != null and _arms.reach != null:
+		_arms.reach.writhe.fill(0.0)
+
+	_arms_for(_view_id)
+
+
 func _use_arms(new: bool) -> void:
 	_arms.use_new_arms(new)
 	_blood_overlay.set_shader_parameter("fov_override", ViewArmsScript.VIEW_FOV if new else 0.0)
@@ -2524,10 +2676,10 @@ func _arms_for(view_id: StringName) -> void:
 	if _arms == null:
 		return
 
-	if view_id == &"brazier" and not ViewArmsScript.new_arms:
+	if (view_id == &"brazier" or _possessing) and not ViewArmsScript.new_arms:
 		_arms_swapped = true
 		_use_arms(true)
-	elif view_id != &"brazier" and _arms_swapped:
+	elif view_id != &"brazier" and not _possessing and _arms_swapped:
 		_arms_swapped = false
 		_use_arms(false)
 
@@ -2755,6 +2907,8 @@ func _place_arms() -> void:
 
 			targets[side] = Transform3D(turn * targets[side].basis, targets[side].origin)
 
+	var possessed := _possessed_hands(targets, weights, curls, poses)
+
 	for side in range(2):
 		_arms.set_hand(side, targets[side], weights[side], curls[side], poses[side])
 
@@ -2767,6 +2921,9 @@ func _place_arms() -> void:
 			# (Where it was posed.)
 			if side == 1 and _view_id == &"brazier" and weights[1] > 0.5:
 				_arms.reach.elbow_hints[1] = _brazier_elbow
+
+			if possessed:
+				_arms.reach.elbow_hints[side] = _possessed_elbow[side]
 
 		if _arms.reach != null:
 			# Held hands in view are the true-size rig's; nothing is brought in

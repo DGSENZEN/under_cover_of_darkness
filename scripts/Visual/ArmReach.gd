@@ -62,6 +62,11 @@ var curl_only_reaching := false
 ## Where each elbow points (as ELBOW_HINT, which it starts as): a reach
 ## across the body wants the elbow out in front, not back.
 var elbow_hints: Array[Vector3] = [ELBOW_HINT[0], ELBOW_HINT[1]]
+## How far each hand's fingers are working on their own, out of step (0..1): how far (rad), how fast (rad/s).
+var writhe: Array[float] = [0.0, 0.0]
+const WRITHES := 0.55
+const WRITHE_RATE := 3.4
+var _writhe_clock := 0.0
 
 ## How far each wrist is bent off straight, degrees, and where each hand
 ## was put (world space), at the last solve. The skeleton's own pose is
@@ -503,6 +508,8 @@ func _curl(skeleton: Skeleton3D, side: int) -> void:
 	var suffix := "l" if side == 0 else "r"
 	var amount := clampf(curls[side], 0.0, 1.0)
 	_fade_pose(side)
+	# (Called for each hand: half a tick each.)
+	_writhe_clock += get_process_delta_time() * 0.5
 
 	for finger in FINGERS:
 		for joint in ["01", "02", "03"]:
@@ -513,7 +520,14 @@ func _curl(skeleton: Skeleton3D, side: int) -> void:
 
 			var index := _bone(skeleton, bone)
 			var rest: Quaternion = _fingers[bone][0]
-			skeleton.set_bone_pose_rotation(index, rest.slerp(_closed(side, bone), amount))
+			var closed := rest.slerp(_closed(side, bone), amount)
+
+			# (Not yours: each finger going its own slow way.)
+			if writhe[side] > 0.001:
+				var phase := float(FINGERS.find(finger)) * 1.9 + float(joint.to_int()) * 0.6 + float(side) * 2.3
+				closed = closed * Quaternion(Vector3.RIGHT, writhe[side] * WRITHES * sin(_writhe_clock * WRITHE_RATE + phase))
+
+			skeleton.set_bone_pose_rotation(index, closed)
 
 
 ## The hand as drawn this solve: its wrist and each fingertip (the last

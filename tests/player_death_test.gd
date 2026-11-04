@@ -3,6 +3,7 @@ extends Node3D
 ## around it.
 
 const PLAYER := preload("res://Player.tscn")
+const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 const Props := preload("res://scripts/Interaction/Props.gd")
 const Sfx := preload("res://scripts/Audio/Sfx.gd")
 const AnimaScript := preload("res://scripts/Monsters/Anima.gd")
@@ -109,6 +110,80 @@ func _dying_by(cursed: bool, feeding: bool, blow: StringName) -> void:
 
 
 ## A revenant's second touch: your body turns without you and walks, and then you go down, and the words come.
+## Your hands stop being yours: the gun's let go, they come up in front of your face, working out of step, and cover your eyes.
+func _possessed_hands() -> void:
+	await _fresh()
+	var hand: Node3D = p.hand
+	Props.give_revolver(p, 24, 4)
+	p.inventory.select_by_id(&"revolver")
+	await _frames(40)
+	var arms_were: bool = ViewArmsScript.new_arms
+	var dropped_at_start := _dropped_things()
+	p.death.possessed = true
+	p.drain_life(p.health + 1.0)
+	await _frames(30)
+	var held_on: bool = hand.get("_main").visible
+	var early := _dropped_things()
+	await _until_death_at(1.5)
+	var cam: Camera3D = p.camera
+	_check("P24 your own arms, whichever you came with", ViewArmsScript.new_arms)
+	_check("P25 it's held on to, at first, then let go of", held_on and early == dropped_at_start and not hand.get("_main").visible and _dropped_things() == dropped_at_start + 1)
+	await _until_death_at(2.0)
+	var reach: Node = hand.get("_arms").reach
+	_check("P26 both hands up in front of your face (%.2f, %.2f)" % [reach.weights[0], reach.weights[1]], reach.weights[0] > 0.99 and reach.weights[1] > 0.99 and hand.possessed_left_at().x < 0.0 and hand.possessed_right_at().x > 0.0 and absf(hand.possessed_right_at().y) < 0.12)
+	_check("P27 their fingers working, out of step", reach.writhe[0] > 0.2 and reach.writhe[1] > 0.2)
+	await _until_death_at(2.86)
+	_check("P28 closing over your eyes (%.2f deep)" % hand.possessed_right_at().z, hand.possessed_right_at().z > -0.2 and reach.poses[1] == &"Claw")
+	await _until_death_at(3.3)
+	_check("P29 and they let go as you hit the floor (%.2f)" % reach.weights[1], reach.weights[1] < 0.05 and reach.writhe[1] < 0.05)
+	await _frames(40)
+	for one in get_tree().get_nodes_in_group(&"let_go_of"):
+		one.queue_free()
+
+	# (As the scene's reloaded, when you die: a new you.)
+	await _fresh()
+	_check("P30 back: the arms you had", ViewArmsScript.new_arms == arms_were)
+	Props.give_revolver(p, 24, 4)
+	p.inventory.select_by_id(&"revolver")
+	await _frames(40)
+	_check("P31 and your hand your own", p.hand.get("_main").visible and p.combat.gun_drawn())
+	await _possessed_with_brazier()
+
+
+## With the brazier: it stays on your hand till your hand opens, then it falls and lies on the floor, still burning.
+func _possessed_with_brazier() -> void:
+	await _fresh()
+	Props.give_revolver(p, 24, 4)
+	p.inventory.select_by_id(&"revolver")
+	await _frames(20)
+	p.loadout.pack_item(&"brazier")
+	p.inventory.select_by_id(&"brazier")
+	await _frames(70)
+	var chain: Node3D = p.combat.chain()
+	p.death.possessed = true
+	p.drain_life(p.health + 1.0)
+	await _until_death_at(1.0)
+	var off: float = chain.head_at().distance_to(p.hand.held_point_world(p.combat.CHAIN_FROM, p.combat.CHAIN_DEEPER))
+	_check("P32 it's on your hand till your hand opens (%.2f m off)" % off, chain.visible and off < 0.3)
+	await _until_death_at(2.4)
+	var fell: bool = chain.visible and chain.head_at().y < 0.4
+	_check("P33 then it falls and lies there (%.2f up)" % chain.head_at().y, fell and chain.coal_light().visible)
+	await _until_death_at(3.4)
+	await _frames(20)
+
+
+func _dropped_things() -> int:
+	return get_tree().get_nodes_in_group(&"let_go_of").size()
+
+
+func _until_death_at(seconds: float) -> void:
+	for i in 300:
+		if p.death.at() >= seconds:
+			return
+
+		await get_tree().physics_frame
+
+
 func _possessed() -> void:
 	await _fresh()
 	p.death.possessed = true
@@ -123,6 +198,7 @@ func _possessed() -> void:
 	_check("P22 and you go down at the last", float(down["down"]) > 1.0)
 	await _frames(40)
 	_check("P23 it ends, in about 3.5 s", not p.death.playing())
+	await _possessed_hands()
 
 
 func _which() -> void:

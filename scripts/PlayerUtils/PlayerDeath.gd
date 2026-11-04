@@ -52,14 +52,14 @@ const POSSESSED_NODS := 0.28
 const POSSESSED_STEPS := 5.5
 const POSSESSED_BOBS := 0.04
 const POSSESSED_SWAYS := 0.045
-const POSSESSED_DROPS_AT := 2.5
+const POSSESSED_DROPS_AT := 2.75
 
 ## The eyes' death: your heart, how long between beats at the start and at its fastest, and from
 ## how far through it stops (as the HUD's flesh fails: StealthHUD.EYES_FAIL_FROM).
 const HEART_GAPS := Vector2(0.55, 0.26)
 const HEART_STOPS_AT := 0.7
 ## When you hit the floor (s), for each; when the last eye tears open (share).
-const FLOORED := {&"eyes": 2.7, &"animas": 3.1, &"both": 3.5, &"swipe": 0.65, &"mouth": 1.9, &"possessed": 3.2}
+const FLOORED := {&"eyes": 2.7, &"animas": 3.1, &"both": 3.5, &"swipe": 0.65, &"mouth": 1.9, &"possessed": 3.35}
 const EYE_TEARS_AT := 0.6
 
 ## How many beats of your heart it has played.

@@ -17,7 +17,7 @@ void fragment() {
 	// Squarish: it comes in from the edges, most at the corners; 0 at the middle third's edge, 1 at the screen's.
 	float out_x = abs(p.x);
 	float out_y = abs(p.y);
-	float edge = smoothstep(0.34, 1.05, max(out_x, out_y) * 0.55 + length(p) * 0.4);
+	float edge = smoothstep(0.34, 1.05, max(out_x, out_y) * 0.28 + length(p) * 0.66);
 	vec2 at = vec2(UV.x * aspect, UV.y);
 	float stroke = texture(stroke_sheet, at * 0.9 + vec2(0.0, TIME * 0.006)).r;
 	float fine = texture(stroke_sheet, at * 2.3 - vec2(TIME * 0.004, 0.0)).r;
@@ -27,12 +27,13 @@ void fragment() {
 	float rivulets = smoothstep(0.58, 0.66, run) * smoothstep(0.1, 0.6, edge);
 	float wet_shown = soaked * clamp(wet * 0.62 + rivulets * 0.5, 0.0, 0.8);
 	// Its touch: closing in, ragged, and lit at its front.
-	float line = edge + (stroke - 0.5) * 0.26 + (fine - 0.5) * 0.1;
+	float line = edge + (stroke - 0.5) * 0.62 + (fine - 0.5) * 0.3;
 	float breath = 0.5 + 0.5 * sin(TIME * 1.15);
 	float reach = mix(0.74, 0.62, breath);
-	float dark = smoothstep(reach, reach + 0.05, line) * touch;
-	float front = smoothstep(reach - 0.012, reach + 0.004, line) * (1.0 - smoothstep(reach + 0.004, reach + 0.03, line));
+	// (Soft, and torn by the brush: water coming in at your corners, not a frame round a screen.)
+	float dark = smoothstep(reach - 0.02, reach + 0.3, line) * touch;
+	float front = smoothstep(reach - 0.012, reach + 0.004, line) * (1.0 - smoothstep(reach + 0.004, reach + 0.03, line)) * smoothstep(0.46, 0.62, fine);
 	vec3 colour = mix(COLD, BLACK_WATER, clamp(dark * 2.0, 0.0, 1.0));
 	colour += SEEP * front * touch * (0.3 + breath * 0.45);
-	COLOR = vec4(colour, clamp(max(wet_shown, dark * 0.92) + front * touch * 0.8, 0.0, 1.0));
+	COLOR = vec4(colour, clamp(max(wet_shown, dark * 0.84) + front * touch * 0.5, 0.0, 1.0));
 }

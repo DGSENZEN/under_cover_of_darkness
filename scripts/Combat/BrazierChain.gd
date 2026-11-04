@@ -725,9 +725,12 @@ func _draw_head(shown: PackedVector3Array) -> void:
 	var up := from - at
 	up = up.normalized() if up.length() > 0.0001 else _up_way
 
-	# (Hanging: it swings from its ring by its own weight, not as the few links above it do.)
+	# (Hanging: it swings from its ring by its own weight, not as the few links above it do. On the floor, it's on its side.)
 	if not busy():
 		up = (Vector3.UP - _tilt).normalized()
+
+		if _floor_at != -INF and at.y < _floor_at + RIDES + 0.03:
+			up = Vector3(0.9, 0.12, 0.3).normalized()
 
 	_up_way = _up_way.slerp(up, 0.35).normalized() if _up_way.dot(up) > -0.9 else up
 	up = _up_way

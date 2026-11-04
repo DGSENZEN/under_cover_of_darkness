@@ -339,6 +339,8 @@ var _dodge_length := 0.0
 ## Where you aimed as the lash left.
 var _lash_aim := Transform3D.IDENTITY
 var _chain: Node3D = null
+var _chain_falling_at := Vector3.ZERO
+var _chain_falls := 0.0
 
 
 func _ready() -> void:
@@ -908,19 +910,29 @@ func chain() -> Node3D:
 ## Its chain, if it's what's in your hand and your hand's your own: taken up, followed, held to where a blow wants it, put away.
 func _work_chain(delta: float) -> void:
 	# (Not until it's up: lowered, on its way, your hand is nowhere a chain could hang from.)
-	var out: bool = weapon != null and weapon.chained and is_able() and player.hand != null and player.hand.is_item_visible()
+	var out: bool = weapon != null and weapon.chained and player.hand != null and ((is_able() and player.hand.is_item_visible()) or player.hand.still_held_by_it())
 
 	if not out:
 		if _chain != null and _chain.visible:
-			_chain.put_away()
+			# Dead, it falls from your hand, wherever you fall. Otherwise it's only away.
+			if player.is_dead:
+				_chain_falling_at += Vector3.DOWN * _chain_falls * delta
+				_chain_falls += 9.8 * delta
+				_chain.work(delta, _chain_falling_at)
+			else:
+				_chain.put_away()
 
 		return
+
+	_chain_falling_at = _chain_hand_now()
+	_chain_falls = 0.0
 
 	if _chain == null:
 		_chain = BrazierChainScript.new()
 		_chain.name = "BrazierChain"
 		add_child(_chain)
 		_chain.hold_from(_chain_hand, player.get_rid())
+		_chain_falling_at = _chain_hand_now()
 
 	if not _chain.visible:
 		_chain.take_up(_chain_hand())
@@ -937,6 +949,10 @@ func _work_chain(delta: float) -> void:
 
 
 func _chain_hand() -> Vector3:
+	return _chain_falling_at if player.is_dead and not player.hand.still_held_by_it() else _chain_hand_now()
+
+
+func _chain_hand_now() -> Vector3:
 	return player.hand.held_point_world(CHAIN_FROM, CHAIN_DEEPER) if player.hand != null else player.global_position
 
 
