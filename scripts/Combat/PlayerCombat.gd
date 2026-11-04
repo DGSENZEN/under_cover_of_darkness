@@ -64,7 +64,7 @@ const ViewArmsScript := preload("res://scripts/Interaction/ViewArms.gd")
 ## Where the chain comes out of its grip (in the grip's own space), and where its head is drawn back to, for a lash and for a close hit (in your view).
 const CHAIN_FROM := Vector3(-0.018, 0.052, -0.064)
 ## The chain's in the world and your hand's a miniature: it's put this much further along the line from your eye to your fist, so what hangs from it can be seen under it.
-const CHAIN_DEEPER := 2.4
+const CHAIN_DEEPER := 1.9
 ## What the censer's swing does to your hand (m per share of straight out), what the hand does anyway under the weight (m, Hz).
 const SWING_MOVES_HAND := 0.045
 const WEIGHT_BREATHES := 0.005
@@ -75,7 +75,14 @@ const CLOSE_GOES := [[0.0, &"close_chamber"], [0.45, &"close_mid"], [1.0, &"clos
 ## A lash coming back: it stays out this far through, it's yanked in by this far through, then it settles at the hold.
 const LASH_STAYS_OUT := 0.1
 const LASH_YANKED_BY := 0.42
-const LASH_DRAWN_TO := Vector3(0.7, 0.5, 0.3)
+## How hard the fist's pulled when a lash lands, when it's pulled up short with nothing on the end, and when a close hit lands (m/s); and how it comes back (Hz, damped).
+const LASH_PULLS := 0.9
+const LASH_PULLS_SHORT := 1.3
+const CLOSE_PULLS := 1.0
+const TUG_RATE := 2.2
+const TUG_DAMP := 0.5
+## The way a lash's head is swung up and round in the wind-up, where you can see it, in your view: up out of its hang, over your right, and back past your shoulder.
+const LASH_WHIRLS := [Vector3(0.45, -0.75, -1.15), Vector3(1.05, -0.3, -1.25), Vector3(1.3, 0.45, -1.05), Vector3(0.95, 1.0, -0.55), Vector3(0.75, 0.8, 0.25)]
 const CLOSE_DRAWN_TO := Vector3(1.0, 0.1, -0.25)
 ## A lash pulled up short at the end of its chain goes back this fast (m/s); a lash that lands tugs you forward this hard (m/s).
 const LASH_SNAPS_BACK := 3.2
@@ -339,6 +346,8 @@ var _dodge_length := 0.0
 ## Where you aimed as the lash left.
 var _lash_aim := Transform3D.IDENTITY
 var _chain: Node3D = null
+var _tug := Vector3.ZERO
+var _tug_going := Vector3.ZERO
 var _chain_falling_at := Vector3.ZERO
 var _chain_falls := 0.0
 
@@ -704,6 +713,10 @@ func _enter(new_phase: int) -> void:
 		if new_phase == Phase.RECOVER:
 			# (A lash at nothing is pulled up short by the chain, and you feel it.)
 			var short: bool = not _power and _outcome == &"miss"
+
+			# The chain comes to its end, whatever it met: your fist's pulled on.
+			if not _power:
+				_tug_going += Vector3(0.0, -0.25, -1.0) * (LASH_PULLS_SHORT if short else LASH_PULLS)
 			_chain.bring_back(_recovery, (_lash_aim.basis.z * LASH_SNAPS_BACK + Vector3.UP * 0.6) if short else Vector3.ZERO)
 			Sfx.play_flat(player, &"rattle_chain", -3.0, 0.8)
 
@@ -902,6 +915,11 @@ func blow_poise() -> float:
 	return maxf(weight, running_poise) if _running else weight
 
 
+## How far the chain's pulling your fist off its pose now, in your view.
+func chain_tug_now() -> Vector3:
+	return _tug
+
+
 ## The chain on your brazier (null until it's first taken up).
 func chain() -> Node3D:
 	return _chain
@@ -939,8 +957,13 @@ func _work_chain(delta: float) -> void:
 
 	match phase:
 		Phase.WINDUP, Phase.CHARGING:
-			# (Held, it's going to be the close hit.)
-			_chain.hold_to(aim() * (CLOSE_DRAWN_TO if _held_through and Input.is_action_pressed("throw") else LASH_DRAWN_TO))
+			# (Held, it's going to be the close hit. Let go, it's swung round for the lash.)
+			if _held_through and Input.is_action_pressed("throw"):
+				_chain.hold_to(aim() * CLOSE_DRAWN_TO)
+			else:
+				var round_it := clampf(_t / maxf(_windup, 0.01), 0.0, 1.0) * (LASH_WHIRLS.size() - 1)
+				var from_i := mini(int(round_it), LASH_WHIRLS.size() - 2)
+				_chain.hold_to(aim() * (LASH_WHIRLS[from_i] as Vector3).lerp(LASH_WHIRLS[from_i + 1], round_it - from_i))
 		Phase.STRIKE:
 			if _power:
 				_chain.hold_to(_close_head_at(clampf(_t / maxf(_strike_time, 0.01), 0.0, 1.0)))
@@ -1621,6 +1644,9 @@ func _chain_lands(target: Node3D, point: Vector3, direction: Vector3) -> void:
 	if _chain != null:
 		_chain.burst(point, -direction, wet)
 		_chain.bite(target, point, -direction)
+
+	if _power:
+		_tug_going += Vector3(-0.8, -0.3, -0.2) * CLOSE_PULLS
 
 	Sfx.play(player, &"thud", point, 2.0, 0.62 if _power else 0.72)
 	Sfx.play(player, &"flesh_heavy", point, -1.0 if _power else -4.0, 0.74)
@@ -2659,6 +2685,12 @@ func _send_chained_pose(delta: float) -> void:
 			target.origin += Vector3(0.0, -0.022, 0.0) * sin(PI * clampf((r - 0.7) / 0.3, 0.0, 1.0))
 		_:
 			exact = false
+
+	# What it's pulling on you: it springs back slowly, a heavy thing on a chain.
+	var tug_w := TAU * TUG_RATE
+	_tug_going += (-tug_w * tug_w * _tug - 2.0 * TUG_DAMP * tug_w * _tug_going) * delta
+	_tug += _tug_going * delta
+	target.origin += _tug
 
 	# The weight of it: the hand breathes under it, and is pulled about by its swing.
 	if _chain != null and _chain.visible and phase != Phase.STRIKE:

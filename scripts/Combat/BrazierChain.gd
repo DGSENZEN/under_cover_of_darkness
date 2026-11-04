@@ -27,7 +27,13 @@ const HOLDS := 14
 ## The head's share of a correction, against a link's 1: it is by far the heaviest thing here.
 const HEAD_GIVES := 0.08
 ## How fast it follows where it's held to, at most (m/s), and its share of the way there a tick: quick, and it has weight.
-const HELD_SPEED := 14.0
+const HELD_SPEED := 17.0
+## The whip that runs along it when it's flung and when it lands: how far (m) at each, how fast it goes, and how many waves there are along it.
+const WHIP_FLUNG := 0.2
+const WHIP_LANDS := 0.12
+const WHIP_GOES := 0.5
+const WHIP_RUNS := 30.0
+const WHIP_WAVES := 2.6
 ## On the floor: how high it rides, and what it keeps of its speed along it.
 const RIDES := 0.11
 const SCRAPES := 0.8
@@ -96,6 +102,8 @@ var _tilt := Vector3.ZERO
 var _tilt_going := Vector3.ZERO
 var _hand_was := Vector3.ZERO
 var _hand_speed := Vector3.ZERO
+var _whip := 0.0
+var _whip_clock := 0.0
 var _bite_left := 0.0
 var _bite_on: Node3D = null
 var _bite_local := Vector3.ZERO
@@ -338,6 +346,11 @@ func busy() -> bool:
 	return _mode != Mode.HANG or _long > HANGS * 1.05
 
 
+## How far it's whipping along its length now (m).
+func whip_now() -> float:
+	return _whip
+
+
 ## How far it's swinging from its ring, flat (a share of straight out): what your hand feels.
 func tilt_now() -> Vector3:
 	return _tilt
@@ -364,6 +377,7 @@ func throw_to(at: Vector3, seconds: float) -> void:
 	_mode = Mode.THROWN
 	_thrown_from = head_at()
 	_thrown_to = at
+	_whip = WHIP_FLUNG
 	_going = 0.0
 	_takes = maxf(seconds, 0.02)
 
@@ -390,6 +404,7 @@ func burst(at: Vector3, away: Vector3, wet := false) -> void:
 	_burst.emitting = true
 	_fans = 1.0
 	_light_jump = LIGHT_JUMPS
+	_whip = maxf(_whip, WHIP_LANDS)
 	_throw_coals(at, away)
 
 	if wet:
@@ -544,7 +559,7 @@ func work(delta: float, hand: Vector3) -> void:
 		_at[0] = hand
 
 	# (However fast it's being hauled: from each end in turn, nothing further from the next than a link's worth.)
-	for _sweep in 2:
+	for _sweep in 5:
 		for i in range(last - 1, 0, -1):
 			_at[i] = _within(_at[i], _at[i + 1], gap)
 
@@ -559,6 +574,8 @@ func work(delta: float, hand: Vector3) -> void:
 	_fans = move_toward(_fans, clampf(_head_speed * FANS_PER, 0.0, 1.0), delta * (6.0 if _head_speed * FANS_PER > _fans else 1.1))
 	_embers.emitting = _fans > 0.35
 	_work_swing(delta, hand)
+	_whip = move_toward(_whip, 0.0, delta * WHIP_GOES)
+	_whip_clock += delta
 	_light_jump = move_toward(_light_jump, 0.0, delta * LIGHT_SETTLES)
 	_steam_left = maxf(_steam_left - delta, 0.0)
 	_work_coals(delta)
@@ -590,7 +607,8 @@ func _wanted_long(delta: float) -> float:
 		Mode.THROWN:
 			return maxf(_long, there * SLACK)
 		Mode.HELD:
-			return maxf(move_toward(_long, there * SLACK, delta * 25.0), HANGS)
+			# (Paid out as fast as it's wanted; taken back in at a hand's pace.)
+			return maxf(maxf(move_toward(_long, there * SLACK, delta * 25.0), there * SLACK), HANGS)
 		Mode.DROPPING:
 			return _long
 		Mode.HAULED:
@@ -683,6 +701,18 @@ func _process(_delta: float) -> void:
 	# (Your hand is where it is now, and the chain near it goes with it: less and less further down.)
 	for i in POINTS:
 		shown[i] += moved_by * pow(1.0 - float(i) / (POINTS - 1), 3.0)
+
+	# A whip going along it, nothing at either end.
+	if _whip > 0.001:
+		var along_it := shown[POINTS - 1] - shown[0]
+		var across := along_it.cross(Vector3.UP)
+		across = across.normalized() if across.length() > 0.001 else Vector3.RIGHT
+		var up_it := across.cross(along_it.normalized())
+
+		for i in range(1, POINTS - 1):
+			var u := float(i) / (POINTS - 1)
+			var wave := sin(u * TAU * WHIP_WAVES - _whip_clock * WHIP_RUNS) * sin(u * PI) * _whip
+			shown[i] += (across * 0.7 + up_it * 0.7) * wave
 
 	_draw_links(shown)
 	_draw_head(shown)

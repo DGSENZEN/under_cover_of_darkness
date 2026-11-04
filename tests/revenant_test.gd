@@ -1074,6 +1074,17 @@ func _how_it_is_held() -> void:
 	var top: Vector3 = cam.global_transform.affine_inverse() * chain.hand_now()
 	var shown := Vector2(top.x, top.y) / (-top.z * tan(deg_to_rad(cam.fov) * 0.5))
 	_check("Hd2 the chain's top is on the fist, on screen (%.3f off)" % drawn.distance_to(shown), drawn.distance_to(shown) < 0.012)
+	# Clear of your sleeve: the censer's middle, on screen, against the line of your forearm.
+	var wrist: Vector3 = cam.global_transform.affine_inverse() * hand.gun_mesh().global_position
+	var along_arm: Vector3 = cam.global_transform.basis.inverse() * hand.gun_mesh().global_basis.orthonormalized().y
+	var elbow: Vector3 = wrist - along_arm * 0.2
+	var screen_of := func(at: Vector3, fov: float) -> Vector2: return Vector2(at.x, at.y) / (-at.z * tan(deg_to_rad(fov) * 0.5))
+	var censer_mid: Vector3 = cam.global_transform.affine_inverse() * (chain.head_at() + Vector3.DOWN * 0.22)
+	var from_a: Vector2 = screen_of.call(wrist, ViewArmsScript.VIEW_FOV)
+	var to_b: Vector2 = screen_of.call(elbow, ViewArmsScript.VIEW_FOV)
+	var seen_mid: Vector2 = screen_of.call(censer_mid, cam.fov)
+	var nearest: Vector2 = Geometry2D.get_closest_point_to_segment(seen_mid, from_a, to_b)
+	_check("Hd10 the censer hangs clear of your sleeve (%.2f of half the screen)" % seen_mid.distance_to(nearest), seen_mid.distance_to(nearest) > 0.3)
 	var reach_at: Vector3 = hand.get("_arms").reach.targets[1].origin
 	_check("Hd3 your hand's sent to where the wrap is (%.3f)" % hand.get("_arms")._to_man(hand.get("_main").transform).origin.distance_to(reach_at), hand.get("_arms")._to_man(hand.get("_main").transform).origin.distance_to(reach_at) < 0.01)
 	var hold_at: Vector3 = cam.global_transform.affine_inverse() * hand.gun_mesh().global_position
@@ -1105,15 +1116,44 @@ func _how_it_is_held() -> void:
 	var hold_after: Vector3 = cam.global_transform.affine_inverse() * hand.gun_mesh().global_position
 	_check("Hd6 back at the hold (%.3f m)" % hold_after.distance_to(hold_at), hold_after.distance_to(hold_at) < 0.03)
 	# The fist goes where the poses say, and comes back.
+	var censer_seen := -1.0
+	var censer_up := -1.0
 	Input.action_press("throw")
 	await _frames(2)
 	Input.action_release("throw")
-	await _until(func(): return p.combat.phase == CombatScript.Phase.STRIKE, 1.0)
+
+	while p.combat.phase != CombatScript.Phase.STRIKE:
+		await get_tree().physics_frame
+		var head_view: Vector3 = cam.global_transform.affine_inverse() * chain.head_at()
+
+		if head_view.z < -0.2:
+			var on_screen := head_view.y / (-head_view.z * tan(deg_to_rad(cam.fov) * 0.5))
+
+			if absf(on_screen) < 1.0 and absf(head_view.x / (-head_view.z * tan(deg_to_rad(cam.fov) * 0.5) * 1.78)) < 1.0:
+				censer_seen = maxf(censer_seen, 1.0 - absf(on_screen))
+				censer_up = maxf(censer_up, on_screen)
+
 	var cocked: Vector3 = cam.global_transform.affine_inverse() * hand.gun_mesh().global_position
-	await _until(func(): return p.combat.phase == CombatScript.Phase.RECOVER, 1.0)
+	var whip_most := 0.0
+
+	while p.combat.phase != CombatScript.Phase.RECOVER:
+		await get_tree().physics_frame
+		whip_most = maxf(whip_most, chain.whip_now())
+
 	await _frames(1)
 	var out: Vector3 = cam.global_transform.affine_inverse() * hand.gun_mesh().global_position
-	_check("Hd7 drawn back for a lash, off to your right (%.2f, %.2f)" % [cocked.x, cocked.z], cocked.x > hold_at.x + 0.03 and cocked.z > hold_at.z + 0.08)
+	var tugged_most := 0.0
+
+	for i in 8:
+		await get_tree().physics_frame
+		tugged_most = maxf(tugged_most, p.combat.chain_tug_now().length())
+	_check("Hd7 drawn back for a lash, off to your right (%.2f, %.2f)" % [cocked.x, cocked.z], cocked.x > hold_at.x + 0.03 and cocked.z > hold_at.z + 0.04)
+	var view_tall: float = tan(deg_to_rad(ViewArmsScript.VIEW_FOV) * 0.5)
+	var view_wide: float = view_tall * 16.0 / 9.0
+	_check("Hd11 and you can see it: the wind-up isn't an empty screen (%.2f, %.2f of the way out)" % [cocked.x / (-cocked.z * view_wide), cocked.y / (-cocked.z * view_tall)], absf(cocked.x / (-cocked.z * view_wide)) < 0.95 and absf(cocked.y / (-cocked.z * view_tall)) < 0.92)
+	_check("Hd12 the censer goes up where you can see it, on its way round (%.2f at most on screen)" % censer_seen, censer_seen > 0.0 and censer_up > 0.0)
+	_check("Hd13 the chain doesn't fly as a rod: it's whipping (%.3f m)" % whip_most, whip_most > 0.03)
+	_check("Hd14 the fist feels it land: pulled on (%.3f past the pose)" % tugged_most, tugged_most > 0.012)
 	_check("Hd8 and driven out along your aim (%.2f deep, %.2f across)" % [out.z, out.x], out.z < hold_at.z - 0.02 and absf(out.x) < hold_at.x)
 	await _until_idle()
 	p.inventory.select_by_id(&"revolver")

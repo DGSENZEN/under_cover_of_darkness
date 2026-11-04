@@ -22,7 +22,18 @@ const PossessionPoses := preload("res://scripts/PlayerUtils/PossessionPoses.gd")
 const POSSESSED_GOES := [[0.5, &"seized"], [1.0, &"seized"], [1.3, &"let_go"], [1.62, &"rise"], [2.0, &"looked_at"], [2.28, &"looked_at"], [2.55, &"closing"], [2.82, &"over_eyes"]]
 const POSSESSED_LETS_GO_OF_IT := 1.2
 const POSSESSED_HANDS_LOOSE := Vector2(3.0, 3.3)
-const POSSESSED_WRITHES := Vector2(1.45, 2.0)
+const POSSESSED_WRITHES := Vector2(0.95, 1.7)
+## How it moves them: each move's broken into this many, each a stop and then a burst, the last share of its time. And the jolts through them: how fast, how far (rad).
+const POSSESSED_FITS := 3.0
+const POSSESSED_BURST := 0.34
+const POSSESSED_JOLTS_AT := Vector2(13.7, 4.3)
+const POSSESSED_JOLTS := 0.16
+## The seep on your hands: when it starts and when it's all there; how far it's got from your knuckles at the last (m, in the view's small world); where your knuckles are from your wrist (m, full size).
+const POSSESSED_SEEPS := Vector2(0.5, 2.1)
+const POSSESSED_SEEP_REACH := 0.078
+const KNUCKLES_ALONG := 0.09
+const PossessedLook := preload("res://scripts/PlayerUtils/possessed_hands.gdshader")
+const SeepBrush := preload("res://textures/painted/eclipse/brush.png")
 const MagicFxScript := preload("res://scripts/Visual/MagicFx.gd")
 const LibraryGlyphsScript := preload("res://scripts/Visual/Library/LibraryGlyphs.gd")
 
@@ -205,6 +216,9 @@ var _item_let_go := false
 var _possessed_from: Array = [Transform3D.IDENTITY, Transform3D.IDENTITY]
 var _possessed_at: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var _possessed_elbow: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var _possessed_knuckles: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var _seep_now := 0.0
+var _seep_look: ShaderMaterial = null
 var _arms_swapped := false
 var _pending_item: Mesh = null
 var _switching := false
@@ -2563,14 +2577,20 @@ func _possessed_hands(targets: Array[Transform3D], weights: Array, curls: Array,
 		var share := clampf((at - was_at) / maxf(by - was_at, 0.001), 0.0, 1.0)
 
 		if at <= by or key == POSSESSED_GOES[-1]:
-			var eased := share * share * (3.0 - 2.0 * share)
+			# (Not as you'd move them: in fits, a stop and a burst and a stop.)
+			var fits := share * POSSESSED_FITS
+			var in_fit := fmod(fits, 1.0)
+			var eased := (floorf(fits) + smoothstep(1.0 - POSSESSED_BURST, 1.0, in_fit)) / POSSESSED_FITS if share < 1.0 else 1.0
 
 			for side in 2:
 				var hand_id := "l" if side == 0 else "r"
 				var from: Transform3D = _possessed_hand(was_key, hand_id) if was_key != &"" else _possessed_from[side]
 				var to := _possessed_hand(key[1], hand_id)
 				var now := from.interpolate_with(to, eased)
+				var jolt := pow(maxf(sin(at * POSSESSED_JOLTS_AT.x + float(side) * 1.7) * sin(at * POSSESSED_JOLTS_AT.y), 0.0), 8.0)
+				now.basis = now.basis * Basis(Vector3.RIGHT, jolt * POSSESSED_JOLTS)
 				_possessed_at[side] = now.origin
+				_possessed_knuckles[side] = now.origin + now.basis.y * KNUCKLES_ALONG
 				targets[side] = Transform3D(now.basis.orthonormalized().scaled(Vector3.ONE * ViewArmsScript.SCALE), now.origin * ViewArmsScript.SCALE)
 				weights[side] = 1.0 - loose
 				curls[side] = 1.0
@@ -2599,7 +2619,37 @@ func _possessed_hands(targets: Array[Transform3D], weights: Array, curls: Array,
 	_main.visible = _main_item != null and at < POSSESSED_LETS_GO_OF_IT
 	var writhes := smoothstep(POSSESSED_WRITHES.x, POSSESSED_WRITHES.y, at) * (1.0 - loose)
 	_arms.reach.writhe.fill(writhes)
+	_lay_seep(smoothstep(POSSESSED_SEEPS.x, POSSESSED_SEEPS.y, at) * (1.0 - loose))
 	return true
+
+
+## What's got you, showing on your hands: over the arms as they are, working out from your knuckles.
+func _lay_seep(how_far: float) -> void:
+	_seep_now = how_far
+
+	if _seep_look == null:
+		_seep_look = ShaderMaterial.new()
+		_seep_look.shader = PossessedLook
+		_seep_look.render_priority = 11
+		_seep_look.set_shader_parameter(&"stroke_sheet", SeepBrush)
+		_seep_look.set_shader_parameter(&"fov_override", ViewArmsScript.VIEW_FOV)
+		_seep_look.set_shader_parameter(&"z_clip", ViewArmsScript.Z_CLIP)
+
+	if _arms.man != null:
+		for skin: MeshInstance3D in _arms.man.find_children("*", "MeshInstance3D", true, false):
+			if skin.material_overlay != _seep_look:
+				skin.material_overlay = _seep_look
+
+	var here := global_transform
+	_seep_look.set_shader_parameter(&"seep", how_far)
+	_seep_look.set_shader_parameter(&"reach", POSSESSED_SEEP_REACH * how_far)
+	_seep_look.set_shader_parameter(&"right_hand", here * (_possessed_knuckles[1] * ViewArmsScript.SCALE))
+	_seep_look.set_shader_parameter(&"left_hand", here * (_possessed_knuckles[0] * ViewArmsScript.SCALE))
+
+
+## How far the seep's got on your hands.
+func seep_on_hands() -> float:
+	return _seep_now
 
 
 ## A posed hand, in your view at full size.
@@ -2656,6 +2706,11 @@ func reset_after_death() -> void:
 	_possessing = false
 	_item_let_go = false
 	_main.visible = true
+	_seep_now = 0.0
+
+	if _arms != null and _arms.man != null:
+		for skin: MeshInstance3D in _arms.man.find_children("*", "MeshInstance3D", true, false):
+			skin.material_overlay = null
 
 	if _arms != null and _arms.reach != null:
 		_arms.reach.writhe.fill(0.0)

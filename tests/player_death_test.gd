@@ -128,9 +128,27 @@ func _possessed_hands() -> void:
 	var cam: Camera3D = p.camera
 	_check("P24 your own arms, whichever you came with", ViewArmsScript.new_arms)
 	_check("P25 it's held on to, at first, then let go of", held_on and early == dropped_at_start and not hand.get("_main").visible and _dropped_things() == dropped_at_start + 1)
-	await _until_death_at(2.0)
+	await _until_death_at(1.62)
 	var reach: Node = hand.get("_arms").reach
-	_check("P26 both hands up in front of your face (%.2f, %.2f)" % [reach.weights[0], reach.weights[1]], reach.weights[0] > 0.99 and reach.weights[1] > 0.99 and hand.possessed_left_at().x < 0.0 and hand.possessed_right_at().x > 0.0 and absf(hand.possessed_right_at().y) < 0.12)
+	# It doesn't move as you would: in bursts, with stops. Through the rise.
+	var moved: Array[float] = []
+	var was_at: Vector3 = hand.possessed_right_at()
+
+	while p.death.at() < 2.5:
+		await get_tree().physics_frame
+		moved.append(hand.possessed_right_at().distance_to(was_at))
+		was_at = hand.possessed_right_at()
+
+	var quick := 0
+	var stopped := 0
+
+	for m in moved:
+		quick += 1 if m > 0.005 else 0
+		stopped += 1 if m < 0.0005 else 0
+
+	_check("P34 it moves your hands in bursts and stops, not smoothly (%d stopped, %d quick, of %d)" % [stopped, quick, moved.size()], stopped >= 6 and quick >= 4)
+	_check("P35 the seep's on your hands (%.2f)" % hand.seep_on_hands(), hand.seep_on_hands() > 0.4)
+	_check("P26 both hands up in front of your face (%.2f, %.2f)" % [reach.weights[0], reach.weights[1]], reach.weights[0] > 0.99 and reach.weights[1] > 0.99 and hand.possessed_left_at().x < 0.0 and hand.possessed_right_at().x > 0.0)
 	_check("P27 their fingers working, out of step", reach.writhe[0] > 0.2 and reach.writhe[1] > 0.2)
 	await _until_death_at(2.86)
 	_check("P28 closing over your eyes (%.2f deep)" % hand.possessed_right_at().z, hand.possessed_right_at().z > -0.2 and reach.poses[1] == &"Claw")
@@ -143,6 +161,7 @@ func _possessed_hands() -> void:
 	# (As the scene's reloaded, when you die: a new you.)
 	await _fresh()
 	_check("P30 back: the arms you had", ViewArmsScript.new_arms == arms_were)
+	_check("P36 clean again", p.hand.seep_on_hands() == 0.0)
 	Props.give_revolver(p, 24, 4)
 	p.inventory.select_by_id(&"revolver")
 	await _frames(40)
