@@ -63,6 +63,9 @@ const BrazierChainScript := preload("res://scripts/Combat/BrazierChain.gd")
 const CHAIN_FROM := Vector3(0.0, -0.098, 0.0)
 const LASH_DRAWN_TO := Vector3(0.7, 0.5, 0.3)
 const CLOSE_DRAWN_TO := Vector3(1.0, 0.1, -0.25)
+## A lash pulled up short at the end of its chain goes back this fast (m/s); a lash that lands tugs you forward this hard (m/s).
+const LASH_SNAPS_BACK := 3.2
+const LASH_TUGS := 1.3
 ## How low a close hit's head goes through, from your eye.
 const CLOSE_HEAD_LOW := 0.3
 
@@ -683,7 +686,14 @@ func _enter(new_phase: int) -> void:
 	# (Whatever stopped it, it comes back: all of a recovery, or quickly if you were knocked out of it.)
 	if _chain != null and _chain.visible:
 		if new_phase == Phase.RECOVER:
-			_chain.bring_back(_recovery)
+			# (A lash at nothing is pulled up short by the chain, and you feel it.)
+			var short: bool = not _power and _outcome == &"miss"
+			_chain.bring_back(_recovery, (_lash_aim.basis.z * LASH_SNAPS_BACK + Vector3.UP * 0.6) if short else Vector3.ZERO)
+			Sfx.play_flat(player, &"rattle_chain", -3.0, 0.8)
+
+			if short:
+				player.juice.add_trauma(0.12)
+				player.juice.punch(0.14, 0.0)
 		elif new_phase in [Phase.IDLE, Phase.DODGE, Phase.KICK, Phase.STAGGER] and _chain.busy():
 			_chain.bring_back(0.3)
 
@@ -986,6 +996,7 @@ func _start_strike(power: bool) -> void:
 	if weapon.chained and not power and _chain != null:
 		_chain.throw_to(_lash_lands_at(), _strike_time)
 		Sfx.play(player, &"whoosh_heavy", _lash_aim.origin, -2.0, 0.8)
+		Sfx.play_flat(player, &"rattle_chain", 3.0, 1.15)
 	_spend((cost_power if power else cost_quick) * float(_style()["cost"]))
 
 	player.juice.on_swing(_side_of(_direction), power, _direction)
@@ -1263,6 +1274,8 @@ func _sweep(p: float) -> void:
 
 	if weapon.chained and _chain != null:
 		_chain.burst(point, normal)
+		_chain.bite(null, point, normal)
+		Sfx.play(player, &"coal_pop", point, 0.0, 0.8)
 
 	# (A lash has nothing to stop in your hand: it comes back as it would.)
 	if lash:
@@ -1498,7 +1511,7 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 			pass
 		_:
 			SoundBus.emit_sound(point, weapon.hit_db, player, &"hit")
-			var heavy := _power or _finisher or _riposte or punish or open or result == &"killed" or kind == &"backstab"
+			var heavy: bool = _power or _finisher or _riposte or punish or open or result == &"killed" or kind == &"backstab" or weapon.chained
 			var freeze := hitstop_finisher if _finisher else (hitstop_heavy if heavy else hitstop_quick)
 			TimeFx.hitstop(get_tree(), freeze, 0.04)
 			player.juice.add_trauma(0.5 if heavy else 0.28)
@@ -1507,14 +1520,13 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 			_recoil_view(1.0 if heavy else 0.6)
 			_hand(&"impact", [&"heavy" if heavy else &"flesh"])
 
-			if not target.has_meta(&"bloodless"):
-				_hand(&"bloody", [0.4 if heavy else 0.22])
+			if weapon.chained:
+				_chain_lands(target, point, direction)
+			else:
+				if not target.has_meta(&"bloodless"):
+					_hand(&"bloody", [0.4 if heavy else 0.22])
 
-			_cut_sound(target, point, heavy, dagger)
-
-			if weapon.chained and _chain != null:
-				_chain.burst(point, -direction)
-				Sfx.play(player, &"coal_pop", point, 0.0, 0.9)
+				_cut_sound(target, point, heavy, dagger)
 
 			_cleave = cleave_slow
 			_outcome = &"hit"
@@ -1570,6 +1582,31 @@ func _cut_sound(target: Node, at: Vector3, heavy: bool, dagger: bool) -> void:
 	if target.has_method("armoured_at") and target.armoured_at(at):
 		Sfx.play(player, &"ting", at, -1.0 if heavy else -4.0, 0.78 if heavy else 0.9)
 		Sfx.play(player, &"clang", at, -12.0 if heavy else -15.0, 0.7)
+
+
+## The head of the brazier going into someone: not a blade's sound, iron and coals on flesh, a hiss if they're wet; and you feel its weight come to the end of the chain.
+func _chain_lands(target: Node3D, point: Vector3, direction: Vector3) -> void:
+	var wet: bool = target.get("kind") == &"revenant"
+
+	if _chain != null:
+		_chain.burst(point, -direction, wet)
+		_chain.bite(target, point, -direction)
+
+	Sfx.play(player, &"thud", point, 2.0, 0.62 if _power else 0.72)
+	Sfx.play(player, &"flesh_heavy", point, -1.0 if _power else -4.0, 0.74)
+	Sfx.play(player, &"coal_pop", point, 1.0, 0.85)
+
+	if _power:
+		Sfx.play(player, &"bone_crack", point, -7.0, 0.8)
+
+	if wet:
+		Sfx.play(player, &"pipe_hiss", point, 11.0, 1.35)
+
+	# (Nothing that's all the way out on a chain stops without pulling on what's holding it.)
+	if not _power and player.is_on_floor():
+		var forward := -player.global_basis.z
+		forward.y = 0.0
+		player.shove(forward.normalized() * LASH_TUGS, 0.1)
 
 
 ## The body the blade met pushes back on it: the view kicks against the cut,

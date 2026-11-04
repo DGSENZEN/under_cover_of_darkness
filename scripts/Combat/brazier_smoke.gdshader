@@ -3,6 +3,8 @@ render_mode unshaded, depth_draw_never, cull_disabled, shadows_disabled;
 // The smoke it trails, what a censer is for: thin, in the brush's shapes, and turned to face you.
 
 uniform sampler2D stroke_sheet : filter_linear_mipmap, repeat_enable;
+// How far the brush tears it up: enough, and it's rags of vapour, never a ball.
+uniform float torn = 0.0;
 
 varying float phase;
 varying float not_in_your_face;
@@ -20,5 +22,6 @@ void fragment() {
 	float brush = texture(stroke_sheet, UV * 0.5 + vec2(phase, TIME * 0.02)).r;
 	float soft = smoothstep(1.0, 0.1, length(p) + (brush - 0.5) * 1.1);
 	ALBEDO = COLOR.rgb;
-	ALPHA = soft * soft * COLOR.a * not_in_your_face;
+	float rags = mix(1.0, smoothstep(0.42, 0.68, texture(stroke_sheet, vec2(UV.x * 0.28 + phase, UV.y * 0.9 - TIME * 0.05)).r), torn);
+	ALPHA = soft * soft * COLOR.a * rags * not_in_your_face;
 }

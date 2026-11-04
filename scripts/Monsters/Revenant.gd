@@ -212,6 +212,10 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 
 	var source := Bestiary.source_of(hit_kind, round_hint)
 
+	# (Where the coals touched it, whatever else comes of this.)
+	if hit_kind == &"brazier" and body != null:
+		body.struck_at(point, direction, damage / 70.0)
+
 	if is_down():
 		last_hit_at = point
 		last_hit_way = direction
@@ -246,6 +250,7 @@ func take_hit(damage: float, attacker: Node3D, hit_kind: StringName, point: Vect
 	# The brazier sears it: it staggers, whatever it was at, and takes double for a while.
 	if hit_kind == &"brazier":
 		statuses.apply(&"exposed", float(_row["seared_time"]))
+		_push += direction.normalized() * damage * float(_row["brazier_shoves"])
 
 		if state != State.HOLD:
 			_enter(State.STAGGER)

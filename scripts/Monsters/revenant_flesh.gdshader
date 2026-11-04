@@ -11,6 +11,9 @@ shader_type spatial;
 instance uniform float eyes = 0.0;
 instance uniform float burn = 0.0;
 instance uniform float seared = 0.0;
+// Where the brazier just landed: a burn spreading from there, its middle gone to char, its edge alive, going out as it goes.
+instance uniform vec3 flare_at = vec3(0.0);
+instance uniform float flare = 0.0;
 // How angry it is, 0..1: everything of the seep comes up with it.
 instance uniform float wrath = 0.0;
 // What it has just done, for what drifts on it to come after (m, in the model's space).
@@ -97,6 +100,11 @@ void fragment() {
 	// (The heat only down the middle of them: thin lines of it, never a whole side of it.)
 	float scored_hot = smoothstep(0.46, 0.415, stroke) * seared * on_flesh;
 	skin = mix(skin, vec3(0.03, 0.02, 0.018), scored * 0.8);
+	float flare_from = length(paint_at - flare_at) + (stroke - 0.5) * 0.24;
+	float flare_reach = mix(0.52, 0.12, flare);
+	float flare_in = (1.0 - smoothstep(flare_reach - 0.08, flare_reach, flare_from)) * step(0.001, flare) * on_flesh;
+	float flare_edge = flare_in * smoothstep(flare_reach - 0.2, flare_reach - 0.06, flare_from);
+	skin = mix(skin, vec3(0.02, 0.015, 0.013), flare_in * 0.85 * smoothstep(0.0, 0.25, flare));
 	// Burning as it comes: the hide splitting, heat in its folds, not all black. Dying: the char takes it all, from the middle out, and goes to pale ash at the last.
 	float fire_cracks = smoothstep(0.46, 0.38, stroke) * burn;
 	skin = mix(skin, skin * 0.4, smoothstep(0.62, 0.42, stroke) * burn * 0.8);
@@ -124,6 +132,7 @@ void fragment() {
 	EMISSION = painted_fill(skin * rest, world_normal, NORMAL, VIEW) * 0.8
 		+ light_of
 		+ is_eye * mix(EYE, EYE_HOT, max(eyes, wrath * 0.6)) * (1.0 - smoothstep(0.3, 0.75, charred))
+		+ FIRE * (flare_in * flare * flare * 1.2 + flare_edge * flare * 1.4)
 		+ FIRE * (scored_hot * 0.38 + fire_cracks * (0.5 + 0.5 * sin(TIME * 7.0 + paint_at.y * 9.0)) * 0.34 + hot_edge * 0.8 + glow_behind * 0.12)
 		+ FIRE * char_here * (1.0 - crumbled) * smoothstep(0.64, 0.72, stroke) * 0.22
 		+ eye_smoulder(paint_at * 2.0, NORMAL, VIEW, TIME);

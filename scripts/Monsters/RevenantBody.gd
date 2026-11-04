@@ -185,6 +185,11 @@ const JAW_GNAWS := 0.45
 const JAW_GNAW_RATE := 13.0
 ## Its arm's elbow on the floor, up over its shoulder like a spider's.
 const ELBOW_UP := Vector3(0.0, 1.0, 0.1)
+## Where the brazier landed: how long the burn takes to go (s). How hard it's knocked, the way it was hit (m/s at its hardest), and how it comes back: Hz, and how damped.
+const FLARE_LASTS := 1.0
+const KNOCKED := 2.3
+const KNOCK_RATE := 1.7
+const KNOCK_DAMP := 0.5
 ## How fast the brazier's marks come up on it and go, a share a second.
 const SEARS_IN := 7.0
 const SEARS_OUT := 1.2
@@ -301,6 +306,9 @@ var _held_at := Vector3.ZERO
 var _just_hitched := false
 var _head_was := Vector3.ZERO
 var _seared_now := 0.0
+var _flare := 0.0
+var _knock := Vector3.ZERO
+var _knock_going := Vector3.ZERO
 var _drift := Vector3.ZERO
 var _drift_going := Vector3.ZERO
 ## Hands on the floor, by side.
@@ -475,6 +483,18 @@ func chest_at() -> Vector3:
 
 func seared_now() -> float:
 	return _seared_now
+
+
+func flare_now() -> float:
+	return _flare
+
+
+## The brazier landed here, going this way: a burn spreading from there on its flesh, and its body gives.
+func struck_at(point: Vector3, way: Vector3, hard: float) -> void:
+	_flare = 1.0
+	_mesh.set_instance_shader_parameter(&"flare_at", _mesh.global_transform.affine_inverse() * point)
+	_knock_going += _bones.global_transform.basis.inverse() * way.normalized() * KNOCKED * clampf(hard, 0.3, 1.2)
+	flinch(signf(global_basis.x.dot(way) + 0.001), clampf(hard, 0.4, 1.0))
 
 
 func silt_now() -> int:
@@ -740,6 +760,11 @@ func tick(delta: float, doing: StringName, moving: Vector3, you_at: Vector3, bur
 
 	_mesh.set_instance_shader_parameter(&"burn", _fire * clampf(burn, 0.0, 1.0))
 	_seared_now = move_toward(_seared_now, seared, delta * (SEARS_IN if seared > _seared_now else SEARS_OUT))
+	_flare = move_toward(_flare, 0.0, delta / FLARE_LASTS)
+	_mesh.set_instance_shader_parameter(&"flare", _flare)
+	var knock_w := TAU * KNOCK_RATE
+	_knock_going += (-knock_w * knock_w * _knock - 2.0 * KNOCK_DAMP * knock_w * _knock_going) * delta
+	_knock += _knock_going * delta
 	_mesh.set_instance_shader_parameter(&"seared", _seared_now)
 	_mesh.set_instance_shader_parameter(&"eyes", _eyes_now)
 	_mesh.set_instance_shader_parameter(&"wrath", clampf(wrath, 0.0, 1.0))
@@ -921,7 +946,7 @@ func _pose_trunk(delta: float, lean: float, twist: float, drop: float, shift: fl
 	var ride := Vector3(shift + _hips_over, -drop - _legs_sink + (0.5 - _heave) * STEP_HEAVES + sin(_clock * FLOATS_RATE) * FLOATS, (lean - COUNTERS_FROM) * HIPS_COUNTER)
 	var crust := Quaternion(Vector3.BACK, LEANS_TO_CRUST)
 	var hips_turn := crust * Quaternion(Vector3.UP, _hips_round + twist * 0.25) * Quaternion(Vector3.RIGHT, -lean * 0.3) * Quaternion(Vector3.BACK, -_hips_over * 0.8)
-	_turn_bone(&"hips", hips_turn, ride)
+	_turn_bone(&"hips", hips_turn, ride + _knock)
 	# (A ripple runs down it, as down something in water.)
 	var ripple := sin(_clock * TAU * SPINE_RIPPLE_RATE) * SPINE_RIPPLES
 	var ripple_on := sin(_clock * TAU * SPINE_RIPPLE_RATE - 1.2) * SPINE_RIPPLES

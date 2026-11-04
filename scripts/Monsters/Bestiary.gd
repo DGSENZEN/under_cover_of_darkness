@@ -25,7 +25,7 @@ const TABLE := {
 		"bite_reach": 2.6, "bite_wind": 0.85, "bite_damage": 30.0, "bite_time": 0.4, "bite_chance": 0.35, "finds": 0.3, "lurches": 5.2, "keeps_off": 2.0, "shoves": 8.0, "between_attacks": 0.9, "shove_time": 0.4, "stagger_time": 0.55,
 		"soaked_time": 8.0, "soaked_stamina": 0.4,
 		"down_time": 5.0, "rise_time": 1.6, "rises_with": 0.4,
-		"dies_in": 3.2, "burn_time": 5.0, "burn_rate": 8.0, "seared_time": 3.0, "push_takes": 0.15, "thrown_takes": 0.8,
+		"dies_in": 3.2, "burn_time": 5.0, "burn_rate": 8.0, "seared_time": 3.0, "brazier_shoves": 0.085, "push_takes": 0.15, "thrown_takes": 0.8,
 	},
 	# Souls no one lit a candle for: what they drink, how they come. Copal hurts them;
 	# lead passes through; a shell's few pellets that tell are a poor answer.

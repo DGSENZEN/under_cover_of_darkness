@@ -1048,10 +1048,120 @@ func _the_brazier() -> void:
 	p.inventory.select_by_id(&"brazier")
 	await _frames(5)
 	await _the_chain()
+	await _how_it_lands()
 	p.loadout.unpack_item(&"brazier")
 	await _frames(2)
 	var kept: Node3D = p.combat.chain()
 	_check("C6 packed away, gone from sight", kept == null or not kept.visible)
+
+
+## How a hit lands: something you feel go in, and see where it went.
+func _how_it_lands() -> void:
+	await _clean()
+	p.combat.adrenaline = 0.0
+	p.combat.stamina = p.combat.stamina_max
+	await _frames(30)
+	var chain: Node3D = p.combat.chain()
+	var one := await _held_still(Vector3(0, 0, -3.5))
+	var was_at: Vector3 = one.global_position
+	var was_chest: Vector3 = one.to_local(one.body.chest_at())
+	var head_near := 0
+	var thrown_most := 0
+	var steam := false
+	var chest_went := 0.0
+	var flare := 0.0
+	var light_most := 0.0
+	Input.action_press("throw")
+	await _frames(2)
+	Input.action_release("throw")
+	await _until(func(): return one.statuses.has(&"burning"), 1.2)
+	var landed_at: Vector3 = chain.head_at()
+	var pushed_from: Vector3 = one.global_position
+	var away: Vector3 = landed_at - p.combat.aim().origin
+	var rebounded := false
+	var furthest_back := 0.0
+
+	for i in 30:
+		await get_tree().physics_frame
+		var off: float = chain.head_at().distance_to(one.global_position + (landed_at - pushed_from))
+		head_near += 1 if off < 0.2 and not rebounded else 0
+		rebounded = rebounded or off > 0.2
+		thrown_most = maxi(thrown_most, chain.coals_flying())
+		steam = steam or chain.steaming()
+		chest_went = maxf(chest_went, (one.to_local(one.body.chest_at()) - was_chest).dot(one.to_local(one.global_position + away.normalized())))
+		flare = maxf(flare, one.body.flare_now())
+		light_most = maxf(light_most, chain.coal_light().light_energy)
+
+	var shoved: float = one.global_position.distance_to(pushed_from)
+	_check("Hb1 its head bites: it stays on what it hit for a moment (%d ticks)" % head_near, head_near >= 3)
+	_check("Hb2 and then rebounds off it", rebounded)
+	_check("Hb3 a lash shoves it back (%.2f m)" % shoved, shoved > 0.35 and one.global_position.distance_to(was_at) < 3.0)
+	_check("Hb4 coals thrown out of it (%d)" % thrown_most, thrown_most >= 6)
+	_check("Hb5 steam off its wet flesh", steam)
+	_check("Hb6 a burn on the flesh where it struck (%.2f)" % flare, flare > 0.8)
+	_check("Hb7 its coals' light jumps (%.1f)" % light_most, light_most > chain.COAL_LIGHT_FANNED + 1.0)
+	_check("Hb8 its body gives the way it was hit (%.2f m)" % chest_went, chest_went > 0.06)
+	await _frames(int(1.2 * 60.0))
+	_check("Hb9 the burn fades (%.2f)" % one.body.flare_now(), one.body.flare_now() < 0.1)
+	var least := INF
+
+	for i in int(2.2 * 60.0):
+		await get_tree().physics_frame
+
+		if chain.coals_flying() > 0:
+			least = minf(least, chain.lowest_coal())
+
+	_check("Hb10 they land on the floor and go out (%.2f, %d left)" % [least, chain.coals_flying()], chain.coals_flying() == 0 and (least == INF or least >= 0.0))
+	one.queue_free()
+	await _clean()
+	p.combat.adrenaline = 0.0
+	p.combat.stamina = p.combat.stamina_max
+	var other := await _held_still(Vector3(0, 0, -2.0))
+	var from_at: Vector3 = other.global_position
+	await _close_hit()
+	_check("Hb11 a close hit shoves it harder (%.2f m)" % other.global_position.distance_to(from_at), other.global_position.distance_to(from_at) > 0.7)
+	other.queue_free()
+	await _clean()
+	p.combat.adrenaline = 0.0
+	var eye: CharacterBody3D = EyeScript.new()
+	eye.seed_value = 7
+	eye.position = p.combat.aim().origin + Vector3(0, -0.2, -3.0)
+	eye.start_turned = true
+	add_child(eye)
+	eye.next_swoop_in = 100.0
+	await _frames(3)
+	var steamed := false
+	var coals_off_eye := 0
+	Input.action_press("throw")
+	await _frames(2)
+	Input.action_release("throw")
+
+	for i in 70:
+		await get_tree().physics_frame
+		steamed = steamed or chain.steaming()
+		coals_off_eye = maxi(coals_off_eye, chain.coals_flying())
+
+	_check("Hb12 no steam off what isn't wet; the coals still fly (%d)" % coals_off_eye, not steamed and coals_off_eye >= 3)
+	eye.queue_free()
+	await _clean()
+	# At nothing: pulled up short at the end of the chain, not sailing on.
+	p.combat.stamina = p.combat.stamina_max
+	await _frames(40)
+	Input.action_press("throw")
+	await _frames(2)
+	Input.action_release("throw")
+	await _until(func(): return p.combat.whiffed(), 1.5)
+	var end_at: Vector3 = p.combat.aim().origin
+	var out_most: float = chain.head_at().distance_to(end_at)
+	var pulled_back := false
+
+	for i in 14:
+		await get_tree().physics_frame
+		out_most = maxf(out_most, chain.head_at().distance_to(end_at))
+
+	pulled_back = chain.head_at().distance_to(end_at) < out_most - 0.15
+	_check("Hb13 a miss is pulled up short (%.2f out at most)" % out_most, pulled_back and out_most < 5.6)
+	await _until_idle()
 
 
 ## The chain and its head: it lags your hand, flies where you aimed, and holds its length.

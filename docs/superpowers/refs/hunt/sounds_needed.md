@@ -79,7 +79,7 @@ All stand-ins for now, from the approved packs (`Revenant._sounds_for`).
 | `revenant_rise` | Hauling itself up, water running off it |
 | `revenant_burn` | Wet flesh catching and spitting in fire |
 | `possession` | Your own breath taken from you, then nothing human |
-| `brazier_lash` | A heavy censer flung out on its chain, links paying out fast | `whoosh_heavy` low |
-| `brazier_back` | The chain hauled in, hand over hand, iron on iron | None yet |
-| `brazier_hit` | Hot iron landing on wet flesh: a thud and a spit of coals | `coal_pop` over the blade's flesh |
+| `brazier_lash` | A heavy censer flung out on its chain, links paying out fast | `whoosh_heavy` low, `rattle_chain` |
+| `brazier_back` | The chain hauled in, hand over hand, iron on iron | `rattle_chain` low |
+| `brazier_hit` | Hot iron landing on wet flesh: a heavy thud, a spit of coals, a hiss of steam | `thud`, `flesh_heavy`, `coal_pop`, `pipe_hiss`, all pitched down |
 | `brazier_held` | Coals ticking in iron, the chain shifting as you walk | None yet |

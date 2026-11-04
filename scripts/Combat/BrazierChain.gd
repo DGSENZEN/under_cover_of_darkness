@@ -7,6 +7,7 @@ const IRON := preload("res://scripts/Combat/brazier_iron.gdshader")
 const COALS := preload("res://scripts/Combat/brazier_coals.gdshader")
 const SMOKE := preload("res://scripts/Combat/brazier_smoke.gdshader")
 const EMBER := preload("res://scripts/Combat/brazier_ember.gdshader")
+const LUMP := preload("res://scripts/Combat/brazier_lump.gdshader")
 const BRUSH := preload("res://textures/painted/eclipse/brush.png")
 const Layers := preload("res://scripts/Visual/Layers.gd")
 const Fx := preload("res://scripts/Visual/Fx.gd")
@@ -44,6 +45,20 @@ const COAL_COLOUR := Color(1.0, 0.46, 0.14)
 const FANS_PER := 0.09
 ## Sparks and embers where it lands.
 const BURST_EMBERS := 26
+## What it does to what it lands on: stays on it this long (s), then comes off it this fast (m/s). And what it does to its light.
+const BITES_FOR := 0.085
+const COMES_OFF := 3.6
+const LIGHT_JUMPS := 2.4
+const LIGHT_SETTLES := 12.0
+## Coals thrown out of its lid at each hit: how many there can be flying at once, how many a hit throws, how long they burn (s), how hard they're thrown (m/s), how they bounce.
+const MOST_COALS := 30
+const COALS_THROWN := 12
+const COALS_BURN := 1.9
+const COALS_FLY := Vector2(1.6, 4.6)
+const COALS_BOUNCE := 0.32
+const COAL_SIZE := Vector2(0.012, 0.028)
+## Steam off wet flesh: how long it's coming (s).
+const STEAM_FOR := 0.75
 
 enum Mode { HANG, HELD, THROWN, DROPPING, HAULED }
 
@@ -71,6 +86,18 @@ var _floor_at := -INF
 var _fans := 0.0
 var _head_speed := 0.0
 var _up_way := Vector3.UP
+var _bite_left := 0.0
+var _bite_on: Node3D = null
+var _bite_local := Vector3.ZERO
+var _bite_fixed := Vector3.ZERO
+var _comes_off := Vector3.ZERO
+## Kicked, next tick, by this much: it's been stopped short.
+var _kick_next := Vector3.ZERO
+var _kicked := false
+var _light_jump := 0.0
+## Each: [where, going, burning left, how big, turning, floor].
+var _flying: Array = []
+var _steam_left := 0.0
 
 var _links: MultiMeshInstance3D
 var _head: Node3D
@@ -80,6 +107,8 @@ var _light: OmniLight3D
 var _smoke: CPUParticles3D
 var _embers: CPUParticles3D
 var _burst: CPUParticles3D
+var _steam: CPUParticles3D
+var _coal_bits: MultiMeshInstance3D
 
 
 func _ready() -> void:
@@ -153,6 +182,40 @@ func _ready() -> void:
 	_burst.initial_velocity_max = 5.5
 	_burst.color_ramp = _embers.color_ramp
 	add_child(_burst)
+	_steam = _particles(SMOKE, 7, 0.95, 0.22)
+	((_steam.mesh as QuadMesh).material as ShaderMaterial).set_shader_parameter(&"torn", 1.0)
+	_steam.one_shot = true
+	_steam.explosiveness = 0.72
+	_steam.emitting = false
+	_steam.gravity = Vector3(0.0, 1.6, 0.0)
+	_steam.spread = 55.0
+	_steam.initial_velocity_min = 0.5
+	_steam.initial_velocity_max = 1.9
+	_steam.damping_min = 2.5
+	_steam.damping_max = 4.0
+	_steam.scale_amount_curve = _rising(0.6, 2.0)
+	_steam.color_ramp = _ramp([Color(0.5, 0.53, 0.51, 0.0), Color(0.46, 0.49, 0.47, 0.3), Color(0.3, 0.32, 0.31, 0.0)], [0.0, 0.12, 1.0])
+	add_child(_steam)
+	var lump := SphereMesh.new()
+	lump.radius = 1.0
+	lump.height = 2.0
+	lump.radial_segments = 7
+	lump.rings = 4
+	var lump_look := ShaderMaterial.new()
+	lump_look.shader = LUMP
+	lump.material = lump_look
+	var bits := MultiMesh.new()
+	bits.transform_format = MultiMesh.TRANSFORM_3D
+	bits.use_colors = true
+	bits.mesh = lump
+	bits.instance_count = MOST_COALS
+	bits.visible_instance_count = 0
+	_coal_bits = MultiMeshInstance3D.new()
+	_coal_bits.multimesh = bits
+	_coal_bits.custom_aabb = AABB(Vector3(-2000, -500, -2000), Vector3(4000, 1000, 4000))
+	_coal_bits.layers = Layers.FX
+	_coal_bits.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_coal_bits)
 	put_away()
 
 
@@ -215,6 +278,11 @@ func put_away() -> void:
 	_embers.emitting = false
 	_mode = Mode.HANG
 	_at.clear()
+	_flying.clear()
+	_coal_bits.multimesh.visible_instance_count = 0
+	_bite_left = 0.0
+	_steam_left = 0.0
+	_light_jump = 0.0
 
 
 ## Taken up: it hangs from your hand, from nowhere else.
@@ -281,16 +349,20 @@ func throw_to(at: Vector3, seconds: float) -> void:
 	_takes = maxf(seconds, 0.02)
 
 
-## It drops, then you haul it in, all in `seconds`.
-func bring_back(seconds: float) -> void:
+## It drops, then you haul it in, all in `seconds`. Off the end of its flight it's stopped short, and goes on this way (m/s).
+func bring_back(seconds: float, kicked := Vector3.ZERO) -> void:
+	if _mode == Mode.THROWN:
+		_kick_next = kicked
+		_kicked = true
+
 	_mode = Mode.DROPPING
 	_going = 0.0
 	_takes = maxf(seconds, 0.02)
 	_long_from = _long
 
 
-## Where it has landed: sparks, embers, its light jumps.
-func burst(at: Vector3, away: Vector3) -> void:
+## Where it has landed: sparks, embers, coals out of its lid, its light jumps; steam, if what it hit is wet.
+func burst(at: Vector3, away: Vector3, wet := false) -> void:
 	bursts += 1
 	Fx.sparks(self, at, away, 1.4, true)
 	_burst.global_position = at
@@ -298,6 +370,98 @@ func burst(at: Vector3, away: Vector3) -> void:
 	_burst.restart()
 	_burst.emitting = true
 	_fans = 1.0
+	_light_jump = LIGHT_JUMPS
+	_throw_coals(at, away)
+
+	if wet:
+		_steam_left = STEAM_FOR
+		_steam.global_position = at
+		_steam.direction = (away + Vector3.UP * 0.8).normalized()
+		_steam.restart()
+		_steam.emitting = true
+
+
+## It stays on what it hit a moment, going where that goes, then comes off it. `on` may be nothing, a wall.
+func bite(on: Node3D, at: Vector3, away: Vector3) -> void:
+	_bite_left = BITES_FOR
+	_bite_on = on
+	_bite_local = on.global_transform.affine_inverse() * at if on != null else Vector3.ZERO
+	_bite_fixed = at
+	_comes_off = away.normalized() * COMES_OFF
+	_kicked = false
+
+
+## How many coals it has thrown that are still burning.
+func coals_flying() -> int:
+	return _flying.size()
+
+
+## How low the lowest of them is, in the world.
+func lowest_coal() -> float:
+	var least := INF
+
+	for coal: Array in _flying:
+		least = minf(least, (coal[0] as Vector3).y)
+
+	return least
+
+
+func steaming() -> bool:
+	return _steam_left > 0.0
+
+
+func _throw_coals(at: Vector3, away: Vector3) -> void:
+	var from := at + away.normalized() * 0.06
+	var query := PhysicsRayQueryParameters3D.create(from, from + Vector3.DOWN * 8.0, 1, _not_this)
+	var found := get_world_3d().direct_space_state.intersect_ray(query)
+	var floor_at: float = (found["position"] as Vector3).y if not found.is_empty() else from.y - 8.0
+
+	for i in COALS_THROWN:
+		var way := (away.normalized() + Vector3.UP * 0.35 + Vector3(randf_range(-1.0, 1.0), randf_range(-0.5, 1.0), randf_range(-1.0, 1.0)) * 0.85).normalized()
+		_flying.append([from, way * randf_range(COALS_FLY.x, COALS_FLY.y), COALS_BURN * randf_range(0.65, 1.15), randf_range(COAL_SIZE.x, COAL_SIZE.y), randf() * TAU, floor_at])
+
+	while _flying.size() > MOST_COALS:
+		_flying.pop_front()
+
+
+func _work_coals(delta: float) -> void:
+	var i := _flying.size() - 1
+
+	while i >= 0:
+		var coal: Array = _flying[i]
+		coal[2] = float(coal[2]) - delta
+
+		if float(coal[2]) <= 0.0:
+			_flying.remove_at(i)
+			i -= 1
+			continue
+
+		var going: Vector3 = coal[1]
+		going += Vector3.DOWN * GRAVITY * delta
+		var at: Vector3 = (coal[0] as Vector3) + going * delta
+		var rests_at: float = float(coal[5]) + float(coal[3])
+
+		if at.y < rests_at:
+			at.y = rests_at
+			going = Vector3(going.x * 0.55, absf(going.y) * COALS_BOUNCE, going.z * 0.55)
+
+			if going.y < 0.35:
+				going = Vector3.ZERO
+
+		coal[0] = at
+		coal[1] = going
+		coal[4] = float(coal[4]) + going.length() * delta * 3.0
+		i -= 1
+
+	var bits := _coal_bits.multimesh
+	bits.visible_instance_count = _flying.size()
+
+	for k in _flying.size():
+		var coal: Array = _flying[k]
+		var turned := Basis(Vector3(0.6, 0.7, 0.3).normalized(), float(coal[4])).scaled(Vector3.ONE * float(coal[3]))
+		bits.set_instance_transform(k, Transform3D(turned, coal[0]))
+		# (Hot till near its end, then going out.)
+		bits.set_instance_color(k, Color(clampf(float(coal[2]) / 0.8, 0.0, 1.0), 0.0, 0.0, 1.0))
 
 
 ## A tick: follows the hand, moves its points, keeps its length.
@@ -313,6 +477,11 @@ func work(delta: float, hand: Vector3) -> void:
 	_before = _at.duplicate()
 	_find_floor()
 	var last := POINTS - 1
+
+	# (Stopped short: what it was flying at isn't its speed any more.)
+	if _kicked and _bite_left <= 0.0:
+		_was[last] = _at[last] - _kick_next * delta
+		_kicked = false
 
 	for i in range(1, POINTS):
 		var moved := (_at[i] - _was[i]) * (HAULED_KEEPS if _mode == Mode.HAULED and i == last else KEEPS)
@@ -370,6 +539,9 @@ func work(delta: float, hand: Vector3) -> void:
 	_head_speed = _at[last].distance_to(_before[last]) / maxf(delta, 0.001)
 	_fans = move_toward(_fans, clampf(_head_speed * FANS_PER, 0.0, 1.0), delta * (6.0 if _head_speed * FANS_PER > _fans else 1.1))
 	_embers.emitting = _fans > 0.35
+	_light_jump = move_toward(_light_jump, 0.0, delta * LIGHT_SETTLES)
+	_steam_left = maxf(_steam_left - delta, 0.0)
+	_work_coals(delta)
 
 
 func _within(point: Vector3, of: Vector3, far: float) -> Vector3:
@@ -399,6 +571,18 @@ func _wanted_long(delta: float) -> float:
 ## Moves the head as it's being moved, if it is: whether it's held there and not free.
 func _carry_head(delta: float) -> bool:
 	var last := POINTS - 1
+
+	if _bite_left > 0.0:
+		_bite_left -= delta
+		var bitten: Vector3 = _bite_on.global_transform * _bite_local if is_instance_valid(_bite_on) else _bite_fixed
+		_at[last] = bitten
+
+		if _bite_left <= 0.0:
+			_was[last] = bitten - _comes_off * delta
+		else:
+			_was[last] = bitten
+
+		return true
 
 	match _mode:
 		Mode.HELD:
@@ -511,6 +695,6 @@ func _draw_head(shown: PackedVector3Array) -> void:
 	var side := up.cross(Vector3(0.31, 0.27, 0.91)).normalized()
 	_head.global_transform = Transform3D(Basis(side, up, side.cross(up).normalized()), at)
 	var breath := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.0016) * sin(float(Time.get_ticks_msec()) * 0.0041 + 1.0)
-	_light.light_energy = lerpf(COAL_LIGHT * (0.82 + breath * 0.18), COAL_LIGHT_FANNED, _fans)
+	_light.light_energy = lerpf(COAL_LIGHT * (0.82 + breath * 0.18), COAL_LIGHT_FANNED, _fans) + _light_jump
 	_coals_mesh.set_instance_shader_parameter(&"fanned", _fans)
 	_head_mesh.set_instance_shader_parameter(&"fanned", _fans)
