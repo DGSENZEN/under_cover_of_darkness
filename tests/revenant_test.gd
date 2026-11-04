@@ -876,7 +876,10 @@ func _held_still(at: Vector3) -> CharacterBody3D:
 
 ## The brazier: reach you can trust, and everything it does to the drowned.
 func _the_brazier() -> void:
+	# (Whatever the groups before it did to you: a possession, a save. This one needs you able to swing.)
 	await _clean()
+	await _new_player()
+	await _frames(30)
 	p.combat.adrenaline = 0.0
 	var packed: bool = p.loadout.pack_item(&"brazier")
 	_check("Z0 it packs and comes to hand", packed and p.inventory.select_by_id(&"brazier"))
@@ -979,6 +982,13 @@ func _the_brazier() -> void:
 	var still_on: bool = searing.is_exposed()
 	await _frames(int(0.3 * 60.0))
 	_check("Z4 seared 3 s, a new hit starts it again", seared_after and still_on and not searing.is_exposed())
+	await _frames(60)
+	searing.take_hit(1.0, p, &"brazier", searing.global_position, Vector3.FORWARD)
+	await _frames(1)
+	var comes_up: float = searing.body.seared_now()
+	await _frames(20)
+	var is_up: float = searing.body.seared_now()
+	_check("Z4b its marks come up on it, and don't just appear (%.2f, %.2f)" % [comes_up, is_up], comes_up < 0.5 and is_up > 0.95)
 	searing.queue_free()
 	await _frames(2)
 	var downed := await _held_still(Vector3(0, 0, -20))
@@ -1035,8 +1045,75 @@ func _the_brazier() -> void:
 	var gun_out: bool = p.combat.gun_drawn()
 	_check("Z9 a spell key takes the gun back out; a tapped Q dodges", gun_out and dodged)
 	p.caster._held_key = &""
+	p.inventory.select_by_id(&"brazier")
+	await _frames(5)
+	await _the_chain()
 	p.loadout.unpack_item(&"brazier")
 	await _frames(2)
+	var kept: Node3D = p.combat.chain()
+	_check("C6 packed away, gone from sight", kept == null or not kept.visible)
+
+
+## The chain and its head: it lags your hand, flies where you aimed, and holds its length.
+func _the_chain() -> void:
+	await _clean()
+	p.combat.adrenaline = 0.0
+	p.combat.stamina = p.combat.stamina_max
+	await _frames(90)
+	var chain: Node3D = p.combat.chain()
+	_check("C0 it hangs from your hand, under it, lit", chain != null and chain.visible and chain.head_at().y < chain.hand_now().y - 0.05 and chain.head_at().distance_to(chain.hand_now()) < 1.0 and chain.coal_light().light_energy > 0.0)
+	var target := _struck_at(4.4)
+	var landed_at: Vector3 = p.combat.aim().origin + Vector3(0.0, 0.0, -4.4)
+	var fastest := 0.0
+	var stretched := 0.0
+	var head_off := INF
+	var was: PackedVector3Array = chain.points_now()
+	Input.action_press("throw")
+	await _frames(2)
+	Input.action_release("throw")
+
+	for i in 110:
+		await get_tree().physics_frame
+		var now: PackedVector3Array = chain.points_now()
+
+		for k in now.size():
+			fastest = maxf(fastest, now[k].distance_to(was[k]) * 60.0)
+
+		was = now
+		stretched = maxf(stretched, chain.stretch())
+
+		if target.hits > 0 and head_off == INF:
+			head_off = chain.head_at().distance_to(landed_at)
+
+	_check("C1 the head reaches where the lash lands (%.2f m off)" % head_off, head_off < 0.5)
+	_check("C2 no link jumps (%.1f m/s)" % fastest, fastest < 30.0)
+	_check("C3 the chain holds its length (%.2f)" % stretched, stretched < 1.1)
+	var link_at: Transform3D = chain._links.multimesh.get_instance_transform(0)
+	_check("C3b its links aren't drawn inside out (%.2f)" % link_at.basis.determinant(), link_at.basis.determinant() > 0.0)
+	target.queue_free()
+	await _until_idle()
+	await _frames(60)
+	_check("C4 it comes back and hangs again (%.2f m)" % chain.head_at().distance_to(chain.hand_now()), chain.head_at().distance_to(chain.hand_now()) < 1.0 and not chain.busy())
+	var hand_was: Vector3 = chain.head_at()
+	p.teleport(Transform3D(Basis.IDENTITY, HOME + Vector3(0, 0, 3)))
+	await _frames(3)
+	var one := await _held_still(Vector3(0, 0, 0.5))
+	var bursts: int = chain.bursts
+	await _lash()
+	_check("C5 sparks and embers where it lands on one (%d)" % (chain.bursts - bursts), chain.bursts > bursts and hand_was != Vector3.ZERO)
+	one.queue_free()
+	await _clean()
+	p.inventory.select_by_id(&"revolver")
+	await _frames(3)
+	_check("C7 the gun out, it's put away", not chain.visible and not chain.coal_light().visible)
+	p.inventory.select_by_id(&"brazier")
+	var never_at_your_face := true
+
+	for i in 90:
+		await get_tree().physics_frame
+		never_at_your_face = never_at_your_face and (not chain.visible or chain.head_at().y < p.camera.global_position.y)
+
+	_check("C8 taken out again, it's on your hand, not where it was, never up in your face", chain.visible and chain.head_at().distance_to(chain.hand_now()) < 1.2 and never_at_your_face)
 
 
 ## Its legs carry what it does: braced and bent under the weight, not stilts; its feet go when a blow says.

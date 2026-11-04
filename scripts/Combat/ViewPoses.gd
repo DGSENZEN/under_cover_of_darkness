@@ -140,6 +140,22 @@ const REVOLVER := {
 }
 
 ## Anything else in hand (a key, a tool): held up in front of you.
+## The brazier's grip, the chain coming out of the bottom of your fist. A STAND-IN, until it's posed with the user in Blender (the plan's Task 11): held out and up, so what hangs from it can be seen.
+const BRAZIER := {
+	"rest": [Vector3(0.3, 0.09, -0.72), Vector3(0.0, 1.0, 0.0), Vector3(0.0, 0.0, -1.0)],
+	"sprint": [Vector3(0.32, -0.08, -0.56), Vector3(0.0, 1.0, 0.0), Vector3(0.0, 0.0, -1.0)],
+	"kick": [Vector3(0.3, -0.06, -0.45), Vector3(0.1, 0.95, 0.25), Vector3(0.0, 0.0, -1.0)],
+	"stagger": [Vector3(0.34, -0.12, -0.4), Vector3(0.3, 0.9, 0.3), Vector3(0.0, 0.0, -1.0)],
+	"sweeps": {
+		&"left": {
+			"pivot": Vector3(0.04, -0.3, 0.12),
+			"path": [Vector3(0.42, 0.08, -0.22), Vector3(0.36, 0.06, -0.42), Vector3(0.18, -0.02, -0.62), Vector3(0.12, -0.1, -0.66), Vector3(0.14, -0.16, -0.58)],
+			"lead": [-40.0, 0.0, 20.0],
+			"rise": [0.3, 0.08, -0.1],
+		},
+	},
+}
+
 const ITEM := {
 	"rest": [Vector3(0.18, -0.26, -0.36), Vector3(-0.2, 0.9, -0.35), Vector3(-0.1, 0.35, -1.0)],
 }
@@ -158,6 +174,8 @@ static func set_of(id: StringName) -> Dictionary:
 			return BOW
 		&"revolver":
 			return REVOLVER
+		&"brazier":
+			return BRAZIER
 
 	return ITEM
 

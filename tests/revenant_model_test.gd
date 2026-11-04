@@ -83,7 +83,32 @@ func _ready() -> void:
 	var shader: Shader = load(SHADER) if ResourceLoader.exists(SHADER) else null
 	var has := func(param: String) -> bool: return shader != null and shader.code.contains("instance uniform float %s" % param)
 	_check("B5 it has eyes to light, flesh to burn and sear", has.call("eyes") and has.call("burn") and has.call("seared"))
+	_the_brazier_model()
 	_end()
+
+
+## Built as a thurible is, its proportions pinned: taller than wide, a bowl about 20 cm across, hung from a ring.
+func _the_brazier_model() -> void:
+	var scene: Node = (load("res://assets/weapons/brazier.glb") as PackedScene).instantiate()
+	var parts := {}
+
+	for part in ["Head", "Coals", "Link", "Grip"]:
+		parts[part] = scene.find_child(part, true, false)
+
+	_check("Bz1 head, coals, a link, a grip", parts.values().all(func(one): return one is MeshInstance3D))
+	var head: AABB = (parts["Head"] as MeshInstance3D).get_aabb()
+	var coals: AABB = (parts["Coals"] as MeshInstance3D).get_aabb()
+	_check("Bz2 hung from its ring: nothing above the origin (%.3f)" % head.end.y, absf(head.end.y) < 0.02)
+	_check("Bz3 taller than wide, as they are (%.2f tall, %.2f wide)" % [head.size.y, head.size.x], head.size.y > 0.48 and head.size.y < 0.56 and head.size.x > 0.19 and head.size.x < 0.24)
+	_check("Bz4 its coals are inside it", head.encloses(coals))
+	var tris := 0
+
+	for part in parts:
+		var mesh: Mesh = (parts[part] as MeshInstance3D).mesh
+		tris += mesh.surface_get_arrays(0)[Mesh.ARRAY_INDEX].size() / 3
+
+	_check("Bz5 within budget for what's closest to your eye (%d)" % tris, tris < 20000)
+	scene.free()
 
 
 func _end() -> void:

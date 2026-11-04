@@ -136,16 +136,24 @@ static func bow() -> Resource:
 
 ## What's in your hand of it: the iron grip the chain comes from. (The chain and its head hang from this: BrazierChain.gd.)
 static func brazier_grip_mesh() -> Mesh:
-	var grip := CylinderMesh.new()
-	grip.top_radius = 0.018
-	grip.bottom_radius = 0.022
-	grip.height = 0.16
-	grip.radial_segments = 8
+	var mesh := model_part(&"brazier", "Grip")
+
+	if mesh == null:
+		var grip := CylinderMesh.new()
+		grip.top_radius = 0.018
+		grip.bottom_radius = 0.022
+		grip.height = 0.16
+		grip.radial_segments = 8
+		mesh = grip
+
 	var look := StandardMaterial3D.new()
-	look.albedo_color = Color(0.1, 0.09, 0.085)
-	look.roughness = 0.7
-	grip.material = look
-	return grip
+	look.vertex_color_use_as_albedo = true
+	look.metallic = 0.3
+	look.roughness = 0.65
+	mesh.surface_set_material(0, look)
+	# How it is held in your view (ViewPoses.gd): a stand-in, until it's posed with the user.
+	mesh.set_meta(&"view_poses", &"brazier")
+	return mesh
 
 
 ## A church censer on a chain, packed with coals: reach you can trust, and a commitment. What's on the drowned, Revenant.gd. Its charge_time is how long a press must be held to be the close hit.
@@ -161,7 +169,8 @@ static func brazier() -> Resource:
 	w.power_reach = 2.4
 	w.arc_degrees = 70.0
 	w.windup = 0.45
-	w.strike_time = 0.16
+	# (What the head takes to fly there.)
+	w.strike_time = 0.22
 	w.recovery = 0.6
 	w.can_block = false
 	w.chained = true

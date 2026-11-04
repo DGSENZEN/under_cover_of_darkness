@@ -185,6 +185,9 @@ const JAW_GNAWS := 0.45
 const JAW_GNAW_RATE := 13.0
 ## Its arm's elbow on the floor, up over its shoulder like a spider's.
 const ELBOW_UP := Vector3(0.0, 1.0, 0.1)
+## How fast the brazier's marks come up on it and go, a share a second.
+const SEARS_IN := 7.0
+const SEARS_OUT := 1.2
 ## What drifts on it trails what its head does (per m/s, m, Hz): slow to start and slow to stop, as under water.
 const DRIFT_PER := 0.16
 const DRIFT_MOST := 0.75
@@ -297,6 +300,7 @@ var _hitch_left := 0.0
 var _held_at := Vector3.ZERO
 var _just_hitched := false
 var _head_was := Vector3.ZERO
+var _seared_now := 0.0
 var _drift := Vector3.ZERO
 var _drift_going := Vector3.ZERO
 ## Hands on the floor, by side.
@@ -467,6 +471,10 @@ func leg_straight(side: int) -> float:
 
 func chest_at() -> Vector3:
 	return _world_of((_now[&"chest"] as Transform3D).origin)
+
+
+func seared_now() -> float:
+	return _seared_now
 
 
 func silt_now() -> int:
@@ -731,7 +739,8 @@ func tick(delta: float, doing: StringName, moving: Vector3, you_at: Vector3, bur
 		halo.set_instance_shader_parameter(&"hot", maxf(_eyes_now, wrath * 0.6))
 
 	_mesh.set_instance_shader_parameter(&"burn", _fire * clampf(burn, 0.0, 1.0))
-	_mesh.set_instance_shader_parameter(&"seared", seared)
+	_seared_now = move_toward(_seared_now, seared, delta * (SEARS_IN if seared > _seared_now else SEARS_OUT))
+	_mesh.set_instance_shader_parameter(&"seared", _seared_now)
 	_mesh.set_instance_shader_parameter(&"eyes", _eyes_now)
 	_mesh.set_instance_shader_parameter(&"wrath", clampf(wrath, 0.0, 1.0))
 	_mesh.set_instance_shader_parameter(&"hurt", _hurt_now)

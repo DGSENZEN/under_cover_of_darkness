@@ -92,7 +92,10 @@ void fragment() {
 	}
 
 	// Scored by the coals: dark, with heat in the cuts.
-	float scored = smoothstep(0.58, 0.44, stroke) * seared;
+	float on_flesh = 1.0 - step(0.001, drift_t);
+	float scored = smoothstep(0.56, 0.46, stroke) * seared * on_flesh;
+	// (The heat only down the middle of them: thin lines of it, never a whole side of it.)
+	float scored_hot = smoothstep(0.46, 0.415, stroke) * seared * on_flesh;
 	skin = mix(skin, vec3(0.03, 0.02, 0.018), scored * 0.8);
 	// Burning as it comes: the hide splitting, heat in its folds, not all black. Dying: the char takes it all, from the middle out, and goes to pale ash at the last.
 	float fire_cracks = smoothstep(0.46, 0.38, stroke) * burn;
@@ -105,7 +108,7 @@ void fragment() {
 	ash = mix(ash, vec3(0.22, 0.21, 0.2) * (0.55 + 0.75 * smoothstep(0.32, 0.62, stroke)), pale);
 	skin = mix(skin, ash, char_here);
 	skin = mix(skin, vec3(0.34, 0.03, 0.02), hurt * 0.45);
-	float hot_edge = (1.0 - smoothstep(0.0, 0.05, abs(burn_at - front))) * step(0.001, charred) * (1.0 - smoothstep(0.92, 1.0, charred));
+	float hot_edge = (1.0 - smoothstep(0.0, 0.026, abs(burn_at - front))) * step(0.001, charred) * (1.0 - smoothstep(0.92, 1.0, charred));
 	float glow_behind = smoothstep(front - 0.2, front - 0.02, burn_at) * (1.0 - smoothstep(front - 0.02, front + 0.02, burn_at)) * step(0.001, charred);
 	ALBEDO = skin * rest;
 	ROUGHNESS = 1.0;
@@ -121,7 +124,7 @@ void fragment() {
 	EMISSION = painted_fill(skin * rest, world_normal, NORMAL, VIEW) * 0.8
 		+ light_of
 		+ is_eye * mix(EYE, EYE_HOT, max(eyes, wrath * 0.6)) * (1.0 - smoothstep(0.3, 0.75, charred))
-		+ FIRE * (scored * 0.7 + fire_cracks * (0.5 + 0.5 * sin(TIME * 7.0 + paint_at.y * 9.0)) * 0.34 + hot_edge * 1.3 + glow_behind * 0.12)
+		+ FIRE * (scored_hot * 0.38 + fire_cracks * (0.5 + 0.5 * sin(TIME * 7.0 + paint_at.y * 9.0)) * 0.34 + hot_edge * 0.8 + glow_behind * 0.12)
 		+ FIRE * char_here * (1.0 - crumbled) * smoothstep(0.64, 0.72, stroke) * 0.22
 		+ eye_smoulder(paint_at * 2.0, NORMAL, VIEW, TIME);
 }

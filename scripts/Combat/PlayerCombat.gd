@@ -58,6 +58,13 @@ enum Phase {
 
 ## How the weapon is held and swung in your view: ViewPoses.gd, pose by pose.
 const ViewPoses := preload("res://scripts/Combat/ViewPoses.gd")
+const BrazierChainScript := preload("res://scripts/Combat/BrazierChain.gd")
+## Where the chain comes out of its grip (in the grip's own space), and where its head is drawn back to, for a lash and for a close hit (in your view).
+const CHAIN_FROM := Vector3(0.0, -0.098, 0.0)
+const LASH_DRAWN_TO := Vector3(0.7, 0.5, 0.3)
+const CLOSE_DRAWN_TO := Vector3(1.0, 0.1, -0.25)
+## How low a close hit's head goes through, from your eye.
+const CLOSE_HEAD_LOW := 0.3
 
 ## Each kind of blow plays its own way (x the weapon's numbers): a thrust is
 ## quick, long and narrow and stops in the first man it meets; a side cut is
@@ -314,6 +321,7 @@ var _dodge_direction := Vector3.ZERO
 var _dodge_length := 0.0
 ## Where you aimed as the lash left.
 var _lash_aim := Transform3D.IDENTITY
+var _chain: Node3D = null
 
 
 func _ready() -> void:
@@ -423,6 +431,7 @@ func _physics_process(delta: float) -> void:
 		_drop_armed = false
 		_drop_target = null
 		_send_pose(delta)
+		_work_chain(delta)
 		return
 
 	# A click that already threw what you held, or recaptured the mouse, is
@@ -540,6 +549,7 @@ func _physics_process(delta: float) -> void:
 				_enter(Phase.IDLE)
 
 	_send_pose(delta)
+	_work_chain(delta)
 
 
 func _update_idle(buffered: bool, attack_held: bool) -> void:
@@ -670,6 +680,13 @@ func _enter(new_phase: int) -> void:
 		# Wound up from wherever it is: rest, or the end of the last blow.
 		_windup_from = _shown
 
+	# (Whatever stopped it, it comes back: all of a recovery, or quickly if you were knocked out of it.)
+	if _chain != null and _chain.visible:
+		if new_phase == Phase.RECOVER:
+			_chain.bring_back(_recovery)
+		elif new_phase in [Phase.IDLE, Phase.DODGE, Phase.KICK, Phase.STAGGER] and _chain.busy():
+			_chain.bring_back(0.3)
+
 	phase = new_phase
 	_t = 0.0
 
@@ -696,6 +713,9 @@ func _reset() -> void:
 
 	if phase == Phase.STRIKE:
 		_hand(&"set_trail", [false])
+
+	if _chain != null and _chain.visible and phase != Phase.IDLE:
+		_chain.bring_back(0.3)
 
 	phase = Phase.IDLE
 	blocking = false
@@ -856,6 +876,61 @@ func blow_poise() -> float:
 	return maxf(weight, running_poise) if _running else weight
 
 
+## The chain on your brazier (null until it's first taken up).
+func chain() -> Node3D:
+	return _chain
+
+
+## Its chain, if it's what's in your hand and your hand's your own: taken up, followed, held to where a blow wants it, put away.
+func _work_chain(delta: float) -> void:
+	# (Not until it's up: lowered, on its way, your hand is nowhere a chain could hang from.)
+	var out: bool = weapon != null and weapon.chained and is_able() and player.hand != null and player.hand.is_item_visible()
+
+	if not out:
+		if _chain != null and _chain.visible:
+			_chain.put_away()
+
+		return
+
+	if _chain == null:
+		_chain = BrazierChainScript.new()
+		_chain.name = "BrazierChain"
+		add_child(_chain)
+		_chain.hold_from(_chain_hand, player.get_rid())
+
+	if not _chain.visible:
+		_chain.take_up(_chain_hand())
+
+	match phase:
+		Phase.WINDUP, Phase.CHARGING:
+			# (Held, it's going to be the close hit.)
+			_chain.hold_to(aim() * (CLOSE_DRAWN_TO if _held_through and Input.is_action_pressed("throw") else LASH_DRAWN_TO))
+		Phase.STRIKE:
+			if _power:
+				_chain.hold_to(_close_head_at(clampf(_t / maxf(_strike_time, 0.01), 0.0, 1.0)))
+
+	_chain.work(delta, _chain_hand())
+
+
+func _chain_hand() -> Vector3:
+	return player.hand.gun_point_world(CHAIN_FROM) if player.hand != null else player.global_position
+
+
+## Where a close hit's head is, at this far through it: out along the blow.
+func _close_head_at(p: float) -> Vector3:
+	var at := aim()
+	var half := deg_to_rad(weapon.arc_degrees * 0.5)
+	return at.origin + (-at.basis.z).rotated(at.basis.y, lerpf(-half, half, p)) * weapon.power_reach * 0.85 - at.basis.y * CLOSE_HEAD_LOW
+
+
+## Where a lash leaving now would land.
+func _lash_lands_at() -> Vector3:
+	var end: Vector3 = _lash_aim.origin - _lash_aim.basis.z * float(weapon.reach)
+	var query := PhysicsRayQueryParameters3D.create(_lash_aim.origin, end, 1 | 2 | 4, [player.get_rid()])
+	var found := player.get_world_3d().direct_space_state.intersect_ray(query)
+	return found["position"] if not found.is_empty() else end
+
+
 ## A lash that missed, on its way back: you're held to it until it is.
 func _lash_coming_back() -> bool:
 	return phase == Phase.RECOVER and weapon != null and weapon.chained and not _power and _outcome == &"miss"
@@ -907,6 +982,10 @@ func _start_strike(power: bool) -> void:
 	_enter(Phase.STRIKE)
 	_strike_time = weapon.strike_time * float(_style()["strike"])
 	_lash_aim = aim()
+
+	if weapon.chained and not power and _chain != null:
+		_chain.throw_to(_lash_lands_at(), _strike_time)
+		Sfx.play(player, &"whoosh_heavy", _lash_aim.origin, -2.0, 0.8)
 	_spend((cost_power if power else cost_quick) * float(_style()["cost"]))
 
 	player.juice.on_swing(_side_of(_direction), power, _direction)
@@ -1182,6 +1261,9 @@ func _sweep(p: float) -> void:
 	_strike_surface(collider, point, normal)
 	SoundBus.emit_sound(point, 50.0, player, &"clang")
 
+	if weapon.chained and _chain != null:
+		_chain.burst(point, normal)
+
 	# (A lash has nothing to stop in your hand: it comes back as it would.)
 	if lash:
 		return
@@ -1429,6 +1511,11 @@ func _strike_target(target: Node3D, point: Vector3, direction: Vector3) -> void:
 				_hand(&"bloody", [0.4 if heavy else 0.22])
 
 			_cut_sound(target, point, heavy, dagger)
+
+			if weapon.chained and _chain != null:
+				_chain.burst(point, -direction)
+				Sfx.play(player, &"coal_pop", point, 0.0, 0.9)
+
 			_cleave = cleave_slow
 			_outcome = &"hit"
 			combo += 1
